@@ -318,6 +318,7 @@ def status():
     snapshot["operation"] = _operation_view(active, snapshot) if active else None
     snapshot["last_operation"] = _json("last")
     snapshot["last_preflight"] = _json("last_preflight")
+    snapshot["last_promotion"] = _json("last_promotion")
     return snapshot
 
 
@@ -466,6 +467,10 @@ def _finalize(request, run, snapshot):
                  "Testovací snapshot bol synchronizovaný."),
     }
     _put("last", result)
+    if request["action"] == "promote_production":
+        # Retain exact CAS + independent remote champion digest readback.
+        # The latest other Model Lab operation must not erase this checkpoint.
+        _put("last_promotion", result)
     if request["action"] == "prepare_inputs":
         _put("last_preflight", result)
     try:

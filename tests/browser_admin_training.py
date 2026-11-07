@@ -42,6 +42,7 @@ def main():
                     };
                     s.adminModelLab={can_start:true,reason:'Ready',champion_sha256:'c'.repeat(64),active_sha256:'a'.repeat(64),candidates:[],operation:null,last_operation:null,
                         last_preflight:{state:'WORKFLOW_VERIFIED',verified_at:new Date().toISOString(),
+                            approval:{expected_champion_sha256:'c'.repeat(64)},
                             run:{id:123,status:'completed',conclusion:'success',artifact_verified:true,
                                  html_url:'https://github.com/BackstageTalks/tbt/actions/runs/123',
                                  preflight_report:{eligible_rows:600000,tours:{
@@ -79,6 +80,8 @@ def main():
                 assert page.get_by_text('Aktivovať iba shadow (manuálne)').is_visible()
                 assert page.get_by_text('3 · Nasadiť do produkcie').is_visible()
                 assert page.locator('[data-admin-action="model-factory-promote"]').is_disabled()
+                assert page.locator('#admin-production-candidate').is_visible()
+                assert page.locator('#admin-training-profile').first.locator('option[value="accuracy-7.2.2"]').get_attribute('disabled') is not None
                 assert page.get_by_text('ATP: 340', exact=False).is_visible()
                 assert page.get_by_text('WTA: 260', exact=False).is_visible()
                 # Confirm the one-click protected build/test path. A successful
@@ -86,7 +89,7 @@ def main():
                 button.click()
                 page.get_by_role("button",name="Potvrdiť a pokračovať",exact=True).click()
                 page.wait_for_function('trainingCalls.length===2 && !adminTestUi.state.adminTrainingBusy')
-                assert page.evaluate('trainingCalls[0].profile')=='accuracy-7.2.2'
+                assert page.evaluate('trainingCalls[0].profile')=='top-7.2.1'
                 assert page.evaluate('trainingCalls[0].auto_shadow') is True
                 assert page.evaluate('trainingCalls[1]===undefined')
                 assert page.locator('[data-admin-action="training-start"]').is_disabled()

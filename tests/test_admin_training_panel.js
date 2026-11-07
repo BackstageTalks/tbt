@@ -17,9 +17,13 @@ const html=ctx.renderAdminTraining();
 assert(!html.includes('javascript:'));assert(!html.includes('<script>'));assert(html.includes('&lt;script>'));
 console.log('Admin training panel: unavailable, ready, busy and unsafe-link states passed');
 
-assert.match(ctx.renderAdminTrainingProfile(), /value="accuracy-7.2.2" selected/);
+assert.match(ctx.renderAdminTrainingProfile(), /value="top-7.2.1" selected/);
+assert.match(ctx.renderAdminTrainingProfile(), /value="accuracy-7.2.2"[^>]*disabled/);
 ctx.state.adminTrainingProfile="top-7.2.1";
 assert.match(ctx.renderAdminTrainingProfile(), /value="top-7.2.1" selected/);
+ctx.state.adminModelLab={champion_sha256:"a".repeat(64),last_promotion:{
+  state:"WORKFLOW_VERIFIED",approval:{source_sha256:"a".repeat(64)},run:{conclusion:"success"}}};
+assert.doesNotMatch(ctx.renderAdminTrainingProfile(), /value="accuracy-7.2.2"[^>]*disabled/);
 
 // The profile captured before the async confirmation must win over a rerender.
 const loader=source.slice(source.indexOf('  async function loadAdminTraining('),source.indexOf('  function renderAdminCalibration(){'));

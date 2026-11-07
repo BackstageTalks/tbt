@@ -41,14 +41,28 @@ research-only and **shadow is not activated**. No auto-promotion to production.
 The manually dispatched protected training workflow defaults to
 `auto_shadow=false` for backwards compatibility.
 
-## 3. Nasadiť do produkcie — not yet implemented
+## 3. Nasadiť do produkcie — normal promotion still open (#959)
 
-The visual third button is disabled until a separate production promotion
-controller is implemented and independently tested (tracked in #959). To enable it safely:
+An explicit owner-confirmed **calibration-waiver** release exists separately, with pinned
+candidate/champion SHA, immutable rollback and remote readback. It is **not**
+a substitute for the normal prospective-evidence Stage 3 gate.
+
+The Admin candidate-cycle hardening pins stage-1 preflight to the current
+champion SHA and preserves the verified production-switch checkpoint separately,
+so an older preflight cannot authorize the next candidate after a champion swap.
+Until that readback exists, the 7.2.2 training profile stays locked.
+
+### Original unimplemented Stage 3 acceptance criteria
+
+
+The normal quality-gated production route still needs its own controller and
+independent tests (tracked in #959). The existing operator waiver is separate.
+To enable regular Stage 3 safely:
 - Bind approval to an exact immutable candidate tag, model digest, and
   serving champion digest (compare-and-swap).
-- Require independently issued/settled forward shadow evidence, ATP/WTA
-  subgroup metrics, real point-in-time odds and TOP/VALUE performance.
+- Require independently issued/settled forward same-event shadow evidence,
+  ATP/WTA subgroup winner quality, calibration and sufficient samples.
+  Odds, EV, VALUE, TOP, ROI and CLV are not model-quality promotion gates.
 - Rehearse rollback of champion plus its dependencies outside production.
 - Get an explicit operator confirmation for the **specific** model switch,
   then perform atomic publish, independent production prediction readback,

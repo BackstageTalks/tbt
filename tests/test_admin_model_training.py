@@ -51,11 +51,29 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(table.return_value.create_entity.call_args.args[0]["profile"], "standard")
             gh.assert_not_called()
 
-    def test_722_profile_is_durably_queued_without_production_write(self):
-        with patch.object(m, "status", return_value={"can_start": True, "base": "8"}), patch.object(m, "_table") as table, patch.object(m, "github") as gh:
+    def test_722_profile_is_durably_queued_only_after_verified_promotion(self):
+        evidence = {
+            "last_promotion": {"state": "WORKFLOW_VERIFIED",
+                               "approval": {"source_sha256": "a" * 64},
+                               "run": {"conclusion": "success"}},
+            "snapshot": {"champion_sha256": "a" * 64},
+        }
+        with patch.object(model_lab, "_json", side_effect=evidence.get), patch.object(m, "status", return_value={"can_start": True, "base": "8"}), patch.object(m, "_table") as table, patch.object(m, "github") as gh:
             self.assertEqual(m.start({"profile": "accuracy-7.2.2"}, "admin")["state"], "QUEUED")
             self.assertEqual(table.return_value.create_entity.call_args.args[0]["profile"], "accuracy-7.2.2")
             gh.assert_not_called()
+
+    def test_722_fails_closed_if_promotion_is_not_read_back(self):
+        for record in (None, {"state": "WORKFLOW_VERIFIED",
+                              "approval": {"source_sha256": "a" * 64},
+                              "run": {"conclusion": "failure"}}):
+            with patch.object(model_lab, "_json", side_effect=lambda key: (
+                    record if key == "last_promotion" else
+                    {"champion_sha256": "b" * 64} if key == "snapshot" else None)), \
+                 patch.object(m, "_table") as table:
+                with self.assertRaises(m.TrainingBlocked):
+                    m.start({"profile": "accuracy-7.2.2"}, "admin")
+                table.assert_not_called()
 
     def test_722_shadow_requires_verified_preflight(self):
         with patch.object(model_lab, "_json", return_value=None), patch.object(m, "_table") as table:

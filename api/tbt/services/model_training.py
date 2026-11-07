@@ -185,6 +185,18 @@ def start(payload, actor):
     from .model_lab import _row as lab_row, _json as lab_json
     if lab_row("active") is not None:
         raise TrainingBlocked("Model Factory má rozpracovanú operáciu. Obnov stav.")
+    # P0: 7.2.2 is never a shortcut around an unverified 7.2.1 champion.
+    # A durable production-readback checkpoint must match the live snapshot.
+    if profile == "accuracy-7.2.2":
+        promotion = lab_json("last_promotion")
+        lab_snapshot = lab_json("snapshot")
+        approval = promotion.get("approval") if isinstance(promotion, dict) else None
+        if (not isinstance(approval, dict) or promotion.get("state") != "WORKFLOW_VERIFIED"
+                or not isinstance(lab_snapshot, dict)
+                or approval.get("source_sha256") != lab_snapshot.get("champion_sha256")
+                or not isinstance(promotion.get("run"), dict)
+                or promotion["run"].get("conclusion") != "success"):
+            raise TrainingBlocked("P0: 7.2.1 musí mať overený produkčný read-back pred tréningom 7.2.2.")
     if auto_shadow:
         preflight = lab_json("last_preflight")
         record = preflight.get("run") if isinstance(preflight, dict) else None
@@ -193,13 +205,17 @@ def start(payload, actor):
                 preflight["verified_at"].replace("Z", "+00:00"))).total_seconds()
         except (AttributeError, KeyError, TypeError, ValueError):
             age = float("inf")
-        if (not isinstance(record, dict) or preflight.get("state") != "WORKFLOW_VERIFIED"
+        lab_snapshot = lab_json("snapshot")
+        approval = preflight.get("approval") if isinstance(preflight, dict) else None
+        if (not isinstance(lab_snapshot, dict) or not isinstance(approval, dict)
+                or approval.get("expected_champion_sha256") != lab_snapshot.get("champion_sha256")
+                or not isinstance(record, dict) or preflight.get("state") != "WORKFLOW_VERIFIED"
                 or record.get("status") != "completed" or record.get("conclusion") != "success"
                 or record.get("artifact_verified") is not True
                 or not isinstance(record.get("preflight_report"), dict)
                 or int(record["preflight_report"].get("eligible_rows") or 0) < 500000
                 or not 0 <= age <= 86400):
-            raise TrainingBlocked("Model Factory: najprv treba čerstvý overený audit dát ATP/WTA.")
+            raise TrainingBlocked("Model Factory: najprv treba čerstvý overený audit dát ATP/WTA pre aktuálneho championa.")
     current = status()
     if not current["can_start"]:
         raise TrainingBlocked(current["reason"])

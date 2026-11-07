@@ -6212,8 +6212,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       trainBusy?'Súbežný tréning stále prebieha.':
       !/^[0-9a-f]{64}$/.test(String(d.feed_sha256||''))?'Chýba overený SHA-256 posledného publikovaného feedu.':'';
     const preflight=d?.last_preflight;
+    // A previous preflight cannot approve fitting against a different champion.
+    const preflightMatchesChampion=/^[0-9a-f]{64}$/.test(String(d?.champion_sha256||''))&&
+      preflight?.approval?.expected_champion_sha256===d.champion_sha256;
     const evidenceTime=Date.parse(preflight?.verified_at||'');
-    const preflightFresh=preflight?.state==='WORKFLOW_VERIFIED'&&
+    const preflightFresh=preflightMatchesChampion&&preflight?.state==='WORKFLOW_VERIFIED'&&
       preflight?.run?.conclusion==='success'&&preflight?.run?.artifact_verified===true&&
       Number.isSafeInteger(preflight?.run?.preflight_report?.eligible_rows)&&
       preflight.run.preflight_report.eligible_rows>=500000&&
@@ -6226,7 +6229,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     // No client-side chaining of training after an unverified or failed preflight.
     const guidedNext=preflightFresh?'train_candidate':'prepare_inputs';
     const guidedEnabled=guidedNext==='train_candidate'?canTrain:canBuild;
-    const guidedActionText=guidedNext==='prepare_inputs'?'1 · Pripraviť dáta':
+    const promoted=d?.last_promotion?.state==='WORKFLOW_VERIFIED'&&
+      d.last_promotion.approval?.source_sha256===d?.champion_sha256&&
+      d.last_promotion.run?.conclusion==='success';
+    const guidedActionText=guidedNext==='prepare_inputs'?(promoted?'1 · Pripraviť dáta pre ďalšieho kandidáta':'1 · Pripraviť dáta'):
       ['failure','timed_out','cancelled'].includes(trainRun?.conclusion)?
       '2 · Zopakovať chránený tréning':'2 · Spustiť tréning kandidáta';
     const guidedReason=guidedEnabled?'Ďalší krok je pripravený. Každú operáciu pred spustením potvrdíš.':
@@ -6321,7 +6327,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const preflightText=preflightFresh?
       '<strong>Audit dát overený.</strong> '+safeLink(preflight.run?.html_url,'Report ATP/WTA · beh #'+preflight.run?.id)+
       ' · Finálne zmrazenie a zálohovanie vstupov prebehne v tréningu.':
-      'Zatiaľ chýba čerstvý overený report ATP/WTA. Najprv spusti prípravu dát.';
+      (promoted&&!preflightMatchesChampion?
+        'Champion bol vymenený a overený. Pred ďalším tréningom priprav nový audit dát pre jeho SHA.':
+        'Zatiaľ chýba čerstvý overený report ATP/WTA. Najprv spusti prípravu dát.');
     const tourSummary=tour=>{
       const item=preflight?.run?.preflight_report?.tours?.[tour];
       if(!preflightFresh||!item)return '';
@@ -6351,16 +6359,24 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-next" data-factory-next="'+guidedNext+'" '+
         (guidedEnabled?'':'disabled')+'>'+escapeHtml(guidedActionText)+'</button></div>'+
       '<p class="model-factory-guided-reason" role="status">'+escapeHtml(guidedFeedback)+'</p>'+
+      (promoted?'<p role="status"><strong>Posledná výmena championa overená.</strong> Nový kandidát vyžaduje vlastný audit dát a nový chránený tréning; nič sa nespúšťa automaticky.</p>':'')+
       '<p><strong>Aktuálny tréning:</strong> '+trainingText+'</p>'+
       (trainingStep?'<p role="status"><strong>Práve prebieha:</strong> '+escapeHtml(readableStep(training.active_steps[0]))+'</p>':'')+
       (failedSteps.length?'<p role="alert"><strong>Zastavené:</strong> '+escapeHtml(failedSteps.join(' · '))+'</p>':'')+
       outcomeText+
       '<p class="model-factory-guided-foot">Po príprave dát sa hlavné tlačidlo zmení na spustenie tréningu. Worker požiadavku preberie spravidla do 30 minút; kartu môžeš zavrieť. Nový model sa sám nenasadí do produkcie.</p></article>';
+    const championCard='<article class="admin-calibration-panel model-factory-champion" aria-label="Ručný výber championa">'+
+      '<small>SAMOSTATNÉ SCHVÁLENIE</small><h3>Vybrať nového championa</h3>'+
+      '<p>Najprv porovnaj kvalitu a prospektívne výsledky. Toto je <strong>výslovná výnimka kalibrácie</strong>, nie automatické GO. Bez kvalitných dôkazov kandidáta nenasadzuj.</p>'+
+      '<label>Uložený kandidát <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
+      '<p role="status">Zadáš dôvod a presné potvrdenie RELEASE. Chránený workflow pred výmenou overí identitu modelu, rollback a globálny lock. Následne sa nezávisle kontroluje SHA championa.</p>'+
+      '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article>';
     return '<section class="admin-ux-section admin-model-lab" aria-label="BlinQ Model Factory">'+
       '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
-      productionSummary+guidedCard+
+      productionSummary+guidedCard+championCard+
       '<details class="admin-model-factory-controls"'+(state.adminModelFactoryControlsOpen===true?' open':'')+'><summary>Podrobnosti, história a pokročilé ovládanie</summary>'+
       '<article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
       '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
@@ -6389,8 +6405,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
       '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+
-      '<label>Model pre produkčný release <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
-      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
+      '<p>Výber championa a potvrdzovacie tlačidlo sú nad pokročilými operáciami, aby zostali vždy viditeľné.</p>'+
       '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
       '<p><strong>Shadow podmienky na posúdenie:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
@@ -6467,9 +6482,18 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     }
   }
   function renderAdminTrainingProfile(disabled=false){
-    const selected=state.adminTrainingProfile||'accuracy-7.2.2';
-    const options=[['accuracy-7.2.2','Presnosť · aktuálny tréningový profil'],['top-7.2.1','Porovnávací profil 7.2.1'],['standard','Štandardný model (bez auto-shadow)']];
-    return '<label>Profil kandidáta <select id="admin-training-profile" '+(disabled?'disabled':'')+'>'+options.map(([value,label])=>'<option value="'+value+'" '+(value===selected?'selected':'')+'>'+label+'</option>').join('')+'</select></label>';
+    const promotion=state.adminModelLab?.last_promotion;
+    const champion=state.adminModelLab?.champion_sha256;
+    const nextUnlocked=promotion?.state==='WORKFLOW_VERIFIED'&&
+      promotion.approval?.source_sha256===champion&&
+      promotion.run?.conclusion==='success';
+    // Preserve P0: never default to 7.2.2 before the operator's verified switch.
+    const selected=state.adminTrainingProfile||'top-7.2.1';
+    const options=[['top-7.2.1','BlinQ 7.2.1 · aktuálna priorita',false],
+      ['accuracy-7.2.2','BlinQ 7.2.2 · až po overenom championovi',!nextUnlocked],
+      ['standard','Štandardný model (bez auto-shadow)',false]];
+    return '<label>Profil kandidáta <select id="admin-training-profile" '+(disabled?'disabled':'')+'>'+options.map(([value,label,locked])=>
+      '<option value="'+value+'" '+(value===selected?'selected':'')+(locked?' disabled':'')+'>'+label+'</option>').join('')+'</select></label>';
   }
   function renderAdminTraining(){
     const d=state.adminTraining, busy=state.adminTrainingBusy;
@@ -6488,7 +6512,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(state.adminTrainingBusy)return;
     state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
-    const profile=selectedProfile||state.adminTrainingProfile||'accuracy-7.2.2';
+    const profile=selectedProfile||state.adminTrainingProfile||'top-7.2.1';
     state.adminTrainingBusy=true;state.adminTrainingMessage='';rerenderAdmin();
     try{
       const result=await BlinqAuth.adminModelTraining(start?{profile,auto_shadow:['top-7.2.1','accuracy-7.2.2'].includes(profile)}:undefined);
@@ -7483,7 +7507,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           if(state.adminModelLab?.can_start!==true||state.adminTraining?.can_start!==true){
             showStatus('Tréning zatiaľ blokuje ochranná fronta. Obnov stav.');return;
           }
-          const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'accuracy-7.2.2';
+          const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'top-7.2.1';
           if(!['standard','top-7.2.1','accuracy-7.2.2'].includes(profile))return;
           if(!await confirmAdminModelOperation('Spustiť chránený tréning nového kandidáta? '+(profile==='standard'?'Model sa uloží bez auto-shadow.':'Shadow aktivácia sa vykoná iba po úspešných nezávislých kontrolách.')+' Produkčný champion zostane nezmenený.'))return;
           loadAdminTraining(true,profile);return;
@@ -7530,7 +7554,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
       if(action==='training-start'){
-        const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'accuracy-7.2.2';
+        const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'top-7.2.1';
         const label=profile==='accuracy-7.2.2'?'7.2.2':profile==='top-7.2.1'?'7.2.1':'štandardný';
         if(!await confirmAdminModelOperation('Natrénovať kandidáta '+label+'? '+(profile==='standard'?'Model sa uloží bez aktivácie.':'Po úspešných nezávislých kontrolách sa aktivuje iba v shadow.')+' Produkčný champion sa nemení.'))return;
         loadAdminTraining(true,profile);return;

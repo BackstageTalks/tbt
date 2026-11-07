@@ -39,6 +39,7 @@ class TestProductionQueue(TestLab):
         lab.sync(state)
         assert lab._json('active') is None
         assert lab._json('last')['state'] == 'WORKFLOW_VERIFIED'
+        assert lab.status()['last_promotion']['approval']['source_sha256'] == 'c' * 64
 
 
 @pytest.fixture
