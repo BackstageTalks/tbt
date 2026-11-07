@@ -150,3 +150,15 @@ def test_audit_does_not_silently_claim_member_render_or_resolve_other_market():
     assert doc["complete_member_render_verification"] is False
     assert doc["paid_provider_requests"] == 0
     assert doc["archive_writes"] == 0
+
+
+def test_site_gap_breakdown_distinguishes_contract_from_source_without_ids():
+    ace = sent()
+    exact = settled(ace)
+    missing = reconcile_day(DAY, [ace], [exact], site([]), None, now=NOW)
+    assert missing["site_gap_breakdown"] == {"aces:no_exact_contract": 1}
+    legacy = deepcopy(exact)
+    legacy["result"].pop("runtime_source")
+    present_but_unverified = reconcile_day(DAY, [ace], [exact], site([legacy]), None, now=NOW)
+    assert present_but_unverified["site_gap_breakdown"] == {"aces:no_verified_final": 1}
+    assert not any("e1" in item for item in present_but_unverified["site_gap_breakdown"])

@@ -64,13 +64,39 @@ def _fingerprint(ref: dict) -> str:
     return sha256(frozen.encode()).hexdigest()[:16]
 
 
+def _has_exact_issued_identity(ref: dict, row: dict) -> bool:
+    """Audit-only structural check; never grade or reprice this candidate."""
+    if not isinstance(row, dict):
+        return False
+    if any(str(row.get(key) or "") != str(ref.get(key) or "")
+           for key in ("event_id", "selection_id", "section", "market")):
+        return False
+    frozen_pub = str(ref.get("publication_key") or "")
+    if frozen_pub and frozen_pub != str(row.get("publication_key") or ""):
+        return False
+    if ref.get("market") == "aces":
+        if str(ref.get("market_line") or "") != str(row.get("market_line") or ""):
+            return False
+        if str(ref.get("projection_direction") or "") != str(row.get("projection_direction") or ""):
+            return False
+    return True
+
+
 def _evidence(ref: dict, rows: list[dict]) -> tuple[str, dict | None, str]:
     try:
         original = results.match_result(ref, rows)
     except RuntimeError:
         return "ambiguous", None, "ambiguous_exact_contract"
     if original is None:
-        return "pending", None, "no_exact_contract"
+        # The canonical Results matcher intentionally rejects unverified
+        # provenance. Audit structure separately, but never treat it as a
+        # verified settlement or allow it to influence ROI/results.
+        structural = [row for row in rows if _has_exact_issued_identity(ref, row)]
+        if len(structural) > 1:
+            return "ambiguous", None, "ambiguous_exact_contract"
+        return "pending", None, (
+            "no_verified_final" if structural else "no_exact_contract"
+        )
     result = original.get("result")
     if not isinstance(result, dict) or result.get("runtime_source") != "match_status_snapshot":
         return "pending", original, "no_verified_final"
@@ -93,6 +119,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
         raise ValueError("Clock must be timezone-aware")
     counts = Counter()
     reasons = Counter()
+    site_gaps = Counter()  # Only broad market and verification class, never identifiers.
     fingerprints: dict[str, list[str]] = {}
     premium = Counter()
     site_rows = site["rows"]
@@ -116,6 +143,10 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
             issues.append("site_ambiguous")
         elif a in ("won", "lost", "void") and b == "pending":
             issues.append("site_missing_exact_archive_result")
+            market = str(ref.get("market") or "").lower()
+            market = market if market in {"aces", "match_winner", "double_faults"} else "other"
+            kind = site_reason if site_reason in {"no_exact_contract", "no_verified_final"} else "other"
+            site_gaps[market + ":" + kind] += 1
         elif a in ("won", "lost", "void") and b not in (a, "pending"):
             issues.append("site_terminal_outcome_conflict")
         if ar is not None and br is not None:
@@ -164,6 +195,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
         "website_excluded_sections": site.get("excluded_sections"),
         "parity": "mismatch" if reasons else "verified_same_contract",
         "mismatch_reasons": dict(sorted(reasons.items())),
+        "site_gap_breakdown": dict(sorted(site_gaps.items())),
         "private_fingerprints": {k: sorted(v)[:20] for k, v in sorted(fingerprints.items())},
         "scope": "telegram_issued_vs_website_pre_entitlement",
         "member_account_render_verified": False,
