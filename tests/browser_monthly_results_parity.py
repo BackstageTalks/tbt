@@ -84,6 +84,8 @@ def main():
               const summary=t.monthlyMetricSummary(monthRows,'elite');
               const todayRowsInMonth=summary.all.filter(x=>t.monthlyRecordDay(x.row)===today);
               const html=t.renderMonthlyPerformance();
+              document.body.classList.remove('blinq-home');
+              document.body.classList.add('blinq-admin');
               const host=document.querySelector('#routePanel');
               document.querySelector('#bootSplash')?.remove();
               document.querySelector('#cookieConsent')?.remove();
@@ -95,6 +97,8 @@ def main():
               const screen=host.querySelector('.monthly-performance');
               const left=screen?.getBoundingClientRect().left;
               const right=screen?.getBoundingClientRect().right;
+              const lastColumnRight=table?.querySelector('thead th:last-child')?.getBoundingClientRect().right;
+              const alignment=getComputedStyle(screen?.querySelector('.monthly-stat')).textAlign;
               // Compare a one-category VALUE selection. Its duplicate was
               // deduplicated only after the actual category was selected.
               s.monthlyPerformance.sections=['value'];
@@ -115,7 +119,7 @@ def main():
                 monthBefore:summary.daily.get(prev)||0,
                 fullProfit:summary.profit,
                 reporting:html.includes('06:00–06:00'),
-                parity,tableVisible,left,right,
+                parity,tableVisible,left,right,lastColumnRight,alignment,
                 valueResultWin:valueResults.wins,valueMonthWin:valueMonth.wins,
                 valueResultProfit:valueResults.profit,valueMonthProfit:valueMonth.profit,
                 excludedResultWin:excludedResults.wins,excludedMonthCount:excludedMonth.length
@@ -131,6 +135,8 @@ def main():
             assert result["reporting"] and result["tableVisible"], result
             assert "Overené:" in result["parity"] and "1/0/0" in result["parity"], result
             assert 0 <= result["left"] < result["right"] <= 391, result
+            assert result["lastColumnRight"] <= 391, result
+            assert result["alignment"] == "center", result
             assert result["valueResultWin"] == result["valueMonthWin"] == 1, result
             assert abs(result["valueResultProfit"] - result["valueMonthProfit"]) < 1e-9, result
             assert result["excludedResultWin"] == result["excludedMonthCount"] == 0, result
