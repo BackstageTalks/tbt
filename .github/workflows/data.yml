@@ -451,7 +451,7 @@ jobs:
             python scripts/run_mega_data.py "${args[@]}"
           elif [[ "$MODE" == history || "$MODE" == statistics || "$MODE" == extras || "$MODE" == identity ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
-            if [[ "$MODE" == statistics && ( "${HOURLY_AUTOFILL}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" ) ]]; then args+=(--targeted-statistics); fi
+            if [[ "$MODE" == statistics && ( "${HOURLY_AUTOFILL}" == "true" || "${BLINQ_TARGETED_STATISTICS:-false}" == "true" || "${BLINQ_BP_FOCUS:-false}" == "true" ) ]]; then args+=(--targeted-statistics); fi
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             if [[ -n "${BLINQ_TARGET_STATS_TOUR:-}" ]]; then args+=(--target-tour "$BLINQ_TARGET_STATS_TOUR"); fi
