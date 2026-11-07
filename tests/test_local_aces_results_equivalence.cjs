@@ -52,7 +52,7 @@ assert(Math.abs(all.avgOdds-1.8125)<1e-9);
 const aceOnly=context.localResultMetrics([aceWin,aceLoss],'ace',{membership:'elite'});
 assert.equal(aceOnly.unitSample,2);
 assert(Math.abs(aceOnly.profit+.21)<1e-9);
-const monthlyStart=source.indexOf('  function monthlyFinancialRecord(publication){');
+const monthlyStart=source.indexOf('  function monthlyFinancialRecord(publication');
 const monthlyEnd=source.indexOf('  function renderMonthlyPerformance(){',monthlyStart);
 assert(monthlyStart>0&&monthlyEnd>monthlyStart);
 vm.runInContext(source.slice(monthlyStart,monthlyEnd),context);

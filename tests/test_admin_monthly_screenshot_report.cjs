@@ -9,7 +9,7 @@ const start=app.indexOf('  const MONTHLY_SECTIONS=[');
 const end=app.indexOf('  function renderResults(){',start);
 assert.ok(start>=0&&end>start);
 const fixtures=[
-  {row:{scheduled_at:'2026-11-01T12:00:00+01:00',tour:'ATP',surface:'hard'},publication:{section:'top_daily',market:'match_winner',price_status:'priced',odds:1.7,result:{outcome:'win',staked_units:2,profit_units:1.4}},categories:['top_daily'],allowed:['pro','elite','legend','goat']},
+  {row:{scheduled_at:'2026-11-01T12:00:00+01:00',tour:'ATP',surface:'hard'},publication:{section:'top_daily',market:'match_winner',price_status:'priced',odds:1.7,result:{outcome:'win',staked_units:2,profit_units:0.7}},categories:['top_daily'],allowed:['pro','elite','legend','goat']},
   {row:{scheduled_at:'2026-11-03T12:00:00+01:00',tour:'WTA',surface:'clay'},publication:{section:'value',market:'match_winner',price_status:'priced',odds:1.9,result:{outcome:'loss',staked_units:1,profit_units:-1}},categories:['value'],allowed:['rookie','pro','elite','legend','goat']},
   {row:{scheduled_at:'2026-11-05T12:00:00+01:00',tour:'ATP',surface:'hard'},publication:{section:'top_daily',market:'match_winner',price_status:'priced',odds:2,result:{outcome:'void',staked_units:0,profit_units:0}},categories:['top_daily'],allowed:['elite','legend','goat']}
 ];
@@ -19,6 +19,9 @@ const sandbox={
  bratislavaBettingDayKey:x=>typeof x==='number'?'2026-11-07':String(x||'').slice(0,10),
  publicationOutcome:p=>({kind:p?.result?.outcome||'pending'}),
  approvedLocalAceResultOdds:()=>NaN,
+ statsHaveExcludedMarkets:()=>false,
+ resultPublicationMatchesWindow:()=>true,
+ localResultMetrics:()=>({wins:0,losses:0,voids:0,profit:0}),
  escapeHtml:x=>String(x??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])),
  filteredResults:f=>fixtures.filter(x=>x.row.scheduled_at.slice(0,10)>=f.dateFrom&&x.row.scheduled_at.slice(0,10)<=f.dateTo&&(!f.tour||f.tour===x.row.tour)&&(!f.surface||f.surface===x.row.surface)),
  settledPublishedEntries:(xs,c,f)=>xs.filter(x=>!f.membership||x.allowed.includes(f.membership))
@@ -35,7 +38,7 @@ const elite=t.monthlyMetricSummary(t.monthlyMetricRows('elite'));
 const rookie=t.monthlyMetricSummary(t.monthlyMetricRows('rookie'));
 assert.equal(elite.all.length,3);
 assert.equal(elite.n,2);
-assert.ok(Math.abs(elite.profit+.3)<1e-9,'profit normalized to 1u');
+assert.ok(Math.abs(elite.profit+.3)<1e-9,'frozen 1u profit remains unchanged despite legacy stake');
 assert.equal(elite.voids,1);
 assert.equal(rookie.all.length,1);
 assert.equal(rookie.profit,-1);

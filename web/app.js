@@ -4091,7 +4091,7 @@
   ];
   function monthlyPerformanceState(){
     if(!state.monthlyPerformance){
-      const thisMonth=bratislavaBettingDayKey(Date.now(),0).slice(0,7);
+      const thisMonth=bratislavaBettingDayKey(Date.now(),6).slice(0,7);
       state.monthlyPerformance={month:thisMonth,level:'all',view:'overview',fullscreen:false,sections:MONTHLY_SECTIONS.map(([key])=>key),
         tour:'',surface:'',minOdds:'',maxOdds:'',outcomes:['win','loss','void']};
     }
@@ -4104,21 +4104,33 @@
     const current=String(today||'').slice(0,7);
     return month>current?0:month===current?Math.min(total,Number(String(today).slice(8,10))||0):total;
   }
+  function monthlyRecordDay(row){
+    return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
+  }
   function monthlyMetricRows(membership=''){
-    const selection=monthlyPerformanceState(),month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
-      ?selection.month:bratislavaBettingDayKey(Date.now(),0).slice(0,7);
-    const end=monthlyMonthEnd(month);
+    const selection=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6),
+      month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
+        ?selection.month:today.slice(0,7);
+    const end=monthlyMonthEnd(month,today);
     if(!end)return [];
-    const filters={category:'all',window:'custom',dateFrom:month+'-01',
-      dateTo:month+'-'+String(end).padStart(2,'0'),bettingDay:false,
+    const categories=MONTHLY_SECTIONS.map(([key])=>key).filter(key=>selection.sections.includes(key));
+    if(!categories.length)return [];
+    const resultCategory=categories.length===MONTHLY_SECTIONS.length?'all':categories.join(',');
+    const filters={category:resultCategory,window:'custom',dateFrom:month+'-01',
+      dateTo:month+'-'+String(end).padStart(2,'0'),bettingDay:true,
       tour:selection.tour,surface:selection.surface,membership};
-    // Reuse canonical settled and deduplicated publications, never display quotes.
-    const entries=settledPublishedEntries(filteredResults(filters),'all',filters);
-    const selected=new Set(selection.sections);
+    // Identical category, authorization, stats-exclusion and deduplication path
+    // to the Results table/KPI; selecting a market happens BEFORE deduplication.
+    const entries=settledPublishedEntries(filteredResults(filters),resultCategory,filters,statsHaveExcludedMarkets());
+    const selected=new Set(categories);
     const allowedOutcomes=new Set(selection.outcomes);
     const min=selection.minOdds===''?null:Number(selection.minOdds);
     const max=selection.maxOdds===''?null:Number(selection.maxOdds);
-    return entries.filter(({publication,categories})=>{
+    return entries.filter(({row,publication,categories})=>{
+      // Use exactly the same current-day issuance gate as Results → Dnes.
+      // In particular, a 00:00–05:59 match belongs to the prior betting day.
+      if(monthlyRecordDay(row)===today&&
+         !resultPublicationMatchesWindow(row,publication,{window:'today',bettingDay:true}))return false;
       if(!categories.some(c=>selected.has(c)))return false;
       const outcome=publicationOutcome(publication).kind;
       if(!allowedOutcomes.has(outcome))return false;
@@ -4128,13 +4140,20 @@
       return true;
     });
   }
-  function monthlyFinancialRecord(publication){
+  function monthlyFinancialRecord(publication,membership='',category='all'){
     const outcome=publicationOutcome(publication).kind;
     const local=approvedLocalAceResultOdds(publication);
     if(Number.isFinite(local)&&['win','loss'].includes(outcome))
       return {profit:outcome==='win'?local-1:-1,stake:1,priced:true,odds:local};
     if(outcome==='void')return {profit:0,stake:0,priced:false};
     if(!['win','loss'].includes(outcome))return null;
+    // The Aces/DF-only Results view uses its approved local quote, not a
+    // generic projection placeholder. Keep its standalone cohort identical.
+    if(!membership&&['ace','double_faults'].includes(category)){
+      const displayOdds=aceDfResultKpiOdds(publication);
+      return Number.isFinite(displayOdds)&&displayOdds>1
+        ?{profit:outcome==='win'?displayOdds-1:-1,stake:1,priced:true,odds:displayOdds}:null;
+    }
     const odds=publication.odds==null?NaN:Number(publication.odds);
     const status=String(publication.price_status||'').toLowerCase();
     const projection=['aces','double_faults','sets','games'].includes(String(publication.market||'').toLowerCase());
@@ -4143,12 +4162,15 @@
     const stake=publication.result?.staked_units==null?NaN:Number(publication.result.staked_units);
     const profit=publication.result?.profit_units==null?NaN:Number(publication.result.profit_units);
     if(!Number.isFinite(stake)||stake<=0||!Number.isFinite(profit))return null;
-    return {profit:profit/stake,stake:1,priced:true,odds};
+    // profit_units is already the canonical 1u gain in Results, even when
+    // a legacy raw staked_units field is larger than one. No second division.
+    if(!membership&&String(publication.section||'').toLowerCase()==='prime')return null;
+    return {profit,stake:1,priced:true,odds};
   }
 
-  function monthlyMetricSummary(entries){
+  function monthlyMetricSummary(entries,membership='',category='all'){
     const all=entries.map(item=>({...item,outcome:publicationOutcome(item.publication).kind,
-      financial:monthlyFinancialRecord(item.publication)}));
+      financial:monthlyFinancialRecord(item.publication,membership,category)}));
     const wins=all.filter(x=>x.outcome==='win').length;
     const losses=all.filter(x=>x.outcome==='loss').length;
     const voids=all.filter(x=>x.outcome==='void').length;
@@ -4156,23 +4178,38 @@
     const excluded=all.filter(x=>['win','loss'].includes(x.outcome)&&!x.financial?.priced).length;
     const profit=priced.reduce((sum,x)=>sum+x.financial.profit,0);
     const n=priced.length;
-    const avg=n?priced.reduce((sum,x)=>sum+x.financial.odds,0)/n:null;
+    // Match Results' quoted-odds sample independently of ROI staking eligibility.
+    const quoteOdds=all.map(x=>{
+      if(!['win','loss'].includes(x.outcome))return NaN;
+      const local=approvedLocalAceResultOdds(x.publication);
+      if(Number.isFinite(local))return local;
+      if(!membership&&['ace','double_faults'].includes(category))return aceDfResultKpiOdds(x.publication);
+      const p=x.publication,odds=p.odds==null?NaN:Number(p.odds);
+      const status=String(p.price_status||'').trim().toLowerCase();
+      const projection=['aces','double_faults','sets','games'].includes(String(p.market||'').toLowerCase());
+      return (projection?status==='priced_projection':['','priced','priced_projection'].includes(status))
+        &&Number.isFinite(odds)&&odds>1?odds:NaN;
+    }).filter(value=>Number.isFinite(value)&&value>1);
+    const avg=quoteOdds.length?quoteOdds.reduce((sum,odds)=>sum+odds,0)/quoteOdds.length:null;
     const daily=new Map();
     priced.forEach(item=>{
-      const day=bratislavaBettingDayKey(item.row.scheduled_at||item.row.date||0,0);
+      const day=monthlyRecordDay(item.row);
       daily.set(day,(daily.get(day)||0)+item.financial.profit);
     });
     return {all,wins,losses,voids,priced,excluded,profit,n,
       roi:n?profit/n*100:null,avg,daily};
   }
   function renderMonthlyPerformance(){
-    const s=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),0);
+    const s=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6);
     const month=/^\d{4}-(0[1-9]|1[0-2])$/.test(s.month)?s.month:today.slice(0,7);
     const days=monthlyMonthEnd(month,today);
     const currentLevel=MONTHLY_LEVELS.some(([id])=>id===s.level)?s.level:'all';
     const fmt=(value,d=2)=>Number(value).toLocaleString('sk-SK',
       {minimumFractionDigits:d,maximumFractionDigits:d});
     const signed=value=>(value>0?'+':'')+fmt(value);
+    // Reconcile 2-decimal daily displays to the rounded cumulative total.
+    // Never round the underlying settlement, ROI or chart input.
+    const roundUnits=value=>Math.sign(value)*Math.round((Math.abs(value)+1e-9)*100)/100;
     const option=(value,label,current)=>'<option value="'+escapeHtml(value)+'"'+
       (value===current?' selected':'')+'>'+escapeHtml(label)+'</option>';
     const tours=[...new Set((state.feed.results||[]).map(r=>String(r.tour||'').toUpperCase()).filter(Boolean))].sort();
@@ -4180,14 +4217,36 @@
       .replace('indoor_hard','hard')).filter(Boolean))].sort();
     // Cohorts express current access rules projected onto historical publications,
     // not distinct member wagers. They overlap and must never be added together.
+    const selectedSections=MONTHLY_SECTIONS.map(([key])=>key).filter(key=>s.sections.includes(key));
+    const resultCategory=selectedSections.length===MONTHLY_SECTIONS.length?'all':selectedSections.join(',');
     const levelData=MONTHLY_LEVELS.map(([id,label])=>({
-      id,label,available:id==='all'||Boolean(state.feed?.member_result_rules?.[id]),
-      ...{}
+      id,label,available:id==='all'||Boolean(state.feed?.member_result_rules?.[id])
     })).map(level=>({
-      ...level,metrics:level.available?monthlyMetricSummary(monthlyMetricRows(level.id==='all'?'':level.id)):null
+      ...level,metrics:level.available?monthlyMetricSummary(monthlyMetricRows(level.id==='all'?'':level.id),level.id==='all'?'':level.id,resultCategory):null
     }));
     const active=levelData.find(item=>item.id===currentLevel)||levelData[0];
     const m=active.metrics;
+    // Live self-check against the Results KPI for the exact same betting day,
+    // membership, section and surface. Mismatches stay visible to Admin.
+    const auditEnabled=Boolean(m)&&month===today.slice(0,7)&&selectedSections.length>0
+      &&s.minOdds===''&&s.maxOdds===''&&s.outcomes.length===3;
+    const auditFilters=auditEnabled?{
+      category:resultCategory,window:'today',bettingDay:true,
+      tour:s.tour,surface:s.surface,membership:currentLevel==='all'?'':currentLevel
+    }:null;
+    const auditResults=auditFilters
+      ?localResultMetrics(filteredResults(auditFilters),resultCategory,auditFilters):null;
+    const auditRows=auditResults?m.all.filter(item=>monthlyRecordDay(item.row)===today):[];
+    const auditWin=auditRows.filter(item=>item.outcome==='win').length;
+    const auditLoss=auditRows.filter(item=>item.outcome==='loss').length;
+    const auditVoid=auditRows.filter(item=>item.outcome==='void').length;
+    const auditProfit=m?.daily.get(today)||0;
+    const auditMatched=!auditResults||(auditWin===auditResults.wins&&auditLoss===auditResults.losses
+      &&auditVoid===auditResults.voids&&Math.abs(auditProfit-auditResults.profit)<.005);
+    const auditText=auditResults?(auditMatched?'Overené: ':'Rozdiel vo výpočte: ')
+      +'Report '+auditWin+'/'+auditLoss+'/'+auditVoid+' · '+(auditProfit>=0?'+':'')+auditProfit.toFixed(2)+' u'
+      +' | Výsledky '+auditResults.wins+'/'+auditResults.losses+'/'+auditResults.voids
+      +' · '+(auditResults.profit>=0?'+':'')+auditResults.profit.toFixed(2)+' u':'';
     const reportMode=s.view==='report'&&active.id!=='all'&&active.available;
     const fullscreen=reportMode&&s.fullscreen===true;
     const showAdvanced=s.filtersExpanded===true||(s.filtersExpanded==null&&!reportMode);
@@ -4266,9 +4325,23 @@
         (v&&v.n?escapeHtml(signed(v.profit))+' u':'—')+'</td>'+
         '<td>'+(v?.roi==null?'—':escapeHtml(signed(v.roi))+' %')+'</td></tr>';
     }).join('');
+    const displayDailyByLevel=new Map(levelData.map(level=>{
+      if(!level.metrics)return [level.id,null];
+      let exact=0,previous=0;
+      const display=new Map();
+      daysWithResults.forEach(day=>{
+        const delta=level.metrics.daily.get(day);
+        if(delta==null)return;
+        exact+=delta;
+        const rounded=roundUnits(exact);
+        display.set(day,roundUnits(rounded-previous));
+        previous=rounded;
+      });
+      return [level.id,display];
+    }));
     const dayRows=daysWithResults.map((day,index)=>{
       const cells=levelData.map(level=>{
-        const d=level.metrics?.daily;
+        const d=displayDailyByLevel.get(level.id);
         if(!d)return '<td class="monthly-cell-na" aria-label="Pravidlá levelu nedostupné">—</td>';
         if(!d.has(day))return '<td class="monthly-cell-empty" aria-label="Bez vyúčtovaných tipov">·</td>';
         const value=d.get(day);
@@ -4280,7 +4353,7 @@
     // cohort. The comparison matrix remains available in overview mode.
     const dailyOutcomes=new Map();
     (m?.all||[]).forEach(item=>{
-      const day=bratislavaBettingDayKey(item.row.scheduled_at||item.row.date||0,0);
+      const day=monthlyRecordDay(item.row);
       if(!dailyOutcomes.has(day))dailyOutcomes.set(day,{win:0,loss:0,void:0});
       const counts=dailyOutcomes.get(day);
       if(Object.prototype.hasOwnProperty.call(counts,item.outcome))counts[item.outcome]++;
@@ -4290,13 +4363,14 @@
       const settled=dailyOutcomes.get(date)||{win:0,loss:0,void:0};
       const dayProfit=m?.daily.get(date);
       dailyRunning+=dayProfit||0;
+      const dayDisplay=displayDailyByLevel.get(active.id)?.get(date);
       return '<tr><th scope="row">'+(index+1)+'.</th>'+
         '<td>'+settled.win+' / '+settled.loss+' / '+settled.void+'</td>'+
-        '<td class="monthly-unit'+(dayProfit==null?' monthly-cell-empty':moneyClass(dayProfit))+'">'+
-        (dayProfit==null?'·':escapeHtml(signed(dayProfit))+' u')+'</td>'+
-        '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(dailyRunning))+' u</td></tr>';
+        '<td class="monthly-unit'+(dayDisplay==null?' monthly-cell-empty':moneyClass(dayDisplay))+'">'+
+        (dayDisplay==null?'·':escapeHtml(signed(dayDisplay))+' u')+'</td>'+
+        '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(roundUnits(dailyRunning)))+' u</td></tr>';
     }).join('');
-    const periodText=days?('1. – '+days+'. deň'):'bez dát';
+    const periodText=days?('1. – '+days+'. deň · 06:00–06:00'):'bez dát';
     const viewButton=(view,label)=>'<button type="button" data-monthly-view="'+view+'" aria-pressed="'+
       (reportMode===(view==='report')?'true':'false')+'" class="'+
       (reportMode===(view==='report')?'is-active':'')+'">'+label+'</button>';
@@ -4349,10 +4423,12 @@
       '<section class="monthly-chart-card"><div class="monthly-card-heading"><h3>Kumulatívny profit · '+escapeHtml(active.label)+'</h3>'+
       '<span>1 u / tip · '+escapeHtml(periodText)+'</span></div>'+chart+'</section>'+
       (reportMode?focused:'<div class="monthly-tables-pair">'+comparison+'</div>')+
+      (auditResults?'<p class="monthly-parity-note'+(auditMatched?'':' is-mismatch')+'" role="status" aria-live="polite">'+escapeHtml(auditText)+'</p>':'')+
       (reportMode?'':'<p class="monthly-report-note" role="status">Vzorka '+(m?m.all.length:0)+' unikátnych vyhodnotených tipov'+
       (m?'; '+m.excluded+' bez overeného kurzu alebo vyúčtovania nezahrnutých do ROI':'')+
       '. Profit je normalizovaný na vklad 1 u, VOID sa do ROI nezapočítava. '+
       'FREE až GOAT sú prekrývajúce sa skupiny podľa pravidiel dostupnosti tipov, nie samostatné stávky používateľov. '+
+      'Denné uzávierky sú 06:00–06:00 Europe/Bratislava, rovnako ako vo Výsledkoch. '+
       'Údaje sú len na čítanie; produkčné výsledky a lokálne kurzy sa nemenia.</p>')+'</section>';
   }
 
