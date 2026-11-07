@@ -51,11 +51,14 @@ súkromný snapshot, chat ID ani priame tipy sa neposielajú v JSON payload-e.
 1. `repository_dispatch` spustí `BlinQ Telegram complete daily offer (06:20 queue)`.
 2. `queue` uloží denný zámer do súkromnej vetvy
    `BackstageTalks/tbt-data@telegram-bot-state` a vykoná read-back.
-3. `wait-for-confirmed-offer` čaká na ukončenie relevantných workflow
-   (`data.yml`, `morning-refresh.yml`, `prediction-release-recovery.yml`,
-   `data-autofill.yml`, `data-hourly-quota-gapfill.yml`,
-   `nightly-data-maintenance.yml`). Nezaberá pritom Telegram writer lock.
-4. Po čakaní načíta **aktuálny** `daily_offer_snapshot.json` zo súkromného
+3. `wait-for-confirmed-offer` opakovane načíta podpísanú aktuálnu ponuku a
+   read-only canary produkčného webu `/api/v1/internal/serving-readback`.
+   Vyžaduje rovnaký `generated_at`, správny betting day, `ready=true`,
+   `stale=false` a dostatočný počet viditeľných kategórií. Iné dátové
+   workflow môžu bežať ďalej; nie sú blokáciou, ak je nasadená ponuka
+   už pripravená. Ak je web neaktuálny, chýba sekcia alebo zlyhá canary,
+   neodosiela sa nič. Nezaberá pritom Telegram writer lock.
+4. Po overení načíta **aktuálny** `daily_offer_snapshot.json` zo súkromného
    release `tbt-predictions-v1`. Kontroluje `confirmed_only`, betting day,
    `generated_at`, dĺžku dát a SHA-256 oproti
    `_tbt_bundle_manifest.json`. Predikcie odoberá výlučne zo schváleného

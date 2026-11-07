@@ -33,10 +33,11 @@ def test_daily_workflow_waits_for_data_writers_and_verifies_telegram_receipts():
     assert "python scripts/telegram_offer_publisher.py send" in text
     assert "python scripts/telegram_offer_publisher.py mark-sent" in text
     assert "ls-remote origin refs/heads/telegram-bot-state" in text
-    for name in ("data.yml","morning-refresh.yml","prediction-release-recovery.yml",
-                 "data-autofill.yml","data-hourly-quota-gapfill.yml",
-                 "nightly-data-maintenance.yml"):
-        assert name in text
+    # Site readiness supersedes waiting for unrelated background data writers.
+    assert "api/v1/internal/serving-readback" in text
+    assert "verified_website_morning_parity" in text
+    assert "data pipeline busy" not in text
+    assert "BLINQ_LIVE_WORKER_TOKEN" in text
     assert 'sleep 60' in text
     assert "gh workflow run telegram-daily-offer.yml" in text
     assert "\nschedule:" not in text  # external cron is operator-owned

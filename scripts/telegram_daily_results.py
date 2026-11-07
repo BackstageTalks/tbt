@@ -95,6 +95,91 @@ def archive(url, day):
     return payload["rows"]
 
 
+def website_results(url, day):
+    """Read the same verified pre-entitlement Results source used by the site.
+
+    The website's different market on the same match is never an eligible
+    fallback. A missing/partial serving source is NOT a verified outcome.
+    """
+    if not re.fullmatch(r"https://[A-Za-z0-9.-]+", url):
+        raise ValueError("Only HTTPS results API is allowed")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise ValueError("Invalid betting day")
+    key = os.getenv("BLINQ_LIVE_WORKER_TOKEN") or ""
+    if not key:
+        raise RuntimeError("Missing existing BLINQ_LIVE_WORKER_TOKEN")
+    request = urllib.request.Request(
+        url + "/api/v1/internal/telegram/site-results-parity?day=" + day,
+        headers={"Accept": "application/json", "Cache-Control": "no-cache",
+                 "X-Blinq-Worker-Token": key},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if response.status != 200:
+                raise RuntimeError("Website Results unavailable")
+            body = response.read(5_000_001)
+    except Exception as exc:
+        raise RuntimeError("Website Results unavailable: " + exc.__class__.__name__) from None
+    if len(body) > 5_000_000:
+        raise RuntimeError("Website Results response exceeds limit")
+    payload = json.loads(body)
+    if (not isinstance(payload, dict) or payload.get("schema") != 1
+            or payload.get("betting_day") != day
+            or payload.get("source") != "website_results_pre_entitlement_v1"
+            or payload.get("member_render_verified") is not False
+            or payload.get("results_archive_unavailable") is not False
+            or payload.get("results_exclusions_unavailable") is not False
+            or payload.get("provider_requests") != 0
+            or not isinstance(payload.get("rows"), list)):
+        raise RuntimeError("Invalid or incomplete website Results source")
+    return payload["rows"]
+
+
+def exact_website_fallback(sent, archived, site_rows):
+    """Reuse only exact, independently graded website publications.
+
+    Prefer archived matches; conflicting same-contract outcomes fail closed.
+    Website prices never override or reprice original Telegram contracts.
+    """
+    merged = list(archived)
+    fallback_count = 0
+    seen_fallbacks = set()
+    for pick in sent:
+        authoritative = match_result(pick, archived)
+        website = match_result(pick, site_rows)
+        if website is None:
+            continue
+        if str(website.get("scheduled_at") or "") != str(pick.get("scheduled_at") or ""):
+            continue
+        if authoritative is not None:
+            a = (authoritative.get("result") or {})
+            b = (website.get("result") or {})
+            if (a.get("void") is True) != (b.get("void") is True):
+                raise RuntimeError("Archive and website exact result conflict")
+            if a.get("void") is not True and a.get("correct") != b.get("correct"):
+                raise RuntimeError("Archive and website exact result conflict")
+            if (pick.get("market") == "aces"
+                    and a.get("actual_count") is not None
+                    and b.get("actual_count") is not None
+                    and a.get("actual_count") != b.get("actual_count")):
+                raise RuntimeError("Archive and website player statistic conflict")
+            continue
+        # Archived source lacks this original contract, but website already
+        # serves a confirmed *identical* publication. Do not use a bare score
+        # or a different model, side, market or line for this decision.
+        # FREE is a mirror of an already-issued TOP result. Count and insert
+        # its exact publication only once, even when both channel refs appear.
+        exact_key = (str(pick.get(k) or "") for k in (
+            "event_id","section","market","selection_id",
+            "publication_key","market_line","projection_direction"))
+        frozen = tuple(exact_key)
+        if frozen not in seen_fallbacks:
+            merged.append(website)
+            seen_fallbacks.add(frozen)
+            fallback_count += 1
+    return merged, fallback_count
+
+
 def extract_sent(state, target_day):
     attempts = state.get("attempts") or {}
     if not isinstance(attempts, dict):
@@ -373,6 +458,16 @@ def prepare(args):
     sent=extract_sent(state,target_day)
     verified=archive(args.api_url,target_day)
     pending=[row for row in sent if evaluate(row,verified)["status"]=="pending"]
+    if pending:
+        # Website Results may already display the exact original bet while
+        # the narrower Telegram archive endpoint has not surfaced it yet.
+        # It must be the identical published contract and verified provenance.
+        site_rows=website_results(args.api_url,target_day)
+        verified, recovered=exact_website_fallback(sent,verified,site_rows)
+        print(json.dumps({"source":"website_results_pre_entitlement_v1",
+                          "exact_fallbacks":recovered,
+                          "issued_references":len(sent)}))
+        pending=[row for row in sent if evaluate(row,verified)["status"]=="pending"]
     if pending:
         print(json.dumps({"status":"waiting","reason":"issued_picks_not_all_settled",
                           "day":target_day,"settled":len(sent)-len(pending),
