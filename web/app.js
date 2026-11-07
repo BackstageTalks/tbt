@@ -3657,6 +3657,7 @@
   }
   function resultVoidLabel(reason=''){
     const value=String(reason||'').trim().toLowerCase();
+    if(value==='aces_equal')return lcopy('TIE','REMÍZA','REMÍZA');
     if(value.includes('retir')||value.includes('incomplete')||value==='ret')return lcopy('RETIREMENT','SKREČ','SKREČ');
     // W/O, cancellations and other non-played results have one public label.
     // Only a verified in-progress retirement stays separate as SKREČ.
@@ -4113,8 +4114,9 @@
       if(Math.abs(realProfit-expected)>.01)ledgerDiscrepancies++;
     }
     const sample=graded.length;
+    const draws=metricEntries.filter(({publication})=>String(publication?.market||'')==='most_aces'&&publicationOutcome(publication).reason==='aces_equal').length;
     return {
-      wins,losses:Math.max(0,sample-wins),voids,sample,
+      wins,losses:Math.max(0,sample-wins),voids,draws,sample,
       hit:sample?wins/sample:null,avgOdds:oddsSample?oddsTotal/oddsSample:null,
       roi:stake?profit/stake:null,profit,stake,oddsSample,unitSample,
       roiAvgOdds:roiOddCount?roiOddsSum/roiOddCount:null,ledgerDiscrepancies,
@@ -4503,15 +4505,15 @@
       const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
       const units=outcome.kind==='void'?0:rawUnits;
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
-      const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
+      const tag=projection?({aces:'ace',most_aces:'ace_winner',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
       // A TOP and Value publication can describe the same settled bet.
       // Preserve one bet / one KPI unit, but show every selected category
       // instead of making a multi-selection look like TOP-only results.
       const visibleTags=String(category).includes(',')&&publishedCategories.length
-        ?[...publishedCategories].sort((a,b)=>['top_daily','prime','value','doubles','ace','double_faults','sets','games'].indexOf(a)-['top_daily','prime','value','doubles','ace','double_faults','sets','games'].indexOf(b))
+        ?[...publishedCategories].sort((a,b)=>['top_daily','prime','value','doubles','ace','ace_winner','double_faults','sets','games'].indexOf(a)-['top_daily','prime','value','doubles','ace','ace_winner','double_faults','sets','games'].indexOf(b))
         :[tag];
       const tags=visibleTags.map(value=>{
-        const metric=({ace:'aces',double_faults:'double_faults',sets:'sets',games:'games'})[value];
+        const metric=({ace:'aces',ace_winner:'most_aces',double_faults:'double_faults',sets:'sets',games:'games'})[value];
         const label=metric?projectionResultTypeLabel({projection_metric:metric}):resultCategoryLabel(value||'all');
         return `<span class="result-tag ${escapeHtml(value)}">${escapeHtml(label)}</span>`;
       }).join('');
@@ -4544,7 +4546,7 @@
         const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
         const legacyAces=String(publication?.market||'').toLowerCase()==='aces';
         const issued=Date.parse(String(publication?.issued_at||r?.scheduled_at||r?.date||''));
-        const historicalEligible=!legacyAces||(Number.isFinite(issued)&&issued<Date.parse('2026-11-01T05:00:00Z'));
+        const historicalEligible=projectionMarket!=='most_aces'&&(!legacyAces||(Number.isFinite(issued)&&issued<Date.parse('2026-11-01T05:00:00Z')));
         const illustrativeOnly=historicalEligible&&publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
           &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
         const normalizedAceOdds=String(publication?.market||'').toLowerCase()==='aces'
