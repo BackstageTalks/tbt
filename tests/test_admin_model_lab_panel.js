@@ -97,6 +97,12 @@ state.adminCalibration={production_version:'v201',
 html=ctx.renderAdminModelLab();
 assert.doesNotMatch(html,/data-model-lab-operation="activate_shadow" disabled/);
 assert.match(html,/Nezávislý offline holdout overený/);
+assert.match(html,/Offline porovnanie, nie povolenie nasadenia/);
+assert.match(html,/Prospektívne shadow brány: Nesplnené alebo neoverené/);
+assert.match(html,/Brier/);
+assert.match(html,/Lepšie/);
+assert.match(html,/same-event ledger/);
+
 assert.doesNotMatch(html,/data-admin-action="model-factory-promote" disabled/);
 state.adminModelLab.operation={
   id:'a'.repeat(24),action:'activate_shadow',state:'RUNNING',
