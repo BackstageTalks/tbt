@@ -879,6 +879,8 @@ def _grade_runtime_projection(
             "projection_metric": publication.get("projection_metric") or market,
             "data_depth": publication.get("data_depth"),
         }
+        if market == "most_aces" and equal:
+            result["reason"] = "aces_equal"
         if other is not None:
             result["opponent_actual_count"] = other
         if market in {"aces", "most_aces", "double_faults"}:
