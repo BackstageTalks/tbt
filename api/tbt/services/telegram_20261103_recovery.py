@@ -184,6 +184,41 @@ def _frozen_status_witness() -> dict:
     return {"statuses": proof["statuses"]}
 
 
+
+
+def safe_recovery_reason(exc: Exception) -> str:
+    """Non-identifying explanation of a blocked 3 Nov recovery.
+
+    Do not expose fixture IDs, player names or source payloads in HTTP or logs.
+    The original exception remains in the private worker context for diagnosis.
+    """
+    message = str(exc)
+    prefixes = (
+        ("Original TOP/VALUE archive does not have all 3", "original_top_value_precheck"),
+        ("Historic source-native snapshot provenance mismatch", "historic_snapshot_provenance"),
+        ("Missing previously persisted match-status snapshot", "historic_snapshot_absent"),
+        ("Historic provider-verified settlement missing", "historic_status_missing"),
+        ("Historic provider participant/status conflict", "provider_participant_or_terminal_status"),
+        ("Not a contemporaneous historic snapshot", "historic_snapshot_timestamp"),
+        ("Source-native player statistics identity mismatch", "provider_player_stats_identity"),
+        ("Unexpected actual ACE count", "provider_player_aces_mismatch"),
+        ("Unverified ACE cancellation", "unverified_cancellation"),
+        ("Halys/Fery identity, start, or final status mismatch", "missing_special_fixture_confirmation"),
+        ("Halys/Fery source-native ace counts differ", "special_fixture_aces_witness"),
+        ("Source-native event response unavailable", "provider_event_missing"),
+        ("Invalid source-native event envelope", "provider_event_schema"),
+        ("Source-native participants unavailable", "provider_participants_missing"),
+        ("Invalid source-native event identity", "provider_event_identity"),
+        ("Provider event does not contain Telegram selected player", "provider_selection_identity"),
+        ("Unknown source-native tournament category", "provider_tour_category"),
+        ("Nine exact archived ACE contracts were not graded", "candidate_grading_incomplete"),
+        ("Incorrect ACE settlement generated", "candidate_issued_contract_conflict"),
+        ("Conflicting pre-existing ACE settlement", "existing_archive_conflict"),
+        ("Conflicting duplicate target archive identity", "existing_archive_duplicate"),
+    )
+    return next((reason for prefix, reason in prefixes if message.startswith(prefix)),
+                "unclassified_evidence_conflict")
+
 def recover(*, dry_run: bool = True) -> dict:
     """Bounded API-Pro corroboration, protected archive write and independent readback."""
     snapshot = _frozen_status_witness()
