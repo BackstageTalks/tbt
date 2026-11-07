@@ -155,3 +155,40 @@ def test_bad_files_are_rejected_without_model_or_cdb_mutations(tmp_path):
     alias.symlink_to(path)
     with pytest.raises(ValueError):
         audit([alias])
+
+
+
+def test_monthly_index_is_readonly_and_never_marks_any_day_complete(tmp_path):
+    from scripts.audit_tennisapi_prediction_signals import check_monthly_tournaments
+    row, _ = source_event(event(eid=12, when="2023-01-18T10:00:00+00:00"))
+    calendar = tmp_path / "index.json"
+    calendar.write_text(json.dumps({"dailyUniqueTournaments": [
+        {"date": "2023-01-18", "uniqueTournamentIds": [2363, 999]},
+        {"date": "2023-01-19", "uniqueTournamentIds": [2363]},
+    ]}))
+    summary = check_monthly_tournaments([row], calendar)
+    assert summary["matched_source_events"] == 1
+    assert summary["unique_tournament_ids"] == 2
+    assert summary["verified_complete_days"] == 0
+    assert summary["skip_daily_category_import"] is False
+    calendar.write_text(json.dumps({"dailyUniqueTournaments": [
+        {"date": "2023-01-18", "uniqueTournamentIds": [999]},
+    ]}))
+    summary = check_monthly_tournaments([row], calendar)
+    assert summary["missing_tournament_in_index"] == 1
+    assert summary["verified_complete_days"] == 0
+
+
+def test_monthly_index_duplicate_day_and_id_quarantined(tmp_path):
+    from scripts.audit_tennisapi_prediction_signals import check_monthly_tournaments
+    calendar = tmp_path / "index.json"
+    for days in (
+        [{"date": "2026-07-01", "uniqueTournamentIds": [3, 3]}],
+        [{"date": "2026-07-01", "uniqueTournamentIds": [3]},
+         {"date": "2026-07-01", "uniqueTournamentIds": [4]}],
+        [{"date": "2026-07-01", "uniqueTournamentIds": [3]},
+         {"date": "2026-08-01", "uniqueTournamentIds": [3]}],
+    ):
+        calendar.write_text(json.dumps({"dailyUniqueTournaments": days}))
+        with pytest.raises(ValueError):
+            check_monthly_tournaments([], calendar)
