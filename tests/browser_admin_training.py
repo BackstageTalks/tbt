@@ -81,7 +81,7 @@ def main():
                 assert page.get_by_text('3 · Nasadiť do produkcie').is_visible()
                 assert page.locator('[data-admin-action="model-factory-promote"]').is_disabled()
                 assert page.locator('#admin-production-candidate').is_visible()
-                assert page.locator('#admin-training-profile').first.locator('option[value="accuracy-7.2.2"]').is_disabled()
+                assert page.locator('#admin-training-profile').first.locator('option[value="accuracy-7.2.2"]').get_attribute('disabled') is not None
                 assert page.get_by_text('ATP: 340', exact=False).is_visible()
                 assert page.get_by_text('WTA: 260', exact=False).is_visible()
                 # Confirm the one-click protected build/test path. A successful
