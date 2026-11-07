@@ -56,6 +56,7 @@ jobs:
           gh release download tbt-predictions-v1 --repo "$TBT_DATA_REPOSITORY" \
             --pattern 'selection_candidates_2026-1*.json.gz' \
             --pattern 'ledger.json' \
+            --pattern 'feed.json' \
             --pattern '_tbt_bundle_manifest.json' --dir "$work/pred"
           gh release download tbt-data-v1 --repo "$TBT_DATA_REPOSITORY" \
             --pattern 'history-2026.parquet' \
@@ -98,6 +99,66 @@ jobs:
             --prediction-before "$work/pred-before.json" \
             --prediction-after "$work/pred-after.json" \
             --out "$work/issued-top-categories.json"
+      - name: Compare current public Results overlay with frozen private ledger (optional, read-only)
+        shell: bash
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          work=".cache/tbt/selection-replay"
+          code="$(curl --silent --show-error --compressed --retry 0 --max-time 60 \
+            --max-filesize 35000000 -H 'Accept: application/json' \
+            --write-out '%{http_code}' --output "$work/live-public-feed.json" \
+            "${BLINQ_BASE_URL%/}/api/v1/feed" || true)"
+          if [[ "$code" != "200" ]]; then
+            python - "$work/live-results-access.json" "$code" <<'PY'
+          import json, sys
+          from pathlib import Path
+          Path(sys.argv[1]).write_text(json.dumps({
+              "status":"BLOCKED_OR_UNAVAILABLE","http_status":sys.argv[2],
+              "is_full_archive":False,"provider_requests":0,"production_mutated":False
+          })+"\n")
+          PY
+            rm -f "$work/live-public-feed.json"
+            echo "LIVE_RESULTS_NOT_ACCESSIBLE HTTP=$code; no claim of current Results coverage"
+            exit 0
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          work=Path(".cache/tbt/selection-replay")
+          feed=json.loads((work/"live-public-feed.json").read_text(encoding="utf-8"))
+          if not isinstance(feed,dict) or not isinstance(feed.get("results"),list):
+              raise SystemExit("HTTP200 but no results[]; fail closed")
+          rows=feed["results"]
+          overlay=[row for row in rows if isinstance(row,dict)
+              and row.get("runtime_result_overlay") is True
+              and row.get("archive_source")=="verified_match_status_snapshot"]
+          (work/"live-visible-overlays.json").write_text(json.dumps(overlay))
+          (work/"live-results-access.json").write_text(json.dumps({
+              "status":"LIVE_PUBLIC_FEED_READ","feed_result_rows":len(rows),
+              "verified_visible_overlay_rows":len(overlay),
+              "is_full_archive":False,"provider_requests":0,"production_mutated":False
+          })+"\n")
+          PY
+          python scripts/audit_settled_archive_reconciled.py \
+            --ledger "$work/pred/ledger.json" \
+            --feed "$work/live-public-feed.json" \
+            --archive "$work/live-visible-overlays.json" \
+            --out "$work/live-results-reconciliation.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          work=Path(".cache/tbt/selection-replay")
+          r=json.loads((work/"live-results-reconciliation.json").read_text())
+          if r.get("production_mutated") is not False or r.get("complete_issued_history_verified") is not False:
+              raise SystemExit("unexpected live Results audit status")
+          print("LIVE_READONLY_PARITY",json.dumps({
+              "total":r["total"],"input_counters":r["input_counters"],
+              "complete_archive":False,"strategies_certified":0
+          }))
+          PY
+          rm -f "$work/live-public-feed.json" "$work/live-visible-overlays.json"
       - name: Private evidence summary and interpretation limits
         if: success()
         shell: bash
@@ -109,6 +170,8 @@ jobs:
           forward=json.loads(Path(".cache/tbt/selection-replay/forward-report.json").read_text())
           top=json.loads(Path(".cache/tbt/selection-replay/top-strategy-report.json").read_text())
           issued=json.loads(Path(".cache/tbt/selection-replay/issued-top-categories.json").read_text())
+          live_access_path=Path(".cache/tbt/selection-replay/live-results-access.json")
+          live_access=json.loads(live_access_path.read_text()) if live_access_path.exists() else {"status":"NOT_CHECKED"}
           summary=[
             "### Read-only BlinQ selection replay (private evidence)",
             f"Status: {report['status']}",
@@ -133,6 +196,7 @@ jobs:
               for category, result in cohort["by_category"].items():
                   summary.append(f"  {category}: {result}")
           summary.append(f"- issued audit exclusions (nonexclusive): {issued['rejected_or_unverified_counts_nonexclusive']}")
+          summary.append(f"Public live Results readback (NOT full archive): {live_access}")
           summary.append("B (per model and section; not issued-bet outcomes):")
           for scope, variants in report["selector_comparison_B"].items():
               core=variants["baseline_assignment"]
@@ -156,5 +220,7 @@ jobs:
             .cache/tbt/selection-replay/forward-report.json
             .cache/tbt/selection-replay/top-strategy-report.json
             .cache/tbt/selection-replay/issued-top-categories.json
+            .cache/tbt/selection-replay/live-results-access.json
+            .cache/tbt/selection-replay/live-results-reconciliation.json
           if-no-files-found: warn
           retention-days: 14
