@@ -64,13 +64,39 @@ def _fingerprint(ref: dict) -> str:
     return sha256(frozen.encode()).hexdigest()[:16]
 
 
+def _has_exact_issued_identity(ref: dict, row: dict) -> bool:
+    """Audit-only structural check; never grade or reprice this candidate."""
+    if not isinstance(row, dict):
+        return False
+    if any(str(row.get(key) or "") != str(ref.get(key) or "")
+           for key in ("event_id", "selection_id", "section", "market")):
+        return False
+    frozen_pub = str(ref.get("publication_key") or "")
+    if frozen_pub and frozen_pub != str(row.get("publication_key") or ""):
+        return False
+    if ref.get("market") == "aces":
+        if str(ref.get("market_line") or "") != str(row.get("market_line") or ""):
+            return False
+        if str(ref.get("projection_direction") or "") != str(row.get("projection_direction") or ""):
+            return False
+    return True
+
+
 def _evidence(ref: dict, rows: list[dict]) -> tuple[str, dict | None, str]:
     try:
         original = results.match_result(ref, rows)
     except RuntimeError:
         return "ambiguous", None, "ambiguous_exact_contract"
     if original is None:
-        return "pending", None, "no_exact_contract"
+        # The canonical Results matcher intentionally rejects unverified
+        # provenance. Audit structure separately, but never treat it as a
+        # verified settlement or allow it to influence ROI/results.
+        structural = [row for row in rows if _has_exact_issued_identity(ref, row)]
+        if len(structural) > 1:
+            return "ambiguous", None, "ambiguous_exact_contract"
+        return "pending", None, (
+            "no_verified_final" if structural else "no_exact_contract"
+        )
     result = original.get("result")
     if not isinstance(result, dict) or result.get("runtime_source") != "match_status_snapshot":
         return "pending", original, "no_verified_final"
