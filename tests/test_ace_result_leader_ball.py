@@ -42,7 +42,8 @@ for(const result of [
   {...pub.result,opponent_actual_count:undefined},
   {...pub.result,actual_count:'not known'},
   {...pub.result,actual_count:9.5},
-  {...pub.result,status:'retired'}
+  {...pub.result,status:'retired'},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided'}
 ])assert.equal(mark({...pub,result},a),'','unknown/invalid/interrupted');
 assert.equal(mark({...pub,result:null},a),'','missing settlement');
 assert.equal(mark({...pub,market:'double_faults'},a),'','not an Aces publication');
