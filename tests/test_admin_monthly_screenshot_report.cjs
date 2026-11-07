@@ -47,12 +47,26 @@ rendered=t.renderMonthlyPerformance();
 for(const token of ['is-report-mode','monthly-focused-table','Kumulatívny profit · ELITE','monthly-profit-area','1. – 7. deň','Režim screenshotu','+0,70 u','-0,30 u','BlinQ · ADMIN / ANALYTIKA']) assert.ok(rendered.includes(token),token);
 assert.ok(!rendered.includes('monthly-tables-pair'));
 assert.ok(!rendered.includes('1. – 30. deň'));
+// Selected-level screenshot report hides the three specifically removed notes.
+assert.ok(!rendered.includes('Overené vyhodnotenia · 1 u / tip'));
+assert.ok(!rendered.includes('Profit normalizovaný na 1 u / tip'));
+assert.ok(!rendered.includes('Vzorka 3 unikátnych vyhodnotených tipov'));
+// SVG uses different strokes and shaded areas on each side of zero.
+for(const token of ['monthlyAboveZero','monthlyBelowZero',
+  'class="monthly-loss-line" clip-path="url(#monthlyBelowZero)"',
+  'class="monthly-profit-line" clip-path="url(#monthlyAboveZero)"',
+  'class="monthly-loss-area" clip-path="url(#monthlyBelowZero)"']) {
+  assert.ok(rendered.includes(token),'missing negative/positive chart split: '+token);
+}
+assert.ok(rendered.includes('monthly-negative-point'), 'negative last value must have orange endpoint');
 assert.ok(!rendered.includes('title='));
 p.fullscreen=true;
 rendered=t.renderMonthlyPerformance();
 assert.ok(rendered.includes('is-monthly-fullscreen')&&rendered.includes('Zavrieť fullscreen'));
 p.view='overview';
-assert.ok(!t.renderMonthlyPerformance().includes('is-monthly-fullscreen'));
+rendered=t.renderMonthlyPerformance();
+assert.ok(!rendered.includes('is-monthly-fullscreen'));
+assert.ok(rendered.includes('Vzorka 3 unikátnych vyhodnotených tipov'), 'overview explanatory note retained');
 p.month='2026-12';p.view='report';p.fullscreen=false;
 rendered=t.renderMonthlyPerformance();
 assert.ok(rendered.includes('Zvolený mesiac ešte nezačal.')&&!rendered.includes('monthly-profit-area'));
@@ -62,5 +76,8 @@ assert.ok(app.includes('monthly.fullscreen=!Boolean(monthly.fullscreen)'));
 assert.ok(app.includes('monthly.filtersExpanded=advancedFilters.open'));
 assert.ok(css.includes('monthly-performance.is-monthly-fullscreen'));
 assert.ok(css.includes('--monthly-accent:#2df2ad'));
+assert.ok(css.includes('stroke:#f5a24c'), 'negative graph line should be amber');
+assert.ok(css.includes('rgba(1,17,13,.87)'), 'fullscreen must preserve see-through dark BlinQ background');
 assert.ok(html.includes('monthly-report-glass=20261107'));
+assert.ok(html.includes('monthly-loss-line=20261107'));
 console.log('Admin monthly BlinQ screenshot report: PASS');
