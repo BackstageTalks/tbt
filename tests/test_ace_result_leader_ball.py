@@ -29,7 +29,7 @@ const pub={
   price_contract:'player_total_ou',ou_side:'over',market_line:10.5,
   result:{status:'miss',correct:false,actual_count:9,opponent_actual_count:5}
 };
-const mark=(row,player)=>sandbox.aceSettledLeaderBallHtml(row,player,player.name);
+const mark=(row,player,other)=>sandbox.aceSettledLeaderBallHtml(row,player,player.name,other);
 assert(mark(pub,a).includes('ace-leader-ball'),'leader succeeded even when Over lost');
 assert.equal(mark(pub,b),'','never mark opponent');
 assert.equal(mark({...pub,result:{...pub.result,correct:true}},a).includes('ace-leader-ball'),true,'O/U WIN independent of leader');
@@ -52,11 +52,36 @@ assert.equal(mark({...pub,projection_subject:'Musetti'},a),'','conflicting issue
 assert.equal(mark({...pub,issued_snapshot:{projection:{projection_subject:'Musetti'}}},a),'','frozen snapshot supersedes later row');
 assert(mark({...pub,result:{...pub.result,status:'void'}},a).includes('ace-leader-ball'),'O/U line push does not erase correct leader');
 assert(mark({...pub,result:{...pub.result,status:'void',void:true}},a).includes('ace-leader-ball'),'legacy void flag on O/U push does not hide successful leader');
+// Real regression shape: original Mayo selection uses an issued provider ID
+// that no longer matches the presentation profile IDs on the Results row.
+const mayo={id:'display-mayo',name:'Aidan Mayo'};
+const andrade={id:'display-andrade',name:'Andres Andrade'};
+const legacy={...pub,selection_id:'issued-mayo',projection_subject:'Aidan Mayo',
+  result:{status:'hit',correct:true,actual_count:5,opponent_actual_count:0}};
+assert(mark(legacy,mayo,andrade).includes('ace-leader-ball'),
+  'Aidan Mayo 5-0: frozen leader must survive display ID drift');
+assert.equal(mark(legacy,andrade,mayo),'','never mark the actual losing player');
+assert.equal(mark({...legacy,result:{...legacy.result,actual_count:0,opponent_actual_count:5}},mayo,andrade),'',
+  'same selection but opponent had more Aces');
+assert.equal(mark({...legacy,result:{...legacy.result,opponent_actual_count:null}},mayo,andrade),'',
+  'no original opponent source count');
+assert.equal(mark({...legacy,selection_id:andrade.id},mayo,andrade),'',
+  'explicit opponent selection ID overrides matching display name');
+assert.equal(mark({...legacy,projection_subject:'Andres Andrade'},mayo,andrade),'',
+  'conflicting original selection name');
+assert.equal(mark({...legacy,projection_subject:''},mayo,andrade),'',
+  'no proof of original named leader with mismatched ID');
+assert.equal(mark({...legacy,issued_snapshot:{projection:{projection_subject:'Andres Andrade'}}},mayo,andrade),'',
+  'frozen conflicting snapshot takes precedence');
+assert.equal(mark({...legacy,aces_superiority_player_id:andrade.id},mayo,andrade).includes('ace-leader-ball'),true,
+  'auxiliary hint ID cannot override verified issued subject');
+// Identity recovery is not permissible without the opponent to prove uniqueness.
+assert.equal(mark(legacy,mayo),'');
 // Prediction still labels the pre-match projected leader independently.
 assert(sandbox.aceLeaderHintHtml(pub,a,a.name).includes('ace-leader-ball'));
 const results=src.slice(renderStart,renderEnd);
-assert(results.includes('aceSettledLeaderBallHtml(publication,p1,p1Name)'));
-assert(results.includes('aceSettledLeaderBallHtml(publication,p2,p2Name)'));
+assert(results.includes('aceSettledLeaderBallHtml(publication,p1,p1Name,p2)'));
+assert(results.includes('aceSettledLeaderBallHtml(publication,p2,p2Name,p1)'));
 assert(!results.includes('aceLeaderHintHtml(r,p1,p1Name)'));
 assert(!results.includes('aceLeaderHintHtml(r,p2,p2Name)'));
 assert(results.includes('publicationOutcome(publication)'));
