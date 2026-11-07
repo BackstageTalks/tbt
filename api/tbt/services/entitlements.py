@@ -54,6 +54,7 @@ _POLICY = {
 # but access is enforced independently per public panel.
 for _plan_policy in _POLICY.values():
     _plan_policy["double_faults"] = _plan_policy.get("ace", (0, False))
+    _plan_policy["ace_winner"] = _plan_policy.get("ace", (0, False))
 
 # Admin may explicitly configure 0..10 visible picks for every category.  The
 # server remains the authorization boundary: runtime values are capped here.
@@ -133,8 +134,8 @@ def _result_timestamp(row: dict) -> datetime | None:
     return None
 
 
-PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
-PUBLIC_RESULT_MARKETS = {"aces", "double_faults"}
+PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games"}
+PUBLIC_RESULT_MARKETS = {"aces", "most_aces", "double_faults"}
 
 
 def _public_result_publications(row: dict) -> list[dict]:
@@ -149,14 +150,14 @@ def _public_result_publications(row: dict) -> list[dict]:
     return out
 
 
-RESULT_CATEGORY_ORDER = ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games")
+RESULT_CATEGORY_ORDER = ("top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games")
 
 
 def _result_publication_category(publication: dict) -> str:
     # Projection market takes precedence over a stale legacy section label.
     market = str(publication.get("market") or "").strip().lower()
-    if market in {"aces", "double_faults", "sets", "games"}:
-        return "ace" if market == "aces" else market
+    if market in {"aces", "most_aces", "double_faults", "sets", "games"}:
+        return "ace" if market == "aces" else "ace_winner" if market == "most_aces" else market
     return str(publication.get("section") or "").strip().lower()
 
 
@@ -953,9 +954,9 @@ def _source_rows_for_section(payload: dict, section: str) -> list[dict]:
         rows=payload.get("value_picks")
     elif section=="doubles":
         rows=payload.get("doubles_picks")
-    elif section in {"ace","double_faults"}:
+    elif section in {"ace","ace_winner","double_faults"}:
         rows=payload.get("ace_picks")
-        market="aces" if section=="ace" else "double_faults"
+        market="aces" if section=="ace" else "most_aces" if section=="ace_winner" else "double_faults"
         return [row for row in (rows if isinstance(rows,list) else []) if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==market]
     elif section in {"games","sets"}:
         rows=payload.get("sg_picks")
@@ -979,7 +980,7 @@ def _published_daily_pick_count(payload: dict) -> int:
     seen: set[tuple[str, str, str]] = set()
     for section in (
         "daily", "top200", "prime", "value", "ace", "double_faults",
-        "doubles", "games", "sets",
+        "doubles", "games", "sets", "ace_winner",
     ):
         for index, row in enumerate(_source_rows_for_section(payload, section)):
             surface = str(row.get("surface") or row.get("court_surface") or "").strip().lower()
@@ -1052,7 +1053,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     # independent public panels. This prevents DF rows from being authorized or
     # counted as ESA merely because they use the same backward-compatible feed.
     ace_source=payload.get(SECTION_TO_FEED_KEY["ace"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["ace"]),list) else []
-    for section_name, market_name in (("ace", "aces"), ("double_faults", "double_faults")):
+    for section_name, market_name in (("ace", "aces"), ("ace_winner", "most_aces"), ("double_faults", "double_faults")):
         market_rows=[row for row in ace_source if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==market_name]
         default_limit, hard_see_all=policy.get(section_name, policy.get("ace", (0,False)))
         runtime_rule=_admin_hub_rule(ui_config, section_name, plan)
@@ -1315,7 +1316,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
 
     ace_rows=payload.get(SECTION_TO_FEED_KEY["ace"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["ace"]),list) else []
     authorized_ace=[]
-    for section_name, market_name in (("ace", "aces"), ("double_faults", "double_faults")):
+    for section_name, market_name in (("ace", "aces"), ("ace_winner", "most_aces"), ("double_faults", "double_faults")):
         market_rows=[row for row in ace_rows if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==market_name]
         ent=manifest["sections"].get(section_name) or {}
         if not ent.get("enabled") or ent.get("display_state")!="active":
@@ -1328,7 +1329,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
         authorized_ace.extend(selected)
     # Preserve old projection rows without a market tag under the legacy ESA
     # permission only; never leak them through the new Double Faults panel.
-    unknown_ace=[row for row in ace_rows if isinstance(row,dict) and str(row.get("market") or "").strip().lower() not in {"aces","double_faults"}]
+    unknown_ace=[row for row in ace_rows if isinstance(row,dict) and str(row.get("market") or "").strip().lower() not in {"aces","most_aces","double_faults"}]
     if unknown_ace:
         ent=manifest["sections"].get("ace") or {}
         if ent.get("enabled") and ent.get("display_state")=="active":
