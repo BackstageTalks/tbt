@@ -6365,10 +6365,38 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       (failedSteps.length?'<p role="alert"><strong>Zastavené:</strong> '+escapeHtml(failedSteps.join(' · '))+'</p>':'')+
       outcomeText+
       '<p class="model-factory-guided-foot">Po príprave dát sa hlavné tlačidlo zmení na spustenie tréningu. Worker požiadavku preberie spravidla do 30 minút; kartu môžeš zavrieť. Nový model sa sám nenasadí do produkcie.</p></article>';
+    // Evidence is tied to the immutable candidate digest, not a selectable label.
+    // This is decision support; release workflow retains the authoritative gates.
+    const qualityComparable=offlineVerified&&releaseCandidates.some(c=>
+      c.tag===offline.candidate_release_tag&&c.sha256===offline.candidate_sha256);
+    const qualityRows=qualityComparable?[
+      ['Accuracy','accuracy',true],['Brier','brier_score',false],
+      ['Log-loss','log_loss',false],['ECE','ece_10',false]
+    ].map(([name,key,higher])=>{
+      const baseline=offline.champion[key],candidate=offline.candidate[key];
+      const delta=candidate-baseline;
+      const better=higher?delta>0:delta<0;
+      return '<tr><th scope="row">'+name+'</th><td>'+baseline.toFixed(4)+
+        '</td><td>'+candidate.toFixed(4)+'</td><td>'+
+        (delta>0?'+':'')+delta.toFixed(4)+' · '+(delta===0?'Bez zmeny':better?'Lepšie':'Horšie')+
+        '</td></tr>';
+    }).join(''):'';
+    const qualitySummary=qualityComparable?
+      '<div role="status"><strong>Offline porovnanie, nie povolenie nasadenia</strong>'+
+      '<p>Overený kandidát: '+escapeHtml(offline.candidate_release_tag)+
+      ' · '+escapeHtml(String(offline.n))+' zápasov · SHA '+escapeHtml(offline.candidate_sha256)+'</p>'+
+      '<table><thead><tr><th>Metrika</th><th>Champion</th><th>Kandidát</th><th>Rozdiel</th></tr></thead><tbody>'+
+      qualityRows+'</tbody></table></div>':
+      '<p role="status">Pre vybraného kandidáta zatiaľ nie je dostupné nezávislé offline porovnanie s overenou identitou tagu a SHA. Nasadenie vyžaduje ďalšie dôkazy.</p>';
+    const prospectiveReady=missingShadow.length===0;
+    const prospectiveSummary='<p role="status"><strong>Prospektívne shadow brány: '+
+      (prospectiveReady?'Podľa načítaného reportu splnené':'Nesplnené alebo neoverené')+
+      '</strong></p>'+(missingShadow.length?'<ul>'+missingShadow+'</ul>':'')+
+      '<p>Výsledky z Admin snapshotu nenahrádzajú podpísaný same-event ledger a nezávislý produkčný read-back.</p>';
     const championCard='<article class="admin-calibration-panel model-factory-champion" aria-label="Ručný výber championa">'+
       '<small>SAMOSTATNÉ SCHVÁLENIE</small><h3>Vybrať nového championa</h3>'+
       '<p>Najprv porovnaj kvalitu a prospektívne výsledky. Toto je <strong>výslovná výnimka kalibrácie</strong>, nie automatické GO. Bez kvalitných dôkazov kandidáta nenasadzuj.</p>'+
-      '<label>Uložený kandidát <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
+      '<label>Uložený kandidát <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+qualitySummary+prospectiveSummary+
       '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
       '<p role="status">Zadáš dôvod a presné potvrdenie RELEASE. Chránený workflow pred výmenou overí identitu modelu, rollback a globálny lock. Následne sa nezávisle kontroluje SHA championa.</p>'+
       '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article>';
