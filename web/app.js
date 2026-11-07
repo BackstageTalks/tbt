@@ -4113,12 +4113,16 @@
         ?selection.month:today.slice(0,7);
     const end=monthlyMonthEnd(month);
     if(!end)return [];
-    const filters={category:'all',window:'custom',dateFrom:month+'-01',
+    const categories=MONTHLY_SECTIONS.map(([key])=>key).filter(key=>selection.sections.includes(key));
+    if(!categories.length)return [];
+    const resultCategory=categories.length===MONTHLY_SECTIONS.length?'all':categories.join(',');
+    const filters={category:resultCategory,window:'custom',dateFrom:month+'-01',
       dateTo:month+'-'+String(end).padStart(2,'0'),bettingDay:true,
       tour:selection.tour,surface:selection.surface,membership};
-    // Reuse canonical settled and deduplicated publications, never display quotes.
-    const entries=settledPublishedEntries(filteredResults(filters),'all',filters);
-    const selected=new Set(selection.sections);
+    // Identical category, authorization, stats-exclusion and deduplication path
+    // to the Results table/KPI; selecting a market happens BEFORE deduplication.
+    const entries=settledPublishedEntries(filteredResults(filters),resultCategory,filters,statsHaveExcludedMarkets());
+    const selected=new Set(categories);
     const allowedOutcomes=new Set(selection.outcomes);
     const min=selection.minOdds===''?null:Number(selection.minOdds);
     const max=selection.maxOdds===''?null:Number(selection.maxOdds);
@@ -4136,13 +4140,20 @@
       return true;
     });
   }
-  function monthlyFinancialRecord(publication){
+  function monthlyFinancialRecord(publication,membership='',category='all'){
     const outcome=publicationOutcome(publication).kind;
     const local=approvedLocalAceResultOdds(publication);
     if(Number.isFinite(local)&&['win','loss'].includes(outcome))
       return {profit:outcome==='win'?local-1:-1,stake:1,priced:true,odds:local};
     if(outcome==='void')return {profit:0,stake:0,priced:false};
     if(!['win','loss'].includes(outcome))return null;
+    // The Aces/DF-only Results view uses its approved local quote, not a
+    // generic projection placeholder. Keep its standalone cohort identical.
+    if(!membership&&['ace','double_faults'].includes(category)){
+      const displayOdds=aceDfResultKpiOdds(publication);
+      return Number.isFinite(displayOdds)&&displayOdds>1
+        ?{profit:outcome==='win'?displayOdds-1:-1,stake:1,priced:true,odds:displayOdds}:null;
+    }
     const odds=publication.odds==null?NaN:Number(publication.odds);
     const status=String(publication.price_status||'').toLowerCase();
     const projection=['aces','double_faults','sets','games'].includes(String(publication.market||'').toLowerCase());
@@ -4151,12 +4162,15 @@
     const stake=publication.result?.staked_units==null?NaN:Number(publication.result.staked_units);
     const profit=publication.result?.profit_units==null?NaN:Number(publication.result.profit_units);
     if(!Number.isFinite(stake)||stake<=0||!Number.isFinite(profit))return null;
-    return {profit:profit/stake,stake:1,priced:true,odds};
+    // profit_units is already the canonical 1u gain in Results, even when
+    // a legacy raw staked_units field is larger than one. No second division.
+    if(!membership&&String(publication.section||'').toLowerCase()==='prime')return null;
+    return {profit,stake:1,priced:true,odds};
   }
 
-  function monthlyMetricSummary(entries){
+  function monthlyMetricSummary(entries,membership='',category='all'){
     const all=entries.map(item=>({...item,outcome:publicationOutcome(item.publication).kind,
-      financial:monthlyFinancialRecord(item.publication)}));
+      financial:monthlyFinancialRecord(item.publication,membership,category)}));
     const wins=all.filter(x=>x.outcome==='win').length;
     const losses=all.filter(x=>x.outcome==='loss').length;
     const voids=all.filter(x=>x.outcome==='void').length;
@@ -4188,11 +4202,12 @@
       .replace('indoor_hard','hard')).filter(Boolean))].sort();
     // Cohorts express current access rules projected onto historical publications,
     // not distinct member wagers. They overlap and must never be added together.
+    const selectedSections=MONTHLY_SECTIONS.map(([key])=>key).filter(key=>s.sections.includes(key));
+    const resultCategory=selectedSections.length===MONTHLY_SECTIONS.length?'all':selectedSections.join(',');
     const levelData=MONTHLY_LEVELS.map(([id,label])=>({
-      id,label,available:id==='all'||Boolean(state.feed?.member_result_rules?.[id]),
-      ...{}
+      id,label,available:id==='all'||Boolean(state.feed?.member_result_rules?.[id])
     })).map(level=>({
-      ...level,metrics:level.available?monthlyMetricSummary(monthlyMetricRows(level.id==='all'?'':level.id)):null
+      ...level,metrics:level.available?monthlyMetricSummary(monthlyMetricRows(level.id==='all'?'':level.id),level.id==='all'?'':level.id,resultCategory):null
     }));
     const active=levelData.find(item=>item.id===currentLevel)||levelData[0];
     const m=active.metrics;
