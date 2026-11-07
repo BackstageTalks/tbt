@@ -306,7 +306,7 @@ jobs:
             (( 10#$max_requests <= 500 )) || { echo "BP focus max 500 paid attempts"; exit 1; }
             [[ "$(jq -r '.kind // empty' "$request")" == "operator-approved-tennisapi-breakpoint-null-only-v1" ]] || { echo "Unapproved BP request kind"; exit 1; }
             [[ "$(jq -r '.source // empty' "$request")" == "tennisapi1" ]] || { echo "Wrong provider host"; exit 1; }
-            [[ "$(jq -r '.model_changes // true' "$request")" == "false" && "$(jq -r '.cdb_writes_allowed // false' "$request")" == "true" ]] || { echo "BP-only CDB write scope not explicitly approved"; exit 1; }
+            [[ "$(jq -r 'if has("model_changes") then .model_changes else true end' "$request")" == "false" && "$(jq -r '.cdb_writes_allowed // false' "$request")" == "true" ]] || { echo "BP-only CDB write scope not explicitly approved"; exit 1; }
           fi
           echo "BLINQ_BP_FOCUS=$bp_focus" >> "$GITHUB_ENV"
           if [[ "$mode" == "statistics" && "$targeted" == "true" ]]; then
