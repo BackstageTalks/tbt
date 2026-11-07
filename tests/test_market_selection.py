@@ -75,7 +75,7 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     }
     rows = {item['event_id']: item for item in snap['rows']}
     assert rows['selected-top']['selected_section'] == 'top_daily'
-    assert rows['selected-top']['selection_tier'] == 'fallback'
+    assert rows['selected-top']['selection_tier'] == 'ranked_core'
     assert rows['unpriced']['priced'] is False
     assert rows['unpriced']['selected_section'] is None
     serialized = str(snap).lower()
