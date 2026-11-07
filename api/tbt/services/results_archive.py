@@ -483,6 +483,28 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
                 incumbent["result"] = deepcopy(updated_result)
             elif previous.get("correct") is None and not previous.get("void"):
                 incumbent["result"] = deepcopy(archived_pub.get("result"))
+            elif (
+                str(archived_pub.get("market") or "match_winner").lower() == "match_winner"
+                and updated_result.get("runtime_source") == "match_status_snapshot"
+                and previous.get("runtime_source") != "match_status_snapshot"
+                and type(previous.get("correct")) is bool
+                and previous.get("correct") is updated_result.get("correct")
+                and bool(previous.get("void")) == bool(updated_result.get("void"))
+                and all(
+                    incumbent.get(field) in (None, "")
+                    or archived_pub.get(field) in (None, "")
+                    or str(incumbent.get(field)) == str(archived_pub.get(field))
+                    for field in ("publication_key", "issued_at", "odds")
+                )
+            ):
+                # A legacy feed may contain the correct terminal winner but
+                # not the source-native verification marker. Upgrade only the
+                # same original market, same outcome and unaltered quote.
+                # Conflicting results must stay visible to the parity audit.
+                incumbent["result"] = deepcopy(updated_result)
+                for field in ("publication_key", "issued_at", "odds"):
+                    if incumbent.get(field) in (None, "") and archived_pub.get(field) not in (None, ""):
+                        incumbent[field] = deepcopy(archived_pub[field])
             continue
         copy = deepcopy(archived_row)
         copy["market_publications"] = [archived_pub]
