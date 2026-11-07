@@ -133,6 +133,8 @@ def test_settle_current_day_immediately_after_last_result_without_waiting_for_06
         calls.append(day)
         return list(available)
     monkeypatch.setattr(r,"archive",get_archive)
+    # This test exercises the pending gate, with no same-contract website row.
+    monkeypatch.setattr(r,"website_results",lambda *_:[])
     args=SimpleNamespace(now=now.isoformat(),config_url="none",api_url="none",
                          state=str(path),output=str(tmp_path/"out"),external_tick=False)
     # First reconciliation sees only two settled market decisions: no TG send.
