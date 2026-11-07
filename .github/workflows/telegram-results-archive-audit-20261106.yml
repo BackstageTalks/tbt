@@ -34,7 +34,7 @@ jobs:
           sparse-checkout: ops
           sparse-checkout-cone-mode: true
           persist-credentials: false
-      - name: Audit exact 3–5 Nov receipts against authenticated archived settlements
+      - name: Audit exact 3–6 Nov receipts against authenticated archived settlements
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
           BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
