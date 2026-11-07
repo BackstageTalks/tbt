@@ -56,10 +56,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # On a guarded 409, print ONLY the backend's whitelisted reason,
+          # never player identities, raw provider records or credentials.
+          status=0
           curl --fail-with-body -sS --retry 0 --max-time 110 -X POST \
             -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
             "${BLINQ_BASE_URL%/}/api/v1/internal/telegram/recover-20261103?mode=dry-run" \
-            -o /tmp/telegram-nov3-dry-run.json
+            -o /tmp/telegram-nov3-dry-run.json || status=$?
+          if [ "$status" -ne 0 ]; then
+            jq -c '{error,reason_class,reason_code}' /tmp/telegram-nov3-dry-run.json || true
+            exit "$status"
+          fi
           jq -e '.ok == true and .status == "dry_run" and
             .day == "2026-11-03" and .expected_ace_rows == 9 and
             .top_value_verified == 3 and .mutation_permitted == false and
