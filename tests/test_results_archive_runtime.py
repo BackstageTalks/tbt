@@ -229,3 +229,66 @@ def test_verified_winner_does_not_replace_conflicting_legacy_quote():
     out = merged["results"][0]["market_publications"][0]
     assert out["result"].get("runtime_source") is None
     assert out["odds"] == 9.99
+
+
+
+def _historical_ace_for_readback(*, day="2026-10-31"):
+    """Frozen historic bet fixture: local issued quote is never calculated."""
+    return {
+        "event_id": "ace-historical-1",
+        "scheduled_at": day + "T12:00:00+00:00",
+        "player1": {"id": "p1", "name": "One"},
+        "player2": {"id": "p2", "name": "Two"},
+        "market_publications": [{
+            "section": "ace", "market": "aces",
+            "selection_id": "p1",
+            "publication_key": "ace:historical:contract:under:4.5",
+            "market_line": 4.5, "ou_side": "under",
+            "price_contract": "player_total_ou",
+            "price_basis": None,
+            "odds": 1.72, "projection": 3.2,
+            "issued_at": day + "T05:30:00+00:00",
+            "price_status": "priced_projection",
+            "result": {"correct": True, "void": False, "actual_count": 3,
+                       "runtime_source": "match_status_snapshot"},
+        }],
+    }
+
+
+def test_verified_historic_aces_readback_updates_provenance_not_local_pricing():
+    for day in ("2026-10-31", "2026-11-01"):
+        frozen=_historical_ace_for_readback(day=day)
+        legacy=deepcopy(frozen)
+        legacy["market_publications"][0]["result"].pop("runtime_source")
+        legacy_copy=deepcopy(legacy)
+        archive_copy=deepcopy(frozen)
+        merged=merge_settled_results({"results":[legacy]}, [frozen])
+        assert len(merged["results"])==1
+        result=merged["results"][0]["market_publications"][0]
+        assert result["result"]["runtime_source"]=="match_status_snapshot"
+        assert result["result"]["correct"] is True
+        assert result["result"]["actual_count"]==3
+        for field in ("publication_key","market_line","ou_side","odds","projection","price_basis","issued_at"):
+            assert result[field]==legacy_copy["market_publications"][0][field]
+        assert legacy==legacy_copy  # read-only, no original change
+        assert frozen==archive_copy  # archive remains authoritative/immutable
+
+
+def test_verified_aces_overlay_rejects_conflicting_quotes_lines_and_outcomes():
+    frozen=_historical_ace_for_readback()
+    for field,bad in (("odds",9.99),("market_line",5.5),("ou_side","over"),
+                      ("publication_key","ace:unrelated:under:4.5")):
+        legacy=deepcopy(frozen)
+        legacy["market_publications"][0]["result"].pop("runtime_source")
+        legacy["market_publications"][0][field]=bad
+        merged=merge_settled_results({"results":[legacy]},[frozen])
+        target=[p for row in merged["results"] for p in row.get("market_publications") or []
+                if p.get(field)==bad]
+        assert target and target[0]["result"].get("runtime_source") is None
+        assert legacy["market_publications"][0][field]==bad
+    legacy=deepcopy(frozen)
+    legacy["market_publications"][0]["result"]["correct"]=False
+    legacy["market_publications"][0]["result"].pop("runtime_source")
+    merged=merge_settled_results({"results":[legacy]},[frozen])
+    assert merged["results"][0]["market_publications"][0]["result"]["correct"] is False
+    assert merged["results"][0]["market_publications"][0]["result"].get("runtime_source") is None
