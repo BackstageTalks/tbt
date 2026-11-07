@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "betting_day": "2026-11-03",
+  "frozen_telegram_message_ids": [
+    730,
+    731
+  ],
+  "archive_write_authorized": true,
+  "telegram_delivery_authorized": true,
+  "cdb_write_authorized": false,
+  "model_changes_authorized": false,
+  "revision": "source-native-exact-recovery-v1"
+}
