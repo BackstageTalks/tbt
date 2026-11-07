@@ -6304,11 +6304,18 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       (failedSteps.length?'<p role="alert"><strong>Zastavené:</strong> '+escapeHtml(failedSteps.join(' · '))+'</p>':'')+
       outcomeText+
       '<p class="model-factory-guided-foot">Po príprave dát sa hlavné tlačidlo zmení na spustenie tréningu. Worker požiadavku preberie spravidla do 30 minút; kartu môžeš zavrieť. Nový model sa sám nenasadí do produkcie.</p></article>';
+    const championCard='<article class="admin-calibration-panel model-factory-champion" aria-label="Ručný výber championa">'+
+      '<small>SAMOSTATNÉ SCHVÁLENIE</small><h3>Vybrať nového championa</h3>'+
+      '<p>Najprv porovnaj kvalitu a prospektívne výsledky. Toto je <strong>výslovná výnimka kalibrácie</strong>, nie automatické GO. Bez kvalitných dôkazov kandidáta nenasadzuj.</p>'+
+      '<label>Uložený kandidát <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
+      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
+      '<p role="status">Zadáš dôvod a presné potvrdenie RELEASE. Chránený workflow pred výmenou overí identitu modelu, rollback a globálny lock. Následne sa nezávisle kontroluje SHA championa.</p>'+
+      '<p><strong>Posledný uložený model:</strong> '+escapeHtml(latestCandidate)+'</p></article>';
     return '<section class="admin-ux-section admin-model-lab" aria-label="BlinQ Model Factory">'+
       '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
-      productionSummary+guidedCard+
+      productionSummary+guidedCard+championCard+
       '<details class="admin-model-factory-controls"'+(state.adminModelFactoryControlsOpen===true?' open':'')+'><summary>Podrobnosti, história a pokročilé ovládanie</summary>'+
       '<article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
       '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
@@ -6337,8 +6344,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
       '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+
-      '<label>Model pre produkčný release <select id="admin-production-candidate" '+(canPromote?'':'disabled')+'>'+releaseOptions+'</select></label>'+
-      '<button type="button" class="btn btn-primary" data-admin-action="model-factory-promote" '+(canPromote?'':'disabled')+'>Nasadiť s výnimkou kalibrácie</button>'+
+      '<p>Výber championa a potvrdzovacie tlačidlo sú nad pokročilými operáciami, aby zostali vždy viditeľné.</p>'+
       '<p role="status">Pred odoslaním potvrdíš presný model a dôvod. Worker overí obnovu championa a výsledný zápis; pri chybe obnoví pôvodný model. Nové predikcie použijú model pri najbližšom výpočte, staré sa neprepisujú.</p>'+
       '<p><strong>Shadow podmienky na posúdenie:</strong></p>'+(missingShadow?'<ul>'+missingShadow+'</ul>':'<p>Základné shadow metriky splnené. Nasadenie ešte vyžaduje kontrolu TOP/VALUE, rollbacku a samostatné schválenie.</p>')+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-start" data-model-lab-operation="audit_shadow" '+(canBuild?'':'disabled')+'>Vyhodnotiť shadow výsledky</button>'+
