@@ -3,10 +3,14 @@ from datetime import datetime, timezone
 
 TARGET_FIELDS = tuple(f"{side}_{field}" for side in ("p1", "p2") for field in
                       ("service_points_won", "return_points_won", "aces", "double_faults"))
+# Opt-in only: ordinary serve/return and Aces/DF hourly selection is unchanged.
+BREAK_POINT_FIELDS = tuple(f"{side}_{field}" for side in ("p1", "p2") for field in
+                           ("break_point_serve_win", "break_point_return_win"))
 
 
-def missing_fields(match):
-    return [key for key in TARGET_FIELDS if (match.stats or {}).get(key) is None]
+def missing_fields(match, *, break_points_focus=False):
+    fields = BREAK_POINT_FIELDS if break_points_focus else TARGET_FIELDS
+    return [key for key in fields if (match.stats or {}).get(key) is None]
 
 
 def event_id(match):
@@ -55,12 +59,12 @@ def recent_score_identity_conflict(match, now=None, *, days=30):
     return 0 <= age.total_seconds() < days * 86400
 
 
-def retry_due(match, schema, now=None):
+def retry_due(match, schema, now=None, *, break_points_focus=False):
     now = now or datetime.now(timezone.utc)
     marker = (match.provider_payload or {}).get("_tbt_statistics", {})
     if not isinstance(marker, dict) or marker.get("schema") != schema or marker.get("event_id") != event_id(match):
         return True
-    if marker.get("status") == "available" and not missing_fields(match):
+    if marker.get("status") == "available" and not missing_fields(match, break_points_focus=break_points_focus):
         return False
     try:
         checked = datetime.fromisoformat(marker["fetched_at"].replace("Z", "+00:00"))

@@ -382,10 +382,12 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     return result
 
 
-def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False, target_tour=None):
+def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False, target_tour=None, break_points_focus=False):
     """Prioritize verified gaps; optional high-yield historical cohort first."""
     if historical_high_yield and not targeted:
         raise ValueError("High-yield priority requires identity-checked targeted statistics")
+    if break_points_focus and (not targeted or historical_high_yield):
+        raise ValueError("Break-point focus is isolated targeted statistics, not the hourly adaptive queue")
     if target_tour not in (None, "atp", "wta"):
         raise ValueError("Unsupported statistics target tour")
     in_window = [
@@ -411,7 +413,7 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         p2_ready = _quality_ready(stats, "p2")
         cohort = f"{str(match.tour or 'unknown').lower()}:{match.scheduled_at.year}"
         if targeted:
-            if not missing_fields(match):
+            if not missing_fields(match, break_points_focus=break_points_focus):
                 skipped["target_fields_present"] += 1
                 eligibility_by_cohort[cohort]["target_fields_present"] += 1
                 continue
@@ -423,7 +425,7 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
                 skipped["recent_identity_conflict"] += 1
                 eligibility_by_cohort[cohort]["recent_identity_conflict"] += 1
                 continue
-            if not retry_due(match, STATISTICS_SCHEMA_VERSION):
+            if not retry_due(match, STATISTICS_SCHEMA_VERSION, break_points_focus=break_points_focus):
                 skipped["retry_not_due"] += 1
                 eligibility_by_cohort[cohort]["retry_not_due"] += 1
                 continue
@@ -454,11 +456,11 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
                           and key in VERIFIED_HIGH_YIELD_COHORTS
                           and not (p1_ready and p2_ready))
         candidates.append((
-            0 if high_yield else 1,
-            -match.scheduled_at.year if targeted else coverage,
-            int(p1_ready and p2_ready) if targeted else 0,
+            0 if break_points_focus else (0 if high_yield else 1),
+            int(not verified_identity) if break_points_focus else (-match.scheduled_at.year if targeted else coverage),
+            -len(missing_fields(match, break_points_focus=True)) if break_points_focus else (int(p1_ready and p2_ready) if targeted else 0),
             partial_priority,
-            int(not verified_identity) if targeted else 0,
+            int(not verified_identity) if targeted and not break_points_focus else 0,
             -populated,
             -match.scheduled_at.timestamp(),
             str(match.match_id),
@@ -477,6 +479,8 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "already_quality_ready": sum(bucket_ready.values()),
         "candidate_rows": len(candidates),
         "targeted": targeted,
+        "break_points_focus": break_points_focus,
+        "focus_fields": ("break_point_serve_win", "break_point_return_win") if break_points_focus else ("service_points_won", "return_points_won", "aces", "double_faults"),
         "historical_high_yield": historical_high_yield,
         "preferred_verified_cohort": "atp:2024:serve_return_incomplete" if historical_high_yield else None,
         "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
@@ -538,6 +542,8 @@ def main():
                         help="Queue only identifiable missing fields whose retry is due, recent years first")
     parser.add_argument("--target-tour", choices=("atp", "wta"), default=None,
                         help="Limit statistics candidates to the selected tour; never affects history mode")
+    parser.add_argument("--break-points-focus", action="store_true",
+                        help="Use existing native statistics importer for BP-only NULL gaps (<=500 attempts)")
     parser.add_argument("--max-requests", type=int, default=4000)
     parser.add_argument("--history-dir", default=str(ROOT / ".cache/tbt/history"))
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", ""))
@@ -548,11 +554,16 @@ def main():
         parser.error("--targeted-statistics requires statistics mode")
     if args.target_tour and (args.mode != "statistics" or not args.targeted_statistics):
         parser.error("--target-tour requires targeted statistics mode")
+    if args.break_points_focus and (args.mode != "statistics" or not args.targeted_statistics
+                                    or args.max_requests > 500):
+        parser.error("Break-point focus requires targeted statistics and <=500 provider attempts")
     high_yield_setting = os.environ.get("BLINQ_AUTOFILL_HIGH_YIELD", "false").lower()
     if high_yield_setting not in ("true", "false"):
         parser.error("BLINQ_AUTOFILL_HIGH_YIELD must be true or false")
     if high_yield_setting == "true" and (args.mode != "statistics" or not args.targeted_statistics):
         parser.error("High-yield priority requires targeted statistics mode")
+    if args.break_points_focus and high_yield_setting == "true":
+        parser.error("Break-point focus cannot modify the ordinary adaptive hourly queue")
     try:
         start, end = history_window(args.start, args.end, args.lookback_days)
     except ValueError as exc:
@@ -817,12 +828,13 @@ def main():
             checkpoint(changed, True)
         else:
             enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite",
-                                         targeted=args.targeted_statistics)
+                                         targeted=args.targeted_statistics,
+                                         break_points_focus=args.break_points_focus)
             changed = set()
             statistics_candidates, statistics_plan = _statistics_candidates(
                 eligible_rows_for_enrichment(), start, end, targeted=args.targeted_statistics,
                 historical_high_yield=high_yield_setting == "true",
-                target_tour=args.target_tour)
+                target_tour=args.target_tour, break_points_focus=args.break_points_focus)
             write_json(directory / "statistics_gap_plan.json", statistics_plan)
             report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
             report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
@@ -920,6 +932,7 @@ def main():
                         "paid_provider_attempts": provider.request_count,
                     }
                 requests = provider.request_count
+                output_report["break_points_focus"] = args.break_points_focus
                 output_report["statistics_data_value"] = {
                     **dict(statistics_value),
                     "api_quality_ready_rows_per_1000_requests": (

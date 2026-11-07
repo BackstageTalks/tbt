@@ -22,9 +22,12 @@ STATISTICS_SCHEMA_VERSION = 3
 class StatisticsEnricher:
     """Reuse settled statistics and verified identity to avoid redundant calls."""
 
-    def __init__(self, provider, cache_path, *, targeted=False):
+    def __init__(self, provider, cache_path, *, targeted=False, break_points_focus=False):
+        if break_points_focus and not targeted:
+            raise ValueError('Break-point focus requires the targeted CDB statistics importer')
         self.provider = provider
         self.targeted = targeted
+        self.break_points_focus = break_points_focus
         self.cache = sqlite3.connect(str(cache_path))
         self.cache.execute("CREATE TABLE IF NOT EXISTS responses (path TEXT PRIMARY KEY, fetched REAL, body TEXT)")
         self.statistics_key_counts = {name: Counter() for name in ("supported", "unsupported", "set_only")}
@@ -113,12 +116,15 @@ class StatisticsEnricher:
                 and marker.get("event_id") == str(event_id)
                 and marker.get("status") == "available"
                 and complete_opponent_service_rates(match.stats)
-                and (not self.targeted or not missing_fields(match))):
+                and (not self.targeted or not missing_fields(
+                     match, break_points_focus=self.break_points_focus))):
             return "enriched"
         legacy_available = (not self.targeted and marker.get("schema") == STATISTICS_SCHEMA_VERSION
                             and marker.get("event_id") == str(event_id)
                             and marker.get("status") == "available")
-        if legacy_available or not retry_due(match, STATISTICS_SCHEMA_VERSION):
+        if legacy_available or not retry_due(
+                match, STATISTICS_SCHEMA_VERSION,
+                break_points_focus=self.break_points_focus):
             return "cached"
         # An independently recorded score/identity mismatch cannot safely
         # yield canonical statistics. Reuse that evidence during its cooldown.
