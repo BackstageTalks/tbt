@@ -56,6 +56,7 @@ def main():
               s.previewPlan=null;s.route='admin';s.adminTab='dataexport';
               document.body.classList.remove('blinq-home','blinq-route');
               document.body.classList.add('blinq-admin');
+              document.getElementById('authDialog')?.remove();
               document.getElementById('bootSplash')?.remove();
               document.getElementById('cookieConsent')?.remove();
               document.getElementById('appShell').hidden=false;
