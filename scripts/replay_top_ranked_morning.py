@@ -109,17 +109,21 @@ def compare_days(day_groups):
                     core.append(card)
                 else:
                     backup.append(card)
-            selected, fallback_count, applied = _rank_full_slate_top(
-                core, backup, target=TOP_TARGET_COUNT, minimum=TOP_MIN_COUNT,
+            # Production publishes TOP3; TOP5 is separately measured only as
+            # an offline capacity alternative and is NEVER deployed.
+            expanded, fallback_count, applied = _rank_full_slate_top(
+                core, backup, target=5, minimum=TOP_MIN_COUNT,
             )
             by_event={r["event"]:r for r in rows}
-            new=[by_event[c["event_id"]] for c in selected]
+            new=[by_event[c["event_id"]] for c in expanded[:TOP_TARGET_COUNT]]
+            experimental_five=[by_event[c["event_id"]] for c in expanded]
             old_ids={r["event"] for r in old}; new_ids={r["event"] for r in new}
             groups={
                 "original_snapshot_top":old,
                 "ranked_top1":new[:1],
                 "ranked_top3":new[:3],
-                "ranked_top5":new,
+                "ranked_top5":experimental_five,
+                "ranked_live_top":new,
                 "both": [r for r in new if r["event"] in old_ids],
                 "new_only":[r for r in new if r["event"] not in old_ids],
                 "old_only":[r for r in old if r["event"] not in new_ids],
@@ -147,6 +151,8 @@ def compare_days(day_groups):
         }
     return {"status":"READ_ONLY_MORNING_TOP_RANK_SHADOW_NOT_DEPLOYMENT_CERTIFICATE",
             "market_output":"top_daily_picks_only", "no_new_offer":True,
+        "production_top_capacity":TOP_TARGET_COUNT,
+        "top5_research_only":True,
             "provider_requests":0, "cdb_writes":0, "production_changes":0,
             "models":result}
 
