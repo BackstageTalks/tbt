@@ -178,6 +178,48 @@ def test_aces_and_double_faults_have_independent_server_entitlements():
     assert manifest["sections"]["double_faults"]["returned"] == 2
 
 
+def test_zero_unlocked_pro_market_rules_never_leak_other_market_rows():
+    """PRO active+zero+HIDE is an empty visible tab, not free predictions."""
+    payload = feed(2)
+    payload["ace_picks"] = [
+        {**row(1), "market": "aces"},
+        {**row(2), "market": "aces"},
+        {**row(3), "market": "double_faults"},
+        {**row(4), "market": "double_faults"},
+    ]
+    payload["sg_picks"] = [
+        {**row(5), "market": "games"},
+        {**row(6), "market": "sets"},
+    ]
+    zero = {
+        "visible_rows": 0, "blur_remaining": False, "tab_enabled": True,
+        "see_all": False, "selection_mode": "first", "display_state": "active",
+    }
+    two = {**zero, "visible_rows": 2, "blur_remaining": True}
+    cfg = {"dashboard": {"daily_hub": {"enabled": True, "tabs": {
+        "ace": {"enabled": True, "plans": {"pro": two}},
+        "double_faults": {"enabled": True, "plans": {"pro": zero}},
+        "prime": {"enabled": True, "plans": {"pro": zero}},
+        "doubles": {"enabled": True, "plans": {"pro": zero}},
+        "sets": {"enabled": True, "plans": {"pro": zero}},
+        "games": {"enabled": True, "plans": {"pro": zero}},
+    }}}}
+    data, manifest = filter_feed_for_access(
+        payload, {"status": "active", "plan": "pro", "id": "pro-zero"}, cfg,
+    )
+    assert [row["market"] for row in data["ace_picks"]] == ["aces", "aces"]
+    assert data["sg_picks"] == []
+    assert data["prime_picks"] == []
+    assert data["doubles_picks"] == []
+    for section in ("double_faults", "prime", "doubles", "sets", "games"):
+        entitlement = manifest["sections"][section]
+        assert entitlement["visible_picks"] == 0
+        assert entitlement["returned"] == 0
+        assert entitlement["blur_remaining"] is False
+        assert all(state == "hidden" for state in entitlement["slot_states"])
+    assert manifest["sections"]["ace"]["returned"] == 2
+
+
 def test_stable_random_unlocks_positions_in_place_instead_of_moving_picks_to_top():
     cfg = {
         "dashboard": {"daily_hub": {"enabled": True, "tabs": {

@@ -15,7 +15,7 @@ def route_request(route):
     if urlparse(route.request.url).path == "/app.js":
         source=(WEB / "app.js").read_text(encoding="utf-8").replace(
             "  boot();",
-            "  window.zeroAllocationTest={state,renderDailyHub,dailyHubAccessLocked,dailyHubIncludedButUnavailable};\n  boot();"
+            "  window.zeroAllocationTest={state,renderDailyHub,dailyHubAccessLocked,dailyHubIncludedButUnavailable,adminDailyHubAccessAudit,adminDailyHubAccessAuditHtml};\n  boot();"
         )
         route.fulfill(content_type="application/javascript", body=source)
     else:
@@ -92,6 +92,68 @@ def main():
                       if(document.querySelector('#dailyHubTabs [data-daily-hub-tab="double_faults"]')?.classList.contains('is-locked')
                          ||document.querySelector('#dailyHubBody tr.hub-row-locked'))
                         throw Error('Unblurred zero-allocation panel must not claim a lock: '+total);
+                    }
+                    // All market tabs and all paid/free levels: when zero rows
+                    // are deliberately hidden instead of blurred, never claim a
+                    // provider outage or display a misleading paywall lock.
+                    for(const level of levels){
+                      for(const tab of ['daily','prime','value',...markets]){
+                        for(const total of [0,3]){
+                          s.feed={
+                            account:{plan:level,status:'active'},
+                            daily_picks:[],top_daily_picks:[],prime_picks:[],value_picks:[],
+                            ace_picks:[],doubles_picks:[],sg_picks:[],results:[],
+                            entitlements:{plan:level,sections:{[tab]:{
+                              visible_picks:0,blur_remaining:false,enabled:true,
+                              see_all:false,display_state:'active',returned:0,total,
+                              locked_count:total,slot_states:Array(total).fill('hidden')
+                            }}}
+                          };
+                          s.dailyHubTab=tab;app.renderDailyHub();
+                          const empty=document.querySelector('#dailyHubEmpty');
+                          const tabNode=document.querySelector('#dailyHubTabs [data-daily-hub-tab="'+tab+'"]');
+                          if(!empty||empty.hidden||!empty.textContent.includes('odomknuté')
+                            ||tabNode?.classList.contains('is-locked')
+                            ||document.querySelector('#dailyHubBody tr.hub-row-locked'))
+                            throw Error('Zero unlocked hidden rows confused with paywall/outage: '+level+'/'+tab+'/'+total);
+                        }
+                      }
+                    }
+                    // Admin diagnostics must expose cross-tier inversion, empty
+                    // visible markets and SEE ALL on a disabled/blurred panel,
+                    // without silently changing membership configuration.
+                    const originalDf={...tabs.double_faults.plans.pro};
+                    const originalElite={...tabs.double_faults.plans.elite};
+                    const originalRookie={...tabs.prime.plans.rookie};
+                    const originalPro={...tabs.prime.plans.pro};
+                    const originalElitePrime={...tabs.prime.plans.elite};
+                    try{
+                      Object.assign(tabs.double_faults.plans.pro,{visible_rows:0,blur_remaining:false,display_state:'active'});
+                      Object.assign(tabs.double_faults.plans.elite,{visible_rows:0,display_state:'blurred',see_all:true});
+                      Object.assign(tabs.prime.plans.rookie,{visible_rows:1,display_state:'active'});
+                      Object.assign(tabs.prime.plans.pro,{visible_rows:0,blur_remaining:false,display_state:'active'});
+                      Object.assign(tabs.prime.plans.elite,{visible_rows:0,display_state:'blurred'});
+                      const issues=app.adminDailyHubAccessAudit();
+                      for(const kind of ['empty','hierarchy','contradiction'])
+                        if(!issues.some(item=>item.kind===kind))
+                          throw Error('Admin audit missed '+kind);
+                      if(!issues.some(item=>item.tab==='prime'&&item.plan==='elite'&&item.kind==='hierarchy'))
+                        throw Error('Admin hierarchy audit ignored ROOKIE->ELITE gap across PRO');
+                      if(!issues.some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
+                        throw Error('Admin audit missed PRO double faults');
+                      if(!app.adminDailyHubAccessAuditHtml().includes('Prístupy na kontrolu'))
+                        throw Error('Admin diagnostics are not rendered');
+                      // Disabled panels must not be reported as visible empty panels.
+                      tabs.double_faults.plans.pro.tab_enabled=false;
+                      const disabledIssues=app.adminDailyHubAccessAudit();
+                      if(disabledIssues.some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
+                        throw Error('Disabled PRO panel was incorrectly flagged as visible');
+                    }finally{
+                      Object.assign(tabs.double_faults.plans.pro,originalDf);
+                      Object.assign(tabs.double_faults.plans.elite,originalElite);
+                      Object.assign(tabs.prime.plans.rookie,originalRookie);
+                      Object.assign(tabs.prime.plans.pro,originalPro);
+                      Object.assign(tabs.prime.plans.elite,originalElitePrime);
                     }
                     // Provider has no offer, even though one row is allocated:
                     // no paid upgrade is justified, at any membership level.
