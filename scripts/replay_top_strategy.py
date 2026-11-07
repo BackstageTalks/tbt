@@ -97,6 +97,32 @@ def evaluate(snapshots, canonical):
             r["competition_pre_match"] = prematch_category(original)
             pool[r["model"]].append(r)
 
+    def funnel(rows):
+        counts = Counter()
+        for record in rows:
+            counts["candidate_rows"] += 1
+            if not record["quote_ok"]:
+                counts["missing_verified_prestart_quote"] += 1
+                continue
+            counts["quote_valid"] += 1
+            if record["odds"] < MIN_TOP_ODDS:
+                counts["quote_below_min_1_50"] += 1
+                continue
+            counts["odds_ge_1_50"] += 1
+            if record["depth"] < MIN_DEPTH or record["min_surface"] is None or record["min_surface"] < MIN_SURFACE_EACH:
+                counts["quality_gate_rejected"] += 1
+                continue
+            counts["quality_pass"] += 1
+            if record["public"] < CORE_TOP_PROBABILITY:
+                counts["below_fixed_80_probability"] += 1
+                continue
+            counts["probability_ge_80"] += 1
+            if eligible(record, "value"):
+                counts["VALUE_claims_precedence"] += 1
+                continue
+            counts["strict_TOP_pass"] += 1
+        return dict(sorted(counts.items()))
+
     models = {}
     for model, records in sorted(pool.items()):
         original = [r for r in records if r["section"] == "top_daily" and r["quote_ok"]]
@@ -143,6 +169,15 @@ def evaluate(snapshots, canonical):
                 r["competition_pre_match"] == "UNKNOWN" for r in records
             ),
             "all_pre_match_candidate_rows": len(records),
+            "eligibility_funnel": funnel(records),
+            "eligibility_funnel_by_tour": {
+                tour: funnel([r for r in records if r["tour"] == tour])
+                for tour in sorted({r["tour"] for r in records})
+            },
+            "eligibility_funnel_by_pre_match_competition": {
+                category: funnel([r for r in records if r["competition_pre_match"] == category])
+                for category in sorted({r["competition_pre_match"] for r in records})
+            },
         }
     return {
         "schema": 1, "status": "RESEARCH_ONLY_NO_DEPLOY",
