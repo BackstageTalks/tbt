@@ -102,6 +102,13 @@ def evaluate(snapshots, canonical):
         original = [r for r in records if r["section"] == "top_daily" and r["quote_ok"]]
         strict = [r for r in records if strict_top(r)]
         main = [r for r in strict if r["competition_pre_match"] in MAIN_LEVELS]
+        old_ids = {r["event"] for r in original}
+        new_ids = {r["event"] for r in strict}
+        # The arms have different denominators. Explain exact same-day overlap
+        # rather than presenting their overall accuracy difference as causal.
+        overlap = [r for r in strict if r["event"] in old_ids]
+        omitted = [r for r in original if r["event"] not in new_ids]
+        added = [r for r in strict if r["event"] not in old_ids]
         grouped = defaultdict(list)
         for r in strict:
             grouped[r["competition_pre_match"]].append(r)
@@ -116,6 +123,13 @@ def evaluate(snapshots, canonical):
             "original_candidate_top": score(original),
             "strict_80_all_tours": score(strict),
             "strict_80_verified_atp_wta_only": score(main),
+            "exact_same_offer_reconciliation": {
+                "both": score(overlap),
+                "original_only": score(omitted),
+                "strict_only": score(added),
+                "same_day_and_model": True,
+                "interpretation": "Descriptive same-slate membership, never paired equal-capacity uplift",
+            },
             "strict_80_by_prematch_competition": {
                 category: score(rows) for category, rows in sorted(grouped.items())
             },
