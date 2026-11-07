@@ -16,3 +16,16 @@ def test_exact_mismatch_is_reported_but_never_graded():
     assert mismatch_reason(sent, [sent]) == {
         "reason": "exact_identity_non_final_or_ambiguous", "candidates": 1,
     }
+
+
+def test_november_six_receipts_are_in_strict_read_only_audit_scope():
+    import json
+    from telegram_results_archive_audit import DAYS
+    request = json.loads((Path(__file__).resolve().parents[1] /
+                          ".github/telegram-results-archive-audit-request.json").read_text())
+    assert DAYS == tuple(request["days"])
+    assert DAYS[-1] == "2026-11-06"
+    assert request["mode"] == "read-only"
+    assert request["paid_provider_requests"] == 0
+    assert request["telegram_send"] is False
+    assert request["cdb_writes"] is False

@@ -7,7 +7,7 @@ from pathlib import Path
 import telegram_daily_results as results
 import telegram_offer_publisher as tg
 
-DAYS = ("2026-11-03", "2026-11-04", "2026-11-05")
+DAYS = ("2026-11-03", "2026-11-04", "2026-11-05", "2026-11-06")
 FIELDS = ("event_id", "selection_id", "section", "market",
           "publication_key", "market_line", "projection_direction")
 
