@@ -11699,3 +11699,53 @@ body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen .monthl
     transition:none!important
   }
 }
+
+
+/* Screenshot monthly reports: deep transparent BlinQ glass and sign-aware graph. */
+body#blinqPremium.blinq-admin .monthly-performance{
+  --monthly-bg:rgba(2,17,14,.78);
+  --monthly-panel:rgba(2,26,20,.44);
+  --monthly-card:rgba(5,39,29,.42);
+  --monthly-edge:rgba(83,178,136,.22);
+  background:
+    radial-gradient(ellipse at 90% -15%,rgba(16,93,64,.17),transparent 58%),
+    linear-gradient(145deg,rgba(1,18,14,.82),rgba(2,23,18,.73))!important;
+  border-color:rgba(74,159,116,.25)!important;
+  backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px);
+}
+body#blinqPremium.blinq-admin .monthly-stat{
+  background:linear-gradient(155deg,rgba(13,58,42,.50),rgba(2,30,23,.43))!important;
+  border-color:rgba(82,159,120,.25)!important;
+}
+body#blinqPremium.blinq-admin .monthly-chart-card,
+body#blinqPremium.blinq-admin .monthly-table-card{
+  background:linear-gradient(150deg,rgba(5,41,31,.61),rgba(2,25,20,.52))!important;
+  border-color:rgba(76,157,116,.28)!important;
+}
+body#blinqPremium.blinq-admin .monthly-performance .monthly-profit-area{
+  fill:url(#monthlyProfitArea);
+}
+body#blinqPremium.blinq-admin .monthly-performance .monthly-loss-area{
+  fill:url(#monthlyLossArea);
+}
+body#blinqPremium.blinq-admin .monthly-performance .monthly-loss-line{
+  fill:none;stroke:#f5a24c;stroke-width:2.9;
+  stroke-linecap:round;stroke-linejoin:round;
+  filter:drop-shadow(0 0 2px rgba(245,162,76,.23));
+}
+body#blinqPremium.blinq-admin .monthly-performance .monthly-negative-point{
+  fill:#ffe2b5;stroke:#f5a24c;
+}
+body#blinqPremium.blinq-admin .monthly-focused-table{
+  background:rgba(0,21,16,.33)!important;
+}
+body#blinqPremium.blinq-admin .monthly-grid-table thead th{
+  background:rgba(15,66,46,.68)!important;
+}
+body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
+  background:
+    radial-gradient(ellipse at 85% 4%,rgba(23,100,65,.18),transparent 58%),
+    linear-gradient(145deg,rgba(1,17,13,.87),rgba(2,25,18,.81))!important;
+  backdrop-filter:blur(9px)!important;
+  -webkit-backdrop-filter:blur(9px)!important;
+}
