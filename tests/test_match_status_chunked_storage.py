@@ -142,3 +142,26 @@ def test_match_status_snapshot_keeps_backlog_priority_diagnostics(monkeypatch):
     assert restored["priority_mode"] is True
     assert restored["current_betting_day_due"] == 17
     assert restored["backlog_due"] == 946
+
+
+
+def test_verified_issued_rollover_entries_roundtrip_without_loss(monkeypatch):
+    table = ChunkTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    entry = {
+        "confirmed_only": True,
+        "section": "ace_picks", "betting_day": "2026-11-06",
+        "receipt_key": "a" * 64, "generated_at": "2026-11-06T05:20:00Z",
+        "row": {"event_id": "old", "scheduled_at": "2026-11-06T12:00:00Z",
+                "market_publications": [{
+                    "market": "aces", "price_contract": "player_total_ou",
+                    "market_line": 5.5, "ou_side": "over",
+                }]},
+    }
+    saved = admin_storage.save_match_status_snapshot({
+        "rollover_issued_rows": [entry], "statuses": {}, "pending": {},
+    })
+    observed = admin_storage.load_match_status_snapshot()
+    assert saved["rollover_issued_rows"] == [entry]
+    assert observed["rollover_issued_rows"] == [entry]
+    assert admin_storage.load_match_status_snapshot()["rollover_issued_rows"] == [entry]
