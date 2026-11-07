@@ -42,7 +42,7 @@ def snapshot(rows):
 
 def test_native_selector_is_used_for_both_arms_and_raw_can_add_top():
     first = row("one", raw=.84, depth=.96)
-    second = row("two", raw=.71, depth=.85, selected=None)
+    second = row("two", raw=.81, depth=.85, selected=None)
     index = canonical_index([match("one"), match("two")])
     pub, alternative = [], []
     for original in (first, second):
@@ -56,7 +56,7 @@ def test_native_selector_is_used_for_both_arms_and_raw_can_add_top():
 
 def test_real_replay_does_not_equate_different_policy_denominators():
     first = row("one", raw=.84, depth=.96)
-    second = row("two", raw=.71, depth=.85, selected=None)
+    second = row("two", raw=.81, depth=.85, selected=None)
     r = replay_analysis([snapshot([first, second])], [match("one"), match("two", winner="b")])
     x = r["models"]["model-test"]
     assert x["fixed_candidate_raw"]["settled"] == 2
