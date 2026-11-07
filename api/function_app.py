@@ -2135,6 +2135,37 @@ def internal_telegram_recover_20261106(req):
         return response({"error": "original_aces_recovery_failed"}, 503)
 
 
+@app.route(route="v1/internal/telegram/recover-20261104-05", methods=["POST"])
+def internal_telegram_recover_20261104_05(req):
+    """Only independently verified frozen Nov 4/5 ACES via native Results CAS.
+
+    Never sends Telegram or requests provider data; strict source-provenance
+    check and independent readback are performed inside the scoped service.
+    """
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    args = getattr(req, "params", {}) or {}
+    day, mode = str(args.get("day") or ""), str(args.get("mode") or "dry-run")
+    if day not in {"2026-11-04", "2026-11-05"} or mode not in {"dry-run", "commit"}:
+        return response({"error": "invalid_historical_recovery_scope"}, 400)
+    try:
+        from tbt.services.telegram_20261104_05_recovery import recover
+        result = recover(day, dry_run=mode != "commit")
+        return response({"ok": True, **result})
+    except AdminStorageUnavailable:
+        logging.exception("Original 4/5 November ACE archive unavailable")
+        return response({"error": "verified_archive_unavailable"}, 503)
+    except (ValueError, RuntimeError) as exc:
+        logging.warning("Original ACE archival guard stopped action: %s", type(exc).__name__)
+        return response({"error": "original_ace_evidence_mismatch",
+                         "reason_class": type(exc).__name__}, 409)
+    except Exception:
+        logging.exception("Original 4/5 November archive restoration failed")
+        return response({"error": "historical_archive_recovery_failed"}, 503)
+
+
 @app.route(route="v1/internal/live-radar-status", methods=["GET"])
 def internal_live_radar_status(req):
     """Read back durable heartbeat and global quota without paid provider calls.
