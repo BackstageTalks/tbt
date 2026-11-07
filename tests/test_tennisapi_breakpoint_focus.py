@@ -156,3 +156,29 @@ def test_partially_complete_bp_still_is_a_gap(match_factory):
     m.stats["p2_break_point_return_win"]=.4
     assert set(missing_fields(m,break_points_focus=True)) == {
         "p1_break_point_return_win","p2_break_point_serve_win"}
+
+
+def test_bp_push_guard_preserves_explicit_false_and_rejects_missing_model_change_flag():
+    """Regression: jq `false // true` means true and rejects a safe BP request."""
+    import json
+    from pathlib import Path
+    import subprocess
+    import shutil
+    import pytest
+    root = Path(__file__).resolve().parents[1]
+    workflow = (root / ".github/workflows/data.yml").read_text()
+    expression = 'if has("model_changes") then .model_changes else true end'
+    assert expression in workflow
+    if not shutil.which("jq"):
+        pytest.skip("jq not installed in local unit-test environment")
+    for request, expected in (
+        ({"model_changes": False}, "false"),
+        ({"model_changes": True}, "true"),
+        ({}, "true"),
+    ):
+        result = subprocess.run(
+            ["jq", "-r", expression],
+            input=json.dumps(request),
+            capture_output=True, text=True, check=True,
+        )
+        assert result.stdout.strip() == expected
