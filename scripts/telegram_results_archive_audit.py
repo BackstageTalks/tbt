@@ -1,6 +1,7 @@
 """Read-only Telegram issued-vs-archive audit. No API provider calls or writes."""
 from __future__ import annotations
 import json
+import math
 from collections import Counter
 from pathlib import Path
 
@@ -31,6 +32,57 @@ def mismatch_reason(sent: dict, archive_rows: list[dict]) -> dict:
             "candidates": len(matches)}
 
 
+
+def verified_aces_actual_evidence(sent: dict, archive_rows: list[dict]) -> dict:
+    """Check reusable, exact-player provider counts; NEVER grade or write.
+
+    An alternate O/U threshold may have been graded for the same player.
+    That is NOT proof that the sent threshold was settled, but its actual
+    provider-verified player count may be reusable after an independent
+    original-contract check. Reject other players, stale fixtures, missing
+    count, invalid provenance and disagreeing measurements.
+    """
+    if sent.get("market") != "aces" or sent.get("section") != "ace":
+        return {"status": "not_player_aces"}
+    event = str(sent.get("event_id") or "")
+    player = str(sent.get("selection_id") or "")
+    day_time = str(sent.get("scheduled_at") or "")
+    if not (event and player and day_time):
+        return {"status": "missing_frozen_identity"}
+    counts = []
+    for row in archive_rows:
+        if not isinstance(row, dict) or any(
+            str(row.get(key) or "") != expected
+            for key, expected in (
+                ("event_id", event), ("selection_id", player),
+                ("section", "ace"), ("market", "aces"),
+                ("scheduled_at", day_time),
+            )
+        ):
+            continue
+        result = row.get("result")
+        if not isinstance(result, dict) or result.get("runtime_source") != "match_status_snapshot":
+            continue
+        raw = result.get("actual_count")
+        if isinstance(raw, bool) or raw is None:
+            continue
+        try:
+            actual = float(raw)
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if not math.isfinite(actual) or actual < 0 or not actual.is_integer():
+            continue
+        if type(result.get("correct")) is not bool and result.get("void") is not True:
+            continue
+        counts.append(int(actual))
+    if not counts:
+        return {"status": "no_verified_player_count", "sources": 0}
+    if len(set(counts)) != 1:
+        return {"status": "conflicting_player_counts", "sources": len(counts)}
+    return {"status": "unique_verified_player_count",
+            "actual_count": counts[0], "sources": len(counts)}
+
+
 def audit(state: dict, url: str, days: tuple[str, ...] = DAYS) -> list[dict]:
     summaries = []
     for day in days:
@@ -52,11 +104,16 @@ def audit(state: dict, url: str, days: tuple[str, ...] = DAYS) -> list[dict]:
                 "publication_key": row.get("publication_key"),
                 "reason": problem["reason"],
                 "candidate_count": problem["candidates"],
+                "ace_actual_evidence": verified_aces_actual_evidence(row, archived),
             })
         summary = {
             "day": day,
             "sent_references": len(sent),
             "archive_rows": len(archived),
+            "pending_aces_with_verified_count": sum(
+                item["ace_actual_evidence"]["status"] == "unique_verified_player_count"
+                for item in unresolved
+            ),
             "verified": counts["won"] + counts["lost"] + counts["void"],
             "pending": counts["pending"],
             "by_status": dict(counts),
@@ -80,6 +137,7 @@ if __name__ == "__main__":
     assert request == {
         "schema": 1, "days": list(DAYS), "mode": "read-only",
         "paid_provider_requests": 0, "telegram_send": False, "cdb_writes": False,
+        "diagnostics": "verified_same_player_aces_count_v1",
     }, "Unexpected results audit authorization"
     state = tg.load(args.state)
     assert isinstance(state, dict) and isinstance(state.get("attempts"), dict)
