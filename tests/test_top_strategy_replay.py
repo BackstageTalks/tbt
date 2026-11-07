@@ -1,7 +1,7 @@
 """Deterministic read-only tests for proposed TOP selection on the full slate."""
 from datetime import datetime, timezone
 
-from replay_top_strategy import evaluate, prematch_category, score, strict_top
+from replay_top_strategy import evaluate, prematch_category, prematch_tier, score, strict_top
 
 
 def candidate(event, *, confidence=.88, depth=1.0, odds=1.65, opponent=2.45,
@@ -178,3 +178,41 @@ def test_one_unit_profit_uses_only_settled_quoted_winners():
     assert (s["wins"], s["losses"], s["pending_or_unmatched"]) == (1, 1, 1)
     assert abs(s["hypothetical_profit_1u"] + .3) < 1e-12
     assert abs(s["hypothetical_roi"] + .15) < 1e-12
+
+
+def test_research_grid_keeps_m15_m25_w35_w50_separate_and_never_promotes_tour():
+    rows = [
+        candidate("m15", competition="ITF M15"),
+        candidate("m25", competition="ITF M25"),
+        candidate("w35", competition="ITF W35", tour="WTA"),
+        candidate("w50", competition="ITF W50", tour="WTA"),
+        candidate("unknown", competition="unknown", tour="ATP"),
+    ]
+    assert [prematch_tier(r) for r in rows] == [
+        "ITF_M15", "ITF_M25", "ITF_W35", "ITF_W50", "UNKNOWN",
+    ]
+    out = evaluate([snapshot(rows)], [finished(r["event_id"], tour=r["tour"]) for r in rows])
+    cohorts = out["models"]["v7.2.1"]["exploratory_fixed_grid"]
+    assert cohorts["status"] == "RETROSPECTIVE_EXPLORATORY_NOT_BLIND"
+    assert cohorts["fixed_cutoff"] == "2026-11-01"
+    assert cohorts["all_sections"]["tier:ITF_M15"]["0.8"]["development_before_2026_11_01"]["candidate_count"] == 1
+    assert cohorts["all_sections"]["tier:ITF_W35"]["0.8"]["min_sample_gate"] == "INSUFFICIENT_COHORT"
+    assert "tier:ATP_MAIN" not in cohorts["all_sections"]
+
+
+def test_older_and_later_history_are_not_pooled_for_performance_claims():
+    first = candidate("oct", confidence=.83)
+    second = candidate("nov", confidence=.85)
+    second["scheduled_at"] = "2026-11-02T12:00:00+00:00"
+    # One daily anchor is a 6 a.m. local betting day; use a real separate day.
+    older = snapshot([first])
+    older["generated_at"] = "2026-10-31T07:00:00+00:00"
+    first["scheduled_at"] = "2026-10-31T12:00:00+00:00"
+    now = snapshot([second])
+    observed = [finished("oct"), finished("nov")]
+    observed[0]["scheduled_at"] = "2026-10-31T12:00:00+00:00"
+    evaluated = evaluate([older, now], observed)["models"]["v7.2.1"]
+    grid = evaluated["exploratory_fixed_grid"]["all_sections"]["ALL"]["0.8"]
+    assert grid["development_before_2026_11_01"]["settled"] == 1
+    assert grid["chronological_review_from_2026_11_01"]["settled"] == 1
+    assert grid["min_sample_gate"] == "INSUFFICIENT_COHORT"
