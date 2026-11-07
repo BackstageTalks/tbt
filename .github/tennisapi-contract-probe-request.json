@@ -1,14 +1,13 @@
 {
   "schema": 1,
-  "requested_date": "2026-11-06",
-  "reason": "Bounded repeat of observed 30-row singles source mismatch: aggregate-only home/away player identity diagnostics, no raw export or CDB write",
+  "requested_date": "2026-11-07",
+  "reason": "Bounded real PRO multiroute endpoint functionality and batch/odds yield QA; read only, single shared budget, no raw player/odds export or canonical writes",
   "provider_requests_allowed": true,
-  "max_requests": 2,
+  "max_requests": 16,
   "event_id": 17449516,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ TennisApi endpoint QA",
-  "diagnostic_attempt": 24,
-  "phase": "candidates",
-  "case": "player_singles_results"
+  "diagnostic_attempt": 25,
+  "phase": "bulk"
 }
