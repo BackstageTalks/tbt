@@ -294,7 +294,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality",
                      "historical", "identity", "archive_2016", "candidates",
-                     "discovery", "bulk"}:
+                     "discovery", "bulk", "bulk_odds_shape"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -368,6 +368,39 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         report["counts"] = dict(Counter(
             x.get("state") for x in report["observations"].values()))
         return report
+
+    if phase == "bulk_odds_shape":
+        # Focused two-call structural contract: one identity/date witness and
+        # one full-day bulk odds map, never fourteen overlapping route probes.
+        if case is not None or max_requests != 2:
+            raise ValueError("Bulk odds shape requires exactly 2 calls and no case")
+        detail = read("bulk_source_event_detail",
+                      f"/api/tennis/event/{event_id}")
+        event = _obj(_obj(detail).get("event", detail))
+        matched = str(event.get("id", event.get("eventId", ""))) == str(event_id)
+        home = _nested_int(event, "homeTeam", "id")
+        away = _nested_int(event, "awayTeam", "id")
+        stamp = event.get("startTimestamp")
+        try:
+            if type(stamp) is not int or stamp <= 0:
+                raise ValueError("Invalid event timestamp")
+            day = datetime.fromtimestamp(stamp, timezone.utc).date()
+        except (ValueError, OverflowError, OSError):
+            day = None
+        if not (matched and home and away and home != away and day):
+            report["bulk_odds_shape_state"] = "invalid_source_witness"
+            return finish()
+        report["bulk_source_event_id_matched"] = True
+        period = f"{day.day}/{day.month}/{day.year}"
+        read("daily_match_winner_odds",
+             f"/api/tennis/events/odds/{period}")
+        profile = report["observations"]["daily_match_winner_odds"].get(
+            "daily_odds_value_profile", {})
+        report["bulk_odds_shape_state"] = (
+            "profiled" if "map_entries" in profile else "unrecognized_shape")
+        report["cdb_writes"] = 0
+        report["model_changes"] = 0
+        return finish()
 
     if phase == "bulk":
         # One guarded source witness, followed by independent documented route
@@ -887,7 +920,7 @@ def main() -> None:
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
                                             "quality", "historical", "identity",
                                             "archive_2016", "candidates",
-                                            "discovery", "bulk"],
+                                            "discovery", "bulk", "bulk_odds_shape"],
                         default="full")
     parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
