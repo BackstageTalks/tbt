@@ -724,7 +724,7 @@ def enrich_current_betting_day_odds(
     provider_id: int = 1,
     timezone_name: str = "Europe/Bratislava",
     start_hour: int = 6,
-    candidate_min_probability: float = VALUE_MIN_PROBABILITY,
+    candidate_min_probability: float = min(VALUE_MIN_PROBABILITY, TOP_MIN_PROBABILITY),
     candidate_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
     candidate_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
     prefetched_payloads: dict[str, Any] | None = None,
@@ -732,9 +732,10 @@ def enrich_current_betting_day_odds(
     """Fetch provider-1 odds only for plausible published betting candidates.
 
     Odds calls are intentionally *not* spent on the entire upcoming board.
-    The broad Value floor is used for pre-price discovery so odds calls can cover
-    every currently supported Match Winner branch. Final Prime/Top/Value rules
-    remain stricter and are applied after prices are attached.
+    Discovery uses the lower TOP/Value probability floor so morning TOP can
+    rank the entire eligible slate rather than leaving its 60–65% candidates
+    unpriced. The existing provider quota, 6/s throttle and common budget
+    guard remain the only paid API path. Final market gates stay independent.
     """
     start, end, day_key = betting_day_bounds(
         now, timezone_name=timezone_name, start_hour=start_hour
@@ -1317,7 +1318,7 @@ def select_market_sections(
             },
             "top_daily_rule": {
                 "product_label": "Top Bets",
-                "objective": "probability_first",
+                "objective": "ranked_market_model_consensus",
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,
