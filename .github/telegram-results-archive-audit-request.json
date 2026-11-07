@@ -9,5 +9,6 @@
   "mode": "read-only",
   "paid_provider_requests": 0,
   "telegram_send": false,
-  "cdb_writes": false
+  "cdb_writes": false,
+  "diagnostics": "verified_same_player_aces_count_v1"
 }
