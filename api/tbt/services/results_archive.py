@@ -484,6 +484,30 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
             elif previous.get("correct") is None and not previous.get("void"):
                 incumbent["result"] = deepcopy(archived_pub.get("result"))
             elif (
+                # Legacy ACES websites may retain an unverified W/L while the
+                # exact original issued bet already has durable provider proof.
+                # Upgrade only the read-time result provenance, never quote,
+                # statistical projection, threshold, issuer or archive rows.
+                str(archived_pub.get("market") or "").lower() == "aces"
+                and updated_result.get("runtime_source") == "match_status_snapshot"
+                and previous.get("runtime_source") != "match_status_snapshot"
+                and (type(previous.get("correct")) is bool or previous.get("void") is True)
+                and previous.get("correct") is updated_result.get("correct")
+                and bool(previous.get("void")) == bool(updated_result.get("void"))
+                and (previous.get("actual_count") is None
+                     or previous.get("actual_count") == updated_result.get("actual_count"))
+                and all(
+                    incumbent.get(field) == archived_pub.get(field)
+                    for field in ("publication_key", "selection_id",
+                                  "market_line", "ou_side", "odds",
+                                  "price_contract", "price_basis", "issued_at")
+                )
+                and bool(str(incumbent.get("publication_key") or "").strip())
+                and incumbent.get("market_line") is not None
+                and str(incumbent.get("ou_side") or "").lower() in {"over", "under"}
+            ):
+                incumbent["result"] = deepcopy(updated_result)
+            elif (
                 str(archived_pub.get("market") or "match_winner").lower() == "match_winner"
                 and updated_result.get("runtime_source") == "match_status_snapshot"
                 and previous.get("runtime_source") != "match_status_snapshot"
