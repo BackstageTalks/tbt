@@ -442,3 +442,73 @@ def test_nov3_send_from_durable_archive_only_preserves_issued_quotes(tmp_path,mo
     args.output=str(tmp_path/"repeat")
     r.prepare(args)
     assert not (tmp_path/"repeat"/"ready").exists()
+
+def test_site_exact_source_recovers_original_aces_without_repricing(tmp_path,monkeypatch,capsys):
+    """A website result with identical frozen O/U is safe for TG reporting."""
+    now=datetime(2026,11,7,21,46,tzinfo=timezone.utc)
+    row={**sent("aces","match-30",1.67),
+         "scheduled_at":"2026-11-07T15:00:00+00:00",
+         "publication_key":"local-aces-ou-v1:match-30:p1:over:4.5",
+         "price_basis":tg.PRICE_BASIS}
+    state={"schema":1,"attempts":{"2026-11-07:daily:0620":{
+        "status":"sent","message_ids":[740,741],
+        "sent_at":"2026-11-07T06:54:00+00:00","rows":[row]}}}
+    state_path=tmp_path/"state.json"
+    tg.save(state_path,state)
+    site=[{**settled(row,True,odds=1.79),
+           "scheduled_at":row["scheduled_at"],
+           "result":{"correct":True,"void":False,
+                     "actual_count":8,
+                     "runtime_source":"match_status_snapshot"}}]
+    monkeypatch.setattr(tg,"config",lambda *_:{"enabled":True,"results_enabled":True})
+    monkeypatch.setattr(r,"archive",lambda *_:[])
+    monkeypatch.setattr(r,"website_results",lambda *_:site)
+    args=SimpleNamespace(now=now.isoformat(),config_url="unused",
+                         api_url="unused",state=str(state_path),
+                         output=str(tmp_path/"out"),elite_auto=True,historical_day="")
+    r.prepare(args)
+    result=tg.load(tmp_path/"out"/"state.json")
+    assert result["attempts"]["results:2026-11-07"]["status"]=="reserved"
+    assert result["attempts"]["results:2026-11-07"]["counts"]=={
+        "won":1,"lost":0,"void":0,"pending":0}
+    # Website's different price must NEVER replace the issued quote or
+    # generate monetary returns from a different quote.
+    text=tg.load(tmp_path/"out"/"messages.json")[0]["text"]
+    assert "1.67" in text and "1.79" not in text
+    assert "ROI" in text
+    assert "exact_fallbacks" in capsys.readouterr().out
+
+
+def test_site_fallback_rejects_wrong_contract_or_unverified_grade():
+    ace=sent("aces","match-3",1.68)
+    source={**settled(ace,True), "scheduled_at":ace["scheduled_at"]}
+    for change in ({"market_line":6.5},
+                   {"projection_direction":"under"},
+                   {"publication_key":"other"},
+                   {"selection_id":"opponent"},
+                   {"market":"match_winner"},
+                   {"scheduled_at":"2026-10-31T13:40:00+00:00"},
+                   {"result":{"correct":True,"void":False,
+                              "runtime_source":"model_prediction"}}):
+        candidate={**source,**change}
+        merged,count=r.exact_website_fallback([ace],[],[candidate])
+        assert count==0 and r.evaluate(ace,merged)["status"]=="pending"
+
+
+def test_site_fallback_never_overwrites_conflicting_verified_archive():
+    row=sent("aces","match-1",1.64)
+    archived=settled(row,False)|{"scheduled_at":row["scheduled_at"]}
+    site=settled(row,True)|{"scheduled_at":row["scheduled_at"]}
+    import pytest
+    with pytest.raises(RuntimeError,match="conflict"):
+        r.exact_website_fallback([row],[archived],[site])
+
+
+def test_site_fallback_prioritizes_archive_and_deduplicates_free_mirror():
+    top=sent("top","m-1",1.85)
+    free=sent("free","m-1",1.85)
+    receipt=settled(top,True)|{"scheduled_at":top["scheduled_at"]}
+    merged,recovered=r.exact_website_fallback([top,free],[receipt],[receipt])
+    assert recovered==0 and len(merged)==1
+    assert r.evaluate(top,merged)["status"]=="won"
+    assert r.evaluate(free,merged)["status"]=="won"
