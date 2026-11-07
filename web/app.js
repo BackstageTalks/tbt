@@ -7456,7 +7456,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
       if(action==='training-refresh'){loadAdminTraining();return;}
       if(action==='training-start'){
-        const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'accuracy-7.2.2';
+        const profile=document.getElementById('admin-training-profile')?.value||state.adminTrainingProfile||'top-7.2.1';
         const label=profile==='accuracy-7.2.2'?'7.2.2':profile==='top-7.2.1'?'7.2.1':'štandardný';
         if(!await confirmAdminModelOperation('Natrénovať kandidáta '+label+'? '+(profile==='standard'?'Model sa uloží bez aktivácie.':'Po úspešných nezávislých kontrolách sa aktivuje iba v shadow.')+' Produkčný champion sa nemení.'))return;
         loadAdminTraining(true,profile);return;
