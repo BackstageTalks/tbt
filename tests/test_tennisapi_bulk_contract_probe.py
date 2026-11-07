@@ -145,6 +145,7 @@ def test_daily_bulk_odds_profiles_actual_value_shape_without_exposing_prices():
     assert profile["historical_pre_match_quote_time_verified"] is False
     assert profile["individual_event_market_replacement_authorized"] is False
     assert profile["cdb_import_authorized"] is False
+    assert report["collections"]["odds"]["keys"] == []
     encoded = json.dumps(report)
     for secret in ("PRICE_SECRET", "RAW_SECRET", "2.17", "1.73"):
         assert secret not in encoded
