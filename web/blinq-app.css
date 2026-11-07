@@ -11749,3 +11749,48 @@ body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
   backdrop-filter:blur(9px)!important;
   -webkit-backdrop-filter:blur(9px)!important;
 }
+
+
+/* Admin monthly report: keep all four columns visible on narrow phones. */
+body#blinqPremium.blinq-admin .monthly-focused-table .monthly-heading-short{display:none}
+@media (max-width:760px){
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-card,
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-card .monthly-table-scroll{
+    min-width:0!important;width:100%!important;max-width:100%!important;
+    box-sizing:border-box
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table{
+    width:100%!important;min-width:0!important;max-width:100%!important;
+    table-layout:fixed!important;box-sizing:border-box
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table .monthly-heading-full{
+    display:none!important
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table .monthly-heading-short{
+    display:inline!important
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th,
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table td{
+    box-sizing:border-box;min-width:0!important;
+    padding:9px 3px!important;
+    font-size:clamp(10px,2.6vw,12px)!important;
+    line-height:1.3!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:clip;
+    text-align:center!important;
+    font-variant-numeric:tabular-nums
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th:nth-child(1){
+    width:11%!important
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th:nth-child(2){
+    width:27%!important
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th:nth-child(3){
+    width:29%!important
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th:nth-child(4){
+    width:33%!important
+  }
+}
