@@ -77,6 +77,7 @@ def test_most_aces_success_loss_tie_and_missing_opponent():
     assert miss["result"]["status"] == "miss"
     assert draw["result"]["status"] == "void"
     assert draw["result"]["correct"] is None
+    assert draw["result"]["reason"] == "aces_equal"
     assert hit["result"]["opponent_actual_count"] == 5
     assert "profit_units" not in hit["result"]
     assert _grade(8, 5, include_opponent=False) is None
@@ -91,3 +92,47 @@ def test_ui_config_includes_regular_most_aces_tab_and_stats_control():
     assert tabs["ace_winner"]["plans"]["rookie"]["visible_rows"] == 0
     complete = json.loads((Path(__file__).resolve().parents[1] / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
     assert validate_ui_config(complete)['dashboard']['daily_hub']['tabs']['ace_winner']['enabled'] is True
+
+
+def test_most_aces_rejects_missing_contract_and_a_player_total_line():
+    from tbt.services.match_status import _grade_runtime_projection
+    row = {
+        "scheduled_at": "2026-11-08T16:00:00+00:00",
+        "event_id": "event1",
+        "player1": {"id": "A", "name": "Alpha"},
+        "player2": {"id": "B", "name": "Beta"},
+    }
+    status = {
+        "status": "win",
+        "provider_home_id": "A", "provider_away_id": "B",
+        "projection_stats_p1_id": "A", "projection_stats_p2_id": "B",
+        "projection_stats": {"p1_aces": 9, "p2_aces": 4},
+    }
+    valid = {
+        "market": "most_aces",
+        "section": "ace_winner",
+        "price_contract": "player_superiority",
+        "issued_at": "2026-11-08T10:00:00+00:00",
+        "selection_id": "A",
+    }
+    assert _grade_runtime_projection(row, valid, status)["result"]["correct"] is True
+    assert _grade_runtime_projection(row, {**valid, "price_contract": ""}, status) is None
+    assert _grade_runtime_projection(row, {**valid, "market_line": 4.5}, status) is None
+    assert _grade_runtime_projection(row, {**valid, "ou_side": "over"}, status) is None
+
+
+def test_new_tab_has_results_kpis_admin_export_and_responsive_placement():
+    root = Path(__file__).resolve().parents[1]
+    app = (root / "web" / "app.js").read_text(encoding="utf-8")
+    css = (root / "web" / "blinq-daily-hub-mobile.css").read_text(encoding="utf-8")
+    assert "const DAILY_HUB_TABS=['daily','prime','value','ace','ace_winner'" in app
+    assert "value:'value',ace:'ace',ace_winner:'ace_winner'" in app
+    assert "if(category==='ace_winner')return String(publication?.market||'')==='most_aces'" in app
+    assert "const STATS_MARKET_TABS={daily:" in app and "ace_winner:'ace_winner'" in app
+    assert "['doubles','Štvorhra'],['ace','Esá'],['ace_winner','Viac es']" in app
+    assert "['daily','prime','value','ace','ace_winner','double_faults'" in app
+    assert '[data-tab="ace_winner"]' in css
+    assert 'grid-area:projection!important' in css
+    assert 'if(value===\'aces_equal\')return lcopy(\'TIE\',\'REMÍZA\',\'REMÍZA\')' in app
+    assert "const sample=graded.length" in app
+    assert "roi:stake?profit/stake:null" in app
