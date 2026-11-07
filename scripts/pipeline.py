@@ -40,7 +40,7 @@ from tbt.services.publication import (
     build_daily_offer_snapshot,
     validate_publication_candidate,
 )
-from tbt.services.ace_selection import select_ace_picks
+from tbt.services.ace_selection import select_ace_picks, select_ace_winner_picks
 from ace_working_odds import eligible_local_ace_projection, verified_ace_odds, local_player_aces_ou
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
@@ -578,7 +578,7 @@ def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None,
 
 def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
-    *, odds_report=None, ace_picks=None, ace_report=None,
+    *, odds_report=None, ace_picks=None, ace_report=None, ace_winner_picks=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
     settlement_matches=None, comparator_artifact=None,
@@ -592,8 +592,9 @@ def _publish_predictions(
     # pending Daily / Prime / Value candidates independently and confirm them only
     # after the exact feed is deployed.
     ledger_predictions = list(predictions) + list(doubles_picks or [])
+    issued_ace_picks = list(ace_picks or []) + list(ace_winner_picks or [])
     ledger_predictions = annotate_market_publication_candidates(
-        ledger_predictions, ace_picks=ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
+        ledger_predictions, ace_picks=issued_ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
     )
     settlement_source = matches if settlement_matches is None else settlement_matches
     settlement_rows = list(settlement_source) + list(doubles_matches or [])
@@ -604,7 +605,7 @@ def _publish_predictions(
     # and never alter the immutable Match Winner probability commitment.
     feed = attach_market_sections_to_feed(
         feed, ledger_predictions, odds_report=odds_report,
-        ace_picks=ace_picks, ace_report=ace_report,
+        ace_picks=issued_ace_picks, ace_report=ace_report,
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,
     )
@@ -625,7 +626,7 @@ def _publish_predictions(
         feed, records, quarantine_report=projection_quarantine,
     )
     integrity = _projection_presentation_integrity(
-        feed, ace_picks=ace_picks, sg_picks=sg_picks,
+        feed, ace_picks=issued_ace_picks, sg_picks=sg_picks,
         quarantined=projection_quarantine,
     )
     if projection_quarantine:
@@ -1258,6 +1259,8 @@ def main():
     odds_report = None
     ace_picks = []
     ace_report = None
+    ace_winner_picks = []
+    ace_winner_report = None
     sg_picks = []
     sg_report = None
     doubles_picks = []
@@ -1541,6 +1544,11 @@ def main():
             matches, predictions, now=selection_now,
             per_market_limit=10, total_limit=20, target_count=10,
             allow_local_aces_fallback=True,
+        )
+        # Independent player-superiority offer from the entire prediction pool.
+        # It must survive the subsequent player-total O/U bookmaker filtering.
+        ace_winner_picks, ace_winner_report = select_ace_winner_picks(
+            matches, predictions, now=selection_now,
         )
         if isinstance(ace_report, dict):
             ace_report["selection_policy"] = "blinq_model_first_then_odds_attachment"
@@ -1966,6 +1974,7 @@ def main():
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
         odds_report=odds_report, ace_picks=ace_picks, ace_report=ace_report,
+        ace_winner_picks=ace_winner_picks,
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
