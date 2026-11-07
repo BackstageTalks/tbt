@@ -374,6 +374,7 @@ jobs:
           python tests/browser_mobile_dashboard_audit.py
           python tests/browser_mobile_projection_cards.py
           python tests/browser_results_betting_day.py
+          python tests/browser_monthly_results_parity.py
           python tests/browser_profile_chip_fit.py
 
       - name: Verify optimized JS/CSS in real Chromium with tier fixtures
