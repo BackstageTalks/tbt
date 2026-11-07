@@ -70,7 +70,7 @@ TOP_SECONDARY_PROBABILITY = 0.78
 TOP_STANDARD_PROBABILITY = 0.75
 TOP_FALLBACK_PROBABILITIES = ()
 TOP_MIN_PROBABILITY = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
-TOP_TARGET_COUNT = 5
+TOP_TARGET_COUNT = 3
 TOP_MIN_COUNT = 3
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
@@ -78,7 +78,7 @@ TOP_MIN_ODDS: float | None = 1.50
 TOP_FALLBACK_MIN_ODDS = 1.50
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
-TOP_LIMIT: int | None = 5
+TOP_LIMIT: int | None = 3
 TOP_BACKUP_MIN_DATA_DEPTH = 0.75
 TOP_BACKUP_MIN_SURFACE_MATCHES = 3
 
@@ -1006,7 +1006,7 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int = TOP_TARGET_COUNT,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """One TOP offer: up to five real priced, evidence-qualified picks.
+    """One TOP offer: three highest-ranked real priced, evidence-qualified picks.
 
     Backup uses a controlled 0.75 depth / 3 surface matches floor if the
     standard 0.80 / 5 pool cannot supply three. Never creates a quote.
@@ -1106,7 +1106,7 @@ def select_market_sections(
 ) -> dict[str, Any]:
     """Publish existing TOP/PRIME/VALUE with unchanged markets and price contracts.
 
-    TOP ranks the entire safe priced Match Winner slate, aiming for 3-5
+    TOP ranks the entire safe priced Match Winner slate, aiming for three
     quality-qualified picks. VALUE remains higher priority; ACES is untouched.
     """
     cards = [
