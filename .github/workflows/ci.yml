@@ -12,6 +12,8 @@ on:
       - '.github/tennisapi-contract-probe-request.json'
       # One-time verified Results recovery uses its own guarded workflow.
       - '.github/telegram-20261103-recover-request.json'
+      # Read-only Telegram/website parity audit must never redeploy the app.
+      - '.github/telegram-web-parity-audit-request.json'
       - '.github/elo-weekly-trigger.json'
       # Read-only CDB audit request is handled by its own workflow.
       # Keep write-capable CDB request triggers visible to full CI.
