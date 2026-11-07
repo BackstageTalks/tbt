@@ -4111,7 +4111,7 @@
     const selection=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6),
       month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
         ?selection.month:today.slice(0,7);
-    const end=monthlyMonthEnd(month);
+    const end=monthlyMonthEnd(month,today);
     if(!end)return [];
     const categories=MONTHLY_SECTIONS.map(([key])=>key).filter(key=>selection.sections.includes(key));
     if(!categories.length)return [];
@@ -4178,7 +4178,19 @@
     const excluded=all.filter(x=>['win','loss'].includes(x.outcome)&&!x.financial?.priced).length;
     const profit=priced.reduce((sum,x)=>sum+x.financial.profit,0);
     const n=priced.length;
-    const avg=n?priced.reduce((sum,x)=>sum+x.financial.odds,0)/n:null;
+    // Match Results' quoted-odds sample independently of ROI staking eligibility.
+    const quoteOdds=all.map(x=>{
+      if(!['win','loss'].includes(x.outcome))return NaN;
+      const local=approvedLocalAceResultOdds(x.publication);
+      if(Number.isFinite(local))return local;
+      if(!membership&&['ace','double_faults'].includes(category))return aceDfResultKpiOdds(x.publication);
+      const p=x.publication,odds=p.odds==null?NaN:Number(p.odds);
+      const status=String(p.price_status||'').trim().toLowerCase();
+      const projection=['aces','double_faults','sets','games'].includes(String(p.market||'').toLowerCase());
+      return (projection?status==='priced_projection':['','priced','priced_projection'].includes(status))
+        &&Number.isFinite(odds)&&odds>1?odds:NaN;
+    }).filter(value=>Number.isFinite(value)&&value>1);
+    const avg=quoteOdds.length?quoteOdds.reduce((sum,odds)=>sum+odds,0)/quoteOdds.length:null;
     const daily=new Map();
     priced.forEach(item=>{
       const day=monthlyRecordDay(item.row);
