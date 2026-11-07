@@ -2287,7 +2287,7 @@
     const raw=String(ent.visible_picks??'').toUpperCase();
     const zeroAllocation=raw!==''&&raw!=='ALL'&&Number(raw)===0
       &&ent.blur_remaining!==false&&!dailyHubHasAllocatedRows(ent);
-    return zeroAllocation||Number(ent.locked_count||0)>0||display==='blurred'
+    return zeroAllocation||(ent.blur_remaining!==false&&Number(ent.locked_count||0)>0)||display==='blurred'
       ||(Array.isArray(ent.slot_states)&&ent.slot_states.includes('blurred'));
   }
   function dailyHubEntitlement(tab){
