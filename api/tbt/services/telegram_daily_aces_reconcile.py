@@ -158,9 +158,11 @@ def _candidate(day, ref, sent_at, source_row, statuses):
 
 
 def reconcile(day, receipt, feed, snapshot, *, dry_run=True,
-              expected_digest=None):
+              expected_digest=None, now=None):
     """Dry-run then CAS append; independently read back every original contract."""
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        raise ValueError("Reconciliation requires timezone-aware clock")
     if (not isinstance(day, str) or not len(day) == 10
             or day not in {_betting_day_key(now), _betting_day_key(now - timedelta(days=1)),
                            _betting_day_key(now - timedelta(days=2))}):
