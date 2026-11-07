@@ -1384,8 +1384,21 @@
       &&Number.isFinite(confidence)&&confidence>=.60&&confidence<=1
       &&Number.isFinite(stableAceDisplayOdds(row));
   }
+  function authenticAceWinnerProjection(row){
+    // Independent pre-match two-player projection, not a bookmaker quote.
+    if(String(row?.market||'').toLowerCase()!=='most_aces'
+      ||row?.price_contract!=='player_superiority'
+      ||row?.price_status!=='projection_only'||row?.odds!=null
+      ||row?.projection_model!=='ace-count-projection-v4')return false;
+    const selected=String(row?.selection_id||''),ids=[String(row?.player1?.id||''),String(row?.player2?.id||'')];
+    const projection=Number(row?.projection),opponent=Number(row?.opponent_projection),confidence=Number(row?.projection_confidence);
+    return Boolean(row?.event_id&&selected&&ids.includes(selected))
+      &&Number.isFinite(Date.parse(String(row?.scheduled_at||'')))
+      &&Number.isFinite(projection)&&Number.isFinite(opponent)&&projection>opponent
+      &&Number.isFinite(confidence)&&confidence>=.60&&confidence<=.93;
+  }
   function authenticMarketSectionRow(row,key){
-    return authenticLiveProjection(row)||(key==='ace'&&authenticLocalAceProjection(row));
+    return authenticLiveProjection(row)||(key==='ace'&&(authenticLocalAceProjection(row)||authenticAceWinnerProjection(row)));
   }
   function marketRows(key){
     // TOP200 has been retired. Old feed data must not recreate active picks.
@@ -2088,7 +2101,7 @@
   }
   function aceMarketName(row){
     const raw=String(row?.market||row?.market_type||'').toLowerCase();
-    return raw.includes('double')||raw.includes('fault')?lcopy('Double Faults','Dvojchyby','Dvojchyby'):'Aces';
+    return raw.includes('double')||raw.includes('fault')?lcopy('Double Faults','Dvojchyby','Dvojchyby'):raw.includes('most_aces')?lcopy('Most Aces','Viac es','Více es'):'Aces';
   }
   function aceProjectionScopeLabel(row){
     const scope=String(row?.projection_scope||'player').toLowerCase();
@@ -2143,12 +2156,13 @@
   function projectionPickText(row,sourceTab=''){
     const market=sourceTab||String(row?.market||row?.projection_metric||'').toLowerCase();
     if(market==='sets')return String(row?.selection||row?.pick||'—');
+    if(market==='ace_winner'||market==='most_aces')return String(row?.projection_subject||row?.selection||row?.pick||'—')+' · '+lcopy('More aces','Viac es','Více es');
     if(market==='games'){
       const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,'games');
       if(side&&Number.isFinite(line))return `${side} ${line.toFixed(1)} Games`;
       return String(row?.selection||row?.pick||'—').replace(/^High\s+Total\s+Games$/i,'Over total games').replace(/^Low\s+Total\s+Games$/i,'Under total games');
     }
-    if(market==='ace'||market==='double_faults'||market==='aces'){
+    if(market==='ace'||market==='ace_winner'||market==='most_aces'||market==='double_faults'||market==='aces'){
       const subject=String(row?.projection_subject||modelPickName(row)||'').trim();
       const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,market);
       const unit=market==='double_faults'||String(row?.market||'').toLowerCase()==='double_faults'?lcopy('Double Faults','Dvojchyby','Dvojchyby'):lcopy('Aces','Aces','Aces');
@@ -2163,14 +2177,14 @@
   }
 
 
-  const DAILY_HUB_TABS=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
+  const DAILY_HUB_TABS=['daily','prime','value','ace','ace_winner','double_faults','doubles','games','sets','see_all'];
   function orderedDailyHubTabs(){
     const saved=state.ui?.dashboard?.daily_hub?.tab_order;
     const order=Array.isArray(saved)?saved.filter((id,i)=>DAILY_HUB_TABS.includes(id)&&saved.indexOf(id)===i):[];
     return [...order,...DAILY_HUB_TABS.filter(id=>!order.includes(id))];
   }
   // Results filters follow the configurable home tab order, including admin changes.
-  const RESULT_CATEGORY_BY_TAB={daily:'top_daily',prime:'prime',value:'value',ace:'ace',double_faults:'double_faults',sets:'sets',doubles:'doubles',games:'games'};
+  const RESULT_CATEGORY_BY_TAB={daily:'top_daily',prime:'prime',value:'value',ace:'ace',ace_winner:'ace_winner',double_faults:'double_faults',sets:'sets',doubles:'doubles',games:'games'};
   function orderedResultCategories(){
     return ['all',...orderedDailyHubTabs().map(tab=>RESULT_CATEGORY_BY_TAB[tab]).filter(Boolean)];
   }
@@ -2202,7 +2216,7 @@
   function authorizedResultPublication(publication){
     if(isAdminAccount()&&!state.previewPlan)return true;
     const market=String(publication?.market||'').trim().toLowerCase();
-    const category=market==='aces'?'ace':['double_faults','sets','games'].includes(market)?market:String(publication?.section||'').trim().toLowerCase();
+    const category=market==='aces'?'ace':market==='most_aces'?'ace_winner':['double_faults','sets','games'].includes(market)?market:String(publication?.section||'').trim().toLowerCase();
     return availableResultCategories().includes(category);
   }
   function moveDailyHubTab(source,target){
@@ -2331,6 +2345,7 @@
     (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
     (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
     (marketRows('ace')||[]).filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='aces').forEach(row=>add({...row,_hub_source:'ace'}));
+    (marketRows('ace')||[]).filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='most_aces').forEach(row=>add({...row,_hub_source:'ace_winner'}));
     (marketRows('ace')||[]).filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='double_faults').forEach(row=>add({...row,_hub_source:'double_faults'}));
     (marketRows('doubles')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'doubles'}));
     (marketRows('sg')||[]).filter(offerSurfaceEligible).forEach(row=>{const market=String(row?.market||'').toLowerCase();if(market==='games'||market==='sets')add({...row,_hub_source:market});});
@@ -2368,6 +2383,7 @@
     if(tab==='prime')return shortOddsDisplayRows(marketRows('prime'));
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
     if(tab==='ace')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='aces');
+    if(tab==='ace_winner')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='most_aces');
     if(tab==='double_faults')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='double_faults');
     if(tab==='doubles')return marketRows('doubles').filter(offerSurfaceEligible);
     if(tab==='games'||tab==='sets')return marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab);
@@ -2400,7 +2416,7 @@
     });
   }
   function dailyHubTabLabel(tab){
-    return {daily:'TOP',prime:'ACCA',value:'VALUE',ace:lcopy('ACES','ESÁ','ESA'),double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),doubles:lcopy('DOUBLES','ŠTVORHRA','ČTYŘHRA'),games:lcopy('GAMES','GAMY','GEMY'),sets:lcopy('SETS','SETY','SETY'),see_all:lcopy('SEE ALL','VŠETKY','VŠECHNY')}[tab]||String(tab||'').toUpperCase();
+    return {daily:'TOP',prime:'ACCA',value:'VALUE',ace:lcopy('ACES','ESÁ','ESA'),ace_winner:lcopy('MORE ACES','VIAC ES','VÍCE ES'),double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),doubles:lcopy('DOUBLES','ŠTVORHRA','ČTYŘHRA'),games:lcopy('GAMES','GAMY','GEMY'),sets:lcopy('SETS','SETY','SETY'),see_all:lcopy('SEE ALL','VŠETKY','VŠECHNY')}[tab]||String(tab||'').toUpperCase();
   }
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
@@ -2408,14 +2424,14 @@
     const time=lcopy('TIME','ČAS','ČAS'),tournament=lcopy('TOURNAMENT','TURNAJ','TURNAJ'),match=lcopy('MATCH','ZÁPAS','ZÁPAS'),prediction=lcopy('PREDICTION','PREDIKCIA','PREDIKCE'),odds=lcopy('ODDS','KURZ','KURZ'),projection=lcopy('PROJECTION','PROJEKCIA','PROJEKCE'),confidence=lcopy('CONFIDENCE','ISTOTA','JISTOTA');
     if(tab==='see_all')return ['#',time,tournament,match,prediction,odds,lcopy('MODEL','MODEL','MODEL'),''];
     if(tab==='value')return ['#',time,tournament,match,prediction,odds,'BLINQ %',''];
-    if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence];
+    if(tab==='ace'||tab==='ace_winner'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence];
     if(tab==='doubles')return ['#',time,tournament,match,prediction,odds,'BLINQ %',''];
     if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,odds,projection,confidence];
     return ['#',time,tournament,match,prediction,odds,'BLINQ %',''];
   }
   function dailyHubColumnKeys(tab){
     if(tab==='value')return ['rank','time','tournament','match','pick','number','confidence','action'];
-    if(tab==='ace'||tab==='double_faults'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','number','confidence'];
+    if(tab==='ace'||tab==='ace_winner'||tab==='double_faults'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','number','confidence'];
     if(tab==='doubles')return ['rank','time','tournament','match','pick','number','confidence','action'];
     return ['rank','time','tournament','match','pick','number','confidence','action'];
   }
@@ -2442,7 +2458,7 @@
     // Visual-only projected Aces leader, never a bet winner or the O/U side.
     // Issued flat Aces rows can carry projection_metric without a market field.
     const market=String(row?.market||row?.projection_metric||'').trim().toLowerCase();
-    if(market!=='aces')return '';
+    if(market!=='aces'&&market!=='most_aces')return '';
     const normalize=value=>String(value||'').normalize('NFKD')
       .replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
     const expected=normalize(row?.aces_superiority_hint||row?.projection_subject||'');
@@ -3046,6 +3062,7 @@
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     // An exact provider O/U wins; otherwise show the local BlinQ O/U price.
+    if(String(row?.market||'').toLowerCase()==='most_aces')return hubNumberHtml('—',lcopy('No winner odds','Bez kurzu víťaza','Bez kurzu vítěze'));
     if(String(row?.market||'').toLowerCase()==='aces'){
       if(row?.price_contract==='player_total_ou'&&Number.isFinite(verifiedAceProviderOdds(row)))
         return hubNumberHtml(Number(row.odds).toFixed(2),lcopy('odds','kurz','kurz'));
@@ -3097,7 +3114,7 @@
       }
       return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell hub-mobile-only"><button class="hub-detail hub-projection-detail" type="button" data-sg-projection aria-label="${escapeHtml(lcopy('Projection details','Detail predikcie','Detail predikce'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button></td></tr>`;
     }
-    if(sourceTab==='ace'||sourceTab==='double_faults'){
+    if(sourceTab==='ace'||sourceTab==='ace_winner'||sourceTab==='double_faults'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
       const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces prediction','Predikcia es','Predikce es'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
       const oddsHtml=projectionOddsHtml(row),projectionText=Number.isFinite(projection)?projection.toFixed(2):'—',projectionUnit=lcopy('projection','projekcia','projekce');
@@ -3219,8 +3236,8 @@
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
       const projectionMarket=String(row?.market||row?.projection_metric||'').toLowerCase();
-      const projectionTab=projectionMarket==='aces'?'ace':projectionMarket;
-      if(['ace','double_faults','games','sets'].includes(projectionTab))pick=projectionPickText(row,projectionTab);
+      const projectionTab=projectionMarket==='aces'?'ace':projectionMarket==='most_aces'?'ace_winner':projectionMarket;
+      if(['ace','ace_winner','double_faults','games','sets'].includes(projectionTab))pick=projectionPickText(row,projectionTab);
       const marketLabel=row?.market_type||String(row?.market||'Prediction').replaceAll('_',' ');const sampleText=Number.isFinite(Number(samples.player1))&&Number.isFinite(Number(samples.player2))?`${publicText('Data')} ${samples.player1}/${samples.player2}`:'';const unit=String(row?.projection_unit||'count');const reference=Number(row?.reference_projection??row?.baseline_projection);
       if(key==='sg'&&projectionTab==='sets'){
         const totalSets=setsTotalProjectionValue(row),line=selectionLineFromText(row),setGap=Number.isFinite(totalSets)&&Number.isFinite(line)?Math.abs(totalSets-line):NaN;
@@ -3476,7 +3493,7 @@
         }
         if(current){
           const sourceTab=state.dailyHubTab==='see_all'?String(current?._hub_source||''):state.dailyHubTab;
-          if(sourceTab==='ace'||sourceTab==='double_faults'){
+          if(sourceTab==='ace'||sourceTab==='ace_winner'||sourceTab==='double_faults'){
             if(aceProjectionDetailAvailable(current))openAceProjection(current);
             return;
           }
@@ -3499,8 +3516,8 @@
       return p&&p.result&&!p.excluded_reason&&(Boolean(p.issued_at)||runtimeSettled);
     });
   }
-  const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','double_faults','sets','games']);
-  const publicResultMarkets=new Set(['aces','double_faults']);
+  const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','ace_winner','double_faults','sets','games']);
+  const publicResultMarkets=new Set(['aces','most_aces','double_faults']);
   function isPublicResultPublication(publication){
     if(!publication||typeof publication!=='object')return false;
     const section=String(publication.section||'').trim().toLowerCase();
@@ -3517,17 +3534,19 @@
       const market=String(p.market||'');
       if(section&&!tags.includes(section))tags.push(section);
       if(market==='aces'&&!tags.includes('ace'))tags.push('ace');
+      if(market==='most_aces'&&!tags.includes('ace_winner'))tags.push('ace_winner');
       if(market==='double_faults'&&!tags.includes('double_faults'))tags.push('double_faults');
     });
     return tags;
   }
-  function isProjectionPublication(publication){return ['aces','double_faults','sets','games'].includes(String(publication?.market||publication?.projection_metric||'').toLowerCase())||['projection_only','priced_projection'].includes(String(publication?.price_status||'').toLowerCase());}
+  function isProjectionPublication(publication){return ['aces','most_aces','double_faults','sets','games'].includes(String(publication?.market||publication?.projection_metric||'').toLowerCase())||['projection_only','priced_projection'].includes(String(publication?.price_status||'').toLowerCase());}
   function publicationMatchesResultCategory(publication,category='all'){
     if(String(category).includes(','))return String(category).split(',').some(c=>publicationMatchesResultCategory(publication,c));
     if(category==='all')return true;
     if(category==='sg')return ['sets','games'].includes(String(publication?.section||''));
     if(category==='winners')return String(publication?.market||'match_winner').toLowerCase()==='match_winner'&&String(publication?.section||'').toLowerCase()!=='doubles';
     if(category==='ace')return String(publication?.market||'')==='aces';
+    if(category==='ace_winner')return String(publication?.market||'')==='most_aces';
     if(category==='double_faults')return String(publication?.market||'')==='double_faults';
     return String(publication?.section||'')===category;
   }
@@ -3582,7 +3601,7 @@
   }
   function projectionResultUnitLabel(publication){
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
-    return ({aces:lcopy('aces','esá','esa'),double_faults:lcopy('double faults','dvojchyby','dvojchyby'),sets:lcopy('sets','sety','sety'),games:lcopy('games','gamy','gemy')})[metric]||'';
+    return ({aces:lcopy('aces','esá','esa'),most_aces:lcopy('aces','esá','esa'),double_faults:lcopy('double faults','dvojchyby','dvojchyby'),sets:lcopy('sets','sety','sety'),games:lcopy('games','gamy','gemy')})[metric]||'';
   }
   function projectionResultNumber(value,publication,digits=1){
     const numberValue=value==null?NaN:Number(value);if(!Number.isFinite(numberValue))return '—';
@@ -3602,7 +3621,7 @@
     if(!Number.isFinite(actual))return '—';
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     const primary=projectionResultNumber(actual,publication,1);
-    if(['aces','double_faults'].includes(metric)&&Number.isFinite(opponent)){
+    if(['aces','most_aces','double_faults'].includes(metric)&&Number.isFinite(opponent)){
       return `${primary} · ${lcopy('opponent','súper','soupeř')} ${projectionResultNumber(opponent,publication,1)}`;
     }
     return primary;
@@ -3614,10 +3633,10 @@
       return (aIndex<0?order.length:aIndex)-(bIndex<0?order.length:bIndex);
     }).map(resultCategoryLabel).join(', ');
   }
-  const en=({all:'All published',prime:'ACCA',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
+  const en=({all:'All published',prime:'ACCA',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',ace_winner:'More Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','More Aces':'Viac es','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','More Aces':'Více es','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=publicResultPublications(row);
-    const filtered=['prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
+    const filtered=['prime','top_daily','value','doubles','ace','ace_winner','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
     return filtered.sort((a,b)=>new Date(a.issued_at)-new Date(b.issued_at))[0]||null;
   }
   function publicationOutcome(publication){
@@ -3871,7 +3890,7 @@
     const groups=new Map(),seen=new Set();
     const add=(row,p)=>{
       const market=String(p.market||'').toLowerCase();
-      const section=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]||p.section;
+      const section=({aces:'ace',most_aces:'ace_winner',double_faults:'double_faults',sets:'sets',games:'games'})[market]||p.section;
       const tab=section==='top_daily'?'daily':section;
       const day=resultPublicationBettingDay(row,p),key=resultBetIdentity(row,p,section==='ace'?'aces':section==='double_faults'?'double_faults':'match_winner');
       if(!day||!key||!rules[tab])return;
@@ -3912,7 +3931,7 @@
     }
     return allowed;
   }
-  const STATS_MARKET_TABS={daily:'top_daily',prime:'prime',value:'value',ace:'ace',
+  const STATS_MARKET_TABS={daily:'top_daily',prime:'prime',value:'value',ace:'ace',ace_winner:'ace_winner',
     double_faults:'double_faults',doubles:'doubles',games:'games',sets:'sets'};
   function statsExcludedSections(){
     const tabs=state.ui?.dashboard?.daily_hub?.tabs||{};
@@ -3924,7 +3943,7 @@
   function resultPublicationStatsSection(p){
     const section=String(p?.section||'').trim().toLowerCase();
     const market=String(p?.market||'').trim().toLowerCase();
-    return section||({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[market]||'');
+    return section||({aces:'ace',most_aces:'ace_winner',double_faults:'double_faults',sets:'sets',games:'games'}[market]||'');
   }
   function statsHaveExcludedMarkets(){return statsExcludedSections().size>0;}
   function settledPublishedEntries(rows,category='all',filters=null,statsOnly=false){
@@ -3933,7 +3952,7 @@
     // into winner ROI. Member-facing filters remain strictly allowlisted.
     if(!(isAdminAccount()&&!state.previewPlan&&!filters&&category==='winners'))
       category=normalizedResultsCategory(category);
-    const specific=String(category).includes(',')||['prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
+    const specific=String(category).includes(',')||['prime','top_daily','value','doubles','ace','ace_winner','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const cohort=memberResultCohort(filters?.membership);
     const now=Date.now();
@@ -3952,7 +3971,7 @@
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
         const market=String(publication.market||'').toLowerCase();
-        const categoryTag=({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'})[market]
+        const categoryTag=({aces:'ace',most_aces:'ace_winner',double_faults:'double_faults',sets:'sets',games:'games'})[market]
           ||String(publication.section||'');
         // Admin membership comparisons use an additional, historical daily
         // cohort. When the published tier explicitly grants ALL rows with no
@@ -4110,7 +4129,7 @@
   // settled, authorized, deduplicated publication ledger (not display quotes).
   const MONTHLY_SECTIONS=[
     ['top_daily','TOP'],['prime','ACCA'],['value','VALUE'],
-    ['doubles','Štvorhra'],['ace','Esá'],['double_faults','Dvojchyby'],
+    ['doubles','Štvorhra'],['ace','Esá'],['ace_winner','Viac es'],['double_faults','Dvojchyby'],
     ['sets','Sety'],['games','Gamy']
   ];
 
