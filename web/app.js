@@ -2453,6 +2453,34 @@
          ||(expected&&identity&&expected===normalize(identity))))return '';
     return '<svg class="ace-leader-ball" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12"></circle><path d="M13 4.5c.1 6 2.4 8.1 6.4 9.1 5.2 1.4 7 4.1 7.4 8.3M4.5 13.7c6-.1 8 2.6 9.1 6.4 1.4 5.2 4.1 7 8.3 7.4"></path></svg>';
   }
+  function aceSettledLeaderBallHtml(publication,player,name){
+    // Separate read-only grading of the issued 'most Aces' insight from the
+    // published player's Over/Under line, W/L, odds and financial settlement.
+    if(String(publication?.market||publication?.projection_metric||'').toLowerCase()!=='aces')return '';
+    const result=publication?.result;
+    if(!result||typeof result!=='object'||result.void===true||result.is_void===true)return '';
+    const status=String(result.status||'').trim().toLowerCase();
+    const reason=String(result.reason||'').trim().toLowerCase();
+    if(['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(status)
+      ||['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(reason))return '';
+    // Number(null) is zero in JS; missing or fractional source counts must not
+    // turn an unevaluated prediction into a claimed successful prediction.
+    const count=value=>{
+      if(value===null||value===undefined||value===''||typeof value==='boolean')return NaN;
+      const n=Number(value);
+      return Number.isInteger(n)&&n>=0?n:NaN;
+    };
+    const actual=count(result.actual_count),opponent=count(result.opponent_actual_count);
+    if(!Number.isFinite(actual)||!Number.isFinite(opponent)||actual<=opponent)return '';
+    const predictedId=String(publication.selection_id||'').trim();
+    const playerId=String(player?.id||'').trim();
+    if(!predictedId||!playerId||predictedId!==playerId)return '';
+    // Read the pre-match publication, not the mutable parent match row. The
+    // parent can describe a different category or a later model prediction.
+    const issuedSubject=String(publication?.issued_snapshot?.projection?.projection_subject
+      ||publication?.projection_subject||publication?.aces_superiority_hint||'').trim();
+    return aceLeaderHintHtml({...publication,aces_superiority_hint:issuedSubject||name},player,name);
+  }
   function hubNumberHtml(value,label=''){
     return `<span class="hub-number-stack"><strong>${escapeHtml(value)}</strong>${label?`<small>${escapeHtml(label)}</small>`:''}</span>`;
   }
@@ -4477,7 +4505,7 @@
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
       const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
-      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${aceLeaderHintHtml(r,p1,p1Name)}${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${aceLeaderHintHtml(r,p2,p2Name)}${p2Selected?tipBadge:''}</span></div>`;
+      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${aceSettledLeaderBallHtml(publication,p1,p1Name)}${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${aceSettledLeaderBallHtml(publication,p2,p2Name)}${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
