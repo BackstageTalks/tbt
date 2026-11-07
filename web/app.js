@@ -4643,7 +4643,7 @@
   // SHOW controls panel visibility, while visible_rows controls actual access.
   function adminDailyHubAccessAudit(){
     const hub=dailyHubConfig(),levels=['rookie','pro','elite','legend','goat'],issues=[];
-    const stateOf=rule=>String(rule?.display_state||((rule?.tab_enabled===false)?'hidden':'active')).toLowerCase();
+    const stateOf=rule=>rule?.tab_enabled===false?'hidden':String(rule?.display_state||'active').toLowerCase();
     const unlocked=rule=>{
       if(!rule||rule.tab_enabled===false||stateOf(rule)!=='active')return 0;
       const raw=String(rule.visible_rows??0).toUpperCase();
