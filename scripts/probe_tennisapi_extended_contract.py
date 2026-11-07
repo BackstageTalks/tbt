@@ -91,7 +91,39 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                     value.get(field) is not None
                     for field in ("quoteTimestamp", "quotedAt", "asOf", "observedAt")
                 )
+            # Inspect nested *shapes*, not quote amounts. These counts
+            # identify provider-ID-indexed objects that the first-level
+            # diagnostic cannot see. Never emit dynamic keys, IDs or prices.
+            first_level_numeric_keys = nested_dicts = nested_pairs = nested_markets = 0
+            known = {"home", "away", "markets", "odds", "providers",
+                     "choices", "fractionalValue", "initialFractionalValue",
+                     "value", "decimalValue", "timestamp", "quotedAt"}
+            first_level_names = Counter()
+            nested_names = Counter()
+            for _, value in entries:
+                if not isinstance(value, dict):
+                    continue
+                for key, inner in value.items():
+                    if isinstance(key, str) and key.isascii() and key.isdecimal():
+                        first_level_numeric_keys += 1
+                    elif key in known:
+                        first_level_names[key] += 1
+                    if not isinstance(inner, dict):
+                        continue
+                    nested_dicts += 1
+                    nested_pairs += isinstance(inner.get("home"), dict) and isinstance(
+                        inner.get("away"), dict)
+                    nested_markets += isinstance(inner.get("markets"), list)
+                    for nested_key in inner:
+                        if nested_key in known:
+                            nested_names[nested_key] += 1
             result["daily_odds_value_profile"] = {
+                "first_level_numeric_key_memberships": first_level_numeric_keys,
+                "first_level_known_fields": dict(sorted(first_level_names.items())),
+                "nested_dict_nodes": nested_dicts,
+                "nested_home_away_objects": nested_pairs,
+                "nested_markets_lists": nested_markets,
+                "nested_known_fields": dict(sorted(nested_names.items())),
                 "map_entries": len(entries),
                 "valid_native_id_keys": len(valid_keys),
                 "value_kinds": dict(sorted(value_kinds.items())),

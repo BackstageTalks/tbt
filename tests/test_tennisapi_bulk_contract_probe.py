@@ -211,3 +211,25 @@ def test_two_call_bulk_odds_refuses_unapproved_run(limit, case):
         run_probe(stub, event_id=WITNESS, max_requests=limit,
                   phase="bulk_odds_shape", case=case)
     assert stub.request_count == 0
+
+
+def test_daily_bulk_odds_nested_provider_shapes_are_aggregated_not_leaked():
+    import json
+    sample={"odds":{
+        "101":{"1":{"home":{"decimalValue":2.25},
+                    "away":{"decimalValue":1.70}}},
+        "102":{"5":{"markets":[{"privateOdd":4.70}]}},
+    }}
+    r=summarize("daily_match_winner_odds",sample,event_id=101)
+    p=r["daily_odds_value_profile"]
+    assert p["first_level_numeric_key_memberships"] == 2
+    assert p["nested_dict_nodes"] == 2
+    assert p["nested_home_away_objects"] == 1
+    assert p["nested_markets_lists"] == 1
+    assert p["nested_known_fields"] == {"away":1, "home":1, "markets":1}
+    assert r["collections"]["odds"]["keys"] == []
+    assert p["individual_event_market_replacement_authorized"] is False
+    assert p["cdb_import_authorized"] is False
+    report=json.dumps(r)
+    for forbidden in ("101", "102", "2.25", "1.70", "4.70", "privateOdd"):
+        assert forbidden not in report
