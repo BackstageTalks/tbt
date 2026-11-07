@@ -3,15 +3,16 @@
   "kind": "operator-approved-tennisapi-breakpoint-null-only-v1",
   "mode": "statistics",
   "source": "tennisapi1",
-  "description": "User-authorized 100-request measured BP-null enrichment pilot in ATP/WTA 2023; expand to <=500 only after independent actual CDB readback and positive yield; preserve native importer, global lock and 500 reserve.",
+  "description": "Continue user-authorized max-500 total paid-call test after exact 100-call readback showed WTA 2023 48 new canonical stats cells per 8 calls versus ATP 2023 47 per 92; bounded 400-call WTA-only provider-native NULL-only import with independent readback.",
   "start": "2023-01-01",
   "end": "2023-12-31",
-  "max_requests": 100,
+  "max_requests": 400,
   "promote": false,
   "targeted_statistics": true,
   "high_yield_statistics": false,
   "break_points_focus": true,
   "cdb_writes_allowed": true,
   "model_changes": false,
-  "diagnostic_attempt": 3
+  "diagnostic_attempt": 4,
+  "target_tour": "wta"
 }
