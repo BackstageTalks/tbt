@@ -157,3 +157,56 @@ def test_daily_bulk_odds_unknown_shape_never_authorizes_shortcut():
         "individual_event_market_replacement_authorized": False,
         "cdb_import_authorized": False,
     }
+
+
+class DailyOddsShapeStub(Stub):
+    def _get(self, path, params=None, *, enrichment=False):
+        if path == "/api/tennis/events/odds/11/9/2026":
+            assert enrichment is True
+            assert self.request_count < self.request_limit
+            self.request_count += 1
+            self.paths.append(path)
+            return {"odds": {
+                str(WITNESS): {"home": {"decimal": 2.11},
+                               "away": {"decimal": 1.77}},
+                "4242": {"markets": [{"marketId": 1}]},
+            }}
+        return super()._get(path, params=params, enrichment=enrichment)
+
+
+def test_two_call_bulk_odds_probe_uses_only_witness_and_daily_map():
+    stub = DailyOddsShapeStub()
+    report = run_probe(stub, event_id=WITNESS, max_requests=2,
+                       phase="bulk_odds_shape")
+    assert stub.request_count == report["request_count"] == 2
+    assert stub.paths == [
+        f"/api/tennis/event/{WITNESS}",
+        "/api/tennis/events/odds/11/9/2026",
+    ]
+    assert report["bulk_odds_shape_state"] == "profiled"
+    shape = report["observations"]["daily_match_winner_odds"][
+        "daily_odds_value_profile"]
+    assert shape["map_entries"] == 2
+    assert shape["valid_native_id_keys"] == 2
+    assert shape["entries_with_market_list"] == 1
+    assert shape["individual_event_market_replacement_authorized"] is False
+    assert report["eligible_for_cdb_import"] is False
+    assert report["cdb_writes"] == report["model_changes"] == 0
+
+
+def test_two_call_bulk_odds_rejects_bad_source_witness_without_odds_call():
+    stub = DailyOddsShapeStub(valid=False)
+    report = run_probe(stub, event_id=WITNESS, max_requests=2,
+                       phase="bulk_odds_shape")
+    assert report["bulk_odds_shape_state"] == "invalid_source_witness"
+    assert stub.paths == [f"/api/tennis/event/{WITNESS}"]
+    assert report["request_count"] == 1
+
+
+@pytest.mark.parametrize("limit, case", [(1, None), (3, None), (2, "daily")])
+def test_two_call_bulk_odds_refuses_unapproved_run(limit, case):
+    stub = DailyOddsShapeStub()
+    with pytest.raises(ValueError):
+        run_probe(stub, event_id=WITNESS, max_requests=limit,
+                  phase="bulk_odds_shape", case=case)
+    assert stub.request_count == 0
