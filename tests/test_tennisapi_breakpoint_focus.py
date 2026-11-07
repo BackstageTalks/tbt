@@ -80,7 +80,7 @@ def test_breakpoint_provider_native_parser_fills_null_only(match_factory, tmp_pa
         assert m.stats["p2_break_point_return_win"] == pytest.approx(3/7)
         assert m.stats["p1_break_points_won"] == pytest.approx(2/6)
         # Fresh marker prevents re-fetching same event in the next hourly tick.
-        assert e.enrich(m) == "enriched"
+        assert e.enrich(m) == "cached"  # cooldown cache, not a second paid request
         assert provider.calls == 1
     finally:
         e.close()
