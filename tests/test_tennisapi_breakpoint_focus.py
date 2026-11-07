@@ -182,3 +182,51 @@ def test_bp_push_guard_preserves_explicit_false_and_rejects_missing_model_change
             capture_output=True, text=True, check=True,
         )
         assert result.stdout.strip() == expected
+
+
+def test_breakpointsscored_native_return_conversion_fraction_only():
+    from tbt.providers.statistics import parse_statistics, inventory_statistics_keys
+    payload = {"statistics": [{"period": "ALL", "groups": [{
+        "statisticsItems": [
+            {"key": "breakPointsScored", "homeValue": 2, "homeTotal": 5,
+             "awayValue": 3, "awayTotal": 9},
+        ],
+    }]}]}
+    inventory = inventory_statistics_keys(payload)
+    assert "breakpointsscored" in inventory["supported"]
+    assert "breakpointsscored" not in inventory["unsupported"]
+    parsed = parse_statistics(payload, home_is_player1=False)
+    assert parsed["p2_break_point_return_win"] == pytest.approx(2/5)
+    assert parsed["p1_break_point_return_win"] == pytest.approx(3/9)
+    assert parsed["p2_break_points_won"] == pytest.approx(2/5)
+    assert parsed["p1_break_points_won"] == pytest.approx(3/9)
+    assert all("break_point_serve_win" not in key for key in parsed)
+
+
+def test_breakpointsscored_bare_count_or_zero_denominator_never_becomes_a_rate():
+    from tbt.providers.statistics import parse_statistics, NoSupportedStatisticsError
+    payload = {"statistics": [{"period": "ALL", "groups": [{
+        "statisticsItems": [{"key":"breakPointsScored", "home": "5", "away": "8"}]
+    }]}]}
+    with pytest.raises(NoSupportedStatisticsError, match="no supported"):
+        parse_statistics(payload, home_is_player1=True)
+    payload["statistics"][0]["groups"][0]["statisticsItems"][0] = {
+        "key":"breakPointsScored",
+        "homeValue":5, "homeTotal":0,
+        "awayValue":6, "awayTotal":4,
+    }
+    with pytest.raises(NoSupportedStatisticsError, match="no supported"):
+        parse_statistics(payload, home_is_player1=True)
+
+
+def test_breakpointsscored_and_converted_disagreement_fails_closed():
+    from tbt.providers.statistics import parse_statistics
+    from tbt.errors import ProviderError
+    payload={"statistics":[{"period":"ALL","groups":[{
+        "statisticsItems":[
+            {"key":"breakPointsConverted", "homeValue":2, "homeTotal":5},
+            {"key":"breakPointsScored", "homeValue":3, "homeTotal":5},
+        ],
+    }]}]}
+    with pytest.raises(ProviderError, match="Conflicting whole-match statistic"):
+        parse_statistics(payload, home_is_player1=True)
