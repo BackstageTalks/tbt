@@ -52,8 +52,10 @@ jobs:
              .phase == "doubles" or .phase == "quality" or
              .phase == "historical" or .phase == "identity" or
              .phase == "archive_2016" or .phase == "candidates" or
-             .phase == "discovery") and
+             .phase == "discovery" or .phase == "bulk") and
             (.case == null or (.case | type == "string" and length > 0 and length < 64)) and
+            (.phase != "bulk" or (.case == null and
+             .max_requests >= 15 and .max_requests <= 16)) and
             (.phase != "candidates" or (.max_requests >= 2 and
              (.case == "team_year_statistics" or
               .case == "tournament_last_matches" or
@@ -86,6 +88,13 @@ jobs:
                  .provider_quote_timestamp_verified == false and
                  .request_count <= .max_requests and
                  ((.counts.available // 0) + (.counts.no_content // 0)) > 0 and
+                 (.phase != "bulk" or
+                  (.bulk_source_event_id_matched == true and
+                   .bulk_state == "tested" and
+                   .bulk_endpoint_observations == 14 and
+                   .request_count >= 15 and
+                   .request_count <= 16 and
+                   .eligible_for_cdb_import == false)) and
                  (.phase != "candidates" or
                   (.candidate_state == "endpoint_available" and
                    .candidate_context.source_event_id_matched == true and
