@@ -18,7 +18,7 @@
     'Projekcia', 'Hranica', 'Smer', 'Kurz', 'Stav_kurzu',
   ];
   const RESULT_COLUMNS = [
-    ...MAIN_COLUMNS, 'Výsledok', 'Dôvod_výsledku', 'Skutočná_hodnota',
+    ...MAIN_COLUMNS, 'Zobrazený_kurz', 'Kurz_UI_typ', 'Zobrazená_predikcia', 'Zobrazené_jednotky', 'Výsledok', 'Dôvod_výsledku', 'Skutočná_hodnota',
     'Jednotky', 'Publikované', 'Model_verzia',
   ];
   const PREDICTION_COLUMNS = [
@@ -49,8 +49,8 @@
     }
   }
   function baseRow(match, categoryCodes, publication, pick) {
-    const p = publication || {}, player1 = match?.player1 || {}, player2 = match?.player2 || {};
-    const rawProbability = first(p.model_probability, match?.blinq_probability, match?.probability, match?.win_probability);
+    const p = publication || {}, settled = publication != null, player1 = match?.player1 || {}, player2 = match?.player2 || {};
+    const rawProbability = settled ? p.model_probability : first(match?.blinq_probability, match?.probability, match?.win_probability);
     return {
       'Kategória': names(categoryCodes),
       'Kategória_kód': categoryCodes.join(' | '),
@@ -62,16 +62,16 @@
       'Kolo': str(match?.round),
       'Hráč_1': first(player1.name, match?.player1_name, match?.p1),
       'Hráč_2': first(player2.name, match?.player2_name, match?.p2),
-      'Trh': first(p.market, match?.market, match?.betting?.market),
+      'Trh': settled ? str(p.market) : first(match?.market, match?.betting?.market),
       'Predikcia': first(pick, p.selection, p.pick, match?.pick, match?.selection),
-      'Výber_ID': first(p.selection_id, p.pick_id, match?.selection_id, match?.winner_id),
+      'Výber_ID': settled ? first(p.selection_id, p.pick_id) : first(match?.selection_id, match?.winner_id),
       'Model_pravdepodobnosť_%': percent(rawProbability),
-      'Projekcia': first(p.projection, match?.projection),
-      'Hranica': first(p.market_line, match?.market_line, match?.line),
-      'Smer': first(p.ou_side, match?.ou_side),
+      'Projekcia': settled ? first(p.projection) : first(match?.projection),
+      'Hranica': settled ? first(p.market_line) : first(match?.market_line, match?.line),
+      'Smer': settled ? str(p.ou_side) : str(match?.ou_side),
       // Actual recorded prices only. Never turn an indicative/illustrative estimate into bookmaker odds.
-      'Kurz': first(p.odds, match?.odds, match?.betting?.odds),
-      'Stav_kurzu': first(p.price_status, match?.price_status),
+      'Kurz': settled ? first(p.odds) : first(match?.odds, match?.betting?.odds),
+      'Stav_kurzu': settled ? str(p.price_status) : str(match?.price_status),
     };
   }
 
@@ -81,8 +81,12 @@
       const match = entry.row || {}, pub = entry.publication || {}, result = pub.result || {};
       const categoryCodes = Array.isArray(entry.categories) ? entry.categories :
         [first(pub.section, pub.market)].filter(Boolean);
-      const out = baseRow(match, categoryCodes, pub, first(pub.selection, pub.pick));
-      out['Výsledok'] = first(result.status, result.outcome, result.settlement);
+      const out = baseRow(match, categoryCodes, pub, first(entry.pick, pub.selection, pub.pick));
+      out['Zobrazený_kurz'] = first(entry.displayOdds);
+      out['Kurz_UI_typ'] = first(entry.displayOddsType);
+      out['Zobrazená_predikcia'] = first(entry.displayPrediction);
+      out['Zobrazené_jednotky'] = first(entry.displayUnits);
+      out['Výsledok'] = first(entry.outcome?.kind, result.status, result.outcome, result.settlement);
       out['Dôvod_výsledku'] = first(result.reason, result.void_reason, result.settlement_reason);
       out['Skutočná_hodnota'] = first(result.actual_count, result.actual, result.value);
       out['Jednotky'] = first(result.profit_units);
