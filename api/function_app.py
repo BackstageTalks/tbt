@@ -2103,6 +2103,37 @@ def internal_telegram_recover_20261103(req):
         return response({"error": "recovery_failed", "reason_class": type(exc).__name__}, 503)
 
 
+@app.route(route="v1/internal/telegram/recover-20261106", methods=["POST"])
+def internal_telegram_recover_20261106(req):
+    """One-time exact source-count archive restore. No Telegram/provider/CDB calls.
+
+    Uses only already durable match-status player Aces counts and pre-existing
+    original issued receipt pinned to messages 737 and 738. A guarded dry-run
+    must precede any externally requested commit.
+    """
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    mode = str((getattr(req, "params", {}) or {}).get("mode") or "dry-run")
+    if mode not in {"dry-run", "commit"}:
+        return response({"error": "invalid_recovery_mode"}, 400)
+    try:
+        from tbt.services.telegram_20261106_recovery import recover
+        planned = recover(dry_run=mode != "commit")
+        return response({"ok": True, **planned})
+    except AdminStorageUnavailable:
+        logging.exception("November 6 original ACE recovery storage unavailable")
+        return response({"error": "verified_archive_unavailable"}, 503)
+    except (ValueError, RuntimeError) as exc:
+        logging.warning("November 6 ACE recovery blocked by evidence: %s", type(exc).__name__)
+        return response({"error": "original_aces_evidence_mismatch",
+                         "reason_class": type(exc).__name__}, 409)
+    except Exception:
+        logging.exception("November 6 ACE recovery failed")
+        return response({"error": "original_aces_recovery_failed"}, 503)
+
+
 @app.route(route="v1/internal/live-radar-status", methods=["GET"])
 def internal_live_radar_status(req):
     """Read back durable heartbeat and global quota without paid provider calls.
