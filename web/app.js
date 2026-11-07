@@ -4639,6 +4639,49 @@
         </div>`).join('')}</div>
       </section>`;
   }
+  // Admin diagnostics only: never silently alter published tier entitlements.
+  // SHOW controls panel visibility, while visible_rows controls actual access.
+  function adminDailyHubAccessAudit(){
+    const hub=dailyHubConfig(),levels=['rookie','pro','elite','legend','goat'],issues=[];
+    const stateOf=rule=>String(rule?.display_state||((rule?.tab_enabled===false)?'hidden':'active')).toLowerCase();
+    const unlocked=rule=>{
+      if(!rule||rule.tab_enabled===false||stateOf(rule)!=='active')return 0;
+      const raw=String(rule.visible_rows??0).toUpperCase();
+      const base=raw==='ALL'?10:Math.min(10,Math.max(0,Number(rule.visible_rows)||0));
+      const overrides=rule.row_overrides||{};
+      let count=0;
+      for(let i=1;i<=10;i++){
+        const mode=String(overrides[String(i)]||'').toLowerCase();
+        if(mode==='active'||(i<=base&&mode!=='blurred'&&mode!=='hidden'))count++;
+      }
+      return raw==='ALL'&&count===10?11:count;
+    };
+    orderedDailyHubTabs().forEach(tab=>{
+      const cfg=hub.tabs?.[tab]||{};
+      if(cfg.enabled===false)return;
+      let previous=null;
+      levels.forEach(plan=>{
+        const rule=cfg.plans?.[plan]||{},state=stateOf(rule),count=unlocked(rule);
+        if(state==='active'&&count===0&&rule.blur_remaining===false){
+          issues.push({tab,plan,kind:'empty',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: panel ZOBRAZIŤ, ale 0 odomknutých riadkov bez zámku.`});
+        }
+        if(rule.see_all===true&&state!=='active'){
+          issues.push({tab,plan,kind:'contradiction',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: Celá ponuka je zapnutá, no panel je ${state==='blurred'?'ZAMKNUTÝ':'SKRYTÝ'}.`});
+        }
+        if(previous&&count<previous.count){
+          issues.push({tab,plan,kind:'hierarchy',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: ${count===11?'VŠETKY':count} riadkov, menej než ${accessLabel(previous.plan)} (${previous.count===11?'VŠETKY':previous.count}).`});
+        }
+        previous={plan,count};
+      });
+    });
+    return issues;
+  }
+  function adminDailyHubAccessAuditHtml(){
+    const issues=adminDailyHubAccessAudit();
+    if(!issues.length)return '<p class="admin-daily-access-ok">Kontrola nastavení: bez prázdnych aktívnych panelov a rozporov medzi levelmi.</p>';
+    return `<details class="admin-daily-access-audit" open><summary>Prístupy na kontrolu (${issues.length})</summary><p>Publikované aj rozpracované pravidlá môžu vytvárať prázdne panely či nižšie práva vo vyššom leveli. Táto kontrola nič automaticky nemení.</p><ul>${issues.map(issue=>`<li data-admin-access-issue="${issue.kind}" data-admin-access-tab="${escapeHtml(issue.tab)}" data-admin-access-plan="${escapeHtml(issue.plan)}">${escapeHtml(issue.text)}</li>`).join('')}</ul></details>`;
+  }
+
   function renderAdminLayout(){
     const levelLabel=accessLabel(state.adminPlan);
     const hub=dailyHubConfig();
@@ -4686,6 +4729,7 @@
       <div class="admin-subpanel" data-admin-subpanel="layout:daily"${adminSubpanelHidden('layout','daily',view)}>
       <div class="admin-daily-matrix-card">
         <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
+        ${adminDailyHubAccessAuditHtml()}
         <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Panel</span><span>Riadky</span><span>Výber</span><span>Zvyšok</span><span>Celá ponuka</span></div>
         <div class="admin-daily-matrix">${rows}</div>
         <div class="admin-admin-legend"><span><i class="is-global"></i><b>SHOW</b> = plný obsah</span><span><i class="is-level"></i><b>BLUR</b> = viditeľný premium teaser bez citlivých dát v HTML</span><span><i class="is-lock"></i><b>HIDE</b> = prvok sa pre level nezobrazí</span></div>
