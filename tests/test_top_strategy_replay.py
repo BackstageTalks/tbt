@@ -195,7 +195,7 @@ def test_research_grid_keeps_m15_m25_w35_w50_separate_and_never_promotes_tour():
     cohorts = out["models"]["v7.2.1"]["exploratory_fixed_grid"]
     assert cohorts["status"] == "RETROSPECTIVE_EXPLORATORY_NOT_BLIND"
     assert cohorts["fixed_cutoff"] == "2026-11-01"
-    assert cohorts["all_sections"]["tier:ITF_M15"]["0.8"]["development_before_2026_11_01"]["candidate_count"] == 1
+    assert cohorts["all_sections"]["tier:ITF_M15"]["0.8"]["chronological_review_from_2026_11_01"]["candidate_count"] == 1
     assert cohorts["all_sections"]["tier:ITF_W35"]["0.8"]["min_sample_gate"] == "INSUFFICIENT_COHORT"
     assert "tier:ATP_MAIN" not in cohorts["all_sections"]
 
