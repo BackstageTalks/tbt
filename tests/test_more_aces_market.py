@@ -1,5 +1,7 @@
 """Regression coverage for the independent VIAC ES market."""
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 
 from tbt.schemas import MatchRecord
 from tbt.services.ace_selection import select_ace_winner_picks
@@ -87,4 +89,5 @@ def test_ui_config_includes_regular_most_aces_tab_and_stats_control():
     assert tabs["ace_winner"]["enabled"] is True
     assert tabs["ace_winner"]["plans"]["elite"]["visible_rows"] == "ALL"
     assert tabs["ace_winner"]["plans"]["rookie"]["visible_rows"] == 0
-    assert validate_ui_config(config)
+    complete = json.loads((Path(__file__).resolve().parents[1] / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
+    assert validate_ui_config(complete)['dashboard']['daily_hub']['tabs']['ace_winner']['enabled'] is True
