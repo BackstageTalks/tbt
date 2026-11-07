@@ -39,6 +39,17 @@ jobs:
         run: |
           set -euo pipefail
           test -s .private-telegram/ops/telegram-bot-state.json
+      - name: Reconcile exact original daily ACES with website's native Results archive
+        if: github.event_name != 'push'
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          python scripts/telegram_daily_aces_reconcile.py \\
+            --api-url "$BLINQ_PRODUCTION_URL" \\
+            --state .private-telegram/ops/telegram-bot-state.json
       - name: Build report only when ALL issued picks have verified results
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
