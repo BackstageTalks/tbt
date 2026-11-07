@@ -86,6 +86,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DATA_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         run: |
           set -euo pipefail
           test -n "$DATA_TOKEN"
@@ -103,44 +105,35 @@ jobs:
               echo "ready=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            busy=false
-            # Wait for all known release/data writers, not only the morning wrapper.
-            # This loop does not hold the private Telegram ledger lock.
-            for workflow in data.yml morning-refresh.yml prediction-release-recovery.yml \
-                            data-autofill.yml data-hourly-quota-gapfill.yml \
-                            nightly-data-maintenance.yml; do
-              if ! payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?per_page=50")"; then
-                busy=true
-                break
-              fi
-              if jq -e '.workflow_runs[] | select(.status != "completed")' <<< "$payload" >/dev/null; then
-                busy=true
-                break
-              fi
-            done
-            if [[ "$busy" == "false" ]]; then
-              if GH_TOKEN="$DATA_TOKEN" python - <<'PY'
-          import sys
+            # Read the immutable confirmed private offer AND the live website
+            # serving generation. Long-running unrelated data writers do not
+            # hold the morning TG queue once the public board is verified ready.
+            if GH_TOKEN="$DATA_TOKEN" python - <<'PY'
+          import json, os, sys, urllib.request
           from datetime import datetime, timezone
           from pathlib import Path
           sys.path.insert(0,str(Path.cwd()/"scripts"))
           import telegram_offer_publisher as pub
           now=datetime.now(timezone.utc)
           snap=pub.snapshot(Path("/tmp/blinq-telegram-gate")/"assets")
-          if snap.get("betting_day")!=pub.day(now) or pub.day(pub.stamp(snap["generated_at"]))!=pub.day(now):
-              raise SystemExit("Confirmed snapshot is not from current betting day")
-          cfg={"sections":{k:True for k in pub.SECTIONS},"free_top_pick":True,
-               "include_started":False,"max_per_section":0}
-          if not pub.select_groups(snap,cfg,now):
-              raise SystemExit("No future confirmed daily selections yet")
-          print("Verified current-day release contains eligible confirmed rows")
+          base=os.environ["BLINQ_PRODUCTION_URL"].rstrip("/")
+          token=os.environ["BLINQ_LIVE_WORKER_TOKEN"]
+          if not token or not base.startswith("https://") or "/" in base.split("://",1)[1]:
+              raise SystemExit("Verified website origin and existing worker token required")
+          req=urllib.request.Request(
+              base+"/api/v1/internal/serving-readback",
+              headers={"X-Blinq-Worker-Token":token,"Cache-Control":"no-cache",
+                       "Accept":"application/json"})
+          with urllib.request.urlopen(req,timeout=20) as resp:
+              readback=json.loads(resp.read(100001))
+          print("MORNING_SITE_PARITY",json.dumps(
+              pub.verified_website_morning_parity(snap,readback,now),sort_keys=True))
           PY
-              then
-                echo "ready=true" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
+            then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+              exit 0
             fi
-            echo "Attempt $n: data pipeline busy or current verified offer not ready; waiting 60s"
+            echo "Attempt $n: confirmed snapshot / live website parity not ready; waiting 60s"
             sleep 60
           done
           echo "::notice::Still queued; handing off to a fresh workflow run"
