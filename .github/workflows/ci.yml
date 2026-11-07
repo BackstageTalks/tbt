@@ -323,6 +323,8 @@ jobs:
       - name: Check frontend JavaScript
         run: |
           node --check web/app.js
+          node --check web/admin-csv-export.js
+          node tests/test_admin_csv_export.cjs
           node tests/test_local_aces_results_equivalence.cjs
           node tests/live_aces_price_verification.cjs web/app.js
           node --check web/auth.js
