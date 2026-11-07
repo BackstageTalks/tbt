@@ -75,6 +75,8 @@ def _verified_count_evidence(
             result = pub.get("result")
             if (not isinstance(result, dict)
                     or result.get("runtime_source") != "match_status_snapshot"
+                    or result.get("recovery_evidence")
+                        == "existing_verified_exact_player_aces_count_v1"
                     or type(result.get("correct")) is not bool
                     or result.get("void") is True):
                 continue
