@@ -124,21 +124,13 @@ def prepare(state: dict, archived: list[dict], witness: dict, config: dict, outp
     issued = state["attempts"][DAY + ":daily:0620"].get("sent_at")
     if not issued or not isinstance(issued, str):
         raise RuntimeError("Missing confirmed original Telegram send timestamp")
-    # Never rewrite or discard an existing verified archive outcome.
+    # Once evidence is known, every original wager must first be persisted
+    # through the native Results CAS writer. A witness-only replay is not a
+    # serving result and must never authorize Telegram delivery again.
+    if not results.all_settled(sent, archived):
+        raise RuntimeError("Exact 4 Nov results must already be durable in the verified archive")
     replayed = list(archived)
-    appended = []
-    for ref in sent:
-        if results.evaluate(ref, replayed)["status"] != "pending":
-            continue
-        if ref.get("channel") != "aces":
-            raise RuntimeError("Missing non-Aces settlement: refusing partial report")
-        entry = frozen_candidate(ref, statuses[ref["event_id"]], issued)
-        if results.evaluate(ref, [entry])["status"] == "pending":
-            raise RuntimeError("Frozen canonical Aces grade cannot satisfy exact issued bet")
-        replayed.append(entry)
-        appended.append(ref["event_id"])
-    if not results.all_settled(sent, replayed):
-        raise RuntimeError("Pending 4 Nov issued selections remain: no Telegram send")
+    appended = []  # No fabricated or transient source rows enter the report.
     posts = results.combined_daily_report(sent, replayed, DAY, tg.branded_footer(config.get("footer")))
     if not posts or any(p.get("counts", {}).get("pending") for p in posts):
         raise RuntimeError("Invalid or incomplete 4 Nov report")
