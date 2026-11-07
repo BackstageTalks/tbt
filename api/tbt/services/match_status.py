@@ -83,6 +83,7 @@ def confirmed_rollover_rows(
     or an odds value from the changed next-day feed.
     """
     import json
+    import hashlib
     from .feed import _betting_day_key
     from .issued_authority import row_authority_key
 
@@ -99,6 +100,7 @@ def confirmed_rollover_rows(
         row = entry.get("row")
         day = str(entry.get("betting_day") or "")
         receipt = str(entry.get("receipt_key") or "")
+        payload_sha256 = str(entry.get("payload_sha256") or "")
         generated = _parse_time(entry.get("generated_at"))
         if section not in ISSUED_ROLLOVER_SECTIONS or not isinstance(row, dict):
             return
@@ -113,7 +115,12 @@ def confirmed_rollover_rows(
         if not eid or not p1 or not p2 or p1 == p2:
             return
         try:
-            if row_authority_key(row, section) != receipt:
+            row_bytes = json.dumps(
+                row, ensure_ascii=False, sort_keys=True, allow_nan=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            if (row_authority_key(row, section) != receipt
+                    or hashlib.sha256(row_bytes).hexdigest() != payload_sha256):
                 return
         except (ValueError, TypeError):
             return
@@ -149,6 +156,12 @@ def confirmed_rollover_rows(
                     include({
                         "confirmed_only": True,
                         "receipt_key": receipt,
+                        "payload_sha256": hashlib.sha256(
+                            json.dumps(
+                                row, ensure_ascii=False, sort_keys=True,
+                                allow_nan=False, separators=(",", ":"),
+                            ).encode("utf-8")
+                        ).hexdigest(),
                         "betting_day": current_day,
                         "generated_at": str(feed["generated_at"]),
                         "section": section,
