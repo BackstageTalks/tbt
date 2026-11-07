@@ -507,17 +507,18 @@ def main():
                     const label=row.querySelector('.result-prediction strong')?.textContent.trim();
                     return [label,{
                       balls:row.querySelectorAll('.ace-leader-ball').length,
-                      result:row.querySelector('.result-status')?.textContent.trim(),
+                      win:!!row.querySelector('.result-status b.correct'),
+                      loss:!!row.querySelector('.result-status b.wrong'),
                       units:row.querySelector('.result-units')?.textContent.trim()
                     }];
                 }));
             }""")
             assert ace_outcomes == {
-                "CASE-hit-leader-loss-ou": {"balls":1,"result":"× PREHRA9 · súper 5","units":"-1.00u"},
-                "CASE-miss-leader-win-ou": {"balls":0,"result":"✓ VÝHRA5 · súper 9","units":"+0.80u"},
-                "CASE-tie": {"balls":0,"result":"× PREHRA5 · súper 5","units":"-1.00u"},
-                "CASE-missing": {"balls":0,"result":"× PREHRA9","units":"-1.00u"},
-                "CASE-not-aces": {"balls":0,"result":"× PREHRA9 · súper 5","units":"-1.00u"}
+                "CASE-hit-leader-loss-ou": {"balls":1,"win":False,"loss":True,"units":"-1.00u"},
+                "CASE-miss-leader-win-ou": {"balls":0,"win":True,"loss":False,"units":"+0.80u"},
+                "CASE-tie": {"balls":0,"win":False,"loss":True,"units":"-1.00u"},
+                "CASE-missing": {"balls":0,"win":False,"loss":True,"units":"-1.00u"},
+                "CASE-not-aces": {"balls":0,"win":False,"loss":True,"units":"-1.00u"}
             }, ace_outcomes
 
             # ALL means no second membership-cohort restriction in Admin.
