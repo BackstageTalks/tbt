@@ -52,8 +52,9 @@ jobs:
              .phase == "doubles" or .phase == "quality" or
              .phase == "historical" or .phase == "identity" or
              .phase == "archive_2016" or .phase == "candidates" or
-             .phase == "discovery" or .phase == "bulk") and
+             .phase == "discovery" or .phase == "bulk" or .phase == "bulk_odds_shape") and
             (.case == null or (.case | type == "string" and length > 0 and length < 64)) and
+            (.phase != "bulk_odds_shape" or (.case == null and .max_requests == 2)) and
             (.phase != "bulk" or (.case == null and
              .max_requests >= 15 and .max_requests <= 16)) and
             (.phase != "candidates" or (.max_requests >= 2 and
@@ -88,6 +89,12 @@ jobs:
                  .provider_quote_timestamp_verified == false and
                  .request_count <= .max_requests and
                  ((.counts.available // 0) + (.counts.no_content // 0)) > 0 and
+                 (.phase != "bulk_odds_shape" or
+                  (.bulk_source_event_id_matched == true and
+                   .bulk_odds_shape_state == "profiled" and
+                   .request_count == 2 and
+                   .observations.daily_match_winner_odds.daily_odds_value_profile.map_entries >= 1 and
+                   .eligible_for_cdb_import == false)) and
                  (.phase != "bulk" or
                   (.bulk_source_event_id_matched == true and
                    .bulk_state == "tested" and

@@ -58,9 +58,56 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "sample_keys": sorted(map(str, first))[:22] if first else [],
             }
         elif isinstance(value, dict):
+            # An odds map is keyed by event IDs; keep the structural count but
+            # never upload event-key samples as part of the aggregate report.
             result["collections"][str(field)] = {
-                "kind": "dict", "keys": sorted(map(str, value))[:22],
+                "kind": "dict",
+                "keys": [] if name == "daily_match_winner_odds" and field == "odds"
+                        else sorted(map(str, value))[:22],
                 "count": len(value),
+            }
+    if name == "daily_match_winner_odds":
+        # The provider returns an event-ID indexed odds map. Measure the value
+        # structure from the EXISTING paid response, never a second request.
+        # No raw quotes or per-event IDs leave this aggregate research report.
+        price_map = obj.get("odds")
+        if isinstance(price_map, dict):
+            entries = list(price_map.items())
+            valid_keys = [
+                key for key, _ in entries
+                if isinstance(key, str) and key.isascii() and key.isdecimal()
+                and int(key) > 0
+            ]
+            value_kinds = Counter(type(value).__name__ for _, value in entries)
+            with_markets = with_pair = with_event_echo = with_quote_clock = 0
+            for key, value in entries:
+                if not isinstance(value, dict):
+                    continue
+                with_markets += isinstance(value.get("markets"), list)
+                with_pair += isinstance(value.get("home"), dict) and isinstance(
+                    value.get("away"), dict)
+                with_event_echo += str(value.get("eventId", value.get("event_id", ""))) == key
+                with_quote_clock += any(
+                    value.get(field) is not None
+                    for field in ("quoteTimestamp", "quotedAt", "asOf", "observedAt")
+                )
+            result["daily_odds_value_profile"] = {
+                "map_entries": len(entries),
+                "valid_native_id_keys": len(valid_keys),
+                "value_kinds": dict(sorted(value_kinds.items())),
+                "entries_with_market_list": with_markets,
+                "entries_with_home_away_objects": with_pair,
+                "entries_with_matching_event_id_echo": with_event_echo,
+                "entries_with_clock_like_field": with_quote_clock,
+                "individual_event_market_replacement_authorized": False,
+                "historical_pre_match_quote_time_verified": False,
+                "cdb_import_authorized": False,
+            }
+        else:
+            result["daily_odds_value_profile"] = {
+                "recognized_id_map": False,
+                "individual_event_market_replacement_authorized": False,
+                "cdb_import_authorized": False,
             }
     if name in ("event_statistics", "historical_2016_match_statistics"):
         result["statistics_key_inventory"] = inventory_statistics_keys(payload)
@@ -251,7 +298,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality",
                      "historical", "identity", "archive_2016", "candidates",
-                     "discovery", "bulk"}:
+                     "discovery", "bulk", "bulk_odds_shape"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -325,6 +372,39 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         report["counts"] = dict(Counter(
             x.get("state") for x in report["observations"].values()))
         return report
+
+    if phase == "bulk_odds_shape":
+        # Focused two-call structural contract: one identity/date witness and
+        # one full-day bulk odds map, never fourteen overlapping route probes.
+        if case is not None or max_requests != 2:
+            raise ValueError("Bulk odds shape requires exactly 2 calls and no case")
+        detail = read("bulk_source_event_detail",
+                      f"/api/tennis/event/{event_id}")
+        event = _obj(_obj(detail).get("event", detail))
+        matched = str(event.get("id", event.get("eventId", ""))) == str(event_id)
+        home = _nested_int(event, "homeTeam", "id")
+        away = _nested_int(event, "awayTeam", "id")
+        stamp = event.get("startTimestamp")
+        try:
+            if type(stamp) is not int or stamp <= 0:
+                raise ValueError("Invalid event timestamp")
+            day = datetime.fromtimestamp(stamp, timezone.utc).date()
+        except (ValueError, OverflowError, OSError):
+            day = None
+        if not (matched and home and away and home != away and day):
+            report["bulk_odds_shape_state"] = "invalid_source_witness"
+            return finish()
+        report["bulk_source_event_id_matched"] = True
+        period = f"{day.day}/{day.month}/{day.year}"
+        read("daily_match_winner_odds",
+             f"/api/tennis/events/odds/{period}")
+        profile = report["observations"]["daily_match_winner_odds"].get(
+            "daily_odds_value_profile", {})
+        report["bulk_odds_shape_state"] = (
+            "profiled" if "map_entries" in profile else "unrecognized_shape")
+        report["cdb_writes"] = 0
+        report["model_changes"] = 0
+        return finish()
 
     if phase == "bulk":
         # One guarded source witness, followed by independent documented route
@@ -844,7 +924,7 @@ def main() -> None:
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
                                             "quality", "historical", "identity",
                                             "archive_2016", "candidates",
-                                            "discovery", "bulk"],
+                                            "discovery", "bulk", "bulk_odds_shape"],
                         default="full")
     parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
