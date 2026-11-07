@@ -24,3 +24,7 @@
 - The new asset and admin buttons must be present in the exact serving release.
 - Both download actions yield CSV files with expected headers, categories, and totals; no missing pages.
 - Existing auth, model, published selections, match Results, and provider budgets remain unchanged.
+
+## Release coordination
+- Full feature PR CI including real-browser download tests passed before merge.
+- Ordinary main CI deploy attempts may be canceled by unrelated concurrent main commits. An explicit existing UI-hotfix workflow deploys the current main code and performs separate Azure readback; the live SHA must still be checked independently after workflow completion.
