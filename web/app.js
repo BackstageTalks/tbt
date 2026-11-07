@@ -2462,7 +2462,8 @@
     const status=String(result.status||'').trim().toLowerCase();
     const reason=String(result.reason||'').trim().toLowerCase();
     if(['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(status)
-      ||['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(reason))return '';
+      ||reason.startsWith('retired')
+      ||['ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(reason))return '';
     // Number(null) is zero in JS; missing or fractional source counts must not
     // turn an unevaluated prediction into a claimed successful prediction.
     const count=value=>{
