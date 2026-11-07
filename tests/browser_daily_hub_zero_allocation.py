@@ -126,15 +126,19 @@ def main():
                     const originalElite={...tabs.double_faults.plans.elite};
                     const originalRookie={...tabs.prime.plans.rookie};
                     const originalPro={...tabs.prime.plans.pro};
+                    const originalElitePrime={...tabs.prime.plans.elite};
                     try{
                       Object.assign(tabs.double_faults.plans.pro,{visible_rows:0,blur_remaining:false,display_state:'active'});
                       Object.assign(tabs.double_faults.plans.elite,{visible_rows:0,display_state:'blurred',see_all:true});
                       Object.assign(tabs.prime.plans.rookie,{visible_rows:1,display_state:'active'});
                       Object.assign(tabs.prime.plans.pro,{visible_rows:0,blur_remaining:false,display_state:'active'});
+                      Object.assign(tabs.prime.plans.elite,{visible_rows:0,display_state:'blurred'});
                       const issues=app.adminDailyHubAccessAudit();
                       for(const kind of ['empty','hierarchy','contradiction'])
                         if(!issues.some(item=>item.kind===kind))
                           throw Error('Admin audit missed '+kind);
+                      if(!issues.some(item=>item.tab==='prime'&&item.plan==='elite'&&item.kind==='hierarchy'))
+                        throw Error('Admin hierarchy audit ignored ROOKIE->ELITE gap across PRO');
                       if(!issues.some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
                         throw Error('Admin audit missed PRO double faults');
                       if(!app.adminDailyHubAccessAuditHtml().includes('Prístupy na kontrolu'))
@@ -149,6 +153,7 @@ def main():
                       Object.assign(tabs.double_faults.plans.elite,originalElite);
                       Object.assign(tabs.prime.plans.rookie,originalRookie);
                       Object.assign(tabs.prime.plans.pro,originalPro);
+                      Object.assign(tabs.prime.plans.elite,originalElitePrime);
                     }
                     // Provider has no offer, even though one row is allocated:
                     // no paid upgrade is justified, at any membership level.
