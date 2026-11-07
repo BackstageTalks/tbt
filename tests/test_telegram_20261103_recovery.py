@@ -117,3 +117,14 @@ def test_frozen_source_statuses_cover_exactly_eight_issuer_verified_fixtures():
     assert witness['statuses']['17475617']['projection_stats']['p1_aces'] == 11
     assert witness['statuses']['17446377']['projection_stats']['p2_aces'] == 6
     assert witness['statuses']['17452315']['provider_status'] == 'canceled canceled'
+
+
+def test_protected_nov3_evidence_diagnostics_are_bounded_and_non_identifying():
+    from tbt.services.telegram_20261103_recovery import safe_recovery_reason
+    assert safe_recovery_reason(ValueError(
+        "Historic provider participant/status conflict: 17452315")) == "provider_participant_or_terminal_status"
+    assert safe_recovery_reason(RuntimeError(
+        "Original TOP/VALUE archive does not have all 3 verified settlements")) == "original_top_value_precheck"
+    assert safe_recovery_reason(ValueError(
+        "Unexpected actual ACE count: 17449516")) == "provider_player_aces_mismatch"
+    assert safe_recovery_reason(RuntimeError("secret player name 123")) == "unclassified_evidence_conflict"
