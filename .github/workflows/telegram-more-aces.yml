@@ -1,0 +1,89 @@
+name: BlinQ Telegram VIAC ES from website ball
+# Separate one-time-per-day Most Aces message after confirmed regular offer.
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [telegram-more-aces-tick]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+
+jobs:
+  more-aces:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Read latest approved main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout private Telegram state with original receipts
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Confirm live website ball cohort and prepare separate feed
+        id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -s .private-telegram/ops/telegram-bot-state.json
+          python scripts/telegram_more_aces.py prepare \
+            --state .private-telegram/ops/telegram-bot-state.json \
+            --api-url "$BLINQ_PRODUCTION_URL"
+          if [ -s /tmp/blinq-telegram/ready ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reserve once before Telegram API call
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Reserve distinct BlinQ more-aces message [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::More-aces reservation read-back failed"; exit 1; }
+      - name: Send separate VIAC ES from exact website ball only
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+        run: python scripts/telegram_offer_publisher.py send
+      - name: Confirm Telegram message IDs and private ledger read-back
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Confirm VIAC ES Telegram receipts [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::More-aces receipt read-back failed"; exit 1; }
