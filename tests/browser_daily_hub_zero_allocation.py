@@ -72,6 +72,23 @@ def main():
                         }
                       }
                     }
+                    // A visible market with zero unlocked rows and no BLUR
+                    // must say that the plan has no access, not blame providers.
+                    s.feed={
+                      account:{plan:'pro',status:'active'},
+                      ace_picks:[],doubles_picks:[],sg_picks:[],daily_picks:[],
+                      prime_picks:[],value_picks:[],top_daily_picks:[],results:[],
+                      entitlements:{plan:'pro',sections:{double_faults:{
+                        visible_picks:0,blur_remaining:false,enabled:true,see_all:false,
+                        display_state:'active',returned:0,total:0,locked_count:0,slot_states:[]
+                      }}}
+                    };
+                    s.dailyHubTab='double_faults';app.renderDailyHub();
+                    const proZero=document.querySelector('#dailyHubEmpty');
+                    if(!proZero||proZero.hidden||!proZero.textContent.includes('odomknuté'))
+                      throw Error('PRO double faults zero rows must explain access, not missing predictions');
+                    if(document.querySelector('#dailyHubTabs [data-daily-hub-tab="double_faults"]')?.classList.contains('is-locked'))
+                      throw Error('Unblurred zero-allocation panel must not claim a lock');
                     // Provider has no offer, even though one row is allocated:
                     // no paid upgrade is justified, at any membership level.
                     for(const level of levels){
