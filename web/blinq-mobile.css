@@ -1204,3 +1204,85 @@ body#blinqPremium .reference-navigation a.comparator-nav-locked::after,
 body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
   display:none!important;content:none!important;
 }
+
+
+/* BlinQ mobile alignment: admin Results tier choices and monthly focused report.
+   Presentation only: native radio inputs, memberships and financial calculations are unchanged. */
+@media(max-width:900px){
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels{
+    display:grid!important;
+    grid-column:1 / -1!important;
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    align-items:stretch!important;
+    width:100%!important;min-width:0!important;box-sizing:border-box!important;
+    gap:8px!important;margin:8px 0 0!important;padding:0!important;
+    border:0!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels legend{
+    width:100%;padding:0!important;margin:0 0 9px!important;
+    font-size:11px!important;line-height:1.4!important;
+    color:#a9c8b8!important;font-weight:700!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels label{
+    box-sizing:border-box!important;display:flex!important;align-items:center!important;
+    justify-content:center!important;gap:8px!important;width:100%!important;min-width:0!important;
+    min-height:42px!important;padding:8px 5px!important;margin:0!important;
+    font-size:11px!important;line-height:1.2!important;font-weight:750!important;
+    text-align:center!important;white-space:nowrap!important;color:#b6d1c3!important;
+    background:rgba(7,39,29,.64)!important;
+    border:1px solid rgba(77,160,116,.32)!important;border-radius:10px!important;
+    cursor:pointer!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels input[type="radio"]{
+    appearance:auto!important;flex:0 0 16px!important;
+    width:16px!important;min-width:16px!important;max-width:16px!important;
+    height:16px!important;min-height:16px!important;max-height:16px!important;
+    margin:0!important;padding:0!important;accent-color:#2df2ad!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels label:has(input:checked){
+    background:rgba(29,117,80,.32)!important;border-color:#34e7a4!important;
+    color:#ecfff5!important;box-shadow:inset 0 0 0 1px rgba(53,225,158,.20)!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels label:has(input:focus-visible){
+    outline:2px solid #7ff5c4!important;outline-offset:2px!important;
+  }
+
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode:not(.is-monthly-fullscreen){
+    box-sizing:border-box!important;min-width:0!important;width:100%!important;
+    max-width:780px!important;margin:10px auto 0!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-selected-head{
+    display:grid!important;justify-items:center!important;text-align:center!important;gap:5px!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-selected-head > div{
+    text-align:center!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:11px!important;width:100%!important;min-width:0!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-stat{
+    min-width:0!important;min-height:104px!important;align-items:center!important;
+    align-content:center!important;justify-items:center!important;text-align:center!important;
+    padding:13px 8px!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-stat small,
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-stat strong{
+    text-align:center!important;max-width:100%!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-card-heading{
+    justify-content:center!important;gap:4px 12px!important;text-align:center!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th,
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table td{
+    text-align:center!important;
+  }
+}
+@media(max-width:380px){
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar .results-member-levels{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-stat strong{
+    font-size:17px!important;
+  }
+}
