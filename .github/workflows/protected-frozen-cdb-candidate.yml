@@ -145,6 +145,20 @@ jobs:
           set -euo pipefail
           python scripts/publish_frozen_candidate_evidence.py
           test -s .cache/tbt/training-backup/frozen-candidate-evaluation.json
+      # The protected fit can outlive the publisher's strict 1-hour
+      # production-readiness attestation. Re-scan the current canonical CDB
+      # and independently restore the CURRENT production release only after
+      # the fit; do not extend freshness or reuse a pre-training attestation.
+      # This step is read-only, uses the existing global CDB/provider guards,
+      # and cannot promote either model.
+      - name: Independently refresh current production readiness after fit
+        if: ${{ success() && steps.comparison.outputs.evaluated == 'true' }}
+        run: |
+          set -euo pipefail
+          python scripts/model_promotion_readiness.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --out .cache/tbt/training-backup/fresh-model-readiness.json
+          test -s .cache/tbt/training-backup/fresh-model-readiness.json
       - name: Update signed Admin model comparison without activation
         if: ${{ success() && steps.comparison.outputs.evaluated == 'true' }}
         env:
@@ -154,6 +168,7 @@ jobs:
           set -euo pipefail
           test -n "$BLINQ_LIVE_WORKER_TOKEN"
           python scripts/publish_model_calibration_status.py \
+            --readiness-file .cache/tbt/training-backup/fresh-model-readiness.json \
             --output .cache/tbt/training-backup/admin-snapshot.json
           test -s .cache/tbt/training-backup/admin-snapshot.json
           python - <<'PY'
