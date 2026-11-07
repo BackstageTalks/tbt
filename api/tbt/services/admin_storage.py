@@ -515,6 +515,15 @@ def _normalize_membership_invariants(payload: object) -> object:
         # A user-facing warning is a hard prerequisite for automated account
         # deactivation. Heal older Admin drafts/runtime rows defensively.
         inactivity["notify_user"] = True
+    # Preserve old Admin settings, extending only the newly introduced market.
+    hub = ((payload.get("dashboard") or {}).get("daily_hub") or {})
+    tabs = hub.get("tabs") or {}
+    if isinstance(tabs, dict) and "ace_winner" not in tabs and isinstance(tabs.get("ace"), dict):
+        tabs["ace_winner"] = json.loads(json.dumps(tabs["ace"]))
+        tabs["ace_winner"]["exclude_from_stats"] = False
+    order = hub.get("tab_order")
+    if isinstance(order, list) and "ace_winner" not in order and "ace" in order:
+        order.insert(order.index("ace") + 1, "ace_winner")
     return payload
 
 
@@ -1333,7 +1342,7 @@ def validate_ui_config(payload: object) -> dict:
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")
-    if daily_hub.get("default_tab") not in {"daily", "top200", "prime", "top", "value", "ace", "double_faults", "games", "sets", "doubles", "board", "see_all"}:
+    if daily_hub.get("default_tab") not in {"daily", "top200", "prime", "top", "value", "ace", "ace_winner", "double_faults", "games", "sets", "doubles", "board", "see_all"}:
         raise ValueError("Invalid Daily Picks default tab")
     for field in ("preview_rows", "expand_rows"):
         value = daily_hub.get(field)
@@ -1341,7 +1350,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
     tab_order = daily_hub.get("tab_order")
     if tab_order is not None:
-        expected = {"daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets", "see_all"}
+        expected = {"daily", "prime", "value", "ace", "ace_winner", "double_faults", "doubles", "games", "sets", "see_all"}
         if (
             not isinstance(tab_order, list)
             or len(tab_order) != len(expected)
@@ -1351,7 +1360,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError("Invalid Daily Picks tab order")
     hub_tabs = daily_hub.get("tabs") or {}
     required_hub_tabs = {"daily", "value", "ace", "double_faults", "games", "sets"}
-    allowed_hub_tabs = required_hub_tabs | {"top200", "prime", "top", "doubles", "board", "see_all"}
+    allowed_hub_tabs = required_hub_tabs | {"ace_winner", "top200", "prime", "top", "doubles", "board", "see_all"}
     if not isinstance(hub_tabs, dict) or not required_hub_tabs.issubset(hub_tabs) or not set(hub_tabs).issubset(allowed_hub_tabs):
         raise ValueError("Daily Picks hub must contain the core tabs and only supported consolidated tabs")
     for tab_id, tab in hub_tabs.items():
@@ -1360,7 +1369,7 @@ def validate_ui_config(payload: object) -> dict:
         # Stats exclusion is global for each real publication category, not
         # per-level SHOW / BLUR / HIDE. Legacy configs may omit the flag.
         # Derived 'see_all' and retired tabs have no independent STATS source.
-        stats_markets = {"daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets"}
+        stats_markets = {"daily", "prime", "value", "ace", "ace_winner", "double_faults", "doubles", "games", "sets"}
         if "exclude_from_stats" in tab:
             if tab_id not in stats_markets:
                 raise ValueError(f"Unsupported STATS exclusion category: {tab_id}")
