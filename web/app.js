@@ -2453,7 +2453,7 @@
          ||(expected&&identity&&expected===normalize(identity))))return '';
     return '<svg class="ace-leader-ball" viewBox="0 0 32 32" aria-hidden="true" focusable="false"><circle cx="16" cy="16" r="12"></circle><path d="M13 4.5c.1 6 2.4 8.1 6.4 9.1 5.2 1.4 7 4.1 7.4 8.3M4.5 13.7c6-.1 8 2.6 9.1 6.4 1.4 5.2 4.1 7 8.3 7.4"></path></svg>';
   }
-  function aceSettledLeaderBallHtml(publication,player,name,opponent){
+  function aceSettledLeaderBallHtml(publication,player,name,otherPlayer){
     // Separate read-only grading of the issued 'most Aces' insight from the
     // published player's Over/Under line, W/L, odds and financial settlement.
     if(String(publication?.market||publication?.projection_metric||'').toLowerCase()!=='aces')return '';
@@ -2475,7 +2475,7 @@
     if(!Number.isFinite(actual)||!Number.isFinite(opponent)||actual<=opponent)return '';
     const predictedId=String(publication.selection_id||'').trim();
     const playerId=String(player?.id||'').trim();
-    const opponentId=String(opponent?.id||'').trim();
+    const opponentId=String(otherPlayer?.id||'').trim();
     if(!predictedId)return '';
     // Read the original publication rather than a mutable match-level hint.
     const issuedSubject=String(publication?.issued_snapshot?.projection?.projection_subject
@@ -2483,7 +2483,7 @@
     const normalize=value=>String(value||'').normalize('NFKD')
       .replace(/\p{M}/gu,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
     const subject=normalize(issuedSubject),displayedName=normalize(name||player?.name);
-    const otherName=normalize(opponent?.name);
+    const otherName=normalize(otherPlayer?.name);
     // An explicit opponent ID or contradictory issued name is never rescued
     // by a later match result or by a similar-looking name.
     if(predictedId===opponentId&&opponentId)return '';
@@ -2492,7 +2492,7 @@
     // Older archived Results can show players under a different provider-ID
     // namespace (or omit display IDs). Recover only when the frozen original
     // subject names exactly one of the two displayed players.
-    const frozenNameMatch=Boolean(opponent&&subject&&displayedName
+    const frozenNameMatch=Boolean(otherPlayer&&subject&&displayedName
       &&subject===displayedName&&subject!==otherName);
     if(!idMatch&&!frozenNameMatch)return '';
     // Suppress stale auxiliary hint IDs: selection identity and the original
