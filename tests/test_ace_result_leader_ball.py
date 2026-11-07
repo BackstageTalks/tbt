@@ -50,6 +50,7 @@ assert.equal(mark({...pub,selection_id:'b'},a),'','wrong frozen selection');
 assert.equal(mark({...pub,projection_subject:'Musetti'},a),'','conflicting issued leader');
 assert.equal(mark({...pub,issued_snapshot:{projection:{projection_subject:'Musetti'}}},a),'','frozen snapshot supersedes later row');
 assert(mark({...pub,result:{...pub.result,status:'void'}},a).includes('ace-leader-ball'),'O/U line push does not erase correct leader');
+assert(mark({...pub,result:{...pub.result,status:'void',void:true}},a).includes('ace-leader-ball'),'legacy void flag on O/U push does not hide successful leader');
 // Prediction still labels the pre-match projected leader independently.
 assert(sandbox.aceLeaderHintHtml(pub,a,a.name).includes('ace-leader-ball'));
 const results=src.slice(renderStart,renderEnd);
