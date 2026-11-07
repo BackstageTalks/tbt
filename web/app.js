@@ -4207,6 +4207,9 @@
     const fmt=(value,d=2)=>Number(value).toLocaleString('sk-SK',
       {minimumFractionDigits:d,maximumFractionDigits:d});
     const signed=value=>(value>0?'+':'')+fmt(value);
+    // Reconcile 2-decimal daily displays to the rounded cumulative total.
+    // Never round the underlying settlement, ROI or chart input.
+    const roundUnits=value=>Math.sign(value)*Math.round((Math.abs(value)+1e-9)*100)/100;
     const option=(value,label,current)=>'<option value="'+escapeHtml(value)+'"'+
       (value===current?' selected':'')+'>'+escapeHtml(label)+'</option>';
     const tours=[...new Set((state.feed.results||[]).map(r=>String(r.tour||'').toUpperCase()).filter(Boolean))].sort();
@@ -4322,9 +4325,23 @@
         (v&&v.n?escapeHtml(signed(v.profit))+' u':'—')+'</td>'+
         '<td>'+(v?.roi==null?'—':escapeHtml(signed(v.roi))+' %')+'</td></tr>';
     }).join('');
+    const displayDailyByLevel=new Map(levelData.map(level=>{
+      if(!level.metrics)return [level.id,null];
+      let exact=0,previous=0;
+      const display=new Map();
+      daysWithResults.forEach(day=>{
+        const delta=level.metrics.daily.get(day);
+        if(delta==null)return;
+        exact+=delta;
+        const rounded=roundUnits(exact);
+        display.set(day,roundUnits(rounded-previous));
+        previous=rounded;
+      });
+      return [level.id,display];
+    }));
     const dayRows=daysWithResults.map((day,index)=>{
       const cells=levelData.map(level=>{
-        const d=level.metrics?.daily;
+        const d=displayDailyByLevel.get(level.id);
         if(!d)return '<td class="monthly-cell-na" aria-label="Pravidlá levelu nedostupné">—</td>';
         if(!d.has(day))return '<td class="monthly-cell-empty" aria-label="Bez vyúčtovaných tipov">·</td>';
         const value=d.get(day);
@@ -4346,11 +4363,12 @@
       const settled=dailyOutcomes.get(date)||{win:0,loss:0,void:0};
       const dayProfit=m?.daily.get(date);
       dailyRunning+=dayProfit||0;
+      const dayDisplay=displayDailyByLevel.get(active.id)?.get(date);
       return '<tr><th scope="row">'+(index+1)+'.</th>'+
         '<td>'+settled.win+' / '+settled.loss+' / '+settled.void+'</td>'+
-        '<td class="monthly-unit'+(dayProfit==null?' monthly-cell-empty':moneyClass(dayProfit))+'">'+
-        (dayProfit==null?'·':escapeHtml(signed(dayProfit))+' u')+'</td>'+
-        '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(dailyRunning))+' u</td></tr>';
+        '<td class="monthly-unit'+(dayDisplay==null?' monthly-cell-empty':moneyClass(dayDisplay))+'">'+
+        (dayDisplay==null?'·':escapeHtml(signed(dayDisplay))+' u')+'</td>'+
+        '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(roundUnits(dailyRunning)))+' u</td></tr>';
     }).join('');
     const periodText=days?('1. – '+days+'. deň · 06:00–06:00'):'bez dát';
     const viewButton=(view,label)=>'<button type="button" data-monthly-view="'+view+'" aria-pressed="'+
