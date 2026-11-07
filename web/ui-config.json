@@ -980,7 +980,7 @@
       ],
       "requires_odds": true,
       "objective": "confidence_first",
-      "min_probability": 0.7,
+      "min_probability": 0.8,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -992,35 +992,19 @@
       "sort": "probability_desc_then_data_depth_then_surface_sample_then_overall_sample",
       "preferred_probability": 0.8,
       "edge_ev_role": "diagnostic_only",
-      "secondary_probability": 0.78,
-      "standard_probability": 0.75,
-      "target_count": 3,
+      "secondary_probability": null,
+      "standard_probability": null,
+      "target_count": 0,
       "presentation_preview_limit": 10,
-      "cascade": "80% core; 78%, 75%, 70% fallback only until >=3 eligible after Value priority; all above current tier retained, no three-pick cap; never below 70%, real odds >=1.50",
+      "cascade": "No confidence fallback: TOP requires >=80% BlinQ probability, >=1.50 pre-start odds and the existing data-quality gates; zero TOP days are valid; VALUE retains close-odds priority",
       "confidence_tiers": [
-        0.8,
-        0.78,
-        0.75,
-        0.7
+        0.8
       ],
-      "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.7,
-      "fallback_only_if_core_count_below": 3,
+      "minimum_dashboard_count": 0,
+      "fallback_min_probability": 0.8,
+      "fallback_only_if_core_count_below": 0,
       "fallback_min_odds": 1.5,
-      "dynamic_fallback_tiers": [
-        {
-          "min_probability": 0.78,
-          "min_odds": 1.5
-        },
-        {
-          "min_probability": 0.75,
-          "min_odds": 1.5
-        },
-        {
-          "min_probability": 0.7,
-          "min_odds": 1.5
-        }
-      ]
+      "dynamic_fallback_tiers": []
     },
     "value": {
       "label": "Value Predictions",
