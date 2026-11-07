@@ -55,6 +55,39 @@ def test_default_provider_client_uses_shared_14500_ceiling():
         client.close()
 
 
+
+
+def test_live_provider_hard_stop_is_still_strict_at_1708(monkeypatch):
+    """Fixture freezes ordinary mocks, not actual production rollover policy."""
+    from tbt.providers import rapidapi
+
+    class RolloverDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            instant = datetime(2026, 11, 6, 17, 8, tzinfo=timezone.utc)
+            return instant.astimezone(tz) if tz is not None else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(rapidapi, "datetime", RolloverDatetime)
+    with pytest.raises(RequestBudgetExceeded, match="17:07"):
+        rapidapi._enforce_provider_day_hard_stop()
+
+    class SafeDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            instant = datetime(2026, 11, 6, 17, 10, tzinfo=timezone.utc)
+            return instant.astimezone(tz) if tz is not None else instant.replace(tzinfo=None)
+
+    monkeypatch.setattr(rapidapi, "datetime", SafeDatetime)
+    rapidapi._enforce_provider_day_hard_stop()
+
+
+def test_mocked_provider_unit_clock_stable_outside_real_reset_window():
+    from tbt.providers import rapidapi
+    assert rapidapi.datetime.now(timezone.utc) == NOW.replace(
+        year=2026, month=11, day=6, hour=12, minute=0
+    )
+
+
 def test_absolute_provider_hard_stop_between_1707_and_1710():
     for minute in (7, 8, 9):
         with pytest.raises(shared_budget.SharedBudgetExhausted, match="17:07"):
