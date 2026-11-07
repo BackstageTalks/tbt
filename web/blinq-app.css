@@ -3315,20 +3315,25 @@ body#blinqPremium .account-modal-section-title small{color:var(--bq-ui-purple)!i
   /* Variable market tables keep their extra metrics in a compact lower strip. */
   body#blinqPremium #dailyHub[data-tab="value"] .daily-hub-table tbody tr,
   body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table tbody tr,
+  body#blinqPremium #dailyHub[data-tab="ace_winner"] .daily-hub-table tbody tr,
   body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table tbody tr{
     grid-template-columns:52px minmax(0,1fr) 72px!important;
     grid-template-areas:"time tournament detail" "match match match" "pick odds probability" "metric1 metric1 metric2"!important;
   }
   body#blinqPremium #dailyHub[data-tab="value"] .daily-hub-table td:nth-child(7),
   body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table td:nth-child(7),
+  body#blinqPremium #dailyHub[data-tab="ace_winner"] .daily-hub-table td:nth-child(7),
   body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table td:nth-child(7){grid-area:metric1!important;justify-self:stretch!important;text-align:left!important}
   body#blinqPremium #dailyHub[data-tab="value"] .daily-hub-table td:nth-child(8),
   body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table td:nth-child(8),
+  body#blinqPremium #dailyHub[data-tab="ace_winner"] .daily-hub-table td:nth-child(8),
   body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table td:nth-child(8){grid-area:metric2!important;justify-self:end!important;text-align:right!important}
   body#blinqPremium #dailyHub[data-tab="value"] .daily-hub-table td:nth-child(9){grid-area:detail!important;justify-self:end!important;align-self:start!important}
   body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table td:nth-child(8) .hub-detail,
+  body#blinqPremium #dailyHub[data-tab="ace_winner"] .daily-hub-table td:nth-child(8) .hub-detail,
   body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table td:nth-child(8) .hub-detail{display:inline-grid!important}
   body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table td:nth-child(8),
+  body#blinqPremium #dailyHub[data-tab="ace_winner"] .daily-hub-table td:nth-child(8),
   body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table td:nth-child(8){grid-area:detail!important}
 
   body#blinqPremium #dailyHub[data-tab="board"][data-board-mode="results"] .daily-hub-table td:nth-child(7){grid-area:detail!important;text-align:right!important}
@@ -6651,6 +6656,7 @@ body#blinqPremium .daily-hub-table .hub-pick-stack strong{
   line-height:1.28!important;
 }
 body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="ace_winner"] .daily-hub-table .hub-pick-stack strong,
 body#blinqPremium #dailyHub[data-tab="double_faults"] .daily-hub-table .hub-pick-stack strong,
 body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table .hub-pick-stack strong,
 body#blinqPremium #dailyHub[data-tab="sets"] .daily-hub-table .hub-pick-stack strong{
