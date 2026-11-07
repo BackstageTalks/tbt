@@ -11,6 +11,13 @@ Na začiatku karty je jeden hlavný panel **Nový kandidát bez GitHub príkazov
 
 Rozhranie úmyselne neodosiela dva samostatné trvalé zápisy naraz: po úspešnom read-only audite vyžaduje ďalšie potvrdenie tréningu. Neznámy dispatch, nedostupná CDB, obsadený lock alebo neaktuálny snapshot zostávajú blokáciou. Všetky guardy a limitovanie sú na serveri, nie iba v JavaScripte.
 
+## Cyklus P0 7.2.1 → champion → ďalší kandidát (2026-11-07)
+
+- Model Lab predvolí **top-7.2.1**, kým nie je zaznamenaný overený produkčný switch. Profil **accuracy-7.2.2** zostáva serverovo zamknutý; nestačí zelené tréningové CI ani samotný kandidátsky release.
+- Po výslovnom produkčnom release worker overí presný SHA championa a zapíše samostatný trvalý checkpoint **last_promotion** (pôvodný champion SHA, nový model SHA, úspešný run a čas). Iné Model Lab operácie ho neprepíšu.
+- Po tejto výmene sa starý predtréningový audit nesmie použiť pre nového championa: tréning s auto-shadow vyžaduje čerstvý overený audit viazaný na **aktuálny champion SHA**. Admin znovu ponúkne **Pripraviť dáta pre ďalšieho kandidáta**, potom samostatne potvrdíš tréning. Nevzniká druhý writer ani automatické spustenie 7.2.2.
+- Produkčný release je zatiaľ len **existujúca explicitná operátorská výnimka** s potvrdením, zálohou a rollbackom. Nie je to automatické schválenie kvality; normálna Stage 3 cesta a prospektívne quality gates zostávajú otvorené v #959 a #965. Model 7.2.1 s nepreukázaným prospektívnym zlepšením sa nemá aktivovať.
+
 ## Samostatný tréning tlačidlami v administrácii
 
 V **Administrácia → Kalibrácia modelu** postupuj zľava doprava:
