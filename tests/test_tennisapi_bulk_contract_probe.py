@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.probe_tennisapi_extended_contract import run_probe
+from scripts.probe_tennisapi_extended_contract import run_probe, summarize
 
 
 WITNESS = 17449516
@@ -122,3 +122,38 @@ def test_source_timestamp_unknown_disables_bulk():
     report = run_probe(stub, event_id=WITNESS, max_requests=16, phase="bulk")
     assert report["request_count"] == 1
     assert report["bulk_state"] == "invalid_source_witness"
+
+
+def test_daily_bulk_odds_profiles_actual_value_shape_without_exposing_prices():
+    import json
+    sample = {"odds": {
+        "101": {"eventId": 101, "markets": [{"secret": "PRICE_SECRET"}],
+                "home": {"price": 2.17}, "away": {"price": 1.73},
+                "observedAt": "2026-09-11T16:00:00Z"},
+        "102": {"home": {}, "away": {}},
+        "bad": "RAW_SECRET",
+    }}
+    report = summarize("daily_match_winner_odds", sample, event_id=101)
+    profile = report["daily_odds_value_profile"]
+    assert profile["map_entries"] == 3
+    assert profile["valid_native_id_keys"] == 2
+    assert profile["value_kinds"] == {"dict": 2, "str": 1}
+    assert profile["entries_with_market_list"] == 1
+    assert profile["entries_with_home_away_objects"] == 2
+    assert profile["entries_with_matching_event_id_echo"] == 1
+    assert profile["entries_with_clock_like_field"] == 1
+    assert profile["historical_pre_match_quote_time_verified"] is False
+    assert profile["individual_event_market_replacement_authorized"] is False
+    assert profile["cdb_import_authorized"] is False
+    encoded = json.dumps(report)
+    for secret in ("PRICE_SECRET", "RAW_SECRET", "2.17", "1.73"):
+        assert secret not in encoded
+
+
+def test_daily_bulk_odds_unknown_shape_never_authorizes_shortcut():
+    report = summarize("daily_match_winner_odds", {"odds": []}, event_id=101)
+    assert report["daily_odds_value_profile"] == {
+        "recognized_id_map": False,
+        "individual_event_market_replacement_authorized": False,
+        "cdb_import_authorized": False,
+    }
