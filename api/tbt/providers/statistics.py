@@ -71,6 +71,12 @@ RATE_ALIASES = {
     "servicepointswon": "service_points_won", "servicepoints": "service_points_won",
     "returnpointswon": "return_points_won", "returnpoints": "return_points_won",
     "breakpointsconverted": "break_points_won",
+    # Native 2026 ALL-period key observed in 200 paid provider responses.
+    # Only count-backed (won/total) or explicit percent shapes are accepted by
+    # _fraction; an unqualified "scored" count must NEVER become a rate.
+    # Preserve the same return-side field/identity conflict checks as
+    # breakPointsConverted. Provider groups label this a return statistic.
+    "breakpointsscored": "break_points_won",
     # Direct saved/faced ratio; not inferred from generic service points.
     "breakpointssaved": "break_point_serve_win",
     # TennisApi names verified in provider-probe 2026-09-23. Serve placement
