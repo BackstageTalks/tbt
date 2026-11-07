@@ -15,7 +15,7 @@ def route_request(route):
     if urlparse(route.request.url).path == "/app.js":
         source=(WEB / "app.js").read_text(encoding="utf-8").replace(
             "  boot();",
-            "  window.zeroAllocationTest={state,renderDailyHub,dailyHubAccessLocked,dailyHubIncludedButUnavailable,adminDailyHubAccessAudit,adminDailyHubAccessAuditHtml};\n  boot();"
+            "  window.zeroAllocationTest={state,renderDailyHub,dailyHubAccessLocked,dailyHubIncludedButUnavailable,adminDailyHubAccessAudit,adminDailyHubAccessAuditHtml,renderAdminLayout};\n  boot();"
         )
         route.fulfill(content_type="application/javascript", body=source)
     else:
@@ -143,6 +143,22 @@ def main():
                         throw Error('Admin audit missed PRO double faults');
                       if(!app.adminDailyHubAccessAuditHtml().includes('Prístupy na kontrolu'))
                         throw Error('Admin diagnostics are not rendered');
+                      // Effective zero access can also be caused by row overrides:
+                      // the count selector itself can still show 2.
+                      Object.assign(tabs.double_faults.plans.pro,{
+                        visible_rows:2,blur_remaining:false,display_state:'active',
+                        row_overrides:{'1':'hidden','2':'hidden'}
+                      });
+                      if(!app.adminDailyHubAccessAudit().some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
+                        throw Error('Override-hidden PRO panel escaped audit');
+                      const beforePlan=s.adminPlan;s.adminPlan='pro';
+                      try{
+                        if(!app.renderAdminLayout().includes('0 efektívne odomknutých riadkov'))
+                          throw Error('Inline warning missed effective zero rows');
+                        tabs.double_faults.plans.pro.row_overrides={'1':'active','2':'hidden'};
+                        if(app.adminDailyHubAccessAudit().some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
+                          throw Error('Inline audit falsely flags one unlocked row');
+                      }finally{s.adminPlan=beforePlan;}
                       // Disabled panels must not be reported as visible empty panels.
                       tabs.double_faults.plans.pro.tab_enabled=false;
                       const disabledIssues=app.adminDailyHubAccessAudit();
