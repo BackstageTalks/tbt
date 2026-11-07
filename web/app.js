@@ -4223,6 +4223,27 @@
     }));
     const active=levelData.find(item=>item.id===currentLevel)||levelData[0];
     const m=active.metrics;
+    // Live self-check against the Results KPI for the exact same betting day,
+    // membership, section and surface. Mismatches stay visible to Admin.
+    const auditEnabled=Boolean(m)&&month===today.slice(0,7)&&selectedSections.length>0
+      &&s.minOdds===''&&s.maxOdds===''&&s.outcomes.length===3;
+    const auditFilters=auditEnabled?{
+      category:resultCategory,window:'today',bettingDay:true,
+      tour:s.tour,surface:s.surface,membership:currentLevel==='all'?'':currentLevel
+    }:null;
+    const auditResults=auditFilters
+      ?localResultMetrics(filteredResults(auditFilters),resultCategory,auditFilters):null;
+    const auditRows=auditResults?m.all.filter(item=>monthlyRecordDay(item.row)===today):[];
+    const auditWin=auditRows.filter(item=>item.outcome==='win').length;
+    const auditLoss=auditRows.filter(item=>item.outcome==='loss').length;
+    const auditVoid=auditRows.filter(item=>item.outcome==='void').length;
+    const auditProfit=m?.daily.get(today)||0;
+    const auditMatched=!auditResults||(auditWin===auditResults.wins&&auditLoss===auditResults.losses
+      &&auditVoid===auditResults.voids&&Math.abs(auditProfit-auditResults.profit)<.005);
+    const auditText=auditResults?(auditMatched?'Overené: ':'Rozdiel vo výpočte: ')
+      +'Report '+auditWin+'/'+auditLoss+'/'+auditVoid+' · '+(auditProfit>=0?'+':'')+auditProfit.toFixed(2)+' u'
+      +' | Výsledky '+auditResults.wins+'/'+auditResults.losses+'/'+auditResults.voids
+      +' · '+(auditResults.profit>=0?'+':'')+auditResults.profit.toFixed(2)+' u':'';
     const reportMode=s.view==='report'&&active.id!=='all'&&active.available;
     const fullscreen=reportMode&&s.fullscreen===true;
     const showAdvanced=s.filtersExpanded===true||(s.filtersExpanded==null&&!reportMode);
@@ -4384,6 +4405,7 @@
       '<section class="monthly-chart-card"><div class="monthly-card-heading"><h3>Kumulatívny profit · '+escapeHtml(active.label)+'</h3>'+
       '<span>1 u / tip · '+escapeHtml(periodText)+'</span></div>'+chart+'</section>'+
       (reportMode?focused:'<div class="monthly-tables-pair">'+comparison+'</div>')+
+      (auditResults?'<p class="monthly-parity-note'+(auditMatched?'':' is-mismatch')+'" role="status" aria-live="polite">'+escapeHtml(auditText)+'</p>':'')+
       (reportMode?'':'<p class="monthly-report-note" role="status">Vzorka '+(m?m.all.length:0)+' unikátnych vyhodnotených tipov'+
       (m?'; '+m.excluded+' bez overeného kurzu alebo vyúčtovania nezahrnutých do ROI':'')+
       '. Profit je normalizovaný na vklad 1 u, VOID sa do ROI nezapočítava. '+
