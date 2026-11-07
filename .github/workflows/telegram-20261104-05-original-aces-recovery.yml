@@ -1,0 +1,154 @@
+name: Restore frozen Nov 4–5 Telegram ACES Results without resending
+on:
+  push:
+    branches: [main]
+    paths: ['.github/telegram-20261104-05-recovery-request.json']
+permissions:
+  contents: read
+concurrency:
+  group: blinq-nov04-nov05-aces-results-writer
+  cancel-in-progress: false
+jobs:
+  restore:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 16
+    env:
+      BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify fresh approved exact-dates-only request
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          git fetch origin main --depth=1
+          test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
+          jq -e '.schema==1 and .days==["2026-11-04","2026-11-05"] and
+             .mode=="verified_source_archive_cas_only" and .expected_net_new==12 and
+             .paid_provider_requests==0 and .cdb_writes==false and
+             .telegram_send==false and .overwrite_existing==false' \
+             .github/telegram-20261104-05-recovery-request.json >/dev/null
+      - name: Checkout immutable historical Telegram message receipts
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Confirm exact frozen original O/U lines, odds and already-sent summaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=api python - <<'PY'
+          import json
+          from pathlib import Path
+          from tbt.services.telegram_20261104_05_recovery import ISSUED
+          state=json.loads(Path('.private-telegram/ops/telegram-bot-state.json').read_text())
+          assert state.get('schema')==1
+          attempts=state.get('attempts') or {}
+          for day,manifest in ISSUED.items():
+              batch=attempts.get(day+':daily:0620') or {}
+              assert batch.get('status')=='sent'
+              assert batch.get('message_ids')==manifest['message_ids']
+              assert batch.get('sent_at')==manifest['sent_at']
+              frozen=batch.get('rows') or []
+              assert len(frozen)==manifest['sent_rows']
+              assert all(r.get('channel') in {'top','value','aces','free'} for r in frozen)
+              assert sum(r.get('channel')=='free' for r in frozen)==1
+              done=attempts.get('results:'+day) or {}
+              assert done.get('status')=='sent'
+              assert done.get('counts')==manifest['premium_counts']
+              aces=[r for r in frozen if r.get('channel')=='aces']
+              assert len(aces)==(6 if day=='2026-11-04' else 7)
+              for event,selected,name,clock,line,projection,odds,actual in manifest['ace']:
+                  refs=[r for r in aces if r.get('event_id')==event]
+                  assert len(refs)==1
+                  ref=refs[0]
+                  assert ref['selection_id']==selected and ref['name']==name
+                  assert ref['scheduled_at']==f'{day}T{clock}:00+00:00'
+                  assert ref['market_line']==line and ref['projection_direction']=='over'
+                  assert ref['publication_key']==f'local-aces-ou-v1:{event}:{selected}:over:{line:.1f}'
+                  assert ref['odds']==odds and ref['projection']==projection
+                  assert ref['price_basis']=='local_aces_statistical_v1'
+              print('ORIGINAL_HISTORIC_LEDGER_AND_SENT_REPORT_RECEIPTS_VERIFIED',day)
+          PY
+      - name: Dry-run both source-proven original-ACE archival updates
+        shell: bash
+        run: |
+          set -euo pipefail
+          for day in 2026-11-04 2026-11-05; do
+            curl -fsSL --connect-timeout 6 --max-time 80 -X POST \
+              -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+              "$BLINQ_PRODUCTION_URL/api/v1/internal/telegram/recover-20261104-05?day=$day&mode=dry-run" \
+              -o "/tmp/parity-dry-$day.json"
+          done
+          PYTHONPATH=api python - <<'PY'
+          import json
+          for day,expected in (('2026-11-04',5),('2026-11-05',7)):
+              doc=json.load(open('/tmp/parity-dry-'+day+'.json'))
+              assert doc['ok'] is True and doc['status']=='dry_run'
+              assert doc['verified_actual_player_counts']==expected
+              assert 0<=doc['net_new']<=expected
+              assert doc['provider_requests']==doc['cdb_writes']==0
+              assert doc['telegram_sent'] is False and doc['archive_updated']==0
+              print('ORIGINAL_ACES_DRY_RUN',json.dumps(doc,sort_keys=True))
+          PY
+      - name: Append ONLY missing original O/U contracts via native CAS
+        shell: bash
+        run: |
+          set -euo pipefail
+          for day in 2026-11-04 2026-11-05; do
+            curl -fsSL --connect-timeout 6 --max-time 100 -X POST \
+              -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+              "$BLINQ_PRODUCTION_URL/api/v1/internal/telegram/recover-20261104-05?day=$day&mode=commit" \
+              -o "/tmp/parity-commit-$day.json"
+          done
+          python - <<'PY'
+          import json
+          for day,expected in (('2026-11-04',5),('2026-11-05',7)):
+              doc=json.load(open('/tmp/parity-commit-'+day+'.json'))
+              assert doc['ok'] is True and doc['status']=='verified'
+              assert doc['archived_exact_original_aces']==expected
+              assert doc['provider_requests']==doc['cdb_writes']==0
+              assert doc['telegram_sent'] is False and doc['archive_updated']==0
+              print('ORIGINAL_ACES_CAS_APPENDED_AND_READ_BACK',json.dumps(doc,sort_keys=True))
+          PY
+      - name: Independently reproduce both ALREADY sent Telegram Results summaries (NO send)
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH=api:scripts python - <<'PY'
+          import json,os
+          from pathlib import Path
+          import telegram_offer_publisher as tg
+          import telegram_daily_results as results
+          state=tg.load('.private-telegram/ops/telegram-bot-state.json')
+          for day in ('2026-11-04','2026-11-05'):
+              issued=results.extract_sent(state,day)
+              archived=results.archive(os.environ['BLINQ_PRODUCTION_URL'],day)
+              assert results.all_settled(issued,archived)
+              counts={k:0 for k in ('won','lost','void','pending')}
+              for ref in issued:
+                  value=results.evaluate(ref,archived)
+                  if ref.get('channel')!='free':
+                      counts[value['status']]+=1
+              expected=state['attempts']['results:'+day]['counts']
+              assert counts==expected,(day,counts,expected)
+              print('INDEPENDENT_ORIGINAL_TELEGRAM_WEB_ARCHIVE_PARITY',json.dumps({
+                  'day':day,'issued_references':len(issued),
+                  'premium_results':counts,'pending':counts['pending'],
+                  'new_telegram_send':False,'paid_provider_requests':0,
+                  'cdb_writes':0},sort_keys=True))
+          PY
+      - name: Do not retain or log private ledger rows
+        if: always()
+        run: rm -rf .private-telegram /tmp/parity-dry-* /tmp/parity-commit-*
