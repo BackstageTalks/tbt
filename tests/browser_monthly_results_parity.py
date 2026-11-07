@@ -144,6 +144,7 @@ def main():
               const t=monthlyParityTest,s=t.state;
               s.monthlyPerformance.month='2026-10';
               s.monthlyPerformance.sections=['top_daily'];
+              s.ui.dashboard.daily_hub.tabs.daily.exclude_from_stats=false;
               s.feed.results=[1,2,3].map(day=>{
                 const d=String(day).padStart(2,'0'),date='2026-10-'+d;
                 return {event_id:'round-'+d,tour:'ATP',surface:'hard',
