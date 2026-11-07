@@ -201,3 +201,31 @@ def test_readback_quarantines_new_aces_without_exact_frozen_ou_contract():
     }]
     assert merge_settled_results({"results": [original]}, [])["results"] == []
     assert merge_settled_results({"results": []}, [original])["results"] == []
+
+
+def test_verified_winner_same_original_contract_upgrades_legacy_result_provenance():
+    """A correct legacy result must not hide the verified native source on web."""
+    verified = settled_archive_candidates(_feed(), _status())
+    original = deepcopy(verified[0])
+    publication = original["market_publications"][0]
+    publication["result"] = {"correct": True, "void": False, "status": "hit"}
+    frozen = deepcopy(original)
+    merged = merge_settled_results({"results": [original]}, verified)
+    assert len(merged["results"]) == 1
+    out = merged["results"][0]["market_publications"][0]
+    assert out["result"]["correct"] is True
+    assert out["result"]["runtime_source"] == "match_status_snapshot"
+    assert out["odds"] == verified[0]["market_publications"][0]["odds"]
+    assert original == frozen
+
+
+def test_verified_winner_does_not_replace_conflicting_legacy_quote():
+    verified = settled_archive_candidates(_feed(), _status())
+    original = deepcopy(verified[0])
+    publication = original["market_publications"][0]
+    publication["result"] = {"correct": True, "void": False, "status": "hit"}
+    publication["odds"] = 9.99
+    merged = merge_settled_results({"results": [original]}, verified)
+    out = merged["results"][0]["market_publications"][0]
+    assert out["result"].get("runtime_source") is None
+    assert out["odds"] == 9.99
