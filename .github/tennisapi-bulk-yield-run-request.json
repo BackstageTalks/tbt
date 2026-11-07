@@ -2,7 +2,7 @@
   "schema": 1,
   "phase": "cdb_yield",
   "requested_date": "2026-11-07",
-  "reason": "Rerun after isolated QA runner missing pytest fixed by PR #1441; still bounded 12 provider requests, no CDB writes",
+  "reason": "Retry only after writer run 42370581051 completed and canonical release IDs/digests were independently stable; no CDB writes, 12 max paid calls",
   "max_requests": 12,
   "provider_requests_allowed": true,
   "cdb_writes_allowed": false,
@@ -12,5 +12,5 @@
     2026
   ],
   "requested_by": "BlinQ operator live endpoint yield QA",
-  "diagnostic_attempt": 2
+  "diagnostic_attempt": 3
 }
