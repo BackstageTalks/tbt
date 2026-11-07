@@ -11749,3 +11749,47 @@ body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
   backdrop-filter:blur(9px)!important;
   -webkit-backdrop-filter:blur(9px)!important;
 }
+
+
+/* Monthly ELITE/PRO report: keep all 4 daily columns visible on phones.
+   The cumulative column was present but the 430px min-width pushed it off-screen. */
+@media(max-width:760px){
+  body#blinqPremium.blinq-admin .monthly-focused-card .monthly-table-scroll{
+    min-width:0;width:100%;overflow-x:hidden
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-card .monthly-focused-table{
+    width:100%!important;max-width:100%;min-width:0!important;
+    table-layout:fixed!important
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-table th,
+  body#blinqPremium.blinq-admin .monthly-focused-table td{
+    box-sizing:border-box;padding:9px 4px!important;
+    font-size:11px!important;line-height:1.25!important;
+    white-space:nowrap!important;overflow:hidden;text-overflow:clip
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-table th:first-child{width:13%!important}
+  body#blinqPremium.blinq-admin .monthly-focused-table th:nth-child(2){width:29%}
+  body#blinqPremium.blinq-admin .monthly-focused-table th:nth-child(3){width:26%}
+  body#blinqPremium.blinq-admin .monthly-focused-table th:nth-child(4){width:32%}
+  /* Keep full semantic labels in HTML while displaying shorter mobile headers. */
+  body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(2),
+  body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(4){
+    font-size:0!important
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(2)::after{
+    content:"W/L/V";font-size:11px;line-height:1.25
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(4)::after{
+    content:"Kumul. u";font-size:11px;line-height:1.25
+  }
+}
+@media(max-width:380px){
+  body#blinqPremium.blinq-admin .monthly-focused-table th,
+  body#blinqPremium.blinq-admin .monthly-focused-table td{
+    padding:8px 2px!important;font-size:10px!important;letter-spacing:-.025em
+  }
+  body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(2)::after,
+  body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(4)::after{
+    font-size:10px
+  }
+}
