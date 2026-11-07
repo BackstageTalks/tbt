@@ -1,15 +1,16 @@
 {
   "schema": 1,
-  "kind": "operator-approved-native-identity-atp-wta-2023-jan",
-  "mode": "identity",
+  "kind": "operator-approved-tennisapi-breakpoint-null-only-v1",
+  "mode": "statistics",
   "source": "tennisapi1",
-  "description": "Bounded native calendar day identity recovery for AO 2023 Jan 16-29; strict tour/player/date/round/winner matching; CDB writer lock + readback; zero model changes",
-  "start": "2023-01-16",
-  "end": "2023-01-29",
-  "max_requests": 90,
+  "description": "Operator requested complete existing 2023-2026 ATP/WTA CDB BP NULL-only enrichment via native guarded statistics writer; bounded 200 provider attempts, explicit readback, no model or local ace odds changes",
+  "start": "2023-01-01",
+  "end": "2026-11-06",
+  "max_requests": 200,
   "promote": false,
-  "targeted_statistics": false,
+  "targeted_statistics": true,
   "high_yield_statistics": false,
+  "break_points_focus": true,
   "cdb_writes_allowed": true,
   "model_changes": false
 }
