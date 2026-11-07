@@ -109,10 +109,21 @@ def test_prepares_all_verified_results_once_without_mutating_receipts(tmp_path):
         "publication_key": ref["publication_key"], "odds": ref["odds"],
         "result": {"runtime_source": "match_status_snapshot", "correct": True},
     } for ref in sent if ref["channel"] != "aces"]
-    info = prepare(state, archived, json.loads(WITNESS.read_text()), {}, tmp_path)
+    witness = json.loads(WITNESS.read_text())
+    # Evidence without an archive CAS readback must not authorize a send.
+    with pytest.raises(RuntimeError, match="durable"):
+        prepare(state, archived, witness, {}, tmp_path)
+    assert not (tmp_path / "ready").exists()
+    statuses = verified_witness(sent, witness)
+    archived.extend(
+        frozen_candidate(ace_row(case), statuses[case[0]],
+                         "2026-11-05T09:11:27.931790+00:00", betting_day=DAY)
+        for case in CASES
+    )
+    info = prepare(state, archived, witness, {}, tmp_path)
     assert info["status"] == "reserved"
     assert info["verified_issued"] == 13
-    assert len(info["replayed_exact_aces"]) == 7
+    assert len(info["replayed_exact_aces"]) == 0
     # FREE duplicates a published TOP tip; it is excluded from premium ROI.
     assert info["counts"] == {"won": 10, "lost": 2, "void": 0, "pending": 0}
     assert info["paid_provider_requests"] == 0
