@@ -2073,6 +2073,42 @@ def internal_telegram_settled_results(req):
         return response({"error": "archive_unavailable"}, 503)
 
 
+@app.route(route="v1/internal/telegram/site-results-parity", methods=["GET"])
+def internal_telegram_site_results_parity(req):
+    """Authenticated, read-only website backend Results projection by betting day.
+
+    This mirrors the server-side result assembly *before* member entitlements.
+    It is not a substitute for authenticated actual member UI evidence.
+    """
+    if not _live_worker_token_ok(req):
+        return response({"error": "unauthorized"}, 401)
+    day = str((getattr(req, "params", {}) or {}).get("day") or "")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        return response({"error": "invalid_betting_day"}, 400)
+    try:
+        requested = datetime.strptime(day, "%Y-%m-%d").date()
+        local = datetime.now(ZoneInfo("Europe/Bratislava"))
+        current = local.date() if local.hour >= 6 else local.date() - timedelta(days=1)
+        if not current - timedelta(days=14) <= requested <= current:
+            return response({"error": "outside_settlement_window"}, 400)
+        from tbt.services.telegram_site_parity import site_day_projection
+        # Exactly the feed's source, persisted CAS Results and runtime status
+        # overlay. Never query tennis providers or run a Results writer.
+        deployed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
+        source = merge_settled_results(deployed, load_settled_results_archive())
+        snapshot = load_match_status_snapshot() or {}
+        status = verified_terminal_statuses(snapshot.get("statuses"))
+        source["results"] = runtime_settled_results(source, status)
+        exclusions = load_result_exclusions()
+        projected = site_day_projection(source, day, exclusions)
+        return response(projected)
+    except AdminStorageUnavailable:
+        return response({"error": "parity_source_unavailable"}, 503)
+    except (ValueError, TypeError):
+        logging.exception("Website result parity data invalid")
+        return response({"error": "parity_source_invalid"}, 503)
+
+
 @app.route(route="v1/internal/telegram/recover-20261103", methods=["POST"])
 def internal_telegram_recover_20261103(req):
     """One-time, pinned-receipt ACE archive repair. No CDB or TG writes.

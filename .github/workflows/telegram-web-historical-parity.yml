@@ -1,0 +1,111 @@
+name: BlinQ Telegram vs website historical parity (read-only)
+on:
+  schedule:
+    # Winter 07:32 UTC -> 08:32 Bratislava; summer 06:32 UTC -> 08:32.
+    - cron: '32 6 * * *'
+    - cron: '32 7 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-web-parity-audit-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-telegram-website-parity-read-only
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: github.repository == 'BackstageTalks/tbt'
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    env:
+      BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Enforce approved read-only scope and local 08:00 schedule
+        id: scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          python - <<'PY'
+          from datetime import datetime, timedelta, timezone
+          from zoneinfo import ZoneInfo
+          import json, os
+          from pathlib import Path
+          now=datetime.now(timezone.utc).astimezone(ZoneInfo('Europe/Bratislava'))
+          enabled=os.environ['GITHUB_EVENT_NAME']!='schedule' or now.hour == 8
+          if os.environ['GITHUB_EVENT_NAME']=='push':
+              req=json.loads(Path('.github/telegram-web-parity-audit-request.json').read_text())
+              assert req=={
+                  'schema':1,'mode':'read-only','days_back':7,
+                  'paid_provider_requests':0,'cdb_writes':False,
+                  'telegram_send':False,'archive_writes':False,
+              }
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('enabled='+str(enabled).lower()+'\n')
+          print('LOCAL_PARITY_SCHEDULE',json.dumps({'local_time':now.isoformat(),
+                 'enabled':enabled,'mutation_permitted':False},sort_keys=True))
+          PY
+      - name: Checkout immutable private Telegram issue/result receipt ledger
+        if: steps.scope.outputs.enabled == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Independently check historical sent receipts and website Results
+        if: steps.scope.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s .private-telegram/ops/telegram-bot-state.json
+          python - <<'PY'
+          from datetime import datetime, timedelta
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+          now=datetime.now(ZoneInfo('Europe/Bratislava'))
+          today=now.date() if now.hour>=6 else now.date()-timedelta(days=1)
+          days=[(today-timedelta(days=i)).isoformat() for i in range(7,0,-1)]
+          Path('/tmp/blinq-audit-days.txt').write_text(' '.join(days))
+          print('AUDIT_DAYS',len(days),days[0],days[-1])
+          PY
+          set +e
+          python scripts/audit_telegram_web_parity.py \
+            --state .private-telegram/ops/telegram-bot-state.json \
+            --url "$BLINQ_PRODUCTION_URL" \
+            --days $(cat /tmp/blinq-audit-days.txt) \
+            --out .cache/tbt/telegram-web-parity/report.json \
+            --mode enforce
+          status=$?
+          set -e
+          test -s .cache/tbt/telegram-web-parity/report.json || exit 3
+          # A real mismatch makes the workflow red AND leaves a diagnostic
+          # artifact. Never alter the immutable delivery ledger.
+          exit "$status"
+      - name: Retain aggregate, identity-hashed discrepancy evidence
+        if: always() && steps.scope.outputs.enabled == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-web-parity-${{ github.run_id }}
+          path: .cache/tbt/telegram-web-parity/report.json
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Remove private ledger and temporary audit data
+        if: always()
+        shell: bash
+        run: rm -rf .private-telegram /tmp/blinq-audit-days.txt
