@@ -1004,7 +1004,7 @@ def betting_performance(results):
         },
     }
 
-PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games"}
 
 PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)
 # Explicit 180-day cards must not silently change the old auto-selected KPI.
