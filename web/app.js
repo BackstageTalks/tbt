@@ -4208,12 +4208,20 @@
     const chart=m&&m.n&&days
       ?'<svg viewBox="0 0 760 194" role="img" aria-label="Kumulatívny profit od prvého dňa po '+escapeHtml(days+'. deň')+'">'+
         '<defs><linearGradient id="monthlyProfitArea" x1="0" y1="0" x2="0" y2="1">'+
-        '<stop offset="0%" stop-color="#2df2ad" stop-opacity=".32"/>'+
-        '<stop offset="100%" stop-color="#2df2ad" stop-opacity=".015"/></linearGradient></defs>'+
+        '<stop offset="0%" stop-color="#2df2ad" stop-opacity=".26"/>'+
+        '<stop offset="100%" stop-color="#2df2ad" stop-opacity=".012"/></linearGradient>'+
+        '<linearGradient id="monthlyLossArea" x1="0" y1="0" x2="0" y2="1">'+
+        '<stop offset="0%" stop-color="#f5a24c" stop-opacity=".05"/>'+
+        '<stop offset="100%" stop-color="#f5a24c" stop-opacity=".27"/></linearGradient>'+
+        '<clipPath id="monthlyAboveZero"><rect x="0" y="0" width="760" height="'+zero+'"/></clipPath>'+
+        '<clipPath id="monthlyBelowZero"><rect x="0" y="'+zero+'" width="760" height="'+(194-Number(zero)).toFixed(1)+'"/></clipPath></defs>'+
         gridLines+'<line x1="48" x2="730" y1="'+zero+'" y2="'+zero+'" class="monthly-zero-line"/>'+
-        '<path d="'+area+'" class="monthly-profit-area"/>'+
-        '<path d="'+path+'" class="monthly-profit-line"/>'+
-        '<circle cx="'+lastPoint[0].toFixed(1)+'" cy="'+lastPoint[1].toFixed(1)+'" r="4.5" class="monthly-last-point"/>'+
+        '<path d="'+area+'" class="monthly-profit-area" clip-path="url(#monthlyAboveZero)"/>'+
+        '<path d="'+area+'" class="monthly-loss-area" clip-path="url(#monthlyBelowZero)"/>'+
+        '<path d="'+path+'" class="monthly-profit-line" clip-path="url(#monthlyAboveZero)"/>'+
+        '<path d="'+path+'" class="monthly-loss-line" clip-path="url(#monthlyBelowZero)"/>'+
+        '<circle cx="'+lastPoint[0].toFixed(1)+'" cy="'+lastPoint[1].toFixed(1)+'" r="4.5" class="'+
+        (values[values.length-1]<0?'monthly-last-point monthly-negative-point':'monthly-last-point')+'"/>'+
         '<text x="48" y="189" class="monthly-axis-label">1.</text>'+
         (middleDay?'<text x="'+(48+(middleDay-1)/(days-1)*682).toFixed(1)+'" y="189" text-anchor="middle" class="monthly-axis-label">'+middleDay+'.</text>':'')+
         (days>1?'<text x="730" y="189" text-anchor="end" class="monthly-axis-label">'+days+'.</text>':'')+'</svg>'
@@ -4297,7 +4305,7 @@
       '<tbody>'+(days?dayRows:'<tr><td colspan="7" class="monthly-chart-empty">Zvolený mesiac ešte nezačal.</td></tr>')+
       '</tbody></table></div></section>';
     const focused='<section class="monthly-table-card monthly-focused-card"><div class="monthly-card-heading">'+
-      '<h3>Denný report · '+escapeHtml(active.label)+'</h3><span>Profit normalizovaný na 1 u / tip</span></div>'+
+      '<h3>Denný report · '+escapeHtml(active.label)+'</h3></div>'+
       '<div class="monthly-table-scroll"><table class="monthly-grid-table monthly-focused-table">'+
       '<thead><tr><th>Deň</th><th>WIN / LOSS / VOID</th><th>Profit</th><th>Kumulatívne</th></tr></thead>'+
       '<tbody>'+(days?focusedRows:'<tr><td colspan="4" class="monthly-chart-empty">Zvolený mesiac ešte nezačal.</td></tr>')+
@@ -4328,16 +4336,16 @@
       '<fieldset><legend>Výsledky</legend><div class="monthly-checks">'+outcomes+'</div></fieldset></div></details>'+
       '<div class="monthly-selected-head"><div><small>'+escapeHtml(month)+' · '+escapeHtml(periodText)+'</small>'+
       '<h3>'+(reportMode?'Report – ':'Kumulatívny výkon – ')+escapeHtml(active.label)+'</h3></div>'+
-      '<span>Overené vyhodnotenia · 1 u / tip</span></div>'+
+      (reportMode?'':'<span>Overené vyhodnotenia · 1 u / tip</span>')+'</div>'+
       '<div class="monthly-stats">'+cards+'</div>'+
       '<section class="monthly-chart-card"><div class="monthly-card-heading"><h3>Kumulatívny profit · '+escapeHtml(active.label)+'</h3>'+
       '<span>1 u / tip · '+escapeHtml(periodText)+'</span></div>'+chart+'</section>'+
       (reportMode?focused:'<div class="monthly-tables-pair">'+comparison+'</div>')+
-      '<p class="monthly-report-note" role="status">Vzorka '+(m?m.all.length:0)+' unikátnych vyhodnotených tipov'+
+      (reportMode?'':'<p class="monthly-report-note" role="status">Vzorka '+(m?m.all.length:0)+' unikátnych vyhodnotených tipov'+
       (m?'; '+m.excluded+' bez overeného kurzu alebo vyúčtovania nezahrnutých do ROI':'')+
       '. Profit je normalizovaný na vklad 1 u, VOID sa do ROI nezapočítava. '+
       'FREE až GOAT sú prekrývajúce sa skupiny podľa pravidiel dostupnosti tipov, nie samostatné stávky používateľov. '+
-      'Údaje sú len na čítanie; produkčné výsledky a lokálne kurzy sa nemenia.</p></section>';
+      'Údaje sú len na čítanie; produkčné výsledky a lokálne kurzy sa nemenia.</p>')+'</section>';
   }
 
   function renderResults(){
