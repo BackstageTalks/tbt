@@ -93,6 +93,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
         raise ValueError("Clock must be timezone-aware")
     counts = Counter()
     reasons = Counter()
+    site_gaps = Counter()  # Only broad market and verification class, never identifiers.
     fingerprints: dict[str, list[str]] = {}
     premium = Counter()
     site_rows = site["rows"]
@@ -116,6 +117,10 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
             issues.append("site_ambiguous")
         elif a in ("won", "lost", "void") and b == "pending":
             issues.append("site_missing_exact_archive_result")
+            market = str(ref.get("market") or "").lower()
+            market = market if market in {"aces", "match_winner", "double_faults"} else "other"
+            kind = site_reason if site_reason in {"no_exact_contract", "no_verified_final"} else "other"
+            site_gaps[market + ":" + kind] += 1
         elif a in ("won", "lost", "void") and b not in (a, "pending"):
             issues.append("site_terminal_outcome_conflict")
         if ar is not None and br is not None:
@@ -164,6 +169,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
         "website_excluded_sections": site.get("excluded_sections"),
         "parity": "mismatch" if reasons else "verified_same_contract",
         "mismatch_reasons": dict(sorted(reasons.items())),
+        "site_gap_breakdown": dict(sorted(site_gaps.items())),
         "private_fingerprints": {k: sorted(v)[:20] for k, v in sorted(fingerprints.items())},
         "scope": "telegram_issued_vs_website_pre_entitlement",
         "member_account_render_verified": False,
