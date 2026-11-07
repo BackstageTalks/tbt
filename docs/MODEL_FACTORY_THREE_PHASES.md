@@ -55,12 +55,14 @@ Until that readback exists, the 7.2.2 training profile stays locked.
 ### Original unimplemented Stage 3 acceptance criteria
 
 
-The visual third button is disabled until a separate production promotion
-controller is implemented and independently tested (tracked in #959). To enable it safely:
+The normal quality-gated production route still needs its own controller and
+independent tests (tracked in #959). The existing operator waiver is separate.
+To enable regular Stage 3 safely:
 - Bind approval to an exact immutable candidate tag, model digest, and
   serving champion digest (compare-and-swap).
-- Require independently issued/settled forward shadow evidence, ATP/WTA
-  subgroup metrics, real point-in-time odds and TOP/VALUE performance.
+- Require independently issued/settled forward same-event shadow evidence,
+  ATP/WTA subgroup winner quality, calibration and sufficient samples.
+  Odds, EV, VALUE, TOP, ROI and CLV are not model-quality promotion gates.
 - Rehearse rollback of champion plus its dependencies outside production.
 - Get an explicit operator confirmation for the **specific** model switch,
   then perform atomic publish, independent production prediction readback,
