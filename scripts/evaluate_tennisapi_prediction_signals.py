@@ -65,8 +65,12 @@ def _oriented_signals(signal: dict, player1_id: str, player2_id: str):
         forward = False
     else:
         raise ValueError("Reconciled signal has different native participants")
-    first = signal.get("home_seed") if forward else signal.get("away_seed")
-    second = signal.get("away_seed") if forward else signal.get("home_seed")
+    # Source data observed only after a match may not be retrospectively
+    # treated as an attested pre-match draw. Without source as-of proof
+    # use no seed feature, not even a nonzero missingness indicator.
+    attested_seed = signal.get("source_prematch_seed_temporal_attestation") is True
+    first = (signal.get("home_seed") if forward else signal.get("away_seed")) if attested_seed else None
+    second = (signal.get("away_seed") if forward else signal.get("home_seed")) if attested_seed else None
     # Missing seed is distinct from a verified unseeded player.
     known_both = first is not None and second is not None
     seed_difference = second - first if known_both else 0.0
