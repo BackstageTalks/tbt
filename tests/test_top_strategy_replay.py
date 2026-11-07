@@ -208,6 +208,8 @@ def test_older_and_later_history_are_not_pooled_for_performance_claims():
     older = snapshot([first])
     older["generated_at"] = "2026-10-31T07:00:00+00:00"
     first["scheduled_at"] = "2026-10-31T12:00:00+00:00"
+    first["betting"]["captured_at"] = "2026-10-31T06:58:00+00:00"
+    first["two_way_market"]["captured_at"] = "2026-10-31T06:58:00+00:00"
     now = snapshot([second])
     observed = [finished("oct"), finished("nov")]
     observed[0]["scheduled_at"] = "2026-10-31T12:00:00+00:00"
