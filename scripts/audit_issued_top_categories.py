@@ -78,6 +78,7 @@ def grade_issued(ledger, canon):
     index = canonical_index(canon)
     rejected = Counter()
     unique = {}
+    conflicting_keys = set()
     raw_pubs = 0
     for row in ledger:
         if not isinstance(row, dict):
@@ -186,6 +187,9 @@ def grade_issued(ledger, canon):
                 "pit_quote": pit_quote, "probability": probability, "depth": depth,
                 "model": str(evidence.get("model_version") or p.get("model_version") or row.get("model_version") or "UNKNOWN"),
             }
+            if key in conflicting_keys:
+                rejected['conflicting_key_additional_record'] += 1
+                continue
             previous = unique.get(key)
             if previous is None:
                 unique[key] = entry
@@ -194,6 +198,7 @@ def grade_issued(ledger, canon):
                 if (entry["correct"] != previous["correct"]
                         or abs(entry["odds"] - previous["odds"]) > 1e-7):
                     rejected["duplicate_conflict"] += 1
+                    conflicting_keys.add(key)
                     unique[key] = None
                 elif entry["issued"] < previous["issued"]:
                     unique[key] = entry
@@ -234,12 +239,16 @@ def audit(ledger, canonical):
         "raw_issued_publication_rows": raw_pubs,
         "exact_canonical_settled_unique": len(entries),
         "quote_time_proven_issued_unique": len(verified),
+        "first_verified_issued_at": min((x["issued"].isoformat() for x in entries), default=None),
+        "latest_verified_issued_at": max((x["issued"].isoformat() for x in entries), default=None),
         "rejected_or_unverified_counts_nonexclusive": rejected,
         "canonical_verified": {
             "overall": aggregate(entries),
             "by_category": groups(entries, lambda x: x["category"]),
             "by_section": groups(entries, lambda x: x["section"]),
             "by_model": groups(entries, lambda x: x["model"]),
+            "by_model_section": groups(entries, lambda x: x["model"] + "|" + x["section"]),
+            "by_model_section_category": groups(entries, lambda x: x["model"] + "|" + x["section"] + "|" + x["category"]),
             "by_date": by_date,
             "by_category_section": groups(entries, lambda x: x["category"] + "|" + x["section"]),
         },
