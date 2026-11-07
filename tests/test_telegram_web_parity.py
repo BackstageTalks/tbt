@@ -162,3 +162,21 @@ def test_site_gap_breakdown_distinguishes_contract_from_source_without_ids():
     present_but_unverified = reconcile_day(DAY, [ace], [exact], site([legacy]), None, now=NOW)
     assert present_but_unverified["site_gap_breakdown"] == {"aces:no_verified_final": 1}
     assert not any("e1" in item for item in present_but_unverified["site_gap_breakdown"])
+
+
+def test_site_absence_diagnostics_do_not_expose_issued_bet_identity():
+    ace=sent()
+    exact=settled(ace)
+    absent=reconcile_day(DAY,[ace],[exact],site([]),None,now=NOW)
+    assert absent["site_absence_breakdown"]=={"aces:event_absent":1}
+    other_contract={**exact,"publication_key":"ace:wrong","market_line":3.5}
+    another=reconcile_day(DAY,[ace],[exact],site([other_contract]),None,now=NOW)
+    assert another["site_absence_breakdown"]=={"aces:selection_present_other_contract":1}
+    other_selection={**exact,"selection_id":"other"}
+    different=reconcile_day(DAY,[ace],[exact],site([other_selection]),None,now=NOW)
+    assert different["site_absence_breakdown"]=={"aces:event_present_other_selection":1}
+    assert all("e1" not in category and "p1" not in category for category in (
+        *absent["site_absence_breakdown"],
+        *another["site_absence_breakdown"],
+        *different["site_absence_breakdown"],
+    ))
