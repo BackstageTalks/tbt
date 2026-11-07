@@ -93,7 +93,7 @@ class TestModelCalibrationStatus(unittest.TestCase):
         assert '--data-repository "$TBT_DATA_REPOSITORY"' in workflow[scan:publish]
         assert '--out ' + fresh in workflow[scan:publish]
         assert '--readiness-file ' + fresh in workflow[publish:]
-        assert workflow.count("steps.comparison.outputs.evaluated == 'true'") >= 3
+        assert workflow.count("steps.comparison.outputs.evaluated == 'true'") == 2  # refresh and publish only
         assert "group: blinq-model-backup-single-writer" in workflow
         assert "cancel-in-progress: false" in workflow
         assert "BLINQ_RAPIDAPI_MAX_RPS: '0'" in workflow
