@@ -1464,7 +1464,7 @@ def annotate_market_publication_candidates(
         event = str(card.get("event_id") or "").strip()
         market = str(card.get("market") or "").strip()
         selection_id = str(card.get("selection_id") or "").strip()
-        if event and market in {"aces", "double_faults"} and selection_id:
+        if event and market in {"aces", "double_faults", "most_aces"} and selection_id:
             ace_by_event.setdefault(event, []).append(card)
 
     sg_by_event: dict[str, list[dict[str, Any]]] = {}
@@ -1550,7 +1550,7 @@ def annotate_market_publication_candidates(
                 if side not in {"over", "under"} or not 0 <= line <= 100:
                     raise ValueError("Priced player total missing valid O/U contract")
                 selection_key += f":total:{side}:{line:.1f}"
-            projection_section = "ace" if market == "aces" else "double_faults"
+            projection_section = "ace" if market == "aces" else "ace_winner" if market == "most_aces" else "double_faults"
             publications.append({
                 "schema": 3,
                 "publication_key": f"{projection_section}:{selection_key}",
