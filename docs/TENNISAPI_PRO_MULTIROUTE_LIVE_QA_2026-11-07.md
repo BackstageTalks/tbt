@@ -111,3 +111,42 @@ identity and quality gates; do not introduce a competing CDB writer, alter
 the active model, weaken the shared quota reserve or silently switch
 production acquisition routes. Current state: **measurement PR only**; no
 production endpoint substitution has been executed or verified.
+
+## Verified 500-request CDB enrichment experiment, 2026-11-07
+
+Authorized provider-native statistics test, NULL-only canonical write, no model change:
+
+| Run / cohort | Paid requests | Persisted new fields | Enriched matches | Conflicts | Empty |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Actions #42416694839, ATP/WTA 2023 | 100 | 95 | 11 | 73 | 16 |
+| Actions #42417826366, WTA 2023 | 400 | 3179 | 400 | 0 | 0 |
+| **Total** | **500** | **3274** | **411** | **73** | **16** |
+
+Independent CDB read-back: first run 95 persisted values,
+history-2023.parquet SHA-256 2a4ba516bca99e95138fa095f5a8ed0dd9f862ad6754266c71b3ff8e57d142ea.
+Second run 3179 persisted values, current history-2023.parquet SHA-256
+361d763d92881d16ef2d2602f7e9fa5559affd1843a072898bf24a862602a781.
+The verified 500-request average was 6.548 new statistic cells/call;
+the WTA-only 400-call sample achieved 7.9475 cells/call. Both reports
+recorded zero new fully serve/return quality-ready rows. These counts
+include all safe null-only whole-match fields, not solely break-point cells.
+No demonstrated model accuracy improvement and no model activation.
+
+PR #1446 introduced a count-backed provider breakPointsScored mapping under
+existing identity/quality checks. Use the evidence-backed productive WTA 2023
+cohort in adaptive prioritization, with dynamic re-evaluation of yield instead
+of permanent allocation or starving other cohorts.
+
+Separate read-only API response-shape QA: Actions #42417199888 and
+#42418057862 spent 2 + 2 additional guarded provider requests, outside the
+500 statistics calls. Each found 994 event-key entries in one daily bulk odds
+response; every entry carried a choices member. Per-event usable prices,
+selection orientation and historic pre-start timestamps remain unverified.
+PRs #1447, #1450, #1451 measure structure only. No price import or
+individual-event API replacement is authorized yet.
+
+Remaining: validate provider-native choices row fields and point-in-time
+semantics with a future bounded, approved observation; then measure actual
+valid new prices per billed call. Preserve CDB single-writer, CAS quota,
+provider reserve and NULL-only protections. No additional paid calls were
+made for this documentation/read-back.
