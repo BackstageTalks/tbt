@@ -1,10 +1,12 @@
 name: BlinQ read-only selector reliability replay
 on:
   push:
-    branches: [analysis/selection-reliability-replay-20261103, main]
+    branches: [analysis/selection-reliability-replay-20261103, main, fix/top-quality-no-forced-fill-20261107]
     paths:
       - scripts/replay_selection_reliability.py
+      - scripts/replay_top_strategy.py
       - tests/test_selection_reliability_replay.py
+      - tests/test_top_strategy_replay.py
       - .github/workflows/selection-replay-readonly.yml
   workflow_dispatch:
   schedule:
@@ -38,7 +40,7 @@ jobs:
       - name: Install replay-only dependencies
         run: python -m pip install pytest pandas pyarrow
       - name: Run isolated safety regression tests
-        run: python -m pytest tests/test_selection_reliability_replay.py -q
+        run: python -m pytest tests/test_selection_reliability_replay.py tests/test_top_strategy_replay.py -q
       - name: Read-only download from existing private releases with pre/post inventory pin
         shell: bash
         run: |
@@ -73,6 +75,15 @@ jobs:
             --out "$work/report.json" \
             --forward-out "$work/forward-report.json" \
             --forward-from 2026-11-04
+      - name: Full-slate frozen strict TOP and ATP/WTA main-tier shadow (read-only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          work=".cache/tbt/selection-replay"
+          python scripts/replay_top_strategy.py \
+            --snapshots "$work"/pred/selection_candidates_2026-1*.json.gz \
+            --canonical "$work/history/history-2026.parquet" \
+            --out "$work/top-strategy-report.json"
       - name: Private evidence summary and interpretation limits
         if: success()
         shell: bash
@@ -82,6 +93,7 @@ jobs:
           from pathlib import Path
           report=json.loads(Path(".cache/tbt/selection-replay/report.json").read_text())
           forward=json.loads(Path(".cache/tbt/selection-replay/forward-report.json").read_text())
+          top=json.loads(Path(".cache/tbt/selection-replay/top-strategy-report.json").read_text())
           summary=[
             "### Read-only BlinQ selection replay (private evidence)",
             f"Status: {report['status']}",
@@ -93,6 +105,12 @@ jobs:
           for version, item in report["model_quality_A"].items():
               m=item["all_candidates_raw"]
               summary.append(f"- {version}: candidates={m['selected']}; settled={m['settled']}; raw hit={m['hit_rate']}; raw Brier={m['brier']}")
+          summary.append("Strict TOP quality (candidate replay, not issued-bet results):")
+          for version, v in top["models"].items():
+              for key in ("original_candidate_top", "strict_80_all_tours", "strict_80_verified_atp_wta_only"):
+                  m=v[key]
+                  summary.append(f"- {version}/{key}: settled={m['settled']}/{m['candidate_count']}; wins={m['wins']}; losses={m['losses']}; hit={m['hit_rate']}; hypothetical_roi={m['hypothetical_roi']}")
+              summary.append(f"- {version}: missing pre-match competition={v['pre_match_competition_unknown']}; category breakdown in artifact")
           summary.append("B (per model and section; not issued-bet outcomes):")
           for scope, variants in report["selector_comparison_B"].items():
               core=variants["baseline_assignment"]
@@ -114,5 +132,6 @@ jobs:
           path: |
             .cache/tbt/selection-replay/report.json
             .cache/tbt/selection-replay/forward-report.json
+            .cache/tbt/selection-replay/top-strategy-report.json
           if-no-files-found: warn
           retention-days: 14
