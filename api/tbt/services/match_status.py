@@ -59,7 +59,7 @@ _PUBLIC_MATCH_WINNER_KEYS = (
     "doubles_picks",
 )
 _PUBLIC_PROJECTION_KEYS = ("ace_picks", "sg_picks")
-_PROJECTION_MARKETS = {"aces", "double_faults", "sets", "games"}
+_PROJECTION_MARKETS = {"aces", "most_aces", "double_faults", "sets", "games"}
 LEGACY_PENDING_CARRY_HOURS = 48
 
 # Only confirmed public market rows are retained across the 06:00 boundary.
@@ -342,7 +342,7 @@ def deployed_priced_projection(row: dict[str, Any], feed: dict[str, Any]) -> dic
         "price_status": "priced_projection", "odds": odds,
         "provider_id": provider_id, "captured_at": captured.isoformat(),
         "projection_scope": row.get("projection_scope") or (
-            "player" if market in {"aces", "double_faults"} else "match_total"
+            "player" if market in {"aces", "most_aces", "double_faults"} else "match_total"
         ),
         "projection_metric": market,
     }
@@ -391,7 +391,7 @@ def published_ace_statistic_targets(feed: dict[str, Any]) -> dict[str, dict[str,
             market = str(pub.get("market") or "").lower()
             issued = _parse_time(pub.get("issued_at"))
             selected = str(pub.get("selection_id") or "").strip()
-            if (market in {"aces", "double_faults"}
+            if (market in {"aces", "most_aces", "double_faults"}
                     and str(pub.get("publication_status") or "").lower() == "published"
                     and issued is not None and issued < scheduled
                     and selected in {p1, p2}):
@@ -802,7 +802,7 @@ def _grade_runtime_projection(
             return None
         actual = other = reference = None
         selected = str(publication.get("selection_id") or "")
-        if market in {"aces", "double_faults"}:
+        if market in {"aces", "most_aces", "double_faults"}:
             p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
             if not p1 or not p2 or p1 == p2 or selected not in {p1, p2}:
                 return None
@@ -811,8 +811,9 @@ def _grade_runtime_projection(
                 return None
             own = "p1" if selected == p1 else "p2"
             opponent = "p2" if own == "p1" else "p1"
-            actual = _finite_count(stats.get(f"{own}_{market}"))
-            other = _finite_count(stats.get(f"{opponent}_{market}"))
+            metric = "aces" if market == "most_aces" else market
+            actual = _finite_count(stats.get(f"{own}_{metric}"))
+            other = _finite_count(stats.get(f"{opponent}_{metric}"))
             if actual is None:
                 return None
             contract = str(publication.get("price_contract") or "").lower()
@@ -824,7 +825,7 @@ def _grade_runtime_projection(
                 correct = actual > reference if direction == "over" else actual < reference
                 equal = actual == reference
             elif (contract in {"", "player_superiority"}
-                  and (market != "aces" or (
+                  and (market == "most_aces" or market != "aces" or (
                       issued < datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
                       and publication.get("market_line") in (None, "")
                       and publication.get("ou_side") in (None, "")
@@ -867,14 +868,14 @@ def _grade_runtime_projection(
             "void": equal, "actual_count": actual,
             "projection": publication.get("projection"),
             "projection_scope": publication.get("projection_scope") or (
-                "player" if market in {"aces", "double_faults"} else "match_total"
+                "player" if market in {"aces", "most_aces", "double_faults"} else "match_total"
             ),
             "projection_metric": publication.get("projection_metric") or market,
             "data_depth": publication.get("data_depth"),
         }
         if other is not None:
             result["opponent_actual_count"] = other
-        if market in {"aces", "double_faults"}:
+        if market in {"aces", "most_aces", "double_faults"}:
             result["opponent_projection"] = publication.get("opponent_projection")
         else:
             result["reference_projection"] = reference
