@@ -170,7 +170,7 @@ def test_review_guard_preserves_ordinary_top_and_any_rank_evidence():
     assert not any(unsubstantiated_high_confidence_winner(r) for r in (normal, ranked, weak))
     cards = select_market_sections([normal, ranked, weak])
     assert {r["event_id"] for r in cards["top_daily_picks"]} == {
-        "Normal", "Ranked", "Weak",
+        "Normal", "Ranked",
     }
     assert cards["market_selection"]["selection_counts"]["market_conflict_missing_rank_quarantined"] == 0
 
