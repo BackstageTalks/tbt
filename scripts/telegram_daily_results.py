@@ -143,6 +143,7 @@ def exact_website_fallback(sent, archived, site_rows):
     """
     merged = list(archived)
     fallback_count = 0
+    seen_fallbacks = set()
     for pick in sent:
         authoritative = match_result(pick, archived)
         website = match_result(pick, site_rows)
@@ -166,8 +167,16 @@ def exact_website_fallback(sent, archived, site_rows):
         # Archived source lacks this original contract, but website already
         # serves a confirmed *identical* publication. Do not use a bare score
         # or a different model, side, market or line for this decision.
-        merged.append(website)
-        fallback_count += 1
+        # FREE is a mirror of an already-issued TOP result. Count and insert
+        # its exact publication only once, even when both channel refs appear.
+        exact_key = (str(pick.get(k) or "") for k in (
+            "event_id","section","market","selection_id",
+            "publication_key","market_line","projection_direction"))
+        frozen = tuple(exact_key)
+        if frozen not in seen_fallbacks:
+            merged.append(website)
+            seen_fallbacks.add(frozen)
+            fallback_count += 1
     return merged, fallback_count
 
 
