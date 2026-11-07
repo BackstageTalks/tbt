@@ -1,13 +1,15 @@
 {
   "schema": 1,
-  "mode": "deploy-current",
-  "max_requests": 1,
+  "kind": "operator-approved-native-identity-atp-wta-2023-jan",
+  "mode": "identity",
+  "source": "tennisapi1",
+  "description": "Bounded native calendar day identity recovery for AO 2023 Jan 16-29; strict tour/player/date/round/winner matching; CDB writer lock + readback; zero model changes",
+  "start": "2023-01-16",
+  "end": "2023-01-29",
+  "max_requests": 90,
   "promote": false,
   "targeted_statistics": false,
-  "model_changes": false,
-  "cdb_writes_allowed": false,
-  "kind": "recover-published-predictions-2026-11-05",
-  "source": "tbt-predictions-v1",
-  "recovery_source_run": 41990119127,
-  "description": "Deploy already computed and preflight-verified current prediction generation using existing no-provider deployment path. No Tennis/PropLine calls or model/CDB changes. Historical request 1349 is preserved in git history."
+  "high_yield_statistics": false,
+  "cdb_writes_allowed": true,
+  "model_changes": false
 }
