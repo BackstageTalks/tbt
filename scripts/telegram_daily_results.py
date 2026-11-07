@@ -363,8 +363,9 @@ def prepare(args):
     historical_day=getattr(args,"historical_day","")
     if historical_day and not getattr(args,"elite_auto",False):
         raise RuntimeError("Historical Telegram send requires explicit ELITE authorization")
-    target_day=(approved_historical_results_day(state,historical_day)
-                if historical_day else unreported_day(state,now))
+    target_day=unreported_day(state,now)
+    if historical_day:
+        target_day=approved_historical_results_day(state,historical_day)
     if not target_day:
         print(json.dumps({"status":"skipped","reason":"no_unreported_issued_day"}))
         return
