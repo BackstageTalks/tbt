@@ -98,6 +98,37 @@ def test_overlap_pending_is_not_inflated_as_loss():
     assert reported["exact_same_offer_reconciliation"]["strict_only"]["pending_or_unmatched"] == 1
 
 
+def test_funnel_explains_all_slate_quality_price_and_value_rejections():
+    rows = [
+        candidate("strong", confidence=.84, section="top_daily"),
+        candidate("weak", confidence=.79),
+        candidate("unpriced", confidence=.90, odds=1.49),
+        candidate("shallow", confidence=.90, depth=.50),
+        candidate("value", confidence=.90, odds=1.90, opponent=2.00),
+    ]
+    report = evaluate([snapshot(rows)], [finished(r["event_id"]) for r in rows])
+    f = report["models"]["v7.2.1"]["eligibility_funnel"]
+    assert f["candidate_rows"] == 5
+    assert f["quote_valid"] == 5
+    assert f["quote_below_min_1_50"] == 1
+    assert f["odds_ge_1_50"] == 4
+    assert f["quality_gate_rejected"] == 1
+    assert f["below_fixed_80_probability"] == 1
+    assert f["VALUE_claims_precedence"] == 1
+    assert f["strict_TOP_pass"] == 1
+
+
+def test_funnel_captures_unknown_category_without_main_tour_inference():
+    report = evaluate([snapshot([
+        candidate("unknown", competition="unknown", tour="ATP"),
+        candidate("itf", competition="ITF M25", tour="ATP"),
+    ])], [finished("unknown"), finished("itf")])
+    model = report["models"]["v7.2.1"]
+    assert model["eligibility_funnel_by_pre_match_competition"]["UNKNOWN"]["candidate_rows"] == 1
+    assert model["eligibility_funnel_by_pre_match_competition"]["ITF"]["candidate_rows"] == 1
+    assert model["strict_80_verified_atp_wta_only"]["candidate_count"] == 0
+
+
 def test_one_or_zero_top_is_not_filled_from_70_to_79():
     rows = [candidate("strong", confidence=.82),
             candidate("weak79", confidence=.79),
