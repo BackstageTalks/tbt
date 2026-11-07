@@ -59,7 +59,7 @@ FIXTURE = """() => {
 
   const hub=document.querySelector('#dailyHub'); hub.hidden=false;
   document.querySelector('#dailyHubTabs').innerHTML=
-    ['TOP','SHORT ODDS','VALUE','ACES','DVOJCHYBY','DOUBLES','GAMES','SETS'].map((name,i)=>
+    ['TOP','SHORT ODDS','VALUE','ACES','VIAC ES','DVOJCHYBY','DOUBLES','GAMES','SETS'].map((name,i)=>
       '<button class="daily-hub-tab '+(i===0?'active':'')+'"><span>'+name+'</span></button>').join('');
   const body=document.querySelector('#dailyHubBody');
   body.innerHTML=Array.from({length:10},(_,i)=>'<tr>'+
@@ -132,7 +132,7 @@ def main():
                 assert page.locator('#dailyHub .daily-mark').count() == 0, label
                 assert page.locator('#dailyHub .daily-date').count() == 0, label
                 assert page.locator('#dailyHub .daily-title-group h2').inner_text().startswith('Dnešné predikcie'), label
-                assert page.locator('#dailyHubTabs .daily-hub-tab').count() == 8, label
+                assert page.locator('#dailyHubTabs .daily-hub-tab').count() == 9, label
                 report = page.evaluate("""() => {
                   const rect=sel=>{const e=typeof sel==='string'?document.querySelector(sel):sel;if(!e)return null;const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
                   const visible=sel=>{const e=document.querySelector(sel);return e&&!e.hidden&&getComputedStyle(e).display!=='none';};
