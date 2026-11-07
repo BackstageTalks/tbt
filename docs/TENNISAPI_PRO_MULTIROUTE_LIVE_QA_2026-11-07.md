@@ -74,3 +74,40 @@ logs, uploaded JSON, consumed paid requests and unchanged CDB state.
 
 Product timing: provider reset is independently known as **17:09 UTC**, not a
 guaranteed local 18:10 through DST. Keep the historical 17:07–17:10 UTC pause.
+
+## Revised efficiency objective — 2026-11-07
+
+User priority is **maximum verified, usable fields per billed request**, not
+preparing an inventory of unmatched event IDs. The 11 unmatched IDs and 196
+existing BP NULL cells from the earlier overlap audit are *not* proof that
+additional individual paid calls will yield new usable data.
+
+Confirmed historical observations (not promises for other dates/cohorts):
+
+- Daily `/api/tennis/events/odds/{day}/{month}/{year}`: one response with 993
+  event-key entries, of which 782 have source ID claims in the read-only CDB.
+  No pre-match quote timestamp or replacement value is validated.
+- Tournament/day or round sample: 32 source event rows per call; last page:
+  30 source event rows; player-month: 7. These are **raw observations** and
+  may overlap other responses.
+- Ten-call historical bulk/CDB QA: 165 raw rows, 109 eligible unique source
+  events, 98 exact CDB links, 46 repeated appearances across endpoints.
+  **Zero new canonical CDB values** were written.
+- BP-only controlled 200-call run 42407952959: **zero** persisted new BP
+  values. Do not repeat broad low-yield pulls merely to spend quota.
+
+Read-only follow-up in PR #1447 adds an aggregate shape profile for EACH
+already fetched daily bulk odds map, using no additional API request. Before
+substituting it for individual event odds requests, verify that map values
+actually include unambiguous event/provider/market/selection data, support
+all required fields, and that historical pre-match quote times are provable
+where required. A timestamp-like field name alone proves none of these.
+
+Future selection policy: compare net-new validated canonical cells per paid
+call (including retries and failed calls), payload-field completeness and
+cross-endpoint duplication. Prefer batch date/round/season routes only where
+their marginal gain beats the existing category/day collector. Keep source
+identity and quality gates; do not introduce a competing CDB writer, alter
+the active model, weaken the shared quota reserve or silently switch
+production acquisition routes. Current state: **measurement PR only**; no
+production endpoint substitution has been executed or verified.
