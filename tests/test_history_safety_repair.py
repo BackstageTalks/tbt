@@ -64,7 +64,9 @@ def test_incoming_provider_id_collision_with_other_players_is_quarantined(match_
     assert [m.match_id for m in safe] == ['known']
     assert accepted == []
     assert report['quarantined_rows'] == 1
-    assert report['collision']['duplicate_provider_event_ids'] == ['777']
+    assert report["original_identity_corrections_rejected"] == 1
+    assert report["rows"][0]["reason"] == "incoming_changes_original_cdb_identity"
+    assert report["rows"][0]["provider_event_id"] == "777"
 
 
 def test_history_safety_reports_only_changed_years(match_factory):
