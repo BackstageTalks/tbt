@@ -80,6 +80,55 @@ class TestModelCalibrationStatus(unittest.TestCase):
         self.assertFalse(normalized["candidate_active"])
         self.assertFalse(normalized["shadow"]["gate"]["ready_for_promotion_review"])
 
+    def test_protected_fit_refreshes_readiness_without_weakening_guards(self):
+        from pathlib import Path
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/protected-frozen-cdb-candidate.yml").read_text()
+        fresh = ".cache/tbt/training-backup/fresh-model-readiness.json"
+        scan = workflow.index("name: Independently refresh current production readiness after fit")
+        publish = workflow.index("name: Update signed Admin model comparison without activation")
+        fit = workflow.index("name: Fit separate candidate only if immutable backup gate passed")
+        assert fit < scan < publish
+        assert 'python scripts/model_promotion_readiness.py \\' in workflow[scan:publish]
+        assert '--data-repository "$TBT_DATA_REPOSITORY"' in workflow[scan:publish]
+        assert '--out ' + fresh in workflow[scan:publish]
+        assert '--readiness-file ' + fresh in workflow[publish:]
+        assert workflow.count("steps.comparison.outputs.evaluated == 'true'") >= 3
+        assert "group: blinq-model-backup-single-writer" in workflow
+        assert "cancel-in-progress: false" in workflow
+        assert "BLINQ_RAPIDAPI_MAX_RPS: '0'" in workflow
+        assert "Acquire global private canonical writer lock" in workflow
+        assert "Release canonical writer immediately after complete immutable snapshot" in workflow
+        assert "Release re-acquired CDB global writer lock (if held)" in workflow
+        assert "--promote" in workflow  # prohibition comment; no actual promote flag
+        assert "python scripts/pipeline.py train" in workflow
+
+    def test_readiness_publisher_rejects_stale_or_changed_production(self):
+        from unittest.mock import patch
+        from publish_model_calibration_status import verify_current_production_digest
+        fresh = {
+            "production_model_sha256": "a" * 64,
+            "production_version": "champion",
+            "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
+        release = {"assets": [{"name": "model.joblib", "digest": "sha256:" + "a" * 64}]}
+        with patch("publish_model_calibration_status._run",
+                   return_value=__import__("json").dumps(release)) as run:
+            verify_current_production_digest("BackstageTalks/tbt-data", fresh)
+            self.assertEqual(run.call_count, 1)
+            with self.assertRaisesRegex(ValueError, "not current"):
+                verify_current_production_digest(
+                    "BackstageTalks/tbt-data",
+                    {**fresh, "generated_at_utc":
+                     (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()},
+                )
+        with patch("publish_model_calibration_status._run",
+                   return_value=__import__("json").dumps({
+                       "assets": [{"name": "model.joblib", "digest": "sha256:" + "b" * 64}]
+                   })):
+            with self.assertRaisesRegex(ValueError, "changed"):
+                verify_current_production_digest("BackstageTalks/tbt-data", fresh)
+
     def test_publisher_requires_independent_readback(self):
         import io
         import json
