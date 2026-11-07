@@ -84,6 +84,9 @@ def test_duplicate_same_event_not_double_counted_and_conflict_quarantined():
     report = audit([first, conflict], [finished()])
     assert report["canonical_verified"]["overall"]["n"] == 0
     assert report["rejected_or_unverified_counts_nonexclusive"]["duplicate_conflict"] == 1
+    after_conflict = audit([first, conflict, entry()], [finished()])
+    assert after_conflict["canonical_verified"]["overall"]["n"] == 0
+    assert after_conflict["rejected_or_unverified_counts_nonexclusive"]["conflicting_key_additional_record"] == 1
 
 
 def test_unknown_main_tour_never_inferred_from_atp_only():
