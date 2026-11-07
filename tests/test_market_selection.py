@@ -166,14 +166,14 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
 
 
 
-def test_retired_top200_never_steals_from_ranked_five_top():
+def test_retired_top200_never_steals_from_ranked_three_top():
     rows = [row(f'ranked-{i}', .80 - i*.01, 1.60, 2.50, depth=1.0,
                 rank1=100+i, rank2=500) for i in range(7)]
     sections = select_market_sections(rows)
     assert sections['top200_picks'] == []
     assert [x['event_id'] for x in sections['top_daily_picks']] == [
-        f'ranked-{i}' for i in range(5)]
-    assert sections['market_selection']['selection_counts']['top_daily'] == 5
+        f'ranked-{i}' for i in range(3)]
+    assert sections['market_selection']['selection_counts']['top_daily'] == 3
 
 def test_probability_first_odds_buckets_match_product_policy():
     rows = [
@@ -253,8 +253,8 @@ def test_top_ranks_all_four_valid_choices_not_first_arbitrary_confidence_tier():
     rows.append(row('another-eligible', .75, 1.70, 2.50, depth=1.0))
     sections = select_market_sections(rows)
     assert {x['event_id'] for x in sections['top_daily_picks']} == {
-        'core0','core1','core2','another-eligible'}
-    assert len(sections['top_daily_picks']) == 4
+        'core0','core1','core2'}
+    assert len(sections['top_daily_picks']) == 3
     assert sections['market_selection']['selection_counts']['top_fallback_added'] == 0
 
 def test_odds_150_belongs_to_top_not_prime():
@@ -348,19 +348,19 @@ def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_ar
 
 
 
-def test_ranked_top_uses_only_real_pre_start_prices_and_target_five():
+def test_ranked_top_uses_only_real_pre_start_prices_and_target_three():
     rows = [row(f'core{i}', .80-i*.02, 1.60, 2.60, depth=1.0) for i in range(7)]
     rows.append(row('too-short', .90, 1.49, 3.00, depth=1.0))
     sections = select_market_sections(rows)
-    assert len(sections['top_daily_picks']) == 5
+    assert len(sections['top_daily_picks']) == 3
     assert {x['event_id'] for x in sections['top_daily_picks']} == {
-        f'core{i}' for i in range(5)}
+        f'core{i}' for i in range(3)}
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
     assert rule['probability_tiers'] == [.60]
     assert rule['min_odds'] == 1.50
-    assert rule['daily_preferred_count'] == 5
+    assert rule['daily_preferred_count'] == 3
 
 def test_value_audit_reports_filter_bottlenecks_without_changing_selection():
     good = row('value-good', .72, 1.90, 2.00, depth=.90, surface1=10, surface2=10)
@@ -444,7 +444,7 @@ def test_top_caps_at_five_and_shows_original_model_adjusted_probability():
     rows.append(row("fallback78", .78, 1.75, 3.00, depth=1.0))
     selection = select_market_sections(rows)
     picks = selection['top_daily_picks']
-    assert len(picks) == 5
+    assert len(picks) == 3
     assert all(x['event_id'] != 'fallback78' for x in picks)
     assert all(abs(x['probability'] - x['raw_model_probability']) < 1e-12 for x in picks)
     assert not selection['market_selection']['selection_counts']['all_qualifying_above_active_tier']
@@ -456,7 +456,7 @@ def test_all_four_quality_qualified_selections_are_ordered_in_top():
             row("c78", .79, 1.60, 3.00, depth=1.0),
             row("d75", .75, 1.60, 3.00, depth=1.0)]
     result = select_market_sections(rows)
-    assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78','d75']
+    assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78']
     assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .60
 
 
@@ -466,7 +466,7 @@ def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
             row("c75", .75, 1.60, 3.00, depth=1.0),
             row("d70", .70, 1.60, 3.00, depth=1.0)]
     result = select_market_sections(rows)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ['a80','b78','c75','d70']
+    assert [x["event_id"] for x in result["top_daily_picks"]] == ['a80','b78','c75']
     rows[2] = row("c69", .69, 1.60, 3.00, depth=1.0)
     rows[3] = row("d59", .59, 1.60, 3.00, depth=1.0)
     result = select_market_sections(rows)
@@ -543,7 +543,7 @@ def test_morning_same_original_top_offer_across_feed_and_publication_without_oth
     ledger = annotate_market_publication_candidates(rows, ace_picks=aces)
     rendered = attach_market_sections_to_feed({'upcoming': []}, ledger, ace_picks=aces)
     top_ids = [x['event_id'] for x in rendered['top_daily_picks']]
-    assert len(top_ids) == 5
+    assert len(top_ids) == 3
     for source in ledger:
         pubs = [p for p in source.get('market_publication_candidates', [])
                 if p.get('market') == 'match_winner' and p.get('section') == 'top_daily']
