@@ -505,7 +505,7 @@ def main():
                 body.innerHTML=t.renderResults();
                 const rows=[...body.querySelectorAll('tr.results-card-row')];
                 const outcomeRows=Object.fromEntries(rows.map(row=>{
-                    const label=row.querySelector('.result-prediction strong')?.textContent.trim();
+                    const label=row.querySelector('.result-prediction strong')?.textContent.trim().split(' · ')[0];
                     return [label,{
                       balls:row.querySelectorAll('.ace-leader-ball').length,
                       win:!!row.querySelector('.result-status b.correct'),
