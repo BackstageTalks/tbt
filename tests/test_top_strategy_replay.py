@@ -68,6 +68,36 @@ def test_fixed_top_no_quota_no_oversized_price_cap_and_value_priority():
     assert result["per_day"]["2026-11-02"]["strict_80_all_tours"]["wins"] == 4
 
 
+def test_exact_same_day_overlap_explains_unequal_candidate_counts():
+    rows = [
+        candidate("kept", confidence=.85, section="top_daily"),
+        candidate("removed", confidence=.75, section="top_daily"),
+        candidate("new", confidence=.83, section=None),
+    ]
+    results = [finished("kept"), finished("removed", winner="b"), finished("new")]
+    reported = evaluate([snapshot(rows)], results)["models"]["v7.2.1"]
+    cohorts = reported["exact_same_offer_reconciliation"]
+    assert cohorts["both"]["candidate_count"] == 1
+    assert cohorts["both"]["wins"] == 1
+    assert cohorts["original_only"]["candidate_count"] == 1
+    assert cohorts["original_only"]["losses"] == 1
+    assert cohorts["strict_only"]["candidate_count"] == 1
+    assert cohorts["strict_only"]["wins"] == 1
+    assert reported["original_candidate_top"]["candidate_count"] == 2
+    assert reported["strict_80_all_tours"]["candidate_count"] == 2
+
+
+def test_overlap_pending_is_not_inflated_as_loss():
+    rows = [
+        candidate("kept", confidence=.85, section="top_daily"),
+        candidate("new", confidence=.83, section=None),
+    ]
+    reported = evaluate([snapshot(rows)], [finished("kept")])["models"]["v7.2.1"]
+    assert reported["exact_same_offer_reconciliation"]["both"]["settled"] == 1
+    assert reported["exact_same_offer_reconciliation"]["strict_only"]["settled"] == 0
+    assert reported["exact_same_offer_reconciliation"]["strict_only"]["pending_or_unmatched"] == 1
+
+
 def test_one_or_zero_top_is_not_filled_from_70_to_79():
     rows = [candidate("strong", confidence=.82),
             candidate("weak79", confidence=.79),
