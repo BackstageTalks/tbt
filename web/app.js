@@ -2481,7 +2481,7 @@
     const issuedSubject=String(publication?.issued_snapshot?.projection?.projection_subject
       ||publication?.projection_subject||publication?.aces_superiority_hint||'').trim();
     const normalize=value=>String(value||'').normalize('NFKD')
-      .replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+      .replace(/\p{M}/gu,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
     const subject=normalize(issuedSubject),displayedName=normalize(name||player?.name);
     const otherName=normalize(opponent?.name);
     // An explicit opponent ID or contradictory issued name is never rescued
