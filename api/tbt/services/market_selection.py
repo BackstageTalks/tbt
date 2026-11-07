@@ -1316,6 +1316,8 @@ def build_selection_candidate_snapshot(
             "scheduled_at": source.get("scheduled_at"),
             "tour": source.get("tour"),
             "tournament": source.get("tournament"),
+            "competition": source.get("competition"),  # frozen pre-match level; never infer from outcomes
+            "selector_snapshot_at": generated_at.astimezone(timezone.utc).isoformat(),
             "surface": source.get("surface"),
             "model_version": source.get("model_version"),
             "winner_id": source.get("winner_id"),
