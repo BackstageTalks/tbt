@@ -374,8 +374,35 @@ def main():
                 page.evaluate("""() => {mobileTest.state.feed.account.plan='elite';mobileTest.renderInsightBell();}""")
                 page.locator('.header-top > .brand').click()
                 assert page.locator('#bqm-dialog nav').get_by_role('button',name='Live radar',exact=True).is_visible(),(width,'LIVE menu unlock')
-                page.get_by_role('button',name='Zavrieť menu').click()
+                # This was a real CI race: <dialog>.open becomes false before its
+                # asynchronous 'close' event. ARIA must be correct in the SAME task.
+                page.evaluate("""() => {
+                    const dialog=document.getElementById('bqm-dialog');
+                    dialog.querySelector('button[aria-label="Zavrieť menu"]').click();
+                    if (dialog.open) throw Error('close button left menu open');
+                    const brand=document.querySelector('.header-top > .brand');
+                    if (brand.getAttribute('aria-expanded') !== 'false') {
+                        throw Error('brand ARIA remained expanded after synchronous close');
+                    }
+                }""")
                 page.wait_for_function("!document.getElementById('bqm-dialog').open")
+                # A queued native close from a prior dialog instance must not
+                # reset ARIA/focus if the member immediately reopens the menu.
+                page.evaluate("""() => {
+                    const dialog=document.getElementById('bqm-dialog');
+                    const brand=document.querySelector('.header-top > .brand');
+                    brand.click();
+                    dialog.querySelector('button[aria-label="Zavrieť menu"]').click();
+                    brand.click();
+                    if (!dialog.open || brand.getAttribute('aria-expanded') !== 'true') {
+                        throw Error('rapid close/reopen lost expanded menu');
+                    }
+                }""")
+                page.wait_for_timeout(40)
+                assert page.locator('#bqm-dialog').is_visible()
+                assert page.locator('.header-top > .brand').get_attribute('aria-expanded')=='true'
+                page.get_by_role('button',name='Zavrieť menu').click()
+                page.wait_for_function("document.querySelector('.header-top > .brand').getAttribute('aria-expanded')==='false'")
                 page.evaluate("""() => {mobileTest.state.feed.account.plan='rookie';mobileTest.renderInsightBell();}""")
                 live_geom=page.evaluate("""() => {
                     const b=document.querySelector('#insightShortcut').getBoundingClientRect();
