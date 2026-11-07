@@ -67,3 +67,21 @@ def test_never_reserve_second_results_delivery_for_same_day(tmp_path):
     state = {"schema": 1, "attempts": {"results:2026-11-04": {"status": "reserved"}}}
     assert prepare(state, [], {}, {}, tmp_path)["status"] == "skipped"
     assert not (tmp_path / "ready").exists()
+
+
+def test_replay_refuses_to_send_from_unpersisted_temporary_aces(monkeypatch, tmp_path):
+    import telegram_20261104_verified_replay as replay
+    from telegram_20261104_verified_replay import DAY
+    rows = [
+        {"event_id": str(i), "selection_id": str(i), "section": "ace" if i < 6 else "top_daily",
+         "market": "aces" if i < 6 else "match_winner",
+         "channel": "aces" if i < 6 else "top", "odds": 1.6}
+        for i in range(16)
+    ]
+    monkeypatch.setattr(replay.results, "extract_sent", lambda *_: rows)
+    monkeypatch.setattr(replay, "verified_witness", lambda *_: {})
+    state = {"attempts": {DAY + ":daily:0620": {
+        "sent_at": "2026-11-04T05:38:38.877232+00:00"}}}
+    with pytest.raises(RuntimeError, match="durable"):
+        replay.prepare(state, [], {}, {}, tmp_path)
+    assert not (tmp_path / "ready").exists()
