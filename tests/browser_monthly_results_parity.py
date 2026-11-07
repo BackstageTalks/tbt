@@ -14,7 +14,7 @@ def route_request(route):
         source = source.replace(marker, (
             "  window.monthlyParityTest={state,bratislavaBettingDayKey,bratislavaBoundaryTimestamp,"
             "monthlyPerformanceState,monthlyMetricRows,monthlyMetricSummary,monthlyRecordDay,"
-            "renderMonthlyPerformance,localResultMetrics,filteredResults,settledPublishedEntries};\\n"
+            "renderMonthlyPerformance,localResultMetrics,filteredResults,settledPublishedEntries};\n"
             + marker
         ))
         route.fulfill(content_type="application/javascript", body=source)
