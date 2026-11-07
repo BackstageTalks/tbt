@@ -140,8 +140,37 @@ def main():
             assert result["valueResultWin"] == result["valueMonthWin"] == 1, result
             assert abs(result["valueResultProfit"] - result["valueMonthProfit"]) < 1e-9, result
             assert result["excludedResultWin"] == result["excludedMonthCount"] == 0, result
+            rounding = page.evaluate("""() => {
+              const t=monthlyParityTest,s=t.state;
+              s.monthlyPerformance.month='2026-10';
+              s.monthlyPerformance.sections=['top_daily'];
+              s.feed.results=[1,2,3].map(day=>{
+                const d=String(day).padStart(2,'0'),date='2026-10-'+d;
+                return {event_id:'round-'+d,tour:'ATP',surface:'hard',
+                  scheduled_at:date+'T13:00:00Z',
+                  player1:{id:'p1'},player2:{id:'p2'},
+                  market_publications:[{
+                    section:'top_daily',market:'match_winner',
+                    publication_status:'published',betting_day:date,
+                    issued_at:date+'T07:00:00Z',selection_id:'p1',
+                    odds:1.6,price_status:'priced',
+                    result:{status:'hit',correct:true,staked_units:1,profit_units:.335}
+                  }]};
+              });
+              const dom=new DOMParser().parseFromString(t.renderMonthlyPerformance(),'text/html');
+              const lines=[...dom.querySelectorAll('.monthly-focused-table tbody tr')].slice(0,3);
+              const toNumber=text=>Number(text.replace('u','').replace('+','').trim().replace(',','.'));
+              const displayed=lines.map(tr=>toNumber(tr.querySelectorAll('td')[1].textContent));
+              const last=toNumber(lines[2].querySelectorAll('td')[2].textContent);
+              const exact=t.monthlyMetricSummary(t.monthlyMetricRows('elite'),'elite','top_daily').profit;
+              return {displayed,last,exact};
+            }""")
+            assert len(rounding["displayed"]) == 3, rounding
+            assert abs(sum(rounding["displayed"]) - rounding["last"]) < 1e-9, rounding
+            assert abs(rounding["last"] - 1.01) < 1e-9, rounding
+            assert abs(rounding["exact"] - 1.005) < 1e-9, rounding
             assert not errors, errors
-            print("PASS: 06:00 betting day, ELITE parity, 1u, dedup, exclusions, mobile grid")
+            print("PASS: 06:00 betting day, ELITE parity, 1u, dedup, exclusions, cent reconciliation and mobile grid")
         finally:
             browser.close()
 
