@@ -4091,7 +4091,7 @@
   ];
   function monthlyPerformanceState(){
     if(!state.monthlyPerformance){
-      const thisMonth=bratislavaBettingDayKey(Date.now(),0).slice(0,7);
+      const thisMonth=bratislavaBettingDayKey(Date.now(),6).slice(0,7);
       state.monthlyPerformance={month:thisMonth,level:'all',view:'overview',fullscreen:false,sections:MONTHLY_SECTIONS.map(([key])=>key),
         tour:'',surface:'',minOdds:'',maxOdds:'',outcomes:['win','loss','void']};
     }
@@ -4104,13 +4104,17 @@
     const current=String(today||'').slice(0,7);
     return month>current?0:month===current?Math.min(total,Number(String(today).slice(8,10))||0):total;
   }
+  function monthlyRecordDay(row){
+    return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
+  }
   function monthlyMetricRows(membership=''){
-    const selection=monthlyPerformanceState(),month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
-      ?selection.month:bratislavaBettingDayKey(Date.now(),0).slice(0,7);
+    const selection=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6),
+      month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
+        ?selection.month:today.slice(0,7);
     const end=monthlyMonthEnd(month);
     if(!end)return [];
     const filters={category:'all',window:'custom',dateFrom:month+'-01',
-      dateTo:month+'-'+String(end).padStart(2,'0'),bettingDay:false,
+      dateTo:month+'-'+String(end).padStart(2,'0'),bettingDay:true,
       tour:selection.tour,surface:selection.surface,membership};
     // Reuse canonical settled and deduplicated publications, never display quotes.
     const entries=settledPublishedEntries(filteredResults(filters),'all',filters);
@@ -4118,7 +4122,11 @@
     const allowedOutcomes=new Set(selection.outcomes);
     const min=selection.minOdds===''?null:Number(selection.minOdds);
     const max=selection.maxOdds===''?null:Number(selection.maxOdds);
-    return entries.filter(({publication,categories})=>{
+    return entries.filter(({row,publication,categories})=>{
+      // Use exactly the same current-day issuance gate as Results → Dnes.
+      // In particular, a 00:00–05:59 match belongs to the prior betting day.
+      if(monthlyRecordDay(row)===today&&
+         !resultPublicationMatchesWindow(row,publication,{window:'today',bettingDay:true}))return false;
       if(!categories.some(c=>selected.has(c)))return false;
       const outcome=publicationOutcome(publication).kind;
       if(!allowedOutcomes.has(outcome))return false;
@@ -4159,14 +4167,14 @@
     const avg=n?priced.reduce((sum,x)=>sum+x.financial.odds,0)/n:null;
     const daily=new Map();
     priced.forEach(item=>{
-      const day=bratislavaBettingDayKey(item.row.scheduled_at||item.row.date||0,0);
+      const day=monthlyRecordDay(item.row);
       daily.set(day,(daily.get(day)||0)+item.financial.profit);
     });
     return {all,wins,losses,voids,priced,excluded,profit,n,
       roi:n?profit/n*100:null,avg,daily};
   }
   function renderMonthlyPerformance(){
-    const s=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),0);
+    const s=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6);
     const month=/^\d{4}-(0[1-9]|1[0-2])$/.test(s.month)?s.month:today.slice(0,7);
     const days=monthlyMonthEnd(month,today);
     const currentLevel=MONTHLY_LEVELS.some(([id])=>id===s.level)?s.level:'all';
@@ -4280,7 +4288,7 @@
     // cohort. The comparison matrix remains available in overview mode.
     const dailyOutcomes=new Map();
     (m?.all||[]).forEach(item=>{
-      const day=bratislavaBettingDayKey(item.row.scheduled_at||item.row.date||0,0);
+      const day=monthlyRecordDay(item.row);
       if(!dailyOutcomes.has(day))dailyOutcomes.set(day,{win:0,loss:0,void:0});
       const counts=dailyOutcomes.get(day);
       if(Object.prototype.hasOwnProperty.call(counts,item.outcome))counts[item.outcome]++;
@@ -4296,7 +4304,7 @@
         (dayProfit==null?'·':escapeHtml(signed(dayProfit))+' u')+'</td>'+
         '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(dailyRunning))+' u</td></tr>';
     }).join('');
-    const periodText=days?('1. – '+days+'. deň'):'bez dát';
+    const periodText=days?('1. – '+days+'. deň · 06:00–06:00'):'bez dát';
     const viewButton=(view,label)=>'<button type="button" data-monthly-view="'+view+'" aria-pressed="'+
       (reportMode===(view==='report')?'true':'false')+'" class="'+
       (reportMode===(view==='report')?'is-active':'')+'">'+label+'</button>';
@@ -4353,6 +4361,7 @@
       (m?'; '+m.excluded+' bez overeného kurzu alebo vyúčtovania nezahrnutých do ROI':'')+
       '. Profit je normalizovaný na vklad 1 u, VOID sa do ROI nezapočítava. '+
       'FREE až GOAT sú prekrývajúce sa skupiny podľa pravidiel dostupnosti tipov, nie samostatné stávky používateľov. '+
+      'Denné uzávierky sú 06:00–06:00 Europe/Bratislava, rovnako ako vo Výsledkoch. '+
       'Údaje sú len na čítanie; produkčné výsledky a lokálne kurzy sa nemenia.</p>')+'</section>';
   }
 
