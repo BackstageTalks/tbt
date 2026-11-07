@@ -48,6 +48,78 @@ def prematch_category(row):
     return "UNKNOWN"
 
 
+def prematch_tier(row):
+    """Retain exact ITF M/W event class only when frozen pre-match text proves it."""
+    combined = " ".join((
+        str(row.get("competition") or ""),
+        str(row.get("tournament") or ""),
+    )).upper()
+    for match in ("M15", "M25", "W15", "W35", "W50", "W75", "W100"):
+        if re.search(r"\b" + match + r"\b", combined):
+            return "ITF_" + match
+    return prematch_category(row)
+
+
+def research_odds_band(odds):
+    if odds is None:
+        return "UNKNOWN"
+    if odds < 1.70:
+        return "1.50_to_1.69"
+    if odds < 1.80:
+        return "1.70_to_1.79"
+    return "1.80_plus"
+
+
+def predeclared_threshold_screen(records):
+    """Outcome-blind fixed grid, chronological retrospective check, NOT deploy gate.
+
+    This grid was specified only on 2026-11-07. Even its later historical
+    window has been observed by selection policy research and is not a
+    prospective blind experiment.
+    """
+    cutoff = "2026-11-01"
+    prequalified = [
+        r for r in records
+        if r["quote_ok"] and r["odds"] is not None and r["odds"] >= MIN_TOP_ODDS
+        and r["depth"] >= MIN_DEPTH
+        and r["min_surface"] is not None and r["min_surface"] >= MIN_SURFACE_EACH
+        and not eligible(r, "value")
+    ]
+    groups = {
+        "ALL": prequalified,
+        **{"tour:" + tour: [r for r in prequalified if r["tour"] == tour]
+           for tour in sorted({r["tour"] for r in prequalified})},
+        **{"tier:" + tier: [r for r in prequalified if r["competition_tier"] == tier]
+           for tier in sorted({r["competition_tier"] for r in prequalified})},
+        **{"odds:" + band: [r for r in prequalified if research_odds_band(r["odds"]) == band]
+           for band in sorted({research_odds_band(r["odds"]) for r in prequalified})},
+    }
+    result = {}
+    for group, rows in sorted(groups.items()):
+        options = {}
+        for threshold in (0.65, 0.70, 0.75, 0.80, 0.85):
+            qualified = [r for r in rows if r["public"] >= threshold]
+            history = [r for r in qualified if r["day"] < cutoff]
+            later = [r for r in qualified if r["day"] >= cutoff]
+            earlier_m = score(history)
+            later_m = score(later)
+            sufficient = (earlier_m["settled"] >= 30 and later_m["settled"] >= 30
+                          and earlier_m["pending_or_unmatched"] <= .1 * max(1,len(history))
+                          and later_m["pending_or_unmatched"] <= .1 * max(1,len(later)))
+            options[str(threshold)] = {
+                "development_before_2026_11_01": earlier_m,
+                "chronological_review_from_2026_11_01": later_m,
+                "min_sample_gate": "DESCRIPTIVE_ONLY" if sufficient else "INSUFFICIENT_COHORT",
+            }
+        result[group] = options
+    return {
+        "status":"RETROSPECTIVE_EXPLORATORY_NOT_BLIND",
+        "fixed_cutoff":"2026-11-01",
+        "all_sections":result,
+        "warning":"Do not select a winning threshold based on the later outcomes; this is not a clean prospective holdout.",
+    }
+
+
 def strict_top(row):
     """Candidate selection; VALUE keeps its unchanged priority and exact <=15% gap."""
     return (
@@ -95,6 +167,7 @@ def evaluate(snapshots, canonical):
                 continue
             seen.add(identity)
             r["competition_pre_match"] = prematch_category(original)
+            r["competition_tier"] = prematch_tier(original)
             pool[r["model"]].append(r)
 
     def funnel(rows):
@@ -169,6 +242,7 @@ def evaluate(snapshots, canonical):
                 r["competition_pre_match"] == "UNKNOWN" for r in records
             ),
             "all_pre_match_candidate_rows": len(records),
+            "exploratory_fixed_grid": predeclared_threshold_screen(records),
             "eligibility_funnel": funnel(records),
             "eligibility_funnel_by_tour": {
                 tour: funnel([r for r in records if r["tour"] == tour])
