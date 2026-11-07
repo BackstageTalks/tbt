@@ -170,13 +170,13 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
 
 def test_retired_top200_never_caps_ranked_candidate_supply():
     rows = [
-        row(f'ranked-{i}', .85 - i * .01, 1.60, 2.50, depth=1.0, rank1=100 + i, rank2=500)
+        row(f'ranked-{i}', .90 - i * .01, 1.60, 2.50, depth=1.0, rank1=100 + i, rank2=500)
         for i in range(7)
     ]
     sections = select_market_sections(rows)
     assert sections['top200_picks'] == []
     assert [item['event_id'] for item in sections['top_daily_picks']] == [
-        f'ranked-{i}' for i in range(6)
+        f'ranked-{i}' for i in range(7)
     ]
 
 
