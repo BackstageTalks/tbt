@@ -204,18 +204,18 @@ def test_breakpointsscored_native_return_conversion_fraction_only():
 
 
 def test_breakpointsscored_bare_count_or_zero_denominator_never_becomes_a_rate():
-    from tbt.providers.statistics import parse_statistics
+    from tbt.providers.statistics import parse_statistics, NoSupportedStatisticsError
     payload = {"statistics": [{"period": "ALL", "groups": [{
         "statisticsItems": [{"key":"breakPointsScored", "home": "5", "away": "8"}]
     }]}]}
-    with pytest.raises(Exception, match="no supported|no imputation"):
+    with pytest.raises(NoSupportedStatisticsError, match="no supported"):
         parse_statistics(payload, home_is_player1=True)
     payload["statistics"][0]["groups"][0]["statisticsItems"][0] = {
         "key":"breakPointsScored",
         "homeValue":5, "homeTotal":0,
         "awayValue":6, "awayTotal":4,
     }
-    with pytest.raises(Exception, match="no supported|no imputation"):
+    with pytest.raises(NoSupportedStatisticsError, match="no supported"):
         parse_statistics(payload, home_is_player1=True)
 
 
