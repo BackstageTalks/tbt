@@ -58,8 +58,12 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "sample_keys": sorted(map(str, first))[:22] if first else [],
             }
         elif isinstance(value, dict):
+            # An odds map is keyed by event IDs; keep the structural count but
+            # never upload event-key samples as part of the aggregate report.
             result["collections"][str(field)] = {
-                "kind": "dict", "keys": sorted(map(str, value))[:22],
+                "kind": "dict",
+                "keys": [] if name == "daily_match_winner_odds" and field == "odds"
+                        else sorted(map(str, value))[:22],
                 "count": len(value),
             }
     if name == "daily_match_winner_odds":
