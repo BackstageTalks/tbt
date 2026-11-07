@@ -28,6 +28,15 @@ class CloseoutContractTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_nightly_workflow_installs_raw_cache_dependency_before_cdb_tests(self):
+        workflow = (Path(__file__).resolve().parents[1] /
+                    ".github/workflows/propline-nightly-closeout.yml").read_text(
+                        encoding="utf-8")
+        install = workflow.index("Install isolated canonical read and exact stats write support")
+        preflight = workflow.index("Test night-only CDB linker and closeout invariants offline")
+        self.assertLess(install, preflight)
+        self.assertIn("'httpx>=0.27,<1'", workflow[install:preflight])
+
     def test_utc_cutoff_excludes_new_quota(self):
         self.assertTrue(mod.allowed(datetime(2026, 10, 10, 21, 0, tzinfo=timezone.utc)))
         self.assertTrue(mod.allowed(datetime(2026, 10, 10, 22, 0, tzinfo=timezone.utc)))
