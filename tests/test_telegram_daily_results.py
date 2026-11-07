@@ -361,3 +361,84 @@ def test_confirmed_ou_reissue_supersedes_legacy_aces_without_double_count():
     state["reposts"][DAY+":repost:aces-player-ou-20261102-v1"]["status"]="reserved"
     assert r.extract_sent(state,DAY)==[top,legacy]
 
+
+
+def test_historical_recovery_guard_does_not_expand_ordinary_worker_window():
+    historic="2026-11-03"
+    now=datetime(2026,11,7,12,tzinfo=timezone.utc)
+    row={**sent("aces","nov3-a"),"scheduled_at":"2026-11-03T12:30:00+00:00"}
+    ledger={"attempts":{historic+":daily:0620":{
+        "status":"sent","message_ids":[730,731],
+        "sent_at":"2026-11-03T05:33:27+00:00",
+        "rows":[{**row,"event_id":str(i)} for i in range(9)] +
+               [{**sent("top",str(i)),"scheduled_at":"2026-11-03T12:30:00+00:00"}
+                for i in range(9,11)] +
+               [{**sent("value","11"),"scheduled_at":"2026-11-03T12:30:00+00:00"}] +
+               [{**sent("free","9"),"scheduled_at":"2026-11-03T12:30:00+00:00"}],
+    }}}
+    assert r.unreported_day(ledger,now) is None
+    assert r.approved_historical_results_day(ledger,historic)==historic
+    for invalid in ("2026-11-02","2026-11-04",""):
+        if not invalid:
+            continue
+        import pytest
+        with pytest.raises(RuntimeError,match="Unapproved"):
+            r.approved_historical_results_day(ledger,invalid)
+    ledger["attempts"]["results:"+historic]={"status":"reserved"}
+    assert r.approved_historical_results_day(ledger,historic) is None
+    del ledger["attempts"]["results:"+historic]
+    ledger["attempts"][historic+":daily:0620"]["message_ids"]=[99,100]
+    import pytest
+    with pytest.raises(RuntimeError,match="immutable"):
+        r.approved_historical_results_day(ledger,historic)
+
+
+def test_nov3_send_from_durable_archive_only_preserves_issued_quotes(tmp_path,monkeypatch):
+    import pytest
+    historic="2026-11-03"
+    now="2026-11-07T12:00:00+00:00"
+    first=[{**sent("top","t1",1.75),"scheduled_at":"2026-11-03T12:30:00+00:00"},
+           {**sent("top","t2",1.85),"scheduled_at":"2026-11-03T12:30:00+00:00"},
+           {**sent("value","v1",2.05),"scheduled_at":"2026-11-03T12:30:00+00:00"}]
+    aces=[{**sent("aces","a"+str(i),1.70),"scheduled_at":"2026-11-03T12:30:00+00:00"}
+          for i in range(9)]
+    free={**first[0],"channel":"free"}
+    premium=first+aces
+    rows=premium+[free]
+    grades=[True,False,False,True,True,True,True,True,False,False,False,None]
+    archived=[settled(ref,correct=grade,void=grade is None)
+              for ref,grade in zip(premium,grades)]
+    ledger={"schema":1,"attempts":{historic+":daily:0620":{
+        "status":"sent","message_ids":[730,731],
+        "sent_at":"2026-11-03T05:33:27+00:00","rows":rows}}}
+    state_path=tmp_path/"ledger.json"
+    tg.save(state_path,ledger)
+    monkeypatch.setattr(tg,"config",lambda *_:{"enabled":False,"results_enabled":False})
+    calls=[]
+    def archived_readback(url,day):
+        calls.append(day)
+        return archived
+    monkeypatch.setattr(r,"archive",archived_readback)
+    args=SimpleNamespace(now=now,config_url="unused",api_url="unused",
+                         state=str(state_path),output=str(tmp_path/"send"),
+                         elite_auto=True,historical_day=historic)
+    assert r.unreported_day(ledger,datetime.fromisoformat(now)) is None
+    r.prepare(args)
+    result=tg.load(tmp_path/"send"/"state.json")
+    assert result["attempts"]["results:"+historic]["counts"]=={
+        "won":6,"lost":5,"void":1,"pending":0}
+    assert result["attempts"]["results:"+historic]["reserved_at"]==now
+    assert calls==[historic]
+    assert tg.load(state_path)==ledger
+    assert [x["odds"] for x in rows]==[x["odds"] for x in premium]+[free["odds"]]
+    assert (tmp_path/"send"/"ready").is_file()
+    # Any mismatched outcome is fail-closed; it cannot reserve an altered score.
+    archived[0]=settled(premium[0],correct=False)
+    args.output=str(tmp_path/"disagree")
+    with pytest.raises(RuntimeError,match="scorecard differs"):
+        r.prepare(args)
+    assert not (tmp_path/"disagree"/"ready").exists()
+    tg.save(state_path,result)
+    args.output=str(tmp_path/"repeat")
+    r.prepare(args)
+    assert not (tmp_path/"repeat"/"ready").exists()

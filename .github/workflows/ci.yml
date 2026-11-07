@@ -12,6 +12,8 @@ on:
       - '.github/tennisapi-contract-probe-request.json'
       # One-time verified Results recovery uses its own guarded workflow.
       - '.github/telegram-20261103-recover-request.json'
+      # Send-only frozen Results receipt replay; no frontend/backend changes.
+      - '.github/telegram-20261103-deliver-request.json'
       # Read-only Telegram/website parity audit must never redeploy the app.
       - '.github/telegram-web-parity-audit-request.json'
       - '.github/elo-weekly-trigger.json'

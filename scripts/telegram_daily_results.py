@@ -38,6 +38,25 @@ def unreported_day(state, now):
     return None
 
 
+def approved_historical_results_day(state, day):
+    """One operator-frozen recovery; ordinary ticks never reach old offers."""
+    if day != "2026-11-03":
+        raise RuntimeError("Unapproved historical Telegram results day")
+    attempts = state.get("attempts") or {}
+    original = attempts.get(day + ":daily:0620") or {}
+    if (original.get("status") != "sent"
+            or original.get("message_ids") != [730, 731]
+            or not original.get("sent_at")):
+        raise RuntimeError("Missing immutable Nov 3 Telegram issuance receipt")
+    sent = extract_sent(state, day)
+    if (len(sent) != 13
+            or sum(row.get("channel") == "aces" for row in sent) != 9
+            or sum(row.get("channel") == "free" for row in sent) != 1):
+        raise RuntimeError("Historic Nov 3 Telegram issuer cohort changed")
+    # Even a reserved prior attempt is never dispatched twice.
+    return None if "results:" + day in attempts else day
+
+
 def all_settled(rows, archived):
     """Require every issued selection, including the duplicate FREE reference.
 
@@ -341,7 +360,12 @@ def prepare(args):
     state=tg.load(args.state)
     if not isinstance(state,dict) or not isinstance(state.get("attempts"),dict):
         raise RuntimeError("Invalid durable Telegram state")
+    historical_day=getattr(args,"historical_day","")
+    if historical_day and not getattr(args,"elite_auto",False):
+        raise RuntimeError("Historical Telegram send requires explicit ELITE authorization")
     target_day=unreported_day(state,now)
+    if historical_day:
+        target_day=approved_historical_results_day(state,historical_day)
     if not target_day:
         print(json.dumps({"status":"skipped","reason":"no_unreported_issued_day"}))
         return
@@ -363,6 +387,11 @@ def prepare(args):
     if not posts:
         print(json.dumps({"status":"skipped","reason":"no_results_to_report"}))
         return
+    if historical_day:
+        # Independently pinned by the original 13/13 archive readback.
+        counts={k:sum(p["counts"][k] for p in posts) for k in ("won","lost","void","pending")}
+        if counts != {"won":6,"lost":5,"void":1,"pending":0}:
+            raise RuntimeError("Nov 3 restored archive scorecard differs from frozen receipt")
     state["attempts"][key]={
         "status":"reserved","reserved_at":now.isoformat(),
         "betting_day":target_day,
@@ -387,5 +416,6 @@ if __name__=="__main__":
     parser.add_argument("--now",default="")
     parser.add_argument("--external-tick",action="store_true")
     parser.add_argument("--elite-auto",action="store_true",help="Operator-approved automatic ELITE settlement independent of old Admin switches")
+    parser.add_argument("--historical-day",default="",help="Only the guarded 2026-11-03 archived-results recovery")
     args=parser.parse_args()
     prepare(args)
