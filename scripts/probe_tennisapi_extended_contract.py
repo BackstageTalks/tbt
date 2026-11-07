@@ -251,7 +251,7 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         raise ValueError("max_requests must be 1..30")
     if phase not in {"full", "metadata", "odds", "doubles", "quality",
                      "historical", "identity", "archive_2016", "candidates",
-                     "discovery"}:
+                     "discovery", "bulk"}:
         raise ValueError("Unknown preapproved TennisApi probe phase")
     if case is not None and phase == "full":
         raise ValueError("Focused case requires a named phase")
@@ -325,6 +325,113 @@ def run_probe(client: RapidTennisClient, *, event_id: int, max_requests: int,
         report["counts"] = dict(Counter(
             x.get("state") for x in report["observations"].values()))
         return report
+
+    if phase == "bulk":
+        # One guarded source witness, followed by independent documented route
+        # samples. There are 14 optional routes: <=15 provider requests total.
+        # Never pretend public example tournament params match the source event.
+        if case is not None or not 2 <= max_requests <= 16:
+            raise ValueError("Bulk probe requires no case and 2..16 calls")
+        detail = read("bulk_source_event_detail",
+                      f"/api/tennis/event/{event_id}")
+        event = _obj(_obj(detail).get("event", detail))
+        matched = str(event.get("id", event.get("eventId", ""))) == str(event_id)
+        home = _nested_int(event, "homeTeam", "id")
+        away = _nested_int(event, "awayTeam", "id")
+        tournament = (_nested_int(event, "tournament", "uniqueTournament", "id")
+                      or _nested_int(event, "tournament", "id"))
+        season = _nested_int(event, "season", "id")
+        stamp = event.get("startTimestamp")
+        try:
+            if type(stamp) is not int or stamp <= 0:
+                raise ValueError("Invalid native event timestamp")
+            day = datetime.fromtimestamp(stamp, timezone.utc).date()
+        except (ValueError, OverflowError, OSError):
+            day = None
+        report["bulk_source_event_id_matched"] = bool(
+            matched and home and away and home != away and tournament and
+            season and day
+        )
+        report["bulk_context"] = {
+            "source_event_id_matched": bool(matched),
+            "source_native_players_confirmed": bool(home and away and home != away),
+            "source_native_tournament_present": bool(tournament),
+            "source_native_season_present": bool(season),
+            "source_native_day_present": bool(day),
+            "identity_validated_for_cdb_import": False,
+            "provider_aggregate_response_complete": False,
+        }
+        if not report["bulk_source_event_id_matched"]:
+            report["bulk_state"] = "invalid_source_witness"
+            return finish()
+
+        t = f"/api/tennis/tournament/{tournament}"
+        y = f"{t}/season/{season}"
+        period = f"{day.day}/{day.month}/{day.year}"
+        month = f"{day.month:02d}"  # Provider documentation requires zero padding.
+        routes = [
+            ("tournament_last_matches", f"{y}/events/last/0", "source_native"),
+            ("tournament_matches_by_date", f"{t}/schedules/{period}", "source_native"),
+            ("player_month_matches",
+             f"/api/tennis/player/{home}/events/{month}/{day.year}", "source_native"),
+            ("team_month_matches",
+             f"/api/tennis/team/{home}/events/{month}/{day.year}", "source_native"),
+            ("featured_tennis_odds",
+             "/api/tennis/events/odds/featured/1", "independent_current_list"),
+            ("match_winning_odds",
+             f"/api/tennis/event/{event_id}/provider/1/winning-odds", "source_native"),
+            ("match_betting_odds",
+             f"/api/tennis/event/{event_id}/odds", "source_native"),
+            ("newly_added_events", "/api/event/newly-added", "independent_current_list"),
+            ("scheduled_tournaments_by_date",
+             f"/api/tennis/scheduled-tournaments/{period}/page/1", "source_native"),
+            ("monthly_calendar",
+             f"/api/tennis/calendar/{day.month}/{day.year}", "source_native"),
+            ("daily_match_winner_odds",
+             f"/api/tennis/events/odds/{period}", "source_native"),
+            ("tournament_rounds", f"{y}/rounds", "source_native"),
+            ("tournament_draw", f"{y}/cup-trees", "source_native"),
+            ("tournament_round_documented_example",
+             "/api/tennis/tournament/2363/season/48186/events/round/32/slug/round-of-64",
+             "independent_documented_example_2023"),
+        ]
+        for name, path, provenance in routes:
+            payload = read(name, path)
+            observed = report["observations"][name]
+            observed["query_provenance"] = provenance
+            observed["eligible_for_cdb_import"] = False
+            observed["point_in_time_odds_verified"] = False
+            observed["source_coverage_complete"] = False
+            body = _obj(payload)
+            candidate = None
+            for field in ("events", "matches", "tournaments",
+                          "dailyUniqueTournaments", "markets", "odds"):
+                if isinstance(body.get(field), list):
+                    candidate = body[field]
+                    observed["source_list_field"] = field
+                    break
+            if candidate is None and isinstance(payload, list):
+                candidate = payload
+                observed["source_list_field"] = "_root"
+            if candidate is not None:
+                observed["source_rows"] = len(candidate)
+                event_ids = [row.get("id") for row in candidate
+                             if isinstance(row, dict)
+                             and type(row.get("id")) is int and row["id"] > 0]
+                observed["unique_native_event_ids"] = len(set(event_ids))
+                observed["duplicate_native_event_ids"] = len(event_ids) - len(set(event_ids))
+                observed["source_witness_event_found"] = event_id in event_ids
+                observed["source_witness_event_id_match_only"] = (
+                    bool(provenance == "source_native" and event_id in event_ids))
+                # Event ID overlap alone never proves canonical CDB identity.
+        report["bulk_state"] = "tested"
+        report["bulk_endpoint_observations"] = len(routes)
+        report["bulk_endpoints_with_source_rows"] = sum(
+            (report["observations"][name].get("source_rows", 0) or 0) > 0
+            for name, _, _ in routes)
+        report["cdb_writes"] = 0
+        report["model_changes"] = 0
+        return finish()
 
     if phase == "archive_2016":
         # Historical event selection is SOURCE-NATIVE and deterministic, not
@@ -736,7 +843,8 @@ def main() -> None:
     parser.add_argument("--max-requests", type=int, default=24)
     parser.add_argument("--phase", choices=["full", "metadata", "odds", "doubles",
                                             "quality", "historical", "identity",
-                                            "archive_2016", "candidates"],
+                                            "archive_2016", "candidates",
+                                            "discovery", "bulk"],
                         default="full")
     parser.add_argument("--case", default=None)
     parser.add_argument("--out", default=".cache/tbt/tennisapi-contract/live-probe.json")
