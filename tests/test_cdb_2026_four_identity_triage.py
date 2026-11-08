@@ -59,7 +59,7 @@ def test_source_event_disagreement_fails_closed():
 def test_unpinned_cohort_fails_closed_even_if_four_missing():
     with pytest.raises(ValueError, match="Pinned original cohorts changed"):
         cases(tab([("a", "x", "y", "1")]),
-              tab([("b", "x", "z", "2")]), tab([]))
+              tab([("b", "x", "z", "2")]), tab([("c", "u", "v", "3")]))
 
 
 def test_diagnostic_has_no_writer_or_paid_provider_requests():
