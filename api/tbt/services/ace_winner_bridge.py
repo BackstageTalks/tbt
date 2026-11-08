@@ -19,7 +19,7 @@ def _aware(value):
     return dt.astimezone(timezone.utc) if dt.tzinfo is not None else None
 
 
-def _issued_leader(row):
+def _issued_leader(row, feed):
     if not isinstance(row, dict) or str(row.get("market") or "") != "aces":
         return None
     if str(row.get("projection_model") or "") != "ace-count-projection-v4":
@@ -47,19 +47,37 @@ def _issued_leader(row):
     scheduled = _aware(row.get("scheduled_at"))
     if scheduled is None:
         return None
-    issued = [
-        p for p in (row.get("market_publications") or [])
-        if isinstance(p, dict)
-        and str(p.get("section") or "") == "ace"
-        and str(p.get("market") or "") == "aces"
-        and str(p.get("selection_id") or "").strip() == selected_id
-        and str(p.get("publication_status") or "") == "published"
-        and _aware(p.get("issued_at")) is not None
-        and _aware(p["issued_at"]) < scheduled
-    ]
-    if len(issued) != 1:
+    # There are two valid kinds of issuance proof:
+    #  1. The row embeds a single frozen published O/U contract; or
+    #  2. The original, immutable row was passed through the server-side
+    #     issued-authority manifest after deployment. The source asset may
+    #     still contain a pending pre-deploy candidate at that instant.
+    pubs = row.get("market_publications") or []
+    if not isinstance(pubs, list) or len(pubs) > 1:
         return None
-    return event_id, selected_id, issued[0]
+    publication = pubs[0] if pubs else None
+    if publication is not None:
+        if (not isinstance(publication, dict)
+                or str(publication.get("section") or "") != "ace"
+                or str(publication.get("market") or "") != "aces"
+                or str(publication.get("selection_id") or "").strip() != selected_id
+                or str(publication.get("publication_status") or "") not in {"pending", "published"}):
+            return None
+        explicit_issue = _aware(publication.get("issued_at"))
+        if publication.get("issued_at") and (explicit_issue is None or explicit_issue >= scheduled):
+            return None
+        if (str(publication.get("publication_status")) == "published"
+                and explicit_issue is not None):
+            return event_id, selected_id, publication
+
+    # A pending / absent nested ledger object is *not* proof by itself.
+    # In the API this helper is called only after filter_unissued_offers,
+    # which has checked every row against the persisted authority receipt.
+    issued_generation = _aware(feed.get("generated_at"))
+    if (feed.get("publication_authority_status") != "confirmed"
+            or issued_generation is None or issued_generation >= scheduled):
+        return None
+    return event_id, selected_id, publication or {}
 
 
 def with_issued_ace_leader_signals(payload: dict) -> dict:
@@ -76,7 +94,7 @@ def with_issued_ace_leader_signals(payload: dict) -> dict:
         return payload
     by_event: dict[str, list[tuple[dict, str, dict]]] = {}
     for row in rows:
-        leader = _issued_leader(row)
+        leader = _issued_leader(row, payload)
         if leader is None:
             continue
         event, player, publication = leader
