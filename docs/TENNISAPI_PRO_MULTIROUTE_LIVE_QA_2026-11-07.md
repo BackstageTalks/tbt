@@ -205,3 +205,48 @@ event/selection index, but it cannot replace historical pre-match quotes or
 individual market requests without valid quote timestamp and provider/market
 identity verification. Spend no more calls merely to reach the operator's
 300-per-test permission ceiling. No model or production route changes.
+
+## Verified ATP 2024 100-call breakpoint-focus CDB enrichment — 2026-11-08
+
+Authorized follow-up to test ATP where the legacy 2023 cohort had a low 47
+new values / 92 calls and 70 conflicts. The existing **provider-native**
+guarded statistics importer (not the read-only bulk probe) selected ATP 2024
+from its current canonical gap plan, with no model changes.
+
+[GitHub Actions run 42466110083](https://github.com/BackstageTalks/tbt/actions/runs/42466110083)
+**completed successfully**, all of Acquire global CDB writer, Execute
+operation, Independently verify every targeted CDB statistics publication,
+Upload report, and Release global CDB writer **succeeded**. The cross-repository
+lock tag was independently observed absent after release.
+
+Exact report/read-back:
+- Provider-native 100 paid attempts (including retries), 99 enriched
+  matches, one empty whole-match response, **779 net-new canonical statistic
+  values**, **7.79 new values per paid call**; zero conflicts and zero
+  new complete serve+return-quality rows.
+- Read-back `status=VERIFIED`, `persisted_new_statistic_values=779`,
+  `persisted_new_per_set_matches=89`, target
+  `history-2024.parquet` SHA-256
+  `cc64fbe1c55e894d60bf339e15cfdbc3932ed42298c14a8c9b49199c2ba8c1fb`.
+- Current ATP 2024 candidate plan: 73,092 completed matches, 39,860 already
+  fully quality-ready, 2,321 eligible breakpoint-focus matches; 48,848
+  on retry cooldown, 17,787 without unambiguous provider event ID, 4,136
+  already with target BP fields present. **These are mutually exclusive
+  selector skip reasons, not 70k safe import candidates**.
+- Provider key inventory: supported `breakpointssaved` and
+  `breakpointsscored` present in 99 payloads each, plus other serve/return
+  and ace/DF keys. The 779 canonical cells include **mixed provider
+  statistics**, NOT 779 proven break-point-only cells; aggregate report
+  did not split exact new field counts by name.
+- The 7.79 ATP 2024 return is close to the independently measured WTA 2023
+  7.9475 return; it **does not** prove the 2024 yield will remain stable
+  after the first 100, or establish trained-model benefits.
+- Artifacts: `blinq-statistics-42466110083` containing
+  `download_report.json`, `statistics_gap_plan.json`,
+  `statistics_readback.json`, `download_progress.json`.
+
+Decision: ATP 2024 is a validated productive cohort, but continue
+ATP/WTA 2016–2026 prioritization based on **fresh persisted cells per paid
+call**, not a fixed season or blanket re-fetch of BP-only gaps. Preserve
+NULL-only canonical precedence, 500 reserve and global single-writer;
+do not claim serve/return quality improvements from the value count alone.
