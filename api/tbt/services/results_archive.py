@@ -421,6 +421,62 @@ def _verified_aces_outcome(publication: dict) -> dict | None:
     return pub
 
 
+def _verified_original_winner_day(canonical_row: dict, archived_row: dict,
+                                  canonical_pub: dict, archived_pub: dict) -> str | None:
+    """Repair only an exact historical winner's *read-time* day classification.
+
+    A canonical legacy row may have a different explicit betting_day from its
+    verified, pre-match issued archive counterpart. Never rewrite either source
+    or move other markets, and never override a disagreeing identity/result.
+    """
+    if (not isinstance(canonical_row, dict) or not isinstance(archived_row, dict)
+            or not isinstance(canonical_pub, dict) or not isinstance(archived_pub, dict)
+            or len(canonical_row.get("market_publications") or []) != 1):
+        return None
+    if (str(archived_pub.get("section") or "").lower() not in {"top_daily", "value"}
+            or str(archived_pub.get("market") or "").lower() != "match_winner"
+            or str(canonical_pub.get("market") or "match_winner").lower() != "match_winner"
+            or str(canonical_pub.get("publication_status") or "published").lower() != "published"
+            or str(archived_pub.get("publication_status") or "published").lower() != "published"):
+        return None
+    proven = archived_pub.get("result")
+    if (not isinstance(proven, dict) or proven.get("runtime_source") != "match_status_snapshot"
+            or (type(proven.get("correct")) is not bool and proven.get("void") is not True)):
+        return None
+    prior = canonical_pub.get("result")
+    prior = prior if isinstance(prior, dict) else {}
+    if (type(prior.get("correct")) is bool
+            and prior["correct"] is not proven.get("correct")):
+        return None
+    if prior.get("void") is True and proven.get("void") is not True:
+        return None
+    original_start = _time(archived_row.get("scheduled_at") or archived_row.get("date"))
+    current_start = _time(canonical_row.get("scheduled_at") or canonical_row.get("date"))
+    if original_start is None or original_start != current_start:
+        return None
+    if str(canonical_row.get("event_id") or canonical_row.get("id") or "") != str(
+            archived_row.get("event_id") or archived_row.get("id") or ""):
+        return None
+    for side in ("player1", "player2"):
+        old = archived_row.get(side) or {}
+        new = canonical_row.get(side) or {}
+        if (not isinstance(old, dict) or not isinstance(new, dict)
+                or not old.get("id") or str(old.get("id")) != str(new.get("id") or "")):
+            return None
+    for field in ("publication_key", "selection_id", "issued_at", "odds"):
+        before, after = canonical_pub.get(field), archived_pub.get(field)
+        if before not in (None, "") and after not in (None, "") and str(before) != str(after):
+            return None
+
+    from .feed import _betting_day_key, _row_betting_day
+    authoritative_day = _betting_day_key(original_start)
+    if _row_betting_day(archived_row) != authoritative_day:
+        return None
+    if _row_betting_day(canonical_row) == authoritative_day:
+        return None
+    return authoritative_day
+
+
 def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
     """Overlay settled outcomes only, preserving canonical publication metadata."""
     out = dict(feed)
@@ -442,6 +498,8 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
         if copy["market_publications"]:
             rows.append(copy)
     existing = {}
+    existing_rows = {}
+    identity_counts = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -451,6 +509,8 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
             key = _identity(row, publication)
             if key:
                 existing[key] = publication
+                existing_rows[key] = row
+                identity_counts[key] = identity_counts.get(key, 0) + 1
     for archived_row in archived:
         if not isinstance(archived_row, dict):
             continue
@@ -465,6 +525,15 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
             continue
         if key in existing:
             incumbent = existing[key]
+            # Use the verified original booking day only for an unambiguous
+            # exact published winner with same event, sides, time and price.
+            if identity_counts.get(key) == 1:
+                canonical_row = existing_rows[key]
+                corrected_day = _verified_original_winner_day(
+                    canonical_row, archived_row, incumbent, archived_pub,
+                )
+                if corrected_day:
+                    canonical_row["betting_day"] = corrected_day
             previous = incumbent.get("result")
             previous = previous if isinstance(previous, dict) else {}
             updated_result = archived_pub.get("result")
