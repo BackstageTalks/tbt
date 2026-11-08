@@ -275,8 +275,9 @@ def select_groups(x,c,now):
 def verified_website_morning_parity(offer, readback, now):
     """Require the live website serving generation before early TG delivery.
 
-    The signed private daily snapshot and current Azure serving feed must share
-    the exact generation/day. Section counts reject incomplete public boards.
+    The signed private daily snapshot must carry the original deployed feed
+    generation, which is distinct from the later confirmation timestamp.
+    Section counts reject incomplete public boards.
     Never query providers or accept a stale, merely-HTTP-200 response.
     """
     if not isinstance(readback, dict) or readback.get("ok") is not True:
@@ -285,7 +286,8 @@ def verified_website_morning_parity(offer, readback, now):
     if (readback.get("schema") != 1 or readback.get("ready") is not True
             or readback.get("stale") is not False
             or readback.get("betting_day") != today
-            or readback.get("generated_at") != offer.get("generated_at")
+            or not isinstance(offer.get("source_feed_generated_at"), str)
+            or readback.get("generated_at") != offer.get("source_feed_generated_at")
             or offer.get("betting_day") != today
             or offer.get("confirmed_only") is not True):
         raise ValueError("Morning offer and website serving generation differ")

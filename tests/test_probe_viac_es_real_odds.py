@@ -30,11 +30,12 @@ def payload(name="Most Aces",one=1.78,two=2.10,third=False):
 def snap(rows=None):
     return {"confirmed_only":True,"betting_day":"2026-11-08",
             "generated_at":"2026-11-08T06:30:00+00:00",
+            "source_feed_generated_at":"2026-11-08T05:10:00+00:00",
             "ace_picks":[fixture()] if rows is None else rows}
 
 def site():
     return {"schema":1,"ok":True,"ready":True,"stale":False,
-            "betting_day":"2026-11-08","generated_at":"2026-11-08T06:30:00+00:00",
+            "betting_day":"2026-11-08","generated_at":"2026-11-08T05:10:00+00:00",
             "visible_counts":{"ace_picks":3}}
 
 

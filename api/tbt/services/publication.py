@@ -1118,6 +1118,10 @@ def build_confirmed_daily_offer_snapshot(
         totals[key] = len(kept)
     snapshot["totals"] = totals
     snapshot["confirmed_only"] = True
+    # Confirmation time and the deployed web feed's generation are distinct.
+    # The Telegram website parity check must compare the immutable source
+    # generation, never the timestamp of a later idempotent confirmation.
+    snapshot["source_feed_generated_at"] = feed.get("generated_at")
     access_contract = _frozen_access_contract(ui_config)
     if access_contract is not None:
         snapshot["access_contract"] = access_contract
