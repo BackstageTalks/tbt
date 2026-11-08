@@ -124,6 +124,15 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
     fingerprints: dict[str, list[str]] = {}
     premium = Counter()
     site_rows = site["rows"]
+    # Worker-only aggregation: expose where already verified archive rows went
+    # during the read-side Results merge without logging identities or quotes.
+    raw_merge = site.get("archive_merge_diagnostics")
+    merge_diagnostics = {}
+    if isinstance(raw_merge, dict):
+        for name in ("archive_contract_not_merged", "archive_contract_shifted_betting_day"):
+            count = raw_merge.get(name)
+            if type(count) is int and 0 <= count <= 25000:
+                merge_diagnostics[name] = count
     for ref in sent:
         channel = ref.get("channel")
         a, ar, diagnostic = _evidence(ref, archived)
@@ -213,6 +222,7 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
         "mismatch_reasons": dict(sorted(reasons.items())),
         "site_gap_breakdown": dict(sorted(site_gaps.items())),
         "site_absence_breakdown": dict(sorted(site_absence.items())),
+        "archive_merge_diagnostics": merge_diagnostics,
         "private_fingerprints": {k: sorted(v)[:20] for k, v in sorted(fingerprints.items())},
         "scope": "telegram_issued_vs_website_pre_entitlement",
         "member_account_render_verified": False,
