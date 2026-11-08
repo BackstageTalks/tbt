@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import unicodedata
 
 
 def _aware(value):
@@ -33,8 +34,15 @@ def _issued_leader(row, feed):
         return None
     # The ball is the original two-player projection leader, never an
     # inferred favourite after seeing actual results.
-    hint = str(row.get("aces_superiority_hint") or "").strip()
-    if not hint or hint.casefold() != str(selected[0].get("name") or "").strip().casefold():
+    def normalized(value):
+        raw = unicodedata.normalize("NFKD", str(value or ""))
+        return "".join(c.lower() if c.isalnum() else " " for c in raw if not unicodedata.combining(c)).split()
+
+    hint = row.get("aces_superiority_hint") or row.get("projection_subject")
+    hint_id = str(row.get("aces_superiority_player_id") or row.get("projection_subject_id") or "").strip()
+    selected_name = selected[0].get("name")
+    if not ((hint and normalized(hint) == normalized(selected_name))
+            or (hint_id and hint_id == selected_id)):
         return None
     try:
         projection = float(row["projection"])
