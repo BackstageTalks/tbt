@@ -2117,7 +2117,10 @@ def internal_telegram_site_results_parity(req):
         projected = site_day_projection(source, day, exclusions)
         # Aggregate diagnostics distinguish day reassignment from a lost row.
         from collections import Counter
-        from tbt.services.results_archive import _identity
+        from tbt.services.results_archive import (
+            _identity, _time, _verified_original_winner_day,
+        )
+        from tbt.services.feed import _betting_day_key
         by_identity = {_identity(row, pub): row for row in source.get("results") or []
                        for pub in row.get("market_publications") or [] if isinstance(pub, dict)}
         gaps = Counter()
@@ -2132,6 +2135,46 @@ def internal_telegram_site_results_parity(req):
                     gaps["archive_contract_not_merged"] += 1
                 elif _row_betting_day(merged) != day:
                     gaps["archive_contract_shifted_betting_day"] += 1
+                    # Classify only aggregate fail-closed gates; private original
+                    # event/player IDs and quotes never leave the worker.
+                    market = str(pub.get("market") or "match_winner").lower()
+                    if market != "match_winner":
+                        gaps["shifted_other_market"] += 1
+                        continue
+                    key = _identity(row, pub)
+                    published = [p for p in merged.get("market_publications") or []
+                                 if isinstance(p, dict) and _identity(merged, p) == key]
+                    incumbent = published[0] if len(published) == 1 else None
+                    if incumbent is None:
+                        reason = "no_exact_publication"
+                    elif len(merged.get("market_publications") or []) != 1:
+                        reason = "multiple_publications"
+                    elif _time(merged.get("scheduled_at") or merged.get("date")) != _time(
+                            row.get("scheduled_at") or row.get("date")):
+                        reason = "schedule_disagrees"
+                    elif any(
+                        str((merged.get(side) or {}).get("id") or "") !=
+                        str((row.get(side) or {}).get("id") or "")
+                        for side in ("player1", "player2")
+                    ):
+                        reason = "participants_disagree"
+                    elif any(
+                        incumbent.get(field) not in (None, "")
+                        and pub.get(field) not in (None, "")
+                        and str(incumbent.get(field)) != str(pub.get(field))
+                        for field in ("publication_key", "selection_id", "issued_at", "odds")
+                    ):
+                        reason = "issued_contract_disagrees"
+                    elif _time(row.get("scheduled_at") or row.get("date")) is None or (
+                        _row_betting_day(row) != _betting_day_key(
+                            _time(row.get("scheduled_at") or row.get("date")))
+                    ):
+                        reason = "archive_day_disagrees"
+                    elif _verified_original_winner_day(merged, row, incumbent, pub) is not None:
+                        reason = "eligible_but_not_applied"
+                    else:
+                        reason = "other_strict_guard"
+                    gaps["shifted_winner_" + reason] += 1
         projected["archive_merge_diagnostics"] = dict(gaps)
         return response(projected)
     except AdminStorageUnavailable:

@@ -188,6 +188,9 @@ def test_archive_merge_diagnostics_are_aggregate_only():
     page["archive_merge_diagnostics"] = {
         "archive_contract_not_merged": 1,
         "archive_contract_shifted_betting_day": 2,
+        "shifted_winner_multiple_publications": 1,
+        "shifted_other_market": 4,
+        "shifted_winner_schedule_disagrees": "bad-secret",
         "raw_identity": "never-log-event-or-player",
         "unknown_failure": -1,
     }
@@ -195,5 +198,8 @@ def test_archive_merge_diagnostics_are_aggregate_only():
     assert report["archive_merge_diagnostics"] == {
         "archive_contract_not_merged": 1,
         "archive_contract_shifted_betting_day": 2,
+        "shifted_winner_multiple_publications": 1,
+        "shifted_other_market": 4,
     }
     assert "never-log-event-or-player" not in str(report)
+    assert "bad-secret" not in str(report)

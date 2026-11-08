@@ -129,7 +129,20 @@ def reconcile_day(day: str, sent: list[dict], archived: list[dict],
     raw_merge = site.get("archive_merge_diagnostics")
     merge_diagnostics = {}
     if isinstance(raw_merge, dict):
-        for name in ("archive_contract_not_merged", "archive_contract_shifted_betting_day"):
+        safe_names = (
+            "archive_contract_not_merged",
+            "archive_contract_shifted_betting_day",
+            "shifted_other_market",
+            "shifted_winner_no_exact_publication",
+            "shifted_winner_multiple_publications",
+            "shifted_winner_schedule_disagrees",
+            "shifted_winner_participants_disagree",
+            "shifted_winner_issued_contract_disagrees",
+            "shifted_winner_archive_day_disagrees",
+            "shifted_winner_eligible_but_not_applied",
+            "shifted_winner_other_strict_guard",
+        )
+        for name in safe_names:
             count = raw_merge.get(name)
             if type(count) is int and 0 <= count <= 25000:
                 merge_diagnostics[name] = count
