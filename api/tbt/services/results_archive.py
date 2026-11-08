@@ -452,8 +452,21 @@ def _verified_original_winner_day(canonical_row: dict, archived_row: dict,
         return None
     original_start = _time(archived_row.get("scheduled_at") or archived_row.get("date"))
     current_start = _time(canonical_row.get("scheduled_at") or canonical_row.get("date"))
-    if original_start is None or original_start != current_start:
+    if original_start is None or current_start is None:
         return None
+    if original_start != current_start:
+        # A postponed match may retain its *original issued betting day* even
+        # though a later feed revision moved the provider's start timestamp.
+        # Trust that older day only with an explicit frozen pre-match issue
+        # timestamp on BOTH copies. An inferred/legacy issue date, a changed
+        # issue timestamp, or a move to an earlier kickoff fails closed.
+        original_issued = _time(archived_pub.get("issued_at"))
+        current_issued = _time(canonical_pub.get("issued_at"))
+        if (original_issued is None or current_issued is None
+                or original_issued != current_issued
+                or original_issued > original_start
+                or original_start > current_start):
+            return None
     if str(canonical_row.get("event_id") or canonical_row.get("id") or "") != str(
             archived_row.get("event_id") or archived_row.get("id") or ""):
         return None
