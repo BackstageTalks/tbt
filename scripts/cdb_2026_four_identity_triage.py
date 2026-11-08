@@ -224,9 +224,9 @@ def main():
     snapshot = download_stable(REPO, TAG, a.out / "live")
     if snapshot.get("status") != "verified" or stamp(initial) != stamp(release(TAG)):
         raise ValueError("Live source moved during audit")
-    old = pq.read_table(frozen, columns=FIELDS)
-    before = pq.read_table(prev, columns=FIELDS)
-    live = pq.read_table(a.out / "live" / "history-2026.parquet", columns=FIELDS)
+    old = pq.read_table(frozen, columns=list(FIELDS))
+    before = pq.read_table(prev, columns=list(FIELDS))
+    live = pq.read_table(a.out / "live" / "history-2026.parquet", columns=list(FIELDS))
     findings = cases(old, before, live)
     result = {
         "schema": 1, "state": "FOUR_SOURCE_IDENTITIES_REVIEW_ONLY",
