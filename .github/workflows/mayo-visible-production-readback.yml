@@ -1,0 +1,88 @@
+name: Verify deployed Mayo Aces marker after asset refresh (read-only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/mayo-visible-production-readback.yml
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  production-readback:
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
+      github.head_ref == 'audit/mayo-visible-production-readback-20261108'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check current main deployment run (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run list --repo BackstageTalks/tbt --branch main --workflow ci.yml --limit 6 --json databaseId,headSha,status,conclusion,event --jq '.[] | {id:.databaseId,sha:(.headSha[0:12]),status,conclusion,event}'
+      - name: Verify served Azure release and exact native Mayo Results source
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${BLINQ_LIVE_WORKER_TOKEN:-}"
+          python - <<'PY'
+          import json,os,urllib.request
+          base='https://agreeable-sky-011a7fe10.7.azurestaticapps.net'
+          expected='0a79affb86a00ba1fe492d6d1d1b7c31ad412c08'
+          def get(url,headers=None):
+              req=urllib.request.Request(url,headers=headers or {})
+              with urllib.request.urlopen(req,timeout=35) as res:
+                  assert res.status==200
+                  return res.read(5_000_001)
+          manifest=json.loads(get(base+'/deployment.json?mayo_cache='+expected))
+          deployed=str(manifest.get('git_sha') or '')
+          print('DEPLOYED_SHA',deployed)
+          if deployed!=expected:
+              raise SystemExit('New asset-refresh revision not yet deployed: '+deployed[:12])
+          html=get(base+'/index.html?mayo_cache='+expected).decode('utf-8')
+          if '&aces-results-visible=20261108-1' not in html:
+              raise SystemExit('Production HTML script URL lacks fresh Aces marker cache version')
+          js=get(base+'/app.js?mayo_cache='+expected)
+          if b'decidedRetiredAces' not in js or b'frozenTotalName' not in js:
+              raise SystemExit('Production JS missing verified decided-retirement marker')
+          headers={'Accept':'application/json','X-Blinq-Worker-Token':os.environ['BLINQ_LIVE_WORKER_TOKEN']}
+          def extract(endpoint):
+              return json.loads(get(base+'/api/v1/internal/telegram/'+endpoint+'?day=2026-11-07',headers))
+          archive,site=extract('settled-results'),extract('site-results-parity')
+          if (archive.get('source')!='verified_match_status_snapshot'
+             or site.get('source')!='website_results_pre_entitlement_v1'
+             or site.get('member_render_verified') is not False
+             or site.get('results_archive_unavailable') is not False
+             or site.get('results_exclusions_unavailable') is not False):
+              raise SystemExit('Untrusted or incomplete website Results source')
+          key='local-aces-ou-v1:17427331:309157:over:4.5'
+          def matches(payload):
+              return [p for p in payload.get('rows',[]) if
+                str(p.get('event_id'))=='17427331'
+                and str(p.get('selection_id'))=='309157'
+                and p.get('market')=='aces'
+                and p.get('publication_key')==key
+                and p.get('market_line')==4.5
+                and p.get('projection_direction')=='over']
+          a,s=matches(archive),matches(site)
+          if len(a)!=1 or len(s)!=1:
+              raise SystemExit('Original original issuer identity not uniquely linked')
+          for p in (a[0],s[0]):
+              r=p.get('result') or {}
+              if not (r.get('correct') is True and r.get('status')=='hit'
+                and r.get('actual_count')==5 and type(r.get('opponent_actual_count')) in (int,float)
+                and r['opponent_actual_count']==0
+                and r.get('runtime_source')=='match_status_snapshot'
+                and abs(float(p.get('odds') or 0)-1.70)<1e-8):
+                  raise SystemExit('Unverified source-native 5:0 result')
+          sr=s[0]['result']
+          if sr.get('reason')!='retired_after_ou_decided' or sr.get('retirement_line_decided') is not True or sr.get('void') is True:
+              raise SystemExit('Website did not preserve decided retired O/U evidence')
+          print('PRODUCTION_MAYO_VISIBLE_FIX PASS: source=1 archive=1, result=hit, Aces=5:0, decided_retirement=true, app_cache_version=true, deployed_sha='+deployed[:12]+', member_render_verified=false')
+          PY
