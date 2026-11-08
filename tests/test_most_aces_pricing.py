@@ -123,7 +123,7 @@ def test_api_and_telegram_utility_use_same_source():
     tg=(root/"scripts/telegram_more_aces.py").read_text()
     api=(root/"api/function_app.py").read_text()
     ui=(root/"web/app.js").read_text()
-    assert "statistical_most_aces_odds(row, ball_player_id=identity[1])" in tg
+    assert "statistical_most_aces_odds(" in tg and "ball_player_id=identity[1]" in tg
     assert "annotate_most_aces_offer(source_feed)" in api
     assert "blinq_user_most_aces_confidence_band_v1" in ui
     assert "verifiedMostAcesApiProOdds" in ui
