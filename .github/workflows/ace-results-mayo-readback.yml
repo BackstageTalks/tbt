@@ -40,6 +40,13 @@ jobs:
         run: |
           set -euo pipefail
           gh run list --repo BackstageTalks/tbt --branch main --workflow ci.yml --limit 8 --json databaseId,headSha,status,conclusion,event,displayTitle --jq '.[] | {id:.databaseId,sha:(.headSha[0:12]),status,conclusion,event,title:.displayTitle}'
+          gh api 'repos/BackstageTalks/tbt/actions/runs?status=in_progress&per_page=30' \
+            --jq '.workflow_runs[] | select(.head_branch == "main") | {id, name, status, sha:(.head_sha[0:12])}' 
+          for run in $(gh api 'repos/BackstageTalks/tbt/actions/runs?status=in_progress&per_page=30' \
+            --jq '.workflow_runs[] | select(.head_branch == "main") | .id' | head -15); do
+            gh api "repos/BackstageTalks/tbt/actions/runs/$run/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "deploy") | {run_id: '\"'$run'\"', name, status, conclusion, started_at, runner_name}'
+          done
       - name: Read authentic frozen Mayo Aces archive and web-source contract (no writes)
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
