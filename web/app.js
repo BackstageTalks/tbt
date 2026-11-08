@@ -2166,7 +2166,7 @@
   function projectionPickText(row,sourceTab=''){
     const market=sourceTab||String(row?.market||row?.projection_metric||'').toLowerCase();
     if(market==='sets')return String(row?.selection||row?.pick||'—');
-    if(market==='ace_winner'||market==='most_aces')return String(row?.projection_subject||row?.selection||row?.pick||'—')+' · '+lcopy('More aces','Viac es','Více es');
+    if(market==='ace_winner'||market==='most_aces')return String(row?.projection_subject||row?.selection||row?.pick||'—')+' · '+lcopy('More aces','Viac es','Více es')+(row?.ace_winner_source==='issued_aces_signal_only'?' · '+lcopy('ESÁ signal','Signál ESÁ','Signál ESA'):'');
     if(market==='games'){
       const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,'games');
       if(side&&Number.isFinite(line))return `${side} ${line.toFixed(1)} Games`;
