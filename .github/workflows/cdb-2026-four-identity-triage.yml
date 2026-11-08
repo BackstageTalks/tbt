@@ -5,6 +5,8 @@ on:
     paths:
       - 'scripts/cdb_2026_four_identity_triage.py'
       - 'tests/test_cdb_2026_four_identity_triage.py'
+      - 'scripts/restore_cdb_2026_four_native_id.py'
+      - 'tests/test_restore_cdb_2026_four_native_id.py'
       - '.github/workflows/cdb-2026-four-identity-triage.yml'
 permissions:
   contents: read
@@ -39,17 +41,23 @@ jobs:
         run: python -m pip install --quiet -r api/requirements-train.txt pytest
       - name: Synthetic fail-closed identity checks; no writer
         run: |
-          python -m py_compile scripts/cdb_2026_four_identity_triage.py
-          python -m pytest -q tests/test_cdb_2026_four_identity_triage.py
+          python -m py_compile scripts/cdb_2026_four_identity_triage.py scripts/restore_cdb_2026_four_native_id.py
+          python -m pytest -q tests/test_cdb_2026_four_identity_triage.py tests/test_restore_cdb_2026_four_native_id.py
       - name: Pinned native-provider and original-vs-live four-case readback
         run: |
           set -euo pipefail
           python scripts/cdb_2026_four_identity_triage.py --out ".cache/tbt/four-ids-$GITHUB_RUN_ID"
+      - name: Fail-closed 1-real-WTA-match candidate DRY-RUN (no CDB writer)
+        run: |
+          set -euo pipefail
+          python scripts/restore_cdb_2026_four_native_id.py --mode dry-run --out ".cache/tbt/one-match-dry-$GITHUB_RUN_ID"
       - name: Preserve public event metadata only; exclude all private raw IDs
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: cdb-four-case-native-evidence-${{ github.run_id }}
-          path: .cache/tbt/four-ids-*/triage.json
+          path: |
+            .cache/tbt/four-ids-*/triage.json
+            .cache/tbt/one-match-dry-*/report.json
           retention-days: 14
           if-no-files-found: warn
