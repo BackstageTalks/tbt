@@ -324,3 +324,65 @@ def test_diagnostics_do_not_weaken_existing_conflict_quarantine(match_factory, t
         assert provider.calls == 1
     finally:
         e.close()
+
+
+def test_crossperiod_bp_contradiction_blocks_new_derived_rates():
+    """API PRO fixture: ALL BP sums contradict both sets and the point tape."""
+    from tbt.providers.statistics import parse_statistics
+
+    raw = {"statistics": [
+        {"period": "ALL", "groups": [{"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 3, "homeTotal": 3,
+             "awayValue": 2, "awayTotal": 3},
+            {"key": "breakPointsScored", "homeValue": 1, "awayValue": 0},
+        ]}]},
+        {"period": "1ST", "groups": [{"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 0, "homeTotal": 1,
+             "awayValue": 0, "awayTotal": 0},
+            {"key": "breakPointsScored", "homeValue": 0, "awayValue": 1},
+        ]}]},
+        {"period": "2ND", "groups": [{"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 1, "homeTotal": 4,
+             "awayValue": 2, "awayTotal": 3},
+            {"key": "breakPointsScored", "homeValue": 1, "awayValue": 3},
+        ]}]},
+    ]}
+    parsed = parse_statistics(raw, home_is_player1=True)
+    assert parsed["p1_break_point_serve_win"] == 1
+    assert parsed["p2_break_point_serve_win"] == pytest.approx(2 / 3)
+    for side in ("p1", "p2"):
+        assert f"{side}_break_point_return_win" not in parsed
+        assert f"{side}_break_points_won" not in parsed
+    swapped = parse_statistics(raw, home_is_player1=False)
+    assert all("break_point_return_win" not in k for k in swapped)
+
+
+def test_crossperiod_bp_consistent_set_allows_verified_count_derivation():
+    from tbt.providers.statistics import parse_statistics
+
+    raw = {"statistics": [
+        {"period": "ALL", "groups": [{"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 3, "homeTotal": 3,
+             "awayValue": 2, "awayTotal": 3},
+            {"key": "breakPointsScored", "homeValue": 1, "awayValue": 0},
+        ]}]},
+        {"period": "1ST", "groups": [{"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 3, "homeTotal": 3,
+             "awayValue": 2, "awayTotal": 3},
+            {"key": "breakPointsScored", "homeValue": 1, "awayValue": 0},
+        ]}]},
+        {"period": "2ND", "groups": [{"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 0, "homeTotal": 0,
+             "awayValue": 0, "awayTotal": 0},
+            {"key": "breakPointsScored", "homeValue": 0, "awayValue": 0},
+        ]}]},
+    ]}
+    parsed = parse_statistics(raw, home_is_player1=True)
+    assert parsed["p1_break_point_return_win"] == pytest.approx(1 / 3)
+    assert parsed["p2_break_point_return_win"] == 0
