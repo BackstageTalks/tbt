@@ -1,0 +1,103 @@
+name: BlinQ VIAC ES real bookmaker odds probe (read-only)
+# One-time Nov 8 2026 probe AFTER site's confirmed morning publication.
+on:
+  workflow_run:
+    workflows:
+      - "BlinQ Telegram complete daily offer (06:20 queue)"
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-viac-es-odds-20261108-readonly
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      PROPL: ${{ secrets.PROPL }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+      BLINQ_RAPIDAPI_MAX_RPS: '3'
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'
+      BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: false
+      - name: Gate exact one-day research and confirmed daily dispatch
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$RAPIDAPI_KEY" && test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -s .private-telegram/ops/telegram-bot-state.json
+          if [[ "$(TZ=Europe/Bratislava date +%F)" != "2026-11-08" ]]; then
+            echo "::notice::One-day Most Aces test expired; no provider calls."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          state=json.loads(Path(".private-telegram/ops/telegram-bot-state.json").read_text())
+          issued=(state.get("attempts") or {}).get("2026-11-08:daily:0620") or {}
+          ready=(issued.get("status")=="sent" and bool(issued.get("message_ids")))
+          with open(os.environ["GITHUB_OUTPUT"],"a",encoding="utf-8") as output:
+              output.write("ready="+str(ready).lower()+"\n")
+          print(json.dumps({"2026_11_08_daily_offer_confirmed":bool(ready)},sort_keys=True))
+          PY
+      - name: Install provider adapter dependencies
+        if: steps.gate.outputs.ready == 'true'
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Probe at most 3 confirmed website ball fixtures, first API Pro then PropLine
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          python scripts/probe_viac_es_real_odds.py --max-events 3 \
+            --out .cache/tbt/viac-es-odds/2026-11-08.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path(".cache/tbt/viac-es-odds/2026-11-08.json")
+          data=json.loads(path.read_text(encoding="utf-8"))
+          assert data["schema"] == 1 and data["cdb_writes"] == 0 and data["tg_messages_sent"] == 0
+          assert data["max_events"] == 3 and data["events_probed"] <= 3
+          assert data["provider_requests"]["api_pro"] <= 3
+          assert data["provider_requests"]["propline"] <= 7
+          assert data["status"] in {"audited", "no_future_ball_marked_fixtures"}
+          print("Read-only integrity verified; no CDB/TG mutations.")
+          PY
+      - name: Preserve evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viac-es-odds-audit-2026-11-08-${{ github.run_id }}
+          path: .cache/tbt/viac-es-odds/*.json
+          if-no-files-found: warn
+          retention-days: 14
