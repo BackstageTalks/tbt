@@ -298,3 +298,71 @@ net-new CDB deltas from the existing importer, then compare eligible WTA
 and other ATP season windows using evidence-backed yield without changing
 global budget, identity, precedence or point-in-time constraints. Production
 model/forecast changes remain out of scope.
+
+## getMatchStatistics field and conflict research — 2026-11-08 (read-only, 0 API calls)
+
+The previous 500-call ATP 2024 artifact `blinq-statistics-42468614163`
+was independently re-inspected, along with the current
+`api/tbt/providers/statistics.py`,
+`api/tbt/services/statistics_enrichment.py` and the operator's anonymized
+`getMatchStatistics` example.
+
+- In all **500 observed ALL-period responses**, the provider exposed
+  `aces`, `doubleFaults`, `firstServeAccuracy`,
+  `firstServePointsAccuracy`, `secondServePointsAccuracy`,
+  `firstReturnPoints`, `secondReturnPoints`,
+  `breakPointsSaved`, and `breakPointsScored`. The current
+  parser already consumes these where an explicit rate/count-backed ratio
+  exists; do not call this an untapped endpoint.
+- `servicePointsScored` and `receiverPointsScored` were present in
+  all 500 responses but are not currently mapped into strict
+  denominator/reconciliation diagnostics. `secondServeAccuracy` also
+  appeared in all 500, and can serve as independent validation of
+  double-fault/second-serve-attempt units, *not* be confused with
+  `secondServePointsAccuracy`.
+- 68/500 responses carried additional winners/unforced-error/groundstroke
+  breakdown keys. They are unmodeled fields with **unknown canonical
+  coverage**, not automatically 68 useful new matches.
+- 194/500 calls were marked `status_conflict`. The current importer
+  deliberately rejects a **whole provider statistics response** when any
+  parsed non-NULL existing canonical value differs. This protects the
+  authoritative CDB, but may forgo separate new nonconflicting cells.
+  Exact per-field conflict counts are NOT included in the aggregate artifact;
+  diagnose conflict keys and numeric deltas from private provenance before
+  deciding whether isolated null-only fields can be accepted.
+- The attached sample supplies `ALL` saved/faced BP counts home 3/3,
+  away 2/3, plus `breakPointsScored` count home 1, away 0.
+  Thus opposite-side saved/faced data mathematically imply **home BP
+  conversion 1/3; away 0/3**, each independently agreeing with the
+  count-only `breakPointsScored` member. Current parser cannot directly
+  obtain a BP return rate from the count-only field. Candidate is a
+  strictly **cross-validated** derivation with preserved input provenance,
+  only for safe NULL fields; no automatic mapping change approved yet.
+- The same anonymized example has inconsistent periods: home saved BP
+  `ALL=3/3` versus first+second set combined `1/5`; away
+  `breakPointsScored ALL=0` versus set sum `1+3=4`;
+  away double faults `ALL=0` versus per-set sum `0+1=1`.
+  The current set parser suppresses all set-level enrichment when the set
+  total **exceeds** a whole-match ace/DF total, but allows incomplete
+  **undercounts**. Do not use raw set summations as canonical whole-match
+  values without fully checked completeness and semantics.
+- Research-only endpoint witness pack under *the configured*
+  `tennisapi1.p.rapidapi.com` host:
+  (a) `GET /api/tennis/event/{eventId}` for exact identity/finish,
+  (b) `GET /api/tennis/event/{eventId}/statistics` for ALL + sets,
+  (c) `GET /api/tennis/event/{eventId}/point-by-point` for point-level
+  completeness/serving/score semantics, and optional
+  (d) `GET /api/tennis/team/{teamId}/year-statistics/{year}`
+  for aggregate coverage, **not direct match-level CDB supplementation**.
+  Use the SAME finished match/native event ID in (a)–(c).
+  An arbitrary `eventId` from another tennis API product must never
+  be matched without a provider-native witness.
+
+Priorities: (1) per-field conflict reason/delta histogram and
+already-paid payload quality audit; (2) conservative cross-validated
+opponent BP-saved -> conversion-rate candidate with regression tests,
+including 0/0 and inconsistent set tapes; (3) denom-based service/return
+cross-checks from scored raw points; (4) PBP coverage/completeness
+measurement before any new paid scale; (5) validate whether 68/500 richer
+stroke reports merit dedicated canonical fields. No API calls, imports,
+schema upgrades or model changes were executed for this investigation.
