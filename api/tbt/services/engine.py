@@ -583,11 +583,11 @@ def _void_projection_publication(publication, match, now, reason):
 
 
 def _settle_projection_publications(row, match, now):
-    """Grade projection-only ESA publications without inventing betting ROI.
+    """Grade frozen Aces/Most Aces/DF publications against actual counts.
 
-    Current ESA cards predict which player will record more Aces or Double
-    Faults and expose the projected count. They have no bookmaker line/price,
-    therefore settlement records HIT/MISS/VOID plus actual counts only.
+    A projection-only signal records HIT/MISS/VOID without betting ROI.
+    An independently issued, fully priced Most Aces selection uses its
+    original frozen API or owner-statistical 1u price, never a UI estimate.
     """
     publications = row.get("market_publications")
     if not isinstance(publications, list):
