@@ -226,6 +226,21 @@ def main():
                 assert "Aidan Mayo" in mayo_row.inner_text()
                 assert mayo_row.locator(".ace-leader-ball").count() == 1, (scenario, "Mayo leader ball missing in DOM")
                 assert opponent_row.locator(".ace-leader-ball").count() == 0, (scenario, "Andrade incorrectly marked")
+                ball = mayo_row.locator(".ace-leader-ball")
+                assert ball.is_visible(), (scenario, "Mayo marker present but invisible")
+                geometry = ball.evaluate("""svg => {
+                    const r=svg.getBoundingClientRect(),row=svg.closest('.results-match-player').getBoundingClientRect();
+                    const style=getComputedStyle(svg);
+                    return {width:r.width,height:r.height,left:r.left,right:r.right,top:r.top,bottom:r.bottom,
+                            rowLeft:row.left,rowRight:row.right,rowTop:row.top,rowBottom:row.bottom,
+                            opacity:Number(style.opacity),display:style.display,visibility:style.visibility};
+                }""")
+                assert geometry["width"] >= 10 and geometry["height"] >= 10, (scenario, "Mayo icon collapsed", geometry)
+                assert geometry["opacity"] > 0.5 and geometry["visibility"] == "visible" and geometry["display"] != "none", (scenario, "Mayo icon hidden", geometry)
+                assert (geometry["left"] >= geometry["rowLeft"] - 1
+                        and geometry["right"] <= geometry["rowRight"] + 1
+                        and geometry["top"] >= geometry["rowTop"] - 1
+                        and geometry["bottom"] <= geometry["rowBottom"] + 1), (scenario, "Mayo icon clipped outside row", geometry)
                 page.evaluate("""() => {
                     const s=resultsMultiTest.state;
                     s.feed.results[0].market_publications[0].result.retirement_line_decided=false;
