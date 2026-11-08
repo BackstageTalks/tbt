@@ -6,7 +6,7 @@ not a second published bet. No changing ledger, Results or arbitrary tiers.
 from copy import deepcopy
 
 from tbt.services.ace_winner_bridge import with_issued_ace_leader_signals
-from tbt.services.entitlements import filter_feed_for_access
+from tbt.services.entitlements import filter_feed_for_access, _published_daily_pick_count
 
 
 NAMES = ("Alexander Donski", "Lorenzo Sonego", "Colin Sinclair", "Sebastian Dominko")
@@ -61,6 +61,7 @@ def test_four_existing_issued_balls_are_visible_in_more_aces_without_extra_bets(
         assert row["odds"] is None and row["market_line"] is None
         assert row["market_publications"] == [] and row["result"] is None
     assert bridged["results"] == source["results"]
+    assert _published_daily_pick_count(bridged) == _published_daily_pick_count(source) == 4
 
 
 def test_existing_independently_issued_winner_does_not_mix_with_fallback():
