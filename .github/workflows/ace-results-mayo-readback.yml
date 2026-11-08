@@ -21,11 +21,13 @@ jobs:
       (github.repository == 'BackstageTalks/tbt' &&
        github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
-       github.head_ref == 'fix/ace-results-frozen-selection-readback-20261108') ||
+       (github.head_ref == 'fix/ace-results-frozen-selection-readback-20261108' ||
+        github.head_ref == 'fix/results-aces-mayo-actual-ui-20261108')) ||
       (github.repository == 'BackstageTalks/tbt' &&
        github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       contains(github.event.workflow_run.head_commit.message, '[ace-mayo-readback]'))
+       ((github.event.workflow_run.conclusion == 'success' &&
+         contains(github.event.workflow_run.head_commit.message, '[ace-mayo-readback]')) ||
+        contains(github.event.workflow_run.head_commit.message, '[ace-retirement-readback]')))
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -62,6 +64,8 @@ jobs:
                   code = js.read(4_000_001)
               if len(code) > 4_000_000 or b'frozenTotalName' not in code:
                   raise SystemExit('Production UI missing frozen O/U name recovery')
+              if b'decidedRetiredAces' not in code:
+                  raise SystemExit('Production UI missing decided-retirement Aces leader logic')
           expected = {
               'event_id': '17427331', 'section': 'ace', 'market': 'aces',
               'selection_id': '309157',
@@ -117,4 +121,12 @@ jobs:
               print('Mayo verified opponent Aces count: paired_zero=%s' % paired)
               if not paired:
                   raise SystemExit('Verified paired Aces count absent; ball cannot be claimed')
+              sr = s[0].get('result') or {}
+              original_decided = sr.get('retirement_line_decided') is True
+              exact_retirement = sr.get('reason') == 'retired_after_ou_decided'
+              site_paired = type(sr.get('opponent_actual_count')) in (int, float) and sr['opponent_actual_count'] == 0
+              print('Mayo live Results retirement readback: original_decided=%s exact_reason=%s paired_zero=%s'
+                    % (original_decided, exact_retirement, site_paired))
+              if not (original_decided and exact_retirement and site_paired):
+                  raise SystemExit('Actual website source does not carry safe retired-OU decision')
           PY
