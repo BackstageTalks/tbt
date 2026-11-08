@@ -8,7 +8,7 @@ collisions that cannot be resolved without guessing. Quarantined rows are
 excluded from model/prediction input and must be reported to the operator.
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timezone
 from typing import Iterable
 
@@ -38,17 +38,23 @@ def _duplicates(values: Iterable[str]) -> set[str]:
 
 
 def _changed_years(before: list[MatchRecord], after: list[MatchRecord]) -> list[int]:
-    years = {
-        int(match.scheduled_at.year)
-        for match in [*before, *after]
-    }
-    changed = []
-    for year in sorted(years):
-        left = _identity_counter(match for match in before if int(match.scheduled_at.year) == year)
-        right = _identity_counter(match for match in after if int(match.scheduled_at.year) == year)
-        if left != right:
-            changed.append(year)
-    return changed
+    """Count exact identities by year in one pass, retaining duplicate multiplicity.
+
+    The previous implementation rescanned both million-row lists for every
+    historical year on every refresh merge. Keep the same calendar-year and
+    full-identity comparison, but avoid repeated scans.
+    """
+    left_by_year = defaultdict(Counter)
+    right_by_year = defaultdict(Counter)
+    for match in before:
+        left_by_year[int(match.scheduled_at.year)][_identity_tuple(match)] += 1
+    for match in after:
+        right_by_year[int(match.scheduled_at.year)][_identity_tuple(match)] += 1
+
+    return sorted(
+        year for year in (left_by_year.keys() | right_by_year.keys())
+        if left_by_year[year] != right_by_year[year]
+    )
 
 
 def quarantine_budget(
