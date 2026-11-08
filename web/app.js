@@ -1402,7 +1402,8 @@
     // still belong in VIAC ES after strict frozen-contract validation.
     return authenticLiveProjection(row)||(key==='ace'&&(
       authenticLocalAceProjection(row)||authenticAceWinnerProjection(row)
-      ||Number.isFinite(verifiedFrozenMostAcesLocalOdds(row))));
+      ||(String(row?.market||'').toLowerCase()==='most_aces'
+        &&Number.isFinite(verifiedFrozenMostAcesLocalOdds(row)))));
   }
   function marketRows(key){
     // TOP200 has been retired. Old feed data must not recreate active picks.
