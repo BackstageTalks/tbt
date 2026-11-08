@@ -2487,12 +2487,10 @@
     // Separate read-only grading of the issued 'most Aces' insight from the
     // published player's Over/Under line, W/L, odds and financial settlement.
     const market=String(publication?.market||publication?.projection_metric||'').toLowerCase();
-    if(market==='most_aces'){
-      // This ball identifies the frozen prediction, including losses and ties.
-      if(!publication?.issued_at||String(publication?.selection_id||'')!==String(player?.id||''))return '';
-      return aceLeaderHintHtml({...publication,aces_superiority_hint:publication?.projection_subject||name},player,name);
-    }
-    if(market!=='aces')return '';
+    if(market!=='aces'&&market!=='most_aces')return '';
+    // Independent Most Aces must reflect verified settlement, not merely a
+    // pre-match marker (a losing or tied forecast must not get a result ball).
+    if(market==='most_aces'&&!publication?.issued_at)return '';
     const result=publication?.result;
     if(!result||typeof result!=='object')return '';
     const status=String(result.status||'').trim().toLowerCase();
@@ -2509,6 +2507,7 @@
     };
     const actual=count(result.actual_count),opponent=count(result.opponent_actual_count);
     if(!Number.isFinite(actual)||!Number.isFinite(opponent)||actual<=opponent)return '';
+    if(market==='most_aces'&&(result.correct!==true||status==='void'))return '';
     const predictedId=String(publication.selection_id||'').trim();
     const playerId=String(player?.id||'').trim();
     const opponentId=String(otherPlayer?.id||'').trim();
@@ -2516,9 +2515,22 @@
     // Read the original publication rather than a mutable match-level hint.
     const issuedSubject=String(publication?.issued_snapshot?.projection?.projection_subject
       ||publication?.projection_subject||publication?.aces_superiority_hint||'').trim();
+    // Original Telegram Aces O/U records freeze the predicted name inside
+    // "selection": "Aidan Mayo Over 4.5 Aces", not "projection_subject".
+    // Recover it only from the exact immutable direction/line/market contract.
+    const frozenSelection=String(publication?.selection||'').trim();
+    const ou=frozenSelection.match(/^(.+?)\s+(over|under)\s+(\d+(?:[.,]\d+)?)\s+aces$/i);
+    const frozenTotalName=market==='aces'
+      &&String(publication?.price_contract||'').toLowerCase()==='player_total_ou'
+      &&ou&&ou[2].toLowerCase()===String(publication?.ou_side||'').toLowerCase()
+      &&publication?.market_line!=null
+      &&Number(ou[3].replace(',','.'))===Number(publication.market_line)
+      ?ou[1].trim():'';
     const normalize=value=>String(value||'').normalize('NFKD')
       .replace(/\p{M}/gu,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
-    const subject=normalize(issuedSubject),displayedName=normalize(name||player?.name);
+    if(issuedSubject&&frozenTotalName&&normalize(issuedSubject)!==normalize(frozenTotalName))return '';
+    const selectedName=issuedSubject||frozenTotalName||(market==='most_aces'?frozenSelection:'');
+    const subject=normalize(selectedName),displayedName=normalize(name||player?.name);
     const otherName=normalize(otherPlayer?.name);
     // An explicit opponent ID or contradictory issued name is never rescued
     // by a later match result or by a similar-looking name.
@@ -2533,7 +2545,7 @@
     if(!idMatch&&!frozenNameMatch)return '';
     // Suppress stale auxiliary hint IDs: selection identity and the original
     // projected subject were already validated independently above.
-    return aceLeaderHintHtml({...publication,aces_superiority_hint:issuedSubject||name,
+    return aceLeaderHintHtml({...publication,aces_superiority_hint:selectedName||name,
       aces_superiority_player_id:'',projection_subject_id:''},player,name);
   }
   function hubNumberHtml(value,label=''){
@@ -3657,12 +3669,15 @@
     return projectionResultNumber(publication?.projection,publication,1);
   }
   function projectionResultActualText(publication){
-    const result=publication?.result||{},actual=Number(result?.actual_count),opponent=Number(result?.opponent_actual_count);
+    const result=publication?.result||{};
+    // Number(null) === 0: unknown source counts must never render as real zeroes.
+    const number=value=>value===null||value===undefined||value===''||typeof value==='boolean'?NaN:Number(value);
+    const actual=number(result?.actual_count),opponent=number(result?.opponent_actual_count);
     if(!Number.isFinite(actual))return '—';
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     const primary=projectionResultNumber(actual,publication,1);
-    if(['aces','most_aces','double_faults'].includes(metric)&&Number.isFinite(opponent)){
-      return `${primary} · ${lcopy('opponent','súper','soupeř')} ${projectionResultNumber(opponent,publication,1)}`;
+    if(['aces','most_aces','double_faults'].includes(metric)){
+      return `${primary} · ${lcopy('opponent','súper','soupeř')} ${Number.isFinite(opponent)?projectionResultNumber(opponent,publication,1):'—'}`;
     }
     return primary;
   }

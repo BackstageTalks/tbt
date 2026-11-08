@@ -2057,7 +2057,8 @@ def internal_telegram_settled_results(req):
                     "result": {
                         k: pub["result"].get(k)
                         for k in ("correct", "void", "status", "actual_count",
-                                  "profit_units", "staked_units", "runtime_source")
+                                  "opponent_actual_count", "profit_units",
+                                  "staked_units", "runtime_source")
                     },
                 })
         if len(approved) > 1000:

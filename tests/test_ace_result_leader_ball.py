@@ -77,6 +77,48 @@ assert.equal(mark({...legacy,aces_superiority_player_id:andrade.id},mayo,andrade
   'auxiliary hint ID cannot override verified issued subject');
 // Identity recovery is not permissible without the opponent to prove uniqueness.
 assert.equal(mark(legacy,mayo),'');
+// The real Nov 7 Telegram bridge stores "Aidan Mayo Over 4.5 Aces" as
+// publication.selection, without any projection_subject. The previous fix
+// never parsed this frozen field, so old ID namespaces still lost the ball.
+const frozenOU={...legacy,projection_subject:undefined,selection:'Aidan Mayo Over 4.5 Aces',
+  price_contract:'player_total_ou',ou_side:'over',market_line:4.5};
+assert(mark(frozenOU,mayo,andrade).includes('ace-leader-ball'),
+  'frozen issued Aces Over 4.5 record must label Mayo, even with presentation ID drift');
+assert.equal(mark(frozenOU,andrade,mayo),'','must not label Andrade instead');
+for(const incorrect of [
+  {...frozenOU,market_line:5.5},
+  {...frozenOU,ou_side:'under'},
+  {...frozenOU,selection:'Andres Andrade Over 4.5 Aces'},
+  {...frozenOU,selection:'Aidan Mayo Over 4.5 Double Faults'},
+  {...frozenOU,projection_subject:'Andres Andrade'},
+  {...frozenOU,selection_id:andrade.id},
+]){
+  assert.equal(mark(incorrect,mayo,andrade),'','contract mismatch cannot label a different bet');
+}
+assert.equal(mark({...frozenOU,result:{...frozenOU.result,opponent_actual_count:null}},mayo,andrade),'',
+  'a missing opponent count must not be fabricated as zero');
+const mostAces={...frozenOU,market:'most_aces',selection:'Aidan Mayo',
+  price_contract:'player_superiority',ou_side:null,market_line:null,
+  issued_at:'2026-11-07T07:00:00Z'};
+assert(mark(mostAces,mayo,andrade).includes('ace-leader-ball'),'settled Most Aces win gets ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,correct:false}},mayo,andrade),'',
+  'Most Aces loss never gets leader win ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,actual_count:5,opponent_actual_count:5}},mayo,andrade),'',
+  'Most Aces tie never gets ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,status:'void'}},mayo,andrade),'',
+  'void Most Aces never gets ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,opponent_actual_count:null}},mayo,andrade),'',
+  'incomplete Most Aces source cannot be scored');
+// Results must not render null/missing opponent statistics as zero.
+const textBegin=src.indexOf('  function projectionResultUnitLabel(');
+const textEnd=src.indexOf('  function resultCategoryLabel(',textBegin);
+assert(textBegin>0&&textEnd>textBegin);
+sandbox.lcopy=(en,sk)=>sk;
+vm.runInContext(src.slice(textBegin,textEnd),sandbox);
+assert.equal(sandbox.projectionResultActualText(frozenOU),'5 esá · súper 0 esá');
+assert.equal(sandbox.projectionResultActualText({...frozenOU,result:{...frozenOU.result,opponent_actual_count:null}}),'5 esá · súper —');
+assert.equal(sandbox.projectionResultActualText({...frozenOU,result:{...frozenOU.result,actual_count:null}}),'—');
+
 // Prediction still labels the pre-match projected leader independently.
 assert(sandbox.aceLeaderHintHtml(pub,a,a.name).includes('ace-leader-ball'));
 const results=src.slice(renderStart,renderEnd);
@@ -87,7 +129,7 @@ assert(!results.includes('aceLeaderHintHtml(r,p2,p2Name)'));
 assert(results.includes('publicationOutcome(publication)'));
 // No O/U settlement, local Aces pricing, ROI or source archive writes in the helper.
 const helper=src.slice(src.indexOf('  function aceSettledLeaderBallHtml('),end);
-for(const forbidden of ['market_line','ou_side','result.correct','profit_units','statistical_ace_odds','fetch(']) {
+for(const forbidden of ['profit_units','statistical_ace_odds','fetch(', 'result.profit_units=']) {
  assert(!helper.includes(forbidden),'leader marker must stay independent: '+forbidden);
 }
 console.log('ACES leader result marker: PASS');
