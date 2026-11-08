@@ -194,6 +194,43 @@ def main():
                 assert "VIAC ES" in page.locator(".results-table tbody").inner_text().upper()
                 assert page.locator(".metric-card strong").last.inner_text() == "1"
                 assert not errors, (scenario, errors)
+                # Full rendered Results DOM, using the actual frozen Telegram
+                # publication shape, not only a standalone helper test.
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results=[{
+                        event_id:'17427331',tour:'ATP',surface:'hard',
+                        scheduled_at:new Date().toISOString(),tournament:'Charlottesville',
+                        player1:{id:'presentation-mayo',name:'Aidan Mayo'},
+                        player2:{id:'presentation-andrade',name:'Andres Andrade'},
+                        market_publications:[{
+                            section:'ace',market:'aces',selection_id:'309157',
+                            selection:'Aidan Mayo Over 4.5 Aces',price_contract:'player_total_ou',
+                            ou_side:'over',market_line:4.5,projection:5.67,
+                            issued_at:new Date(Date.now()-3600000).toISOString(),
+                            odds:1.70,price_status:'priced_projection',
+                            result:{status:'hit',correct:true,actual_count:5,
+                                    opponent_actual_count:0,staked_units:1,profit_units:0.7}
+                        }]
+                    }];
+                    s.resultsFilters.category='ace';
+                    s.resultsPage=0;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert table.count() == 1, (scenario, "Mayo result missing")
+                mayo_row = page.locator(".results-table tbody .results-match-player")
+                opponent_row = page.locator(".results-table tbody .results-opponent")
+                assert "Aidan Mayo" in mayo_row.inner_text()
+                assert mayo_row.locator(".ace-leader-ball").count() == 1, (scenario, "Mayo leader ball missing in DOM")
+                assert opponent_row.locator(".ace-leader-ball").count() == 0, (scenario, "Andrade incorrectly marked")
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results[0].market_publications[0].result.opponent_actual_count=null;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert page.locator(".results-table .ace-leader-ball").count() == 0, (scenario, "unknown opponent falsely marked")
+                assert "súper —" in table.inner_text(), (scenario, "unknown stat rendered as false zero")
+                assert not errors, (scenario, errors)
                 context.close()
             print("Results category multi-select including Android Desktop site and 24h: PASS")
         finally:
