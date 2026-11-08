@@ -83,7 +83,7 @@
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:not([data-tab="see_all"]) .daily-hub-table tbody tr:not(.hub-row-locked) {
     display:grid !important; grid-template-columns:minmax(0,1fr) 62px 58px !important; grid-template-areas:"tournament tournament time" "match confidence number" "pick pick action" !important; grid-template-rows:auto minmax(66px,auto) auto !important; gap:6px !important; padding:10px !important;
   }
-  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] {
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] {
     grid-template-areas:"tournament tournament time" "match confidence number" "pick pick action" "projection projection projection" !important; grid-template-rows:auto minmax(66px,auto) auto auto !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-match-cell {
@@ -140,7 +140,7 @@
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-action-cell .hub-detail:not(.is-locked) {
     background:transparent !important; border:0 !important; color:#8ee6bc !important; padding:4px 0 !important; min-height:44px !important; min-width:44px !important; font-size:11px !important; box-shadow:none !important;
   }
-  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"]) .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"]) .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
     background:transparent !important; border-top:1px solid var(--bq-court-line) !important; border-radius:0 !important;
   }
 
@@ -153,18 +153,18 @@
   /* The PROJEKCIA label is a generated ::before flex item.
      Give the number its own breathing room rather than rendering PROJEKCIA9.62. */
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) {
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) {
     column-gap:12px !important;
   }
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7)::before {
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7)::before {
     margin:0 !important; flex:0 0 auto !important; white-space:nowrap !important;
   }
 
   /* Aces and double faults already have a mobile PROJEKCIA column heading.
      Keep the numeric model projection, hide only its redundant lower caption. */
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) .hub-number-stack small {
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"]) .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] > td:nth-child(7) .hub-number-stack small {
     display:none !important;
   }
   /* Daily predictions rail: modest contrast, touch height and typography adjustments (2026-11-01). */

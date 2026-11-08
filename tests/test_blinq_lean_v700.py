@@ -76,7 +76,7 @@ def test_public_prediction_board_matches_final_product_tabs():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     render = app.split("function renderDailyHub(){", 1)[1].split("function marketPreviewCard", 1)[0]
     assert "const tabs=orderedDailyHubTabs()" in render
-    assert "const DAILY_HUB_TABS=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all']" in app
+    assert "const DAILY_HUB_TABS=['daily','prime','value','ace','ace_winner','double_faults','doubles','games','sets','see_all']" in app
     assert "return {daily:'TOP',prime:'ACCA',value:'VALUE'" in app
     assert "ace:lcopy('ACES','ESÁ','ESA')" in app
     assert "double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY')" in app

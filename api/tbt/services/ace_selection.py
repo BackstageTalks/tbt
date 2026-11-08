@@ -796,3 +796,43 @@ def select_ace_picks(
         "empirical_calibration": calibration,
         "fill_policy": "independent_market_fill_evidence_adjusted_hard_floor_0.60",
     }
+
+
+def select_ace_winner_picks(
+    history,
+    predictions: list[dict[str, Any]],
+    *,
+    now: datetime,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Independent point-in-time Most Aces offer, without an O/U odds gate.
+
+    Reuse the existing two-player serve projection and its quality/calibration
+    guards; never infer a bookmaker probability or odds for this market.
+    """
+    universe = max(1, len(predictions))
+    candidates, report = select_ace_picks(
+        history, predictions, now=now, per_market_limit=universe,
+        total_limit=2 * universe, target_count=universe,
+        available_markets_by_event=None, allow_local_aces_fallback=False,
+    )
+    winners = []
+    for card in candidates:
+        if card.get("market") != "aces":
+            continue
+        row = deepcopy(card)
+        row.update(
+            market="most_aces",
+            market_type="Most Aces",
+            projection_metric="most_aces",
+            projection_kind="player_most_aces",
+            projection_label="Hráč · Viac es než súper",
+            price_contract="player_superiority",
+            price_status="projection_only",
+            odds=None,
+            probability=None,
+            edge=None,
+            expected_value=None,
+        )
+        winners.append(row)
+    return winners, {**report, "most_aces_selected": len(winners),
+                     "selection_policy": "independent_pre_match_player_superiority"}

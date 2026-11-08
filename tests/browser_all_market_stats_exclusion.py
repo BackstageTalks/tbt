@@ -1,4 +1,4 @@
-"""Chromium regression: independent STATS switches for all eight markets.
+"""Chromium regression: independent STATS switches for all nine markets.
 
 Synthetic admin configuration only. No real users, publications or API writes.
 """
@@ -9,8 +9,8 @@ from playwright.sync_api import sync_playwright
 from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
 
 
-CATEGORIES = ("daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets")
-MARKETS = dict(zip(CATEGORIES, ("top_daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets")))
+CATEGORIES = ("daily", "prime", "value", "ace", "ace_winner", "double_faults", "doubles", "games", "sets")
+MARKETS = dict(zip(CATEGORIES, ("top_daily", "prime", "value", "ace", "ace_winner", "double_faults", "doubles", "games", "sets")))
 
 
 def route_request(route):
@@ -47,7 +47,7 @@ def test_width(browser, width):
     }""")
     if page.locator('[data-admin-subtab="layout:daily"]').count():
         page.locator('[data-admin-subtab="layout:daily"]').click()
-    assert page.locator("[data-admin-market-exclude-stats]").count() == 8
+    assert page.locator("[data-admin-market-exclude-stats]").count() == 9
     assert page.locator('[data-admin-hub-tab-card="see_all"] [data-admin-market-exclude-stats]').count() == 0
 
     # Clicking a category's option updates only its own global switch.
@@ -87,7 +87,7 @@ def test_width(browser, width):
     assert page.evaluate(
         "marketHarness.state.ui.dashboard.daily_hub.tabs.prime.exclude_from_stats===true"
     )
-    assert page.locator("[data-admin-market-exclude-stats]").count() == 8
+    assert page.locator("[data-admin-market-exclude-stats]").count() == 9
     assert page.evaluate("marketHarness.state.ui.dashboard.daily_hub.tabs.daily.enabled===true")
     assert page.evaluate("marketHarness.state.ui.dashboard.daily_hub.tabs.value.enabled===false")
 

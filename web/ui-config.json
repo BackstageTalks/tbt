@@ -1517,6 +1517,7 @@
         "prime",
         "value",
         "ace",
+        "ace_winner",
         "double_faults",
         "doubles",
         "games",
@@ -1668,6 +1669,76 @@
         },
         "ace": {
           "label": "ACES",
+          "enabled": true,
+          "exclude_from_stats": false,
+          "plans": {
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "rookie": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "pro": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            }
+          }
+        },
+        "ace_winner": {
+          "label": "VIAC ES",
           "enabled": true,
           "exclude_from_stats": false,
           "plans": {

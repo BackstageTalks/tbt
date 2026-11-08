@@ -9,7 +9,7 @@ from tbt.services.admin_storage import validate_ui_config
 
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED = ["daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets", "see_all"]
+EXPECTED = ["daily", "prime", "value", "ace", "ace_winner", "double_faults", "doubles", "games", "sets", "see_all"]
 
 
 def config():

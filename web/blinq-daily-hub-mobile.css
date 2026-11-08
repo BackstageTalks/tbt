@@ -5,7 +5,7 @@
    6 odds, 7 confidence/projection, 8 action/confidence. */
 @media (max-width:900px) {
   body#blinqPremium#blinqPremium:not(.blinq-admin)
-  #dailyHub:is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"],[data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"],[data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) {
     display:grid!important;
     box-sizing:border-box!important;
@@ -25,7 +25,7 @@
     overflow:hidden!important;
   }
   body#blinqPremium#blinqPremium:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) {
     grid-template-areas:"tournament time" "match match" "pick pick" "projection odds" "confidence action"!important;
   }
@@ -103,10 +103,10 @@
     width:auto!important;
     background:transparent!important;
   }
-  /* Aces / double faults / games / sets contain one more numeric metric:
+  /* Aces / more aces / double faults / games / sets contain one more numeric metric:
      column 7 is PROJECTION, not confidence; column 8 is confidence. */
   body#blinqPremium#blinqPremium:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked)>td:nth-child(7) {
     grid-area:projection!important;
     justify-self:stretch!important;
@@ -118,7 +118,7 @@
     text-align:left!important;
   }
   body#blinqPremium#blinqPremium:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked)>td:nth-child(8) {
     grid-area:confidence!important;
     justify-self:start!important;

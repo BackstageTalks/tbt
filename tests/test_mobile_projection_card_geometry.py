@@ -15,7 +15,7 @@ def test_projection_fields_do_not_share_css_grid_area():
     css = (ROOT / "web/blinq-daily-hub-mobile.css").read_text(encoding="utf-8")
     assert "@media (max-width:900px)" in css
     assert 'grid-template-areas:"tournament time" "match match" "pick pick" "projection odds" "confidence action"' in css
-    for tab in ("ace", "double_faults", "games", "sets"):
+    for tab in ("ace", "ace_winner", "double_faults", "games", "sets"):
         assert f'[data-tab="{tab}"]' in css
     assert "grid-area:projection!important" in css
     assert "grid-area:odds!important" in css
@@ -31,7 +31,7 @@ def test_rendered_market_column_order_matches_css_contract():
     assert '<td class="hub-time">' in js
     assert '<td class="hub-tournament-cell">' in js
     assert '<td class="hub-match-cell">' in js
-    assert 'sourceTab===\'ace\'||sourceTab===\'double_faults\'' in js
+    assert 'sourceTab===\'ace\'||sourceTab===\'ace_winner\'||sourceTab===\'double_faults\'' in js
     assert '<td class="hub-pick">' in js
     assert '<td class="hub-odds hub-number-cell">' in js
     assert '<td class="hub-confidence-cell">' in js

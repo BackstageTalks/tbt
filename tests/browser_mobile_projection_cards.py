@@ -1,6 +1,6 @@
 """Chromium geometry gate for the unified mobile prediction cards.
 
-Checks TOP, VALUE, ACCA, DOUBLES, ACES, DOUBLE FAULTS, SETS and GAMES
+Checks TOP, VALUE, ACCA, DOUBLES, ACES, VIAC ES, DOUBLE FAULTS, SETS and GAMES
 at 320/390/600px, and protects legacy 768px tablet layout.
 No live API, auth privileges or provider quota.
 """
@@ -8,7 +8,7 @@ from playwright.sync_api import sync_playwright
 from browser_runtime_r43 import ORIGIN, browser_path, static_route
 
 WINNERS = ('daily', 'value', 'prime', 'doubles')
-PROJECTED = ('ace', 'double_faults', 'games', 'sets')
+PROJECTED = ('ace', 'ace_winner', 'double_faults', 'games', 'sets')
 MARKETS = WINNERS + PROJECTED
 
 SETUP = r"""(market) => {
@@ -22,7 +22,7 @@ SETUP = r"""(market) => {
   const hub = document.querySelector('#dailyHub');
   hub.hidden = false;
   hub.dataset.tab = market;
-  const projected = ['ace','double_faults','games','sets'].includes(market);
+  const projected = ['ace','ace_winner','double_faults','games','sets'].includes(market);
   const rank = '<td class="hub-rank">1</td>';
   const time = '<td class="hub-time"><span class="hub-time-stack"><strong>14:30</strong><small>30.10.26</small><em class="hub-offer-status is-started">ZAČATÉ</em></span></td>';
   const tournament = '<td class="hub-tournament-cell"><span class="hub-tournament"><span class="hub-tournament-badge">ITF</span><span class="hub-tournament-copy"><b>Very Long Tournament in Lyon, France</b><small><span>ATP</span><span>FINAL</span><span>HARD</span><span class="hub-mobile-started is-started">ZAČATÉ</span></small></span></span></td>';

@@ -599,7 +599,7 @@ def _settle_projection_publications(row, match, now):
         if not isinstance(publication, dict):
             continue
         market = str(publication.get("market") or "")
-        if market not in {"aces", "double_faults"}:
+        if market not in {"aces", "most_aces", "double_faults"}:
             continue
         issued_at = publication.get("issued_at")
         if not issued_at:
@@ -621,7 +621,7 @@ def _settle_projection_publications(row, match, now):
             publication["excluded_reason"] = "invalid_projection_selection"
             continue
         opponent_side = "p2" if selected_side == "p1" else "p1"
-        stat_suffix = "aces" if market == "aces" else "double_faults"
+        stat_suffix = "aces" if market in {"aces", "most_aces"} else "double_faults"
         try:
             actual = float(stats.get(f"{selected_side}_{stat_suffix}"))
         except (TypeError, ValueError):
@@ -651,13 +651,19 @@ def _settle_projection_publications(row, match, now):
             else:
                 correct = (actual > line) if direction == "over" else (actual < line)
                 status = "hit" if correct else "miss"
-        elif (contract in {"", "player_superiority"}
-              and (market != "aces" or (
-                  issued < datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
-                  and publication.get("market_line") in (None, "")
-                  and publication.get("ou_side") in (None, "")
-                  and not re.search(r"\b(?:over|under)\s+\d", str(publication.get("selection") or ""), re.I)
-              ))):
+        elif (
+            (market == "most_aces"
+             and contract == "player_superiority"
+             and publication.get("market_line") in (None, "")
+             and publication.get("ou_side") in (None, ""))
+            or (market != "most_aces" and contract in {"", "player_superiority"}
+                and (market != "aces" or (
+                    issued < datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
+                    and publication.get("market_line") in (None, "")
+                    and publication.get("ou_side") in (None, "")
+                    and not re.search(r"\b(?:over|under)\s+\d", str(publication.get("selection") or ""), re.I)
+                )))
+        ):
             # Only legacy pre-cutover player comparisons may use opponent count.
             # Today an O/U bet MUST be graded against its frozen player line.
             if not np.isfinite(opponent_actual) or opponent_actual < 0:
@@ -687,6 +693,8 @@ def _settle_projection_publications(row, match, now):
             "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
             "scheduled_at": match.scheduled_at.isoformat(),
         }
+        if market == "most_aces" and status == "void":
+            settled["reason"] = "aces_equal"
         if price_units:
             settled.update(price_units)
         if existing is not None and (
@@ -804,7 +812,7 @@ def _projection_metrics(publications):
     rows = [
         p for p in publications
         if isinstance(p, dict)
-        and str(p.get("market") or "").strip().lower() in {"aces", "double_faults", "sets", "games"}
+        and str(p.get("market") or "").strip().lower() in {"aces", "most_aces", "double_faults", "sets", "games"}
         and isinstance(p.get("result"), dict)
         and not p.get("excluded_reason")
         and p["result"].get("status") in {"hit", "miss", "void"}
@@ -832,9 +840,9 @@ def _genuine_publication_odds(publication):
     market = str(publication.get("market") or "").strip().lower()
     if status in {"projection_only", "model_only"}:
         return None
-    if market in {"aces", "double_faults", "sets", "games"} and status != "priced_projection":
+    if market in {"aces", "most_aces", "double_faults", "sets", "games"} and status != "priced_projection":
         return None
-    if market not in {"aces", "double_faults", "sets", "games"} and status not in {"", "priced", "priced_projection"}:
+    if market not in {"aces", "most_aces", "double_faults", "sets", "games"} and status not in {"", "priced", "priced_projection"}:
         return None
     if publication.get("historical_display_placeholder_source") == "synthetic_illustrative_not_bookmaker" and publication.get("odds") is None:
         return None
@@ -985,7 +993,7 @@ def betting_performance(results):
     for market in sorted({str(p.get("market") or "") for _, p in entries if p.get("market")}):
         market_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("market") == market])
         markets[market] = _betting_metrics(market_entries)
-    projection_entries = _dedupe_result_publications([(row, p) for row, p in entries if str(p.get("market") or "").strip().lower() in {"aces", "double_faults", "sets", "games"}])
+    projection_entries = _dedupe_result_publications([(row, p) for row, p in entries if str(p.get("market") or "").strip().lower() in {"aces", "most_aces", "double_faults", "sets", "games"}])
     projection_publications = [p for _, p in projection_entries]
     return {
         "schema": 2,
@@ -997,13 +1005,14 @@ def betting_performance(results):
         "projections": {
             "overall": _projection_metrics(projection_publications),
             "aces": _projection_metrics([p for p in projection_publications if p.get("market") == "aces"]),
+            "most_aces": _projection_metrics([p for p in projection_publications if p.get("market") == "most_aces"]),
             "double_faults": _projection_metrics([p for p in projection_publications if p.get("market") == "double_faults"]),
             "sets": _projection_metrics([p for p in projection_publications if p.get("market") == "sets"]),
             "games": _projection_metrics([p for p in projection_publications if p.get("market") == "games"]),
         },
     }
 
-PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games"}
 
 PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)
 # Explicit 180-day cards must not silently change the old auto-selected KPI.

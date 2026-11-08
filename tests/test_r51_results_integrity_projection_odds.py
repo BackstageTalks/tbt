@@ -33,7 +33,7 @@ def test_results_use_compact_model_odds_result_columns_and_projection_odds():
     assert 'class="results-actual"' in APP
     assert 'class="results-outcome-stack"' in APP
     assert "if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
-    assert "if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
+    assert "if(tab==='ace'||tab==='ace_winner'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
 
 
 def test_exact_match_total_parser_requires_two_sided_real_market():
