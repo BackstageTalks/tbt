@@ -143,7 +143,7 @@ def test_propline_fallback_requires_exact_match_and_advertised_market():
             if path=="/sports/tennis/events":
                 return {"events":[{"id":"12345","commence_time":STAMP,
                         "home_team":"Ana A","away_team":"Bob B"}]}
-            if path.endswith("/markets"):return {"markets":["player_aces","h2h"]}
+            if path.endswith("/markets"):return {"markets":[{"key":"player_aces"},{"key":"h2h"}]}
             raise AssertionError("Do not fetch O/U odds for Most Aces")
     out=probe.audit(snap(),site(),NOW,rapid=Rapid(),prop=Prop())
     assert out["priced_exact"]==0
