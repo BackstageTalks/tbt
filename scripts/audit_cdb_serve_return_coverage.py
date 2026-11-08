@@ -60,6 +60,48 @@ def profile(rows):
             if len(samples) < 8 and source:
                 samples.setdefault(source[:120], 0)
                 samples[source[:120]] += 1
+        # Retrospective, read-only diagnosis of already-persisted TennisApi
+        # conflict markers. These contain the *names* of rejected canonical
+        # fields, not the rejected values. They cannot authorize NULL writes.
+        if (isinstance(provenance, dict)
+                and provenance.get("source") == "tennisapi1"
+                and provenance.get("status") == "conflict"):
+            counter["tennisapi_conflict_rows"] += 1
+            reason = provenance.get("reason")
+            if reason in {"existing_canonical_stat_conflict",
+                          "provider_identity_mismatch"}:
+                counter[f"tennisapi_conflict_reason_{reason}"] += 1
+            else:
+                counter["tennisapi_conflict_reason_other_or_missing"] += 1
+            fields = provenance.get("unsupported_keys")
+            if not isinstance(fields, list):
+                fields = []
+            observed = set()
+            for field in fields[:40]:
+                if (not isinstance(field, str) or len(field) > 96
+                        or field not in {
+                            f"{side}_{name}"
+                            for side in ("p1", "p2")
+                            for name in RATE_NAMES + COUNT_NAMES
+                        } and field not in {
+                            f"{side}_{name}" for side in ("p1", "p2")
+                            for name in ("break_points_won",
+                                         "first_serve_in", "first_return_win",
+                                         "second_return_win", "service_points_total",
+                                         "return_points_total")
+                        }):
+                    continue
+                observed.add(field)
+            if not observed:
+                counter["tennisapi_conflicts_without_known_field_keys"] += 1
+            for field in sorted(observed):
+                counter[f"tennisapi_conflicting_field_{field}"] += 1
+            for side in ("p1", "p2"):
+                for suffix in ("break_point_serve_win", "break_point_return_win"):
+                    if stats.get(f"{side}_{suffix}") is None:
+                        counter["tennisapi_conflict_existing_bp_null_cells"] += 1
+            # Existing CDB nulls are NOT independently verified provider values.
+            counter["tennisapi_conflict_recovered_fields"] += 0
         for side in ("p1", "p2"):
             for name in RATE_NAMES + COUNT_NAMES:
                 key = f"{side}_{name}"

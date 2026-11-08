@@ -27,6 +27,43 @@ class Probe(unittest.TestCase):
         self.assertEqual(c["potential_complements_in_otherwise_conflicting_match"],1)
         self.assertEqual(c["candidate_p2_return_points_won"],1)
 
+    def test_retrospective_tennisapi_conflict_marks_only_existing_evidence(self):
+        import json
+        rows = [
+            {
+                "match_id": "private-stable-id-1",
+                "stats_json": json.dumps({"p1_aces": 7,
+                                          "p2_break_point_serve_win": None}),
+                "provider_context_json": json.dumps({"_tbt_statistics": {
+                    "schema": 3, "source": "tennisapi1",
+                    "status": "conflict",
+                    "reason": "existing_canonical_stat_conflict",
+                    "unsupported_keys": ["p1_aces", "p1_aces",
+                                         "p2_break_point_return_win",
+                                         "unexpected_arbitrary_key"],
+                }}),
+            },
+            {
+                "match_id": "private-stable-id-2",
+                "stats_json": "{}",
+                "provider_context_json": json.dumps({"_tbt_statistics": {
+                    "source": "tennisapi1", "status": "conflict",
+                    "reason": "provider_identity_mismatch",
+                }}),
+            },
+        ]
+        counts, samples = profile(rows)
+        self.assertEqual(counts["tennisapi_conflict_rows"], 2)
+        self.assertEqual(counts["tennisapi_conflict_reason_existing_canonical_stat_conflict"], 1)
+        self.assertEqual(counts["tennisapi_conflict_reason_provider_identity_mismatch"], 1)
+        self.assertEqual(counts["tennisapi_conflicting_field_p1_aces"], 1)
+        self.assertEqual(counts["tennisapi_conflicting_field_p2_break_point_return_win"], 1)
+        self.assertEqual(counts["tennisapi_conflicts_without_known_field_keys"], 1)
+        self.assertEqual(counts["tennisapi_conflict_existing_bp_null_cells"], 8)
+        self.assertEqual(counts["tennisapi_conflict_recovered_fields"], 0)
+        self.assertNotIn("private-stable-id", json.dumps({"counts": counts, "samples": samples}))
+        self.assertNotIn("unexpected_arbitrary_key", json.dumps(counts))
+
     def test_invalid_json(self):
         with self.assertRaises(ValueError):
             json_object('[]')
