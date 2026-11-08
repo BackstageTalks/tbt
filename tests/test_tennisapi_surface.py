@@ -34,7 +34,7 @@ def example():
 def observe(payload=None, *, year=2025):
     return completed_year_surface_profile(
         example() if payload is None else payload,
-        team_id=83397, year=year,
+        team_id=987654321, year=year,  # Synthetic ID: supplied body has no player ID.
         observed_at=datetime(2026, 11, 8, tzinfo=timezone.utc),
     )
 
