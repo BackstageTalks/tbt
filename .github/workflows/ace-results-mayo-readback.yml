@@ -13,6 +13,7 @@ on:
     types: [completed]
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -32,6 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: Diagnose main deployment workflow runs (read-only)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run list --repo BackstageTalks/tbt --branch main --workflow ci.yml --limit 8 --json databaseId,headSha,status,conclusion,event,displayTitle --jq '.[] | {id:.databaseId,sha:(.headSha[0:12]),status,conclusion,event,title:.displayTitle}'
       - name: Read authentic frozen Mayo Aces archive and web-source contract (no writes)
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
