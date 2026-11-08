@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "requested_date": "2026-11-07",
-  "reason": "Operator-authorized fresh verification of daily odds, tournament-by-date, tournament-by-round, tournament last, monthly player and all independent bulk routes; <=15 paid requests, read-only; compare actual response rows to historical sample",
+  "reason": "Operator-authorized archive 2016 cross-era verification of the six provider routes; native witnessed Wimbledon 2016 event, fail-closed protected two-era batch comparison, 15 max paid calls, no CDB changes",
   "provider_requests_allowed": true,
   "max_requests": 15,
-  "event_id": 17449516,
+  "event_id": 7115726,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ TennisApi endpoint QA",
-  "diagnostic_attempt": 28,
+  "diagnostic_attempt": 29,
   "phase": "bulk"
 }
