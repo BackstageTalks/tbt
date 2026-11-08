@@ -21,7 +21,7 @@ jobs:
       (github.repository == 'BackstageTalks/tbt' &&
        github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
-       github.head_ref == 'fix/ace-results-frozen-selection-readback-20261108') ||
+       github.head_ref == 'audit/mayo-paired-production-readback-20261108') ||
       (github.repository == 'BackstageTalks/tbt' &&
        github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
@@ -33,8 +33,8 @@ jobs:
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
           BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
-          POST_DEPLOY_READBACK: ${{ github.event_name == 'workflow_run' && 'true' || 'false' }}
-          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+          POST_DEPLOY_READBACK: 'true'
+          DEPLOY_SHA: '921978b91741c683a9ee8445b3f84c8cf75ada35'
         shell: bash
         run: |
           set -euo pipefail
