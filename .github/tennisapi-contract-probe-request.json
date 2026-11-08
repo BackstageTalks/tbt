@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "requested_date": "2026-11-07",
-  "reason": "One guarded 2-call nested daily odds shape profile after CI-approved PR 1450; aggregate structural keys only, no CDB mutation",
+  "reason": "Operator-authorized fresh verification of daily odds, tournament-by-date, tournament-by-round, tournament last, monthly player and all independent bulk routes; <=15 paid requests, read-only; compare actual response rows to historical sample",
   "provider_requests_allowed": true,
-  "max_requests": 2,
+  "max_requests": 15,
   "event_id": 17449516,
   "cdb_writes_allowed": false,
   "model_changes_allowed": false,
   "requested_by": "BlinQ TennisApi endpoint QA",
-  "diagnostic_attempt": 27,
-  "phase": "bulk_odds_shape"
+  "diagnostic_attempt": 28,
+  "phase": "bulk"
 }
