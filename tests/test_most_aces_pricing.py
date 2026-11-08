@@ -128,3 +128,93 @@ def test_api_and_telegram_utility_use_same_source():
     assert "blinq_user_most_aces_confidence_band_v1" in ui
     assert "verifiedMostAcesApiProOdds" in ui
     assert "Bl inQ" not in ui
+
+
+def test_owner_local_most_aces_is_frozen_full_value_with_readback():
+    from tbt.services.most_aces_pricing import (
+        freeze_most_aces_price, verified_frozen_local_most_aces_odds,
+        LOCAL_CONTRACT_VERSION,
+    )
+    from tbt.services.engine import _projection_price_units, _betting_metrics
+    original = row()
+    frozen = freeze_most_aces_price(original)
+    assert original["odds"] is None and original["price_status"] == "projection_only"
+    assert frozen["odds"] == 1.59 and frozen["price_status"] == "priced_projection"
+    assert frozen["price_basis"] == PRICE_BASIS
+    assert frozen["odds_source"] == "blinq_statistical"
+    assert frozen["odds_contract_version"] == LOCAL_CONTRACT_VERSION
+    assert frozen["provider_id"] is None and frozen["captured_at"] is None
+    assert verified_frozen_local_most_aces_odds(frozen) == 1.59
+    publication = {**frozen, "section": "ace_winner", "issued_at": "2026-11-08T10:00:00+00:00"}
+    assert _projection_price_units(publication, True)["profit_units"] == pytest.approx(0.59)
+    assert _projection_price_units(publication, False)["profit_units"] == -1.0
+    publication["result"] = {
+        "status": "hit", "correct": True, "staked_units": 1.0,
+        "return_units": 1.59, "profit_units": 0.59,
+    }
+    report = _betting_metrics([(frozen, publication)])
+    assert report["n"] == 1 and report["staked_units"] == 1.0
+    assert report["avg_odds"] == 1.59 and report["roi"] == pytest.approx(0.59)
+
+
+def test_api_precedes_local_and_old_issued_rows_never_change():
+    from tbt.services.most_aces_pricing import (
+        freeze_most_aces_price, verified_frozen_local_most_aces_odds,
+    )
+    priced = row(price_status="priced_projection", odds=1.73, provider_id=1,
+                 odds_source="rapidapi", captured_at="2026-11-08T06:00:00+00:00",
+                 odds_market_name="Most Aces")
+    assert freeze_most_aces_price(priced) == priced
+    invalid = row(price_status="priced_projection", odds=2.0,
+                  odds_source="mystery", provider_id=8)
+    assert freeze_most_aces_price(invalid) == invalid
+    signal = row(ace_winner_issued=False,
+                 ace_winner_source="issued_aces_signal_only")
+    assert freeze_most_aces_price(signal) == signal
+    original = row(price_status="projection_only", odds=None)
+    original["issued_at"] = "2026-11-07T06:00:00+00:00"
+    # Never retroactively price a prior-day published, originally unpriced bet.
+    assert freeze_most_aces_price(original) == original
+    assert verified_frozen_local_most_aces_odds(original) is None
+    tampered = freeze_most_aces_price(row())
+    tampered["odds"] = 1.65
+    assert verified_frozen_local_most_aces_odds(tampered) is None
+
+
+def test_live_results_grade_1u_local_quote_and_equal_aces_refund():
+    from tbt.services.most_aces_pricing import freeze_most_aces_price
+    from tbt.services.match_status import (
+        deployed_priced_projection, _grade_runtime_projection,
+    )
+    base = freeze_most_aces_price(row())
+    feed = {"generated_at": "2026-11-08T09:00:00+00:00"}
+    published = deployed_priced_projection(base, feed)
+    assert published is not None and published["section"] == "ace_winner"
+    assert published["odds"] == 1.59 and published["issued_at"] == feed["generated_at"]
+    status = {
+        "status": "win",
+        "provider_home_id": "11", "provider_away_id": "22",
+        "projection_stats_p1_id": "11", "projection_stats_p2_id": "22",
+        "projection_stats": {"p1_aces": 8, "p2_aces": 3},
+    }
+    win = _grade_runtime_projection(base, published, status)
+    assert win["result"]["status"] == "hit"
+    assert win["result"]["staked_units"] == 1.0
+    assert win["result"]["profit_units"] == pytest.approx(0.59)
+    status["projection_stats"]["p1_aces"] = 1
+    loss = _grade_runtime_projection(base, published, status)
+    assert loss["result"]["profit_units"] == -1.0
+    status["projection_stats"]["p1_aces"] = 3
+    tie = _grade_runtime_projection(base, published, status)
+    assert tie["result"]["status"] == "void"
+    assert tie["result"]["profit_units"] == 0.0
+    assert deployed_priced_projection(base, {"generated_at": "2026-11-08T18:00:00+00:00"}) is None
+
+
+def test_freeze_is_only_for_most_aces_not_aces_over_under():
+    from tbt.services.most_aces_pricing import freeze_most_aces_price
+    player_total = row("aces", price_contract="player_total_ou",
+                       price_status="priced_projection", odds=1.81,
+                       ou_side="over", market_line=6.5)
+    assert freeze_most_aces_price(player_total) == player_total
+    assert freeze_most_aces_price(row()) == freeze_most_aces_price(row())

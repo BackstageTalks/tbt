@@ -18,7 +18,10 @@ import unicodedata
 import urllib.request
 
 import telegram_offer_publisher as tg
-from tbt.services.most_aces_pricing import statistical_most_aces_odds, verified_api_pro_most_aces_odds, PRICE_BASIS
+from tbt.services.most_aces_pricing import (
+    statistical_most_aces_odds, verified_api_pro_most_aces_odds,
+    verified_frozen_local_most_aces_odds, PRICE_BASIS,
+)
 
 
 def _normal(value):
@@ -70,17 +73,24 @@ def offered_rows(snapshot, now):
         raise ValueError("Missing ACES website offer")
     # Independently published Most Aces provider prices can supersede our
     # local band only on the *same event and ball player*. Never reuse O/U.
-    api_quotes = {}
+    api_quotes, local_quotes = {}, {}
+    claimed_local_quotes = set()
     for candidate in rows:
         if not isinstance(candidate, dict) or candidate.get("market") != "most_aces":
-            continue
-        price = verified_api_pro_most_aces_odds(candidate)
-        if price is None:
             continue
         identity = (str(candidate.get("event_id") or ""),
                     str(candidate.get("selection_id") or ""),
                     str(candidate.get("scheduled_at") or ""))
-        api_quotes.setdefault(identity, []).append((candidate, price))
+        if (candidate.get("price_status") == "priced_projection"
+                and candidate.get("odds_source") == "blinq_statistical"):
+            claimed_local_quotes.add(identity)
+        api_price = verified_api_pro_most_aces_odds(candidate)
+        if api_price is not None:
+            api_quotes.setdefault(identity, []).append((candidate, api_price))
+            continue
+        local_price = verified_frozen_local_most_aces_odds(candidate)
+        if local_price is not None:
+            local_quotes.setdefault(identity, []).append((candidate, local_price))
     selected = []
     identities = set()
     for row in rows:
@@ -107,8 +117,19 @@ def offered_rows(snapshot, now):
                         str(candidate.get("player2", {}).get("id") or "")}
                     == {str(row["player1"]["id"]), str(row["player2"]["id"])}]
         api_price = matching[0] if len(matching) == 1 else None
-        price = None if api_price is not None else statistical_most_aces_odds(
-            row, ball_player_id=identity[1])
+        frozen_local = local_quotes.get((identity[0], identity[1], str(row["scheduled_at"]))) or []
+        matching_local = [value for candidate, value in frozen_local
+                          if {str(candidate.get("player1", {}).get("id") or ""),
+                              str(candidate.get("player2", {}).get("id") or "")}
+                          == {str(row["player1"]["id"]), str(row["player2"]["id"])}]
+        # Never silently change a published independent bet price when
+        # rendering the auxiliary ESÁ-ball Telegram signal.
+        price = None if api_price is not None else (
+            matching_local[0] if len(matching_local) == 1
+            else None if ((identity[0], identity[1], str(row["scheduled_at"]))
+                          in claimed_local_quotes or frozen_local)
+            else statistical_most_aces_odds(row, ball_player_id=identity[1])
+        )
         selected.append({
             "event_id": identity[0], "selection_id": identity[1],
             "name": str(player["name"]).strip(),

@@ -1617,6 +1617,8 @@ def annotate_market_publication_candidates(
                 "odds_source": card.get("odds_source"),
                 "odds_bookmaker": card.get("odds_bookmaker"),
                 "odds_provider_event_id": card.get("odds_provider_event_id"),
+                "price_basis": card.get("price_basis"),
+                "odds_contract_version": card.get("odds_contract_version"),
                 "betting_day": None,
                 "price_status": card.get("price_status") or "projection_only",
                 "price_contract": card.get("price_contract"),

@@ -150,6 +150,28 @@ def test_exact_api_pro_winner_quote_precedes_local_and_never_uses_ou():
     assert picked[0]["statistical_more_aces_odds"]==1.59
 
 
+def test_telegram_reuses_frozen_full_value_odds_not_repriced_ball():
+    from tbt.services.most_aces_pricing import freeze_most_aces_price
+    ball = row()
+    ball["projection_confidence"] = .62  # independently derived ESÁ signal price differs
+    independent = {**row(), "market": "most_aces", "selection_id": "p1",
+                   "price_contract": "player_superiority",
+                   "price_status": "projection_only",
+                   "market_line": None, "ou_side": None, "odds": None}
+    issued = freeze_most_aces_price(independent)
+    assert issued["odds"] == 1.59
+    selected = more.offered_rows(snapshot([ball, issued]), NOW)
+    assert selected[0]["statistical_more_aces_odds"] == 1.59
+    assert "kurz 1.59" in more.render_messages(selected, NOW, tg.FOOTER)[0]["text"]
+
+    # An explicitly claimed frozen local quote must not be replaced with a
+    # different, freshly recomputed price after source tampering.
+    corrupted = {**issued, "odds": 1.65}
+    selected = more.offered_rows(snapshot([ball, corrupted]), NOW)
+    assert selected[0]["statistical_more_aces_odds"] is None
+    assert "BlinQ štat. kurz" not in more.render_messages(selected, NOW, tg.FOOTER)[0]["text"]
+
+
 def test_bad_source_fails_closed_without_reusing_over_under_price():
     malformed=row()
     malformed["projection_model"]="unknown"

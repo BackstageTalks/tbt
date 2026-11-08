@@ -1,7 +1,8 @@
-"""Read-only BlinQ user-statistics price for the *Most Aces* contract.
+"""BlinQ full-value local statistical price for a newly issued Most Aces bet.
 
-The user-approved 1.50–1.70 price band is a local model presentation value,
-not a bookmaker offer, a made-up API response or an implied ROI contract.
+The owner-approved 1.50–1.70 odds band is a valid 1-unit betting price once
+frozen BEFORE publication; it is never misrepresented as a bookmaker quote.
+Older ESÁ ball-only display signals stay unissued, ungraded and outside ROI.
 The separate ESÁ player-total Over/Under price remains unchanged.
 """
 from __future__ import annotations
@@ -107,6 +108,67 @@ def verified_api_pro_most_aces_odds(row: Mapping[str, Any]) -> float | None:
             or not 1.01 <= quote <= 100):
         return None
     return round(quote, 3)
+
+
+LOCAL_CONTRACT_VERSION = "most_aces_local_statistical_v1"
+LOCAL_ODDS_SOURCE = "blinq_statistical"
+
+
+def verified_frozen_local_most_aces_odds(row: Mapping[str, Any]) -> float | None:
+    """Read back only an exact, pre-issued local two-player Most Aces price."""
+    if (not isinstance(row, Mapping)
+            or row.get("market") != "most_aces"
+            or row.get("price_contract") != "player_superiority"
+            or row.get("price_status") != "priced_projection"
+            or row.get("odds_source") != LOCAL_ODDS_SOURCE
+            or row.get("price_basis") != PRICE_BASIS
+            or row.get("odds_contract_version") != LOCAL_CONTRACT_VERSION
+            or row.get("provider_id") not in (None, "")
+            or row.get("captured_at") not in (None, "")
+            or row.get("ace_winner_source") == "issued_aces_signal_only"
+            or row.get("ace_winner_issued") is False):
+        return None
+    original = dict(row)
+    original.update(price_status="projection_only", odds=None)
+    expected = statistical_most_aces_odds(original)
+    try:
+        frozen = float(row["odds"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if (expected is None or not math.isfinite(frozen)
+            or abs(frozen - expected) > 1e-6):
+        return None
+    return expected
+
+
+def freeze_most_aces_price(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Freeze a real Most Aces quote or the owner's 1.50–1.70 fallback BEFORE issuance.
+
+    Never backfill a served offer, replace an API quote or price a display-only
+    ESÁ leader bridge. This function consumes an already-selected model pick;
+    it never selects fixtures or changes the independent O/U contract.
+    """
+    result = deepcopy(dict(row))
+    if (result.get("market") != "most_aces"
+            or result.get("issued_at")
+            or result.get("publication_status") == "published"
+            or result.get("ace_winner_source") == "issued_aces_signal_only"
+            or result.get("ace_winner_issued") is False):
+        return result
+    if verified_api_pro_most_aces_odds(result) is not None:
+        return result  # exact provider quote has priority
+    if result.get("price_status") != "projection_only" or result.get("odds") is not None:
+        return result  # ambiguous/unsupported price: never silently replace it
+    price = statistical_most_aces_odds(result)
+    if price is None:
+        return result
+    result.update(
+        odds=price, price_status="priced_projection",
+        odds_source=LOCAL_ODDS_SOURCE,
+        price_basis=PRICE_BASIS, odds_contract_version=LOCAL_CONTRACT_VERSION,
+        provider_id=None, captured_at=None, odds_bookmaker=None,
+    )
+    return result
 
 
 def annotate_most_aces_offer(feed: dict) -> dict:

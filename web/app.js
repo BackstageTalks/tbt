@@ -3021,9 +3021,9 @@
     }
     return odds;
   }
-  // Own-model 1.50–1.70 price for the distinct Most Aces superiority bet.
-  // An API Pro contract (if independently verified) always wins; this
-  // sidecar display price is NOT a bookmaker quote or a Results/ROI rewrite.
+  // Two distinct paths: frozen 1.50–1.70 owner odds are a full issued 1u
+  // betting contract with Results/ROI; unissued signal-only sidecar values
+  // remain display-only. Genuine exact bookmaker Most Aces quotes win.
   function verifiedMostAcesApiProOdds(row){
     if(String(row?.market||'').toLowerCase()!=='most_aces'
       ||row?.price_contract!=='player_superiority'
@@ -3035,6 +3035,30 @@
       ||/(total|over|under|handicap|set|period)/.test(market))return NaN;
     const value=row?.odds==null?NaN:Number(row.odds);
     return Number.isFinite(value)&&value>1&&value<=100?value:NaN;
+  }
+  function verifiedFrozenMostAcesLocalOdds(row){
+    // This source-labeled, model-frozen price is the issued full betting
+    // contract. The older projection-only leader bridge stays view-only.
+    if(String(row?.market||'').toLowerCase()!=='most_aces'
+      ||row?.price_contract!=='player_superiority'
+      ||row?.price_status!=='priced_projection'
+      ||row?.odds_source!=='blinq_statistical'
+      ||row?.price_basis!=='blinq_user_most_aces_confidence_band_v1'
+      ||row?.odds_contract_version!=='most_aces_local_statistical_v1'
+      ||row?.ace_winner_source==='issued_aces_signal_only'
+      ||row?.ace_winner_issued===false
+      ||row?.provider_id!=null||row?.captured_at!=null
+      ||row?.ou_side!=null||row?.market_line!=null
+      ||row?.projection_model!=='ace-count-projection-v4')return NaN;
+    const own=String(row?.selection_id||''),p1=String(row?.player1?.id||''),p2=String(row?.player2?.id||'');
+    const conf=Number(row?.projection_confidence),proj=Number(row?.projection),opp=Number(row?.opponent_projection);
+    const saved=row?.odds==null?NaN:Number(row.odds);
+    if(!row?.event_id||!own||p1===p2||(own!==p1&&own!==p2)
+      ||!Number.isFinite(Date.parse(String(row?.scheduled_at||'')))
+      ||!Number.isFinite(conf)||conf<.60||conf>.93
+      ||!Number.isFinite(proj)||!Number.isFinite(opp)||!(proj>opp)||opp<0||!Number.isFinite(saved))return NaN;
+    const expected=Math.round((1.70-.20*(conf-.60)/.33+1e-10)*100)/100;
+    return saved>=1.50&&saved<=1.70&&Math.abs(saved-expected)<.00001?saved:NaN;
   }
   function localMostAcesDisplayOdds(row){
     if(!authenticAceWinnerProjection(row))return NaN;
@@ -3155,8 +3179,10 @@
     if(String(row?.market||'').toLowerCase()==='most_aces'){
       const api=verifiedMostAcesApiProOdds(row);
       if(Number.isFinite(api))return hubNumberHtml(api.toFixed(2),lcopy('API Pro odds','Kurz API Pro','Kurz API Pro'));
+      const frozen=verifiedFrozenMostAcesLocalOdds(row);
+      if(Number.isFinite(frozen))return hubNumberHtml(frozen.toFixed(2),lcopy('BlinQ statistical odds','Štat. kurz BlinQ','Stat. kurz BlinQ'));
       const local=localMostAcesDisplayOdds(row);
-      if(Number.isFinite(local))return hubNumberHtml(local.toFixed(2),lcopy('BlinQ statistical odds','Štat. kurz BlinQ','Stat. kurz BlinQ'));
+      if(Number.isFinite(local))return hubNumberHtml(local.toFixed(2),lcopy('BlinQ statistical signal','Štat. signál BlinQ','Stat. signál BlinQ'));
       return hubNumberHtml('—',lcopy('No Most Aces odds','Bez kurzu Viac es','Bez kurzu Více es'));
     }
     if(String(row?.market||'').toLowerCase()==='aces'){
@@ -3327,7 +3353,7 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const aceLocal=row?.ui_local_ace_ou_line!=null&&Number.isFinite(Number(row.ui_local_ace_ou_line))?Number(row?.statistical_ace_odds):NaN;const odds=key==='ace'&&row?.market==='aces'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):aceLocal):row?.market==='most_aces'?(Number.isFinite(verifiedMostAcesApiProOdds(row))?verifiedMostAcesApiProOdds(row):localMostAcesDisplayOdds(row)):Number(row?.odds);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const aceLocal=row?.ui_local_ace_ou_line!=null&&Number.isFinite(Number(row.ui_local_ace_ou_line))?Number(row?.statistical_ace_odds):NaN;const odds=key==='ace'&&row?.market==='aces'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):aceLocal):row?.market==='most_aces'?(Number.isFinite(verifiedMostAcesApiProOdds(row))?verifiedMostAcesApiProOdds(row):Number.isFinite(verifiedFrozenMostAcesLocalOdds(row))?verifiedFrozenMostAcesLocalOdds(row):localMostAcesDisplayOdds(row)):Number(row?.odds);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=(row?.price_status==='projection_only'||(key==='ace'&&row?.market==='aces'&&row?.ui_local_ace_ou_line!=null))&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){

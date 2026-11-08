@@ -41,6 +41,7 @@ from tbt.services.publication import (
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks, select_ace_winner_picks
+from tbt.services.most_aces_pricing import freeze_most_aces_price
 from ace_working_odds import eligible_local_ace_projection, verified_ace_odds, local_player_aces_ou
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
@@ -594,7 +595,11 @@ def _publish_predictions(
     # pending Daily / Prime / Value candidates independently and confirm them only
     # after the exact feed is deployed.
     ledger_predictions = list(predictions) + list(doubles_picks or [])
-    issued_ace_picks = list(ace_picks or []) + list(ace_winner_picks or [])
+    # Model selection precedes bookmaker discovery. Freeze an exact provider
+    # price or the owner's full-value local fallback in BOTH ledger and feed.
+    issued_ace_picks = list(ace_picks or []) + [
+        freeze_most_aces_price(row) for row in (ace_winner_picks or [])
+    ]
     ledger_predictions = annotate_market_publication_candidates(
         ledger_predictions, ace_picks=issued_ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
     )
