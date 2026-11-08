@@ -62,6 +62,52 @@ def test_rejects_extra_duplicate_candidates(monkeypatch):
         repair.build_candidate(pre, pre, live)
 
 
+
+def test_schema_alignment_only_widens_exact_small_bestof_and_null_ranks():
+    pre = pa.table({
+        "match_id": pa.array(["old"]),
+        "best_of": pa.array([3], type=pa.int64()),
+        "player1_rank": pa.nulls(1),
+        "player2_rank": pa.nulls(1),
+        "stats_json": pa.array(['{"p1_aces":0}']),
+    })
+    live = pa.table({
+        "match_id": pa.array(["live"]),
+        "best_of": pa.array([5.0], type=pa.float64()),
+        "player1_rank": pa.array([10.0], type=pa.float64()),
+        "player2_rank": pa.array([20.0], type=pa.float64()),
+        "stats_json": pa.array(['{"p1_aces":1}']),
+    })
+    aligned, same = repair.align_prewrite_exact_observed_types(pre, live)
+    assert aligned.schema.equals(live.schema)
+    assert aligned["best_of"].to_pylist() == [3.0]
+    assert aligned["player1_rank"].to_pylist() == [None]
+    assert aligned["player2_rank"].to_pylist() == [None]
+    assert aligned["stats_json"].equals(pre["stats_json"])
+    assert same.equals(live)
+
+
+def test_schema_alignment_fails_on_invalid_bestof_and_other_type_change():
+    base = pa.table({
+        "best_of": pa.array([9], type=pa.int64()),
+        "player1_rank": pa.nulls(1),
+        "player2_rank": pa.nulls(1),
+        "name": pa.array(["a"]),
+    })
+    target = pa.table({
+        "best_of": pa.array([3.0], type=pa.float64()),
+        "player1_rank": pa.array([10.0], type=pa.float64()),
+        "player2_rank": pa.array([10.0], type=pa.float64()),
+        "name": pa.array(["a"]),
+    })
+    with pytest.raises(ValueError, match="Nonstandard source best_of"):
+        repair.align_prewrite_exact_observed_types(base, target)
+    shifted = base.set_column(base.schema.get_field_index("name"), "name",
+                              pa.array([1], type=pa.int64()))
+    with pytest.raises(ValueError, match="Unapproved prewrite"):
+        repair.align_prewrite_exact_observed_types(shifted, target)
+
+
 def test_unchanged_external_writer_and_no_freeform_provider_calls():
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1]
