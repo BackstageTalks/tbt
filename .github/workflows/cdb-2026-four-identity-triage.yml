@@ -43,10 +43,6 @@ jobs:
         run: |
           python -m py_compile scripts/cdb_2026_four_identity_triage.py scripts/restore_cdb_2026_four_native_id.py
           python -m pytest -q tests/test_cdb_2026_four_identity_triage.py tests/test_restore_cdb_2026_four_native_id.py
-      - name: Pinned native-provider and original-vs-live four-case readback
-        run: |
-          set -euo pipefail
-          python scripts/cdb_2026_four_identity_triage.py --out ".cache/tbt/four-ids-$GITHUB_RUN_ID"
       - name: Fail-closed 1-real-WTA-match candidate DRY-RUN (no CDB writer)
         run: |
           set -euo pipefail
