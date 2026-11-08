@@ -31,14 +31,14 @@ def _same_canonical_stat(key, current, incoming) -> bool:
     at most 1e-10 (absolute), far below the precision of reported tennis
     percentages; actual conflicting rates are still quarantined.
     """
-    if current == incoming:
-        return True
     if (isinstance(current, bool) or isinstance(incoming, bool)
             or not isinstance(current, (int, float))
             or not isinstance(incoming, (int, float))):
         return False
     if not (math.isfinite(current) and math.isfinite(incoming)):
         return False
+    if current == incoming:
+        return True
     if key.endswith(_COUNT_SUFFIXES):
         return False
     return math.isclose(float(current), float(incoming),
