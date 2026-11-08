@@ -63,6 +63,58 @@ def _count(item, side):
     return None
 
 
+def _set_bp_counts_exceed_all(periods, *, home_is_player1, saved, scored):
+    """Veto *newly derived* BP rates if observed set counts exceed ALL.
+
+    Set tapes can be incomplete, so a lower sum is not a contradiction.
+    Unparseable or missing set counts cannot establish a match-level rate.
+    """
+    totals = {side: {"saved": 0, "faced": 0, "scored": 0}
+              for side in ("p1", "p2")}
+    for period in periods:
+        if not isinstance(period, dict):
+            continue
+        label = str(period.get("period") or "").strip().upper()
+        if not re.fullmatch(r"(?:[1-5](?:ST|ND|RD|TH)?|S[1-5]|SET\s*[1-5])", label):
+            continue
+        groups = period.get("groups")
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
+            if not isinstance(group, dict):
+                continue
+            items = group.get("statisticsItems")
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                key = re.sub(r"[^a-z0-9]", "",
+                             str(item.get("key") or item.get("name") or "").lower())
+                if key not in {"breakpointssaved", "breakpointsscored"}:
+                    continue
+                for side in ("home", "away"):
+                    player = "p1" if (side == "home") == home_is_player1 else "p2"
+                    if key == "breakpointssaved":
+                        _, won, faced = _fraction(item, side)
+                        if (won is not None and faced is not None
+                                and won.is_integer() and faced.is_integer()):
+                            totals[player]["saved"] += int(won)
+                            totals[player]["faced"] += int(faced)
+                    else:
+                        won = _count(item, side)
+                        if won is not None and won.is_integer():
+                            totals[player]["scored"] += int(won)
+    for player in ("p1", "p2"):
+        if player in saved:
+            won, faced = saved[player]
+            if (totals[player]["saved"] > won or
+                    totals[player]["faced"] > faced):
+                return True
+        if player in scored and totals[player]["scored"] > scored[player]:
+            return True
+    return False
+
 RATE_ALIASES = {
     "firstservepoints": "first_serve_win", "firstservepointswon": "first_serve_win",
     "1stservepointswon": "first_serve_win", "1stservepoints": "first_serve_win",
@@ -170,6 +222,9 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
 
     values: dict[str, float] = {}
     rate_counts = {}
+    # Bare converted-BP counts require an independently observed denominator.
+    bp_saved_counts = {}
+    bp_scored_counts = {}
     for group in whole[0]["groups"]:
         if not isinstance(group, dict):
             continue
@@ -195,6 +250,11 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                     continue
 
                 value, won, total = _fraction(item, side)
+                if (key == "breakpointsscored"
+                        and item.get(side + "Total") is None):
+                    observed = _count(item, side)
+                    if observed is not None and observed.is_integer():
+                        bp_scored_counts[prefix] = int(observed)
                 if value is None:
                     continue
                 field = f"{prefix}_{rate_name}"
@@ -210,6 +270,38 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                     values[bp_field] = value
                 if total is not None:
                     rate_counts[field] = (won, total)
+                    if (rate_name == "break_point_serve_win"
+                            and won is not None and won.is_integer()
+                            and total.is_integer()):
+                        bp_saved_counts[prefix] = (int(won), int(total))
+
+    # Independent set totals can disprove even internally consistent ALL BP.
+    # Fail closed on new conversion-rate derivation; retain direct evidence.
+    set_bp_contradiction = _set_bp_counts_exceed_all(
+        periods, home_is_player1=home_is_player1,
+        saved=bp_saved_counts, scored=bp_scored_counts,
+    )
+    # Opponent saved/faced BPs imply conversion chances for this player.
+    # Only accept the rate if the independent converted count also agrees.
+    # Missing counts, 0/0 and disagreements must never become a BP rate.
+    for player, opponent in (("p1", "p2"), ("p2", "p1")):
+        if set_bp_contradiction:
+            continue
+        saved = bp_saved_counts.get(opponent)
+        converted = bp_scored_counts.get(player)
+        if saved is None or converted is None:
+            continue
+        saved_count, faced = saved
+        if faced <= 0 or converted != faced - saved_count:
+            continue
+        rate = converted / faced
+        targets = (f"{player}_break_points_won",
+                   f"{player}_break_point_return_win")
+        if any(field in values and abs(values[field] - rate) > 1e-6
+               for field in targets):
+            continue
+        for field in targets:
+            values.setdefault(field, rate)
 
     # Weighted return quality is computed from *return-point* wins and chances;
     # do not average percentages or mistake a first-serve-in rate for quality.

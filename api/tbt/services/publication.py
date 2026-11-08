@@ -678,6 +678,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                     "price_contract", "ou_side", "model_probability", "expected_value",
                     "provider_id", "captured_at", "odds_market_name",
                     "odds_source", "odds_bookmaker", "odds_provider_event_id",
+                    "price_basis", "odds_contract_version",
                 ):
                     if field in snapshot:
                         row[field] = deepcopy(snapshot.get(field))

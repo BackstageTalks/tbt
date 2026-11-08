@@ -30,6 +30,33 @@ MARKET_KEYS = (
 ACTIVE_KEYS = ("upcoming", *MARKET_KEYS)
 LEGACY_ALIASES = ("daily_picks", "top_daily", "value", "doubles", "aces", "sets_games")
 MAX_KEYS = 700  # Daily public board + distinct market contracts; storage remains size-gated.
+MAX_DAILY_KEYS = 7000  # Bounded union of successive issued generations, never truncated.
+
+
+def _decode_entity(row):
+    """Atomic multi-property receipt; legacy one-property receipts remain readable."""
+    from .admin_storage import _decode_runtime_ui_payload
+    header = _decode_runtime_ui_payload(row["manifest_json"])
+    if not isinstance(header, dict) or "keys_shards_v1" not in header:
+        return _decode_stored_authority(row["manifest_json"])
+    import hashlib
+    shards = header["keys_shards_v1"]
+    if (header.get("schema") != 1 or header.get("confirmed_only") is not True
+            or not isinstance(shards, list) or not 1 <= len(shards) <= MAX_DAILY_KEYS // MAX_KEYS):
+        raise ValueError("Invalid issued authority shard inventory")
+    keys = []
+    for index, digest in enumerate(shards):
+        encoded = row[f"keys_{index:03d}"]
+        if not isinstance(encoded, str) or hashlib.sha256(encoded.encode()).hexdigest() != digest:
+            raise ValueError("Issued authority shard checksum mismatch")
+        part = _decode_stored_authority(encoded)
+        if (not isinstance(part, dict) or part.get("betting_day") != header.get("betting_day")
+                or part.get("confirmed_only") is not True or not isinstance(part.get("keys"), list)):
+            raise ValueError("Issued authority shard identity mismatch")
+        keys.extend(part["keys"])
+    if len(keys) != header.get("key_count") or len(keys) != len(set(keys)) or len(keys) > MAX_DAILY_KEYS:
+        raise ValueError("Invalid issued authority union")
+    return {"schema": 1, "confirmed_only": True, "betting_day": header["betting_day"], "keys": keys}
 
 
 def _decode_stored_authority(value: object) -> dict | None:
@@ -89,6 +116,17 @@ def _feed_keys(feed: dict) -> set[str]:
             except ValueError:
                 continue
     return result
+
+
+def offer_contract_readback(feed: dict) -> dict:
+    """Worker-only exact hashes of the issued board, not merely section counts."""
+    from .entitlements import _daily_rows
+    sources = {"top": ("top_daily_picks", _daily_rows(feed)),
+               "value": ("value_picks", feed.get("value_picks") or []),
+               "aces": ("ace_picks", feed.get("ace_picks") or [])}
+    return {category: sorted({row_authority_key(row, key) for row in rows
+                              if isinstance(row, dict)})
+            for category, (key, rows) in sources.items()}
 
 
 def build_confirmed_authority(feed: dict, ledger: list, *, now=None) -> dict:
@@ -194,7 +232,7 @@ def load_authority(day: str) -> dict | None:
             return None
         raise AdminStorageUnavailable("Issued publication authority unavailable") from exc
     try:
-        result = _decode_stored_authority(row["manifest_json"])
+        result = _decode_entity(row)
         if (not isinstance(result, dict) or result.get("betting_day") != day
                 or result.get("schema") != 1 or result.get("confirmed_only") is not True
                 or not isinstance(result.get("keys"), list)):
@@ -214,6 +252,10 @@ def persist_authority(manifest: dict) -> dict:
 
     day = manifest["betting_day"]
     incoming = set(manifest["keys"])
+    if (len(manifest["keys"]) > MAX_KEYS or len(incoming) != len(manifest["keys"])
+            or any(not isinstance(key, str) or len(key) != 64
+                   or any(c not in "0123456789abcdef" for c in key) for key in incoming)):
+        raise ValueError("Issued authority exceeds bounded daily size or has invalid keys")
     client = _table(TABLE)
     for _attempt in range(4):
         try:
@@ -227,7 +269,7 @@ def persist_authority(manifest: dict) -> dict:
             prior = set()
         else:
             try:
-                previous = _decode_stored_authority(existing["manifest_json"])
+                previous = _decode_entity(existing)
                 if (not isinstance(previous, dict) or previous.get("schema") != 1 or previous.get("betting_day") != day
                         or previous.get("confirmed_only") is not True):
                     raise ValueError("Invalid prior authority")
@@ -235,7 +277,7 @@ def persist_authority(manifest: dict) -> dict:
             except (ValueError, TypeError, KeyError) as exc:
                 raise AdminStorageUnavailable("Corrupt previous authority") from exc
         keys = sorted(prior | incoming)
-        if len(keys) > MAX_KEYS:
+        if len(keys) > MAX_DAILY_KEYS:
             raise ValueError("Issued authority exceeds bounded daily size")
         updated = {
             "schema": 1, "confirmed_only": True, "betting_day": day, "keys": keys,
@@ -249,6 +291,21 @@ def persist_authority(manifest: dict) -> dict:
                 b"".join(bytes.fromhex(key) for key in keys)
             ).decode("ascii"),
         }
+        shards = {}
+        if len(keys) > MAX_KEYS:
+            import hashlib
+            digests = []
+            for index, start in enumerate(range(0, len(keys), MAX_KEYS)):
+                part = {**packed, "keys_packed_v1": base64.b64encode(
+                    b"".join(bytes.fromhex(key) for key in keys[start:start + MAX_KEYS])
+                ).decode("ascii")}
+                encoded = _encode_runtime_ui_payload(part)
+                if len(encoded.encode("utf-16-le")) > 65536:
+                    raise ValueError("Issued authority shard exceeds Azure Table string limit")
+                shards[f"keys_{index:03d}"] = encoded
+                digests.append(hashlib.sha256(encoded.encode()).hexdigest())
+            packed = {"schema": 1, "confirmed_only": True, "betting_day": day,
+                      "keys_shards_v1": digests, "key_count": len(keys)}
         stored_json = _encode_runtime_ui_payload(packed)
         if len(stored_json.encode("utf-16-le")) > 65536:
             raise ValueError("Issued authority exceeds Azure Table string limit")
@@ -257,6 +314,7 @@ def persist_authority(manifest: dict) -> dict:
             "RowKey": day,
             "manifest_json": stored_json,
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            **shards,
         }
         try:
             if existing is None:
@@ -271,7 +329,7 @@ def persist_authority(manifest: dict) -> dict:
                 )
             # Independent storage readback, not just a successful write response.
             observed = load_authority(day)
-            if not observed or not incoming.issubset(observed["keys"]):
+            if not observed or not set(keys).issubset(observed["keys"]):
                 raise AdminStorageUnavailable("Issued authority readback mismatch")
             return observed
         except Exception as exc:

@@ -41,6 +41,7 @@ from tbt.services.publication import (
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks, select_ace_winner_picks
+from tbt.services.most_aces_pricing import freeze_most_aces_price
 from ace_working_odds import eligible_local_ace_projection, verified_ace_odds, local_player_aces_ou
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
@@ -594,7 +595,11 @@ def _publish_predictions(
     # pending Daily / Prime / Value candidates independently and confirm them only
     # after the exact feed is deployed.
     ledger_predictions = list(predictions) + list(doubles_picks or [])
-    issued_ace_picks = list(ace_picks or []) + list(ace_winner_picks or [])
+    # Model selection precedes bookmaker discovery. Freeze an exact provider
+    # price or the owner's full-value local fallback in BOTH ledger and feed.
+    issued_ace_picks = list(ace_picks or []) + [
+        freeze_most_aces_price(row) for row in (ace_winner_picks or [])
+    ]
     ledger_predictions = annotate_market_publication_candidates(
         ledger_predictions, ace_picks=issued_ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
     )
@@ -1997,6 +2002,25 @@ def main():
         "prime": len(feed.get("prime_picks", [])),
         "value": len(feed.get("value_picks", [])),
         "ace": len(feed.get("ace_picks", [])),
+        # The independent VIAC ES issue contract was added after the 2026-11-08
+        # morning release. Report the *actual* frozen rows and the selector /
+        # ledger restoration counts separately so an empty offer cannot be
+        # mistaken for a UI-only regression or a successful publication.
+        "ace_winner": {
+            "selected": int((ace_winner_report or {}).get("most_aces_selected") or 0),
+            "presented": sum(
+                isinstance(row, dict) and str(row.get("market") or "").lower() == "most_aces"
+                for row in feed.get("ace_picks", [])
+            ),
+            "fresh_published": int(
+                ((feed.get("market_selection") or {}).get("presentation_integrity") or {})
+                .get("published", {}).get("most_aces") or 0
+            ),
+            "ledger_quarantined": int(
+                ((feed.get("market_selection") or {}).get("presentation_integrity") or {})
+                .get("ledger_quarantined", {}).get("most_aces") or 0
+            ),
+        },
         "ace_projection": ace_report or {},
         "ace_df_settlement_statistics": ace_df_settlement_stats_report or {},
         "sg": len(feed.get("sg_picks", [])),

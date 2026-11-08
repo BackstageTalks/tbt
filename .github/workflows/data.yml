@@ -1,7 +1,7 @@
 name: Tennis data and predictions
 # Only an authenticated Model Lab request carries an operation marker.
 # Preserve ordinary workflow names for all automatic/provider jobs.
-run-name: ${{ inputs.stale_handoff_run_id && format('BlinQ safe deploy handoff {0}', inputs.stale_handoff_run_id) || inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
+run-name: ${{ inputs.morning_parent_run_id && format('BlinQ morning refresh {0}', inputs.morning_parent_run_id) || inputs.stale_handoff_run_id && format('BlinQ safe deploy handoff {0}', inputs.stale_handoff_run_id) || inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
 on:
   push:
     branches: [main]
@@ -10,6 +10,10 @@ on:
       - '.github/data-operation-request.json'
   workflow_dispatch:
     inputs:
+      morning_parent_run_id:
+        description: Exact morning orchestrator run ID; no provider semantics
+        type: string
+        default: ''
       request_id:
         description: Internal Model Lab correlation ID; leave blank for normal runs
         type: string
@@ -379,6 +383,10 @@ jobs:
       - name: Install data-pipeline dependencies
         if: env.MODE != 'deploy-current'
         run: python -m pip install -r api/requirements-train.txt
+      - name: Verify approved morning TOP policy without provider calls
+        if: env.MODE == 'refresh' || env.MODE == 'current-refresh'
+        run: python scripts/verify_top_morning_policy.py
+
       - name: Reuse current candidate without duplicate pipeline assembly
         if: env.MODE == 'deploy-current'
         run: echo "Deployment job will assemble and verify the immutable serving snapshot once."

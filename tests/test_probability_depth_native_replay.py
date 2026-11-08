@@ -7,7 +7,7 @@ from replay_selection_reliability import canonical_index, dt, prepare
 from research.probability_depth_replay import (
     reconstructed_card, selection_ids, paired_day_ci, test_replay as replay_analysis,
 )
-from tbt.services.market_selection import select_market_sections
+from research.legacy_market_selection_v18 import select_market_sections
 
 
 def row(event="event-a", raw=.85, depth=.95, selected="top_daily", *, odds=1.65):
@@ -15,6 +15,7 @@ def row(event="event-a", raw=.85, depth=.95, selected="top_daily", *, odds=1.65)
     return {
         "event_id": event, "scheduled_at": "2026-11-02T12:00:00+00:00",
         "model_version": "model-test", "tour": "ATP", "surface": "hard",
+        "competition": "ATP", "created_at": "2026-11-02T06:00:00Z",
         "winner_id": "a",
         "player1": {"id": "a", "name": "A", "rank": 1, "probability": raw},
         "player2": {"id": "b", "name": "B", "rank": 2, "probability": 1-raw},

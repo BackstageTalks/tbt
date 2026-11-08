@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "approved_by_operator": true,
+  "source_live_bundle_sha256": "5396eb560146a92094c92d2d14fd52917f4e7ac176c8e4eed048e9b93cdba46c",
+  "expected_source_original_missing_ids": 4,
+  "expected_existing_event_aliases": 3,
+  "expected_real_net_new_matches": 1,
+  "expected_wta_nonnull_stats": 33,
+  "cdb_write_limit": 1,
+  "provider_requests": 0,
+  "model_changes": false
+}

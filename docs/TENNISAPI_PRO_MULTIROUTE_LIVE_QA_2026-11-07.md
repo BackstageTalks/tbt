@@ -205,3 +205,322 @@ event/selection index, but it cannot replace historical pre-match quotes or
 individual market requests without valid quote timestamp and provider/market
 identity verification. Spend no more calls merely to reach the operator's
 300-per-test permission ceiling. No model or production route changes.
+
+## Verified ATP 2024 100-call breakpoint-focus CDB enrichment — 2026-11-08
+
+Authorized follow-up to test ATP where the legacy 2023 cohort had a low 47
+new values / 92 calls and 70 conflicts. The existing **provider-native**
+guarded statistics importer (not the read-only bulk probe) selected ATP 2024
+from its current canonical gap plan, with no model changes.
+
+[GitHub Actions run 42466110083](https://github.com/BackstageTalks/tbt/actions/runs/42466110083)
+**completed successfully**, all of Acquire global CDB writer, Execute
+operation, Independently verify every targeted CDB statistics publication,
+Upload report, and Release global CDB writer **succeeded**. The cross-repository
+lock tag was independently observed absent after release.
+
+Exact report/read-back:
+- Provider-native 100 paid attempts (including retries), 99 enriched
+  matches, one empty whole-match response, **779 net-new canonical statistic
+  values**, **7.79 new values per paid call**; zero conflicts and zero
+  new complete serve+return-quality rows.
+- Read-back `status=VERIFIED`, `persisted_new_statistic_values=779`,
+  `persisted_new_per_set_matches=89`, target
+  `history-2024.parquet` SHA-256
+  `cc64fbe1c55e894d60bf339e15cfdbc3932ed42298c14a8c9b49199c2ba8c1fb`.
+- Current ATP 2024 candidate plan: 73,092 completed matches, 39,860 already
+  fully quality-ready, 2,321 eligible breakpoint-focus matches; 48,848
+  on retry cooldown, 17,787 without unambiguous provider event ID, 4,136
+  already with target BP fields present. **These are mutually exclusive
+  selector skip reasons, not 70k safe import candidates**.
+- Provider key inventory: supported `breakpointssaved` and
+  `breakpointsscored` present in 99 payloads each, plus other serve/return
+  and ace/DF keys. The 779 canonical cells include **mixed provider
+  statistics**, NOT 779 proven break-point-only cells; aggregate report
+  did not split exact new field counts by name.
+- The 7.79 ATP 2024 return is close to the independently measured WTA 2023
+  7.9475 return; it **does not** prove the 2024 yield will remain stable
+  after the first 100, or establish trained-model benefits.
+- Artifacts: `blinq-statistics-42466110083` containing
+  `download_report.json`, `statistics_gap_plan.json`,
+  `statistics_readback.json`, `download_progress.json`.
+
+Decision: ATP 2024 is a validated productive cohort, but continue
+ATP/WTA 2016–2026 prioritization based on **fresh persisted cells per paid
+call**, not a fixed season or blanket re-fetch of BP-only gaps. Preserve
+NULL-only canonical precedence, 500 reserve and global single-writer;
+do not claim serve/return quality improvements from the value count alone.
+
+## ATP 2024 next 500-call canonical import — 2026-11-08
+
+Operator explicitly authorized 500 NEW paid attempts after the previous
+100-call ATP 2024 pilot yielded 779 verified net-new statistical values.
+Existing native targeted break-point-focus statistics importer was reused,
+without any provider route, model, quality, or writer-contract changes.
+
+[Actions run 42468614163](https://github.com/BackstageTalks/tbt/actions/runs/42468614163)
+completed **successfully**. All of acquire owner-only global CDB writer,
+execute native operation, independent canonical publication read-back, artifact
+upload and owner-only lock release succeeded. The tag observed soon afterward
+was a **different, later owner**, run 42469575334; do not confuse this with
+failure to release the completed run's lock.
+
+Read-back from `blinq-statistics-42468614163`:
+- **500 paid attempts**, 306 enriched matches, 194 responses classified
+  as conflicts and safely rejected, 0 empty whole-match results.
+- **2,787 actually persisted net-new canonical statistic cells**
+  (`status=VERIFIED`, 5.574 cells per paid attempt); 282 matches with
+  persisted per-set data.
+- 0 new fully serve/return-ready rows and 0 new ace/DF cells.
+- `history-2024.parquet` independently verified SHA-256:
+  `b18c0efa98ee1248ef2971d354ece216068188f1fb6529e188a9794a5afdecff`.
+- 2,221 eligible candidates in the pre-run plan. The earlier 100-call pilot
+  had 2,321, before its 100 selected matches entered cooldown.
+- Source statistics payload key inventory observed 500 complete payloads
+  with both break-point keys, but the canonical delta reported all safe
+  statistical fields together: **2,787 is not proven BP-only**.
+- This aggregated report does not itemize the 194 conflict reason labels.
+  The guarded enricher refuses any response conflicting with existing
+  authoritative statistics; it never overwrites the existing cell.
+
+Comparison:
+| ATP 2024 cohort | Paid calls | Enriched matches | Rejected conflicts | Net-new CDB values | Values / paid call |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pilot run 42466110083 | 100 | 99 | 0 | 779 | 7.790 |
+| Continuation run 42468614163 | 500 | 306 | 194 | 2787 | 5.574 |
+| **ATP 2024 combined** | **600** | **405** | **194** | **3566** | **5.943** |
+
+The incremental yield fell ~28.4% relative to the pilot, with a 38.8%
+conflict rate in the new cohort. **Do not repeat a large blind ATP 2024
+same-order batch** merely because many CDB cells remain NULL. Next
+read-only improvement: report per-reason conflict counts and per-field
+net-new CDB deltas from the existing importer, then compare eligible WTA
+and other ATP season windows using evidence-backed yield without changing
+global budget, identity, precedence or point-in-time constraints. Production
+model/forecast changes remain out of scope.
+
+## getMatchStatistics field and conflict research — 2026-11-08 (read-only, 0 API calls)
+
+The previous 500-call ATP 2024 artifact `blinq-statistics-42468614163`
+was independently re-inspected, along with the current
+`api/tbt/providers/statistics.py`,
+`api/tbt/services/statistics_enrichment.py` and the operator's anonymized
+`getMatchStatistics` example.
+
+- In all **500 observed ALL-period responses**, the provider exposed
+  `aces`, `doubleFaults`, `firstServeAccuracy`,
+  `firstServePointsAccuracy`, `secondServePointsAccuracy`,
+  `firstReturnPoints`, `secondReturnPoints`,
+  `breakPointsSaved`, and `breakPointsScored`. The current
+  parser already consumes these where an explicit rate/count-backed ratio
+  exists; do not call this an untapped endpoint.
+- `servicePointsScored` and `receiverPointsScored` were present in
+  all 500 responses but are not currently mapped into strict
+  denominator/reconciliation diagnostics. `secondServeAccuracy` also
+  appeared in all 500, and can serve as independent validation of
+  double-fault/second-serve-attempt units, *not* be confused with
+  `secondServePointsAccuracy`.
+- 68/500 responses carried additional winners/unforced-error/groundstroke
+  breakdown keys. They are unmodeled fields with **unknown canonical
+  coverage**, not automatically 68 useful new matches.
+- 194/500 calls were marked `status_conflict`. The current importer
+  deliberately rejects a **whole provider statistics response** when any
+  parsed non-NULL existing canonical value differs. This protects the
+  authoritative CDB, but may forgo separate new nonconflicting cells.
+  Exact per-field conflict counts are NOT included in the aggregate artifact;
+  diagnose conflict keys and numeric deltas from private provenance before
+  deciding whether isolated null-only fields can be accepted.
+- The attached sample supplies `ALL` saved/faced BP counts home 3/3,
+  away 2/3, plus `breakPointsScored` count home 1, away 0.
+  Thus opposite-side saved/faced data mathematically imply **home BP
+  conversion 1/3; away 0/3**, each independently agreeing with the
+  count-only `breakPointsScored` member. Current parser cannot directly
+  obtain a BP return rate from the count-only field. Candidate is a
+  strictly **cross-validated** derivation with preserved input provenance,
+  only for safe NULL fields; no automatic mapping change approved yet.
+- The same anonymized example has inconsistent periods: home saved BP
+  `ALL=3/3` versus first+second set combined `1/5`; away
+  `breakPointsScored ALL=0` versus set sum `1+3=4`;
+  away double faults `ALL=0` versus per-set sum `0+1=1`.
+  The current set parser suppresses all set-level enrichment when the set
+  total **exceeds** a whole-match ace/DF total, but allows incomplete
+  **undercounts**. Do not use raw set summations as canonical whole-match
+  values without fully checked completeness and semantics.
+- Research-only endpoint witness pack under *the configured*
+  `tennisapi1.p.rapidapi.com` host:
+  (a) `GET /api/tennis/event/{eventId}` for exact identity/finish,
+  (b) `GET /api/tennis/event/{eventId}/statistics` for ALL + sets,
+  (c) `GET /api/tennis/event/{eventId}/point-by-point` for point-level
+  completeness/serving/score semantics, and optional
+  (d) `GET /api/tennis/team/{teamId}/year-statistics/{year}`
+  for aggregate coverage, **not direct match-level CDB supplementation**.
+  Use the SAME finished match/native event ID in (a)–(c).
+  An arbitrary `eventId` from another tennis API product must never
+  be matched without a provider-native witness.
+
+Priorities: (1) per-field conflict reason/delta histogram and
+already-paid payload quality audit; (2) conservative cross-validated
+opponent BP-saved -> conversion-rate candidate with regression tests,
+including 0/0 and inconsistent set tapes; (3) denom-based service/return
+cross-checks from scored raw points; (4) PBP coverage/completeness
+measurement before any new paid scale; (5) validate whether 68/500 richer
+stroke reports merit dedicated canonical fields. No API calls, imports,
+schema upgrades or model changes were executed for this investigation.
+
+## Four-endpoint supplied fixture: match, statistics, PBP, player-year — independent calculations
+
+Read-only audit on 2026-11-08. **Zero provider calls, zero CDB writes, zero
+model changes.** Uploaded fixture has `getTennisMatchDetails` event
+**14232981**, ATP Kitzbühel, 2025-07-22, Ofner (home
+tennisapi team 83397) vs Struff (away team 46391), finished,
+set scores 4–6 2–6, clay. The separately supplied
+`getMatchStatistics` and `getPointByPointData` JSON bodies **do not
+carry their own event ID**; original requested URLs are still needed to
+independently certify that all three describe this exact event.
+The player-year fixture lacks both team ID and year in its body; do not
+attribute it to a named participant without the original request.
+
+Independently replayed point-by-point **18 games** (10 first set,
+8 second set), **92 explicitly listed** point transitions, with one
+terminal point omitted from each game's `points` list but each game's
+winner and server supplied by `score.scoring` and `score.serving`.
+All 18 end states permitted the winning player to take one terminal
+point; **0 invalid score transitions**. Accounting for 18 inferred
+terminal *point winners* (not inferred ace/DF shot descriptions), the
+result is **110 points**:
+
+| PBP independently calculated | Ofner/home | Struff/away |
+| --- | ---: | ---: |
+| Points won | 45 | 65 |
+| Service points won | 30 / 59 | 36 / 51 |
+| Return points won | 15 / 51 | 29 / 59 |
+| Converted break points | 1 / 3 | 4 / 5 |
+| Saved break points | 1 / 5 | 2 / 3 |
+
+These counts exactly agree with the supplied *SUM OF SETS* in
+`getMatchStatistics` for service won, return won, and all break-point
+counts, as well as the score 4–6 2–6. The `ALL` period, by contrast,
+reports **115** points, away **4** aces vs **3** by set,
+away **0** double faults vs **1** by set,
+away **0** break-point conversions vs **4** by set/PBP,
+home BP saved **3/3** vs **1/5** by set/PBP. This is a real
+fixture-level discrepancy but does NOT alone prove a provider bug
+because stats/PBP response request IDs are missing.
+
+The observed pointDescription flags have preliminary semantics:
+description=1 occurred **7** times, *always a server-won point*,
+with a per-side observed subset matching the set ace counts except
+two missing possible terminal aces. Description=2 occurred **7**
+times, *always receiver-won*, matching **all 7 set double faults**
+by player and set. This suggests 1=ace and 2=double fault, but
+**flag meanings are not yet documented or verified across independent
+events**, and the omitted terminal shot types cannot be reconstructed.
+Do not use these flags as canonical aces/DF until verified.
+
+The existing `tennisapi_extra.py::point_by_point_inventory` is
+explicitly **structural only**, returning
+`eligible_for_cdb_point_features=False`, despite a complete
+fixture permitting replay. The existing `statistics_enrichment.py`
+only accepts ALL-period whole-match rates, rejects *the entire API
+statistics response* when any existing canonical field differs, and
+drops **all** per-set enrichment if a set ace/DF sum exceeds its
+ALL value; the sample's away set DF total 1 exceeds ALL 0, thus the
+existing set parser would discard this otherwise recoverable tape.
+The existing raw-count `breakPointsScored` is intentionally not
+interpreted as a percentage in `statistics.py`. A verified
+opponent-saved break-point numerator/denominator plus crosschecked
+conversion count could provide the missing conversion rate,
+but only with source/event completeness safeguards.
+
+The five surface rows of `getTeamYearStatistics` (player/year unverified)
+yield **63 matches / 42 wins**, **85 aces**, **102 double faults**,
+**4,401 distinct service points**, **5,710 physical serves including
+second attempts**, **2,530 service points won**, service points won
+**57.49%**, first serve landed **70.26%**, break points converted
+**251/524 = 47.90%**, saved **256/465 = 55.05%**.
+For each of five surface rows, the following three exact identities hold:
+`firstServeTotal + secondServeTotal = totalServeAttempts`;
+`firstServeTotal - firstServePointsTotal = secondServeTotal`;
+`secondServeTotal - secondServePointsTotal = doubleFaults`.
+Thus `totalServeAttempts` is **not** the right denominator for service
+point-win rate; use `firstServeTotal`, conditionally on consistent
+provider semantics. Winners/unforced error fields are missing in two
+surface rows; absence means unknown, not zero. Surface aggregates
+must be player/year provenance verified and never used as a full-year
+feature for predictions **earlier in that year** (future leakage).
+They are not evidence to fill a particular match's missing statistics.
+
+Additional identity/caveat: detail says `firstToServe=2`, whereas
+the PBP fixture lists set 1 game 1 server=1; verify response identity
+and field semantics. Historical ranking/currentRanking and prizeCurrent
+from the old event detail are not automatically point-in-time rankings.
+
+Conclusion/next gates: (1) verify requested exact match ID for both
+stats and PBP and team/year for surface summary; (2) read-only
+multi-event PBP completeness and scoring-descriptor validation; (3)
+capture conflict-key/value/tolerance distributions for the existing
+194/500 rejected ATP calls, plus per-field NULL-delta, before changing
+canonical conflict policy; (4) develop independently replayed set/PBP
+evidence sidecar or native provider importer upgrade with explicit
+provenance/NULL-only writer/score identity, rollback, and readback;
+(5) research historical, **prior-season** surface aggregates for
+qualified completed seasons only, not direct match imputation.
+No new CDB import or schema change is claimed.
+
+## Completed implementation: validated BP ratios and conflict observability — 2026-11-08
+
+Scope delivered autonomously on the existing native provider importer, no
+new writer or data source:
+
+- [PR #1486](https://github.com/BackstageTalks/tbt/pull/1486)
+  **MERGED** squash commit
+  `8ab1d8c62ee0fb1484d6258cd7aac40ccabf6bc9`.
+  The parser now derives a missing BP return-conversion rate from
+  `breakPointsScored` count only if the opposite side's
+  `breakPointsSaved` won/faced denominator is known, greater than zero,
+  and the independent count equals `faced - saved`. Orientation and
+  direct canonical values remain preserved; bare count alone is
+  never a rate. `statistics_conflict_diagnostics` reports aggregated
+  conflicting canonical fields, numerical delta bands, and counts of
+  otherwise-null fields rejected with any conflicting response.
+  **No partial import and no existing CDB overwrite** was introduced.
+- [PR #1488](https://github.com/BackstageTalks/tbt/pull/1488)
+  **MERGED** squash commit
+  `ab7dda4ded9d4236fa4f6c59a0f47226ddeb7c99`.
+  Additional parser-level fail-closed guard: if observed set-level BP
+  saved/faced or converted-count totals exceed the corresponding ALL
+  totals, **no newly derived BP conversion rate is produced**. This
+  explicitly covers the supplied Kitzbühel-shaped contradictory
+  ALL/1ST/2ND fixture, including player-order swapping. Consistent
+  fixtures still produce validated conversion rates.
+- Required PR CI completed **success** for
+  [run 42524078198](https://github.com/BackstageTalks/tbt/actions/runs/42524078198)
+  and
+  [run 42525173660](https://github.com/BackstageTalks/tbt/actions/runs/42525173660):
+  full backend pytest suite, browser runtime, optimized Chromium assets,
+  and production web artifact checks. On actual `main`,
+  [run 42525701737](https://github.com/BackstageTalks/tbt/actions/runs/42525701737)
+  independently passed all checks and Azure production deployment.
+  Verified deployment steps included frontend release, worker serving
+  snapshot, prediction publication and health endpoint, not HTTP 200 alone.
+- Independent main read-back at `ab7dda4ded9d4236fa4f6c59a0f47226ddeb7c99`
+  confirmed the BP set-contradiction guard and conflict-report keys are
+  present in the committed provider and importer code. An unrelated
+  concurrent `VIAC ES` change to `scripts/pipeline.py` and
+  `tests/test_more_aces_market.py` was protected; PR #1488 merged cleanly
+  after verifying zero file overlap.
+- **API paid requests for this implementation: 0. CDB data writes: 0.
+  New persisted statistic values: 0.** These are code and diagnostic
+  improvements, not a new import. The previously measured 194 rejected
+  ATP 2024 responses were not retroactively recovered by this commit;
+  future runs can measure conflict-field histograms without weakening
+  precedence. No deployment of PBP-derived CDB fields or new point-in-time
+  player features; no model/champion or external-cron changes.
+
+NEXT: obtain exact eventID witness for uploaded stats/PBP (those JSON
+bodies lack event IDs), then run a read-only multi-event PBP
+completeness/semantic audit before considering any point-derived
+match-level canonical import. For canonical conflict recovery, analyze
+independent field-level provenance and clean NULL-only candidates using
+the existing native lock, budget, dry-run, read-back and identity checks;
+no unapproved partial promotion.

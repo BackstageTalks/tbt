@@ -264,6 +264,51 @@ def deployed_priced_projection(row: dict[str, Any], feed: dict[str, Any]) -> dic
         or str(row.get("price_status") or "").lower() != "priced_projection"
     ):
         return None
+    # An exact frozen BlinQ Most Aces price is a regular issued 1u bet.
+    # Unlike bookmaker prices it has no fictitious provider capture timestamp.
+    # Authenticate its source, price calculation, two-player contract and
+    # original pre-start serving generation before deriving a result overlay.
+    if str(row.get("market") or "").lower() == "most_aces":
+        from .most_aces_pricing import (
+            verified_frozen_local_most_aces_odds,
+            verified_api_pro_most_aces_odds,
+        )
+        local = verified_frozen_local_most_aces_odds(row)
+        external = verified_api_pro_most_aces_odds(row) if local is None else None
+        odds = local if local is not None else external
+        if (odds is None or row.get("price_contract") != "player_superiority"
+                or row.get("market_line") not in (None, "")
+                or row.get("ou_side") not in (None, "")):
+            return None
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        issued = _parse_time(row.get("issued_at") or feed.get("generated_at"))
+        p1, p2 = _player_id(row, "player1"), _player_id(row, "player2")
+        selected = str(row.get("selection_id") or "")
+        if (scheduled is None or issued is None or not issued < scheduled
+                or not p1 or not p2 or p1 == p2 or selected not in {p1, p2}):
+            return None
+        return {
+            "section": "ace_winner", "market": "most_aces",
+            "selection_id": selected,
+            "selection": row.get("selection") or row.get("pick"),
+            "issued_at": issued.isoformat(),
+            "publication_status": "published",
+            "runtime_publication_evidence": "deployed_daily_offer_row",
+            "price_status": "priced_projection",
+            "price_contract": "player_superiority",
+            "odds": odds,
+            "odds_source": row.get("odds_source"),
+            "price_basis": row.get("price_basis"),
+            "odds_contract_version": row.get("odds_contract_version"),
+            "captured_at": row.get("captured_at"),
+            "provider_id": row.get("provider_id"),
+            "publication_key": row.get("publication_key"),
+            "projection": row.get("projection"),
+            "opponent_projection": row.get("opponent_projection"),
+            "projection_scope": row.get("projection_scope") or "player",
+            "projection_metric": "most_aces",
+            "data_depth": row.get("data_depth"),
+        }
     scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
     issued = _parse_time(row.get("issued_at") or feed.get("generated_at"))
     captured = _parse_time(row.get("captured_at"))

@@ -1398,7 +1398,12 @@
       &&Number.isFinite(confidence)&&confidence>=.60&&confidence<=.93;
   }
   function authenticMarketSectionRow(row,key){
-    return authenticLiveProjection(row)||(key==='ace'&&(authenticLocalAceProjection(row)||authenticAceWinnerProjection(row)));
+    // Issued BlinQ statistical Most Aces prices have no provider ID. They
+    // still belong in VIAC ES after strict frozen-contract validation.
+    return authenticLiveProjection(row)||(key==='ace'&&(
+      authenticLocalAceProjection(row)||authenticAceWinnerProjection(row)
+      ||(String(row?.market||'').toLowerCase()==='most_aces'
+        &&Number.isFinite(verifiedFrozenMostAcesLocalOdds(row)))));
   }
   function marketRows(key){
     // TOP200 has been retired. Old feed data must not recreate active picks.
@@ -2166,7 +2171,7 @@
   function projectionPickText(row,sourceTab=''){
     const market=sourceTab||String(row?.market||row?.projection_metric||'').toLowerCase();
     if(market==='sets')return String(row?.selection||row?.pick||'—');
-    if(market==='ace_winner'||market==='most_aces')return String(row?.projection_subject||row?.selection||row?.pick||'—')+' · '+lcopy('More aces','Viac es','Více es');
+    if(market==='ace_winner'||market==='most_aces')return String(row?.projection_subject||row?.selection||row?.pick||'—')+' · '+lcopy('More aces','Viac es','Více es')+(row?.ace_winner_source==='issued_aces_signal_only'?' · '+lcopy('ESÁ signal','Signál ESÁ','Signál ESA'):'');
     if(market==='games'){
       const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,'games');
       if(side&&Number.isFinite(line))return `${side} ${line.toFixed(1)} Games`;
@@ -3021,6 +3026,59 @@
     }
     return odds;
   }
+  // Two distinct paths: frozen 1.50–1.70 owner odds are a full issued 1u
+  // betting contract with Results/ROI; unissued signal-only sidecar values
+  // remain display-only. Genuine exact bookmaker Most Aces quotes win.
+  function verifiedMostAcesApiProOdds(row){
+    if(String(row?.market||'').toLowerCase()!=='most_aces'
+      ||row?.price_contract!=='player_superiority'
+      ||row?.price_status!=='priced_projection'
+      ||row?.odds_source!=='rapidapi'||Number(row?.provider_id)!==1
+      ||!row?.captured_at)return NaN;
+    const market=String(row?.odds_market_name||'').toLowerCase();
+    if(!market.includes('ace')||!/(most|more|winner|higher)/.test(market)
+      ||/(total|over|under|handicap|set|period)/.test(market))return NaN;
+    const value=row?.odds==null?NaN:Number(row.odds);
+    return Number.isFinite(value)&&value>1&&value<=100?value:NaN;
+  }
+  function verifiedFrozenMostAcesLocalOdds(row){
+    // This source-labeled, model-frozen price is the issued full betting
+    // contract. The older projection-only leader bridge stays view-only.
+    if(String(row?.market||'').toLowerCase()!=='most_aces'
+      ||row?.price_contract!=='player_superiority'
+      ||row?.price_status!=='priced_projection'
+      ||row?.odds_source!=='blinq_statistical'
+      ||row?.price_basis!=='blinq_user_most_aces_confidence_band_v1'
+      ||row?.odds_contract_version!=='most_aces_local_statistical_v1'
+      ||row?.ace_winner_source==='issued_aces_signal_only'
+      ||row?.ace_winner_issued===false
+      ||row?.provider_id!=null||row?.captured_at!=null
+      ||row?.ou_side!=null||row?.market_line!=null
+      ||row?.projection_model!=='ace-count-projection-v4')return NaN;
+    const own=String(row?.selection_id||''),p1=String(row?.player1?.id||''),p2=String(row?.player2?.id||'');
+    const conf=Number(row?.projection_confidence),proj=Number(row?.projection),opp=Number(row?.opponent_projection);
+    const saved=row?.odds==null?NaN:Number(row.odds);
+    if(!row?.event_id||!own||p1===p2||(own!==p1&&own!==p2)
+      ||!Number.isFinite(Date.parse(String(row?.scheduled_at||'')))
+      ||!Number.isFinite(conf)||conf<.60||conf>.93
+      ||!Number.isFinite(proj)||!Number.isFinite(opp)||!(proj>opp)||opp<0||!Number.isFinite(saved))return NaN;
+    const expected=Math.round((1.70-.20*(conf-.60)/.33+1e-10)*100)/100;
+    return saved>=1.50&&saved<=1.70&&Math.abs(saved-expected)<.00001?saved:NaN;
+  }
+  function localMostAcesDisplayOdds(row){
+    if(!authenticAceWinnerProjection(row))return NaN;
+    const confidence=Number(row?.projection_confidence);
+    // Use only the frozen two-player CDB projection. Larger calibrated
+    // superiority confidence selects a shorter price inside the approved band.
+    const computed=Math.round((1.70-.20*(confidence-.60)/.33+1e-10)*100)/100;
+    const saved=row?.statistical_more_aces_odds==null?NaN:Number(row.statistical_more_aces_odds);
+    if(row?.statistical_more_aces_price_basis==='blinq_user_most_aces_confidence_band_v1'){
+      if(!Number.isFinite(saved)||saved<1.50||saved>1.70
+        ||Math.abs(saved-computed)>.001)return NaN; // source mismatch: fail closed
+      return saved;
+    }
+    return Number.isFinite(computed)&&computed>=1.50&&computed<=1.70?computed:NaN;
+  }
   // Locally statistically grounded ACES odds: approved 1.60–1.80 range.
   // Stable event/selection hash chooses cents inside that range. These local
   // statistical odds are NOT placeholders or external bookmaker quotes.
@@ -3123,7 +3181,15 @@
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     // An exact provider O/U wins; otherwise show the local BlinQ O/U price.
-    if(String(row?.market||'').toLowerCase()==='most_aces')return hubNumberHtml('—',lcopy('No winner odds','Bez kurzu víťaza','Bez kurzu vítěze'));
+    if(String(row?.market||'').toLowerCase()==='most_aces'){
+      const api=verifiedMostAcesApiProOdds(row);
+      if(Number.isFinite(api))return hubNumberHtml(api.toFixed(2),lcopy('API Pro odds','Kurz API Pro','Kurz API Pro'));
+      const frozen=verifiedFrozenMostAcesLocalOdds(row);
+      if(Number.isFinite(frozen))return hubNumberHtml(frozen.toFixed(2),lcopy('BlinQ statistical odds','Štat. kurz BlinQ','Stat. kurz BlinQ'));
+      const local=localMostAcesDisplayOdds(row);
+      if(Number.isFinite(local))return hubNumberHtml(local.toFixed(2),lcopy('BlinQ statistical signal','Štat. signál BlinQ','Stat. signál BlinQ'));
+      return hubNumberHtml('—',lcopy('No Most Aces odds','Bez kurzu Viac es','Bez kurzu Více es'));
+    }
     if(String(row?.market||'').toLowerCase()==='aces'){
       if(row?.price_contract==='player_total_ou'&&Number.isFinite(verifiedAceProviderOdds(row)))
         return hubNumberHtml(Number(row.odds).toFixed(2),lcopy('odds','kurz','kurz'));
@@ -3292,7 +3358,7 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const aceLocal=row?.ui_local_ace_ou_line!=null&&Number.isFinite(Number(row.ui_local_ace_ou_line))?Number(row?.statistical_ace_odds):NaN;const odds=key==='ace'&&row?.market==='aces'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):aceLocal):Number(row?.odds);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const aceLocal=row?.ui_local_ace_ou_line!=null&&Number.isFinite(Number(row.ui_local_ace_ou_line))?Number(row?.statistical_ace_odds):NaN;const odds=key==='ace'&&row?.market==='aces'?(Number.isFinite(verifiedAceProviderOdds(row))&&row?.price_contract==='player_total_ou'?Number(row.odds):aceLocal):row?.market==='most_aces'?(Number.isFinite(verifiedMostAcesApiProOdds(row))?verifiedMostAcesApiProOdds(row):Number.isFinite(verifiedFrozenMostAcesLocalOdds(row))?verifiedFrozenMostAcesLocalOdds(row):localMostAcesDisplayOdds(row)):Number(row?.odds);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=(row?.price_status==='projection_only'||(key==='ace'&&row?.market==='aces'&&row?.ui_local_ace_ou_line!=null))&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'ACCA Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
@@ -3312,7 +3378,7 @@
         const unit=marketName;
         mainValue=`${projection.toFixed(1)}<small>${escapeHtml(unit)}</small>`;
         metrics=[[lcopy('Line','Hranica','Hranice'),Number.isFinite(line)?`${side?side+' ':''}${line.toFixed(1)}`:'—'],[lcopy('Opponent','Súper','Soupeř'),Number.isFinite(opponentProjection)?opponentProjection.toFixed(1):'—'],[lcopy('Difference','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${projectionGap>=0?'+':''}${projectionGap.toFixed(1)}`:'—'],[lcopy('Data','Dáta','Data'),Number.isFinite(projectionConfidence)?`${Math.round(projectionConfidence*100)}/100`:'—']];
-        if(key==='ace'&&row?.market==='aces'&&Number.isFinite(odds))
+        if(key==='ace'&&['aces','most_aces'].includes(String(row?.market||''))&&Number.isFinite(odds))
           metrics.push([lcopy('Odds','Kurz','Kurz'),odds.toFixed(2)]);
         pickLabel=lcopy('Prediction','Predikcia','Predikce');
       }
@@ -8995,7 +9061,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     }
     else if(route==='top_daily'){
       const r=state.ui?.market_rules?.top_daily||{},day=state.feed?.market_selection?.odds_report?.betting_day||'current';
-      const desc=lcopy(`BlinQ publication day ${day} · CORE starts at 68% / 1.50. If fewer than 3 TOP picks remain after Value priority, probability relaxes stepwise only until 3 qualify, with a hard floor of 65% while the 1.50 odds boundary never moves. Data-depth and surface guardrails stay active.`,`Publikačný deň BlinQ ${day} · CORE začína na 68 % / 1,50. Ak po priorite Value ostanú menej ako 3 TOP picky, pravdepodobnosť sa uvoľňuje po krokoch iba dovtedy, kým sa nekvalifikujú 3 picky; absolútne minimum je 65 % a hranica kurzu 1,50 sa nikdy neposúva. Pravidlá hĺbky dát a povrchu zostávajú aktívne.`,`Publikační den BlinQ ${day} · CORE začíná na 68 % / 1,50. Pokud po prioritě Value zůstanou méně než 3 TOP tipy, pravděpodobnost se uvolňuje po krocích jen do chvíle, kdy se kvalifikují 3 tipy; absolutní minimum je 65 % a hranice kurzu 1,50 se nikdy neposouvá. Pravidla hloubky dat a povrchu zůstávají aktivní.`);
+      const desc=lcopy(`TOP aims for 3 picks, prioritizing ATP/WTA. Probability tiers: 80%, 78%, 75%, 70%; data quality stays fixed. Odds from 1.50 with no upper limit. Value takes priority above 1.80 with a two-way odds gap up to 15%.`, `TOP cieli na 3 tipy s prioritou ATP/WTA. Hranice: 80 %, 78 %, 75 %, 70 %; kvalita dát sa neznižuje. Kurz od 1,50 bez horného limitu. Value má prednosť nad 1,80 pri rozdiele dvojice kurzov najviac 15 %.`, `TOP cílí na 3 tipy s prioritou ATP/WTA. Hranice: 80 %, 78 %, 75 %, 70 %; kvalita dat se nesnižuje. Kurz od 1,50 bez horního limitu. Value má přednost nad 1,80 při rozdílu dvojice kurzů nejvýše 15 %.`);
       body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('TOP Predictions rule'))}</strong><span>${escapeHtml(desc)}</span></div>${detailCards(marketRows('top_daily'),'top_daily')}`;
     }
     else if(route==='value'){

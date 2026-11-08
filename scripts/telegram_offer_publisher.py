@@ -309,8 +309,35 @@ def verified_website_morning_parity(offer, readback, now):
             raise ValueError("Invalid website section counts")
         if sum(counts[k] for k in keys) < len(rows):
             raise ValueError("Website is missing confirmed morning selections")
+    from tbt.services.issued_authority import row_authority_key
+    actual = readback.get("offer_authority_keys")
+    if not isinstance(actual, dict):
+        raise ValueError("Missing exact website issued contracts")
+    for category, rows in selections.items():
+        observed = actual.get(category)
+        if not isinstance(observed, list) or any(not isinstance(k, str) for k in observed):
+            raise ValueError("Invalid website issued contracts")
+        expected = {row_authority_key(row, SECTIONS[category]) for row in rows}
+        if not expected.issubset(set(observed)):
+            raise ValueError("Website differs from exact issued morning contracts")
     return {"betting_day":today,"eligible":sum(len(v) for v in selections.values()),
             "website_generation_verified":True}
+
+
+def verify_prepared_site(confirmed, config_url, now):
+    token = os.environ.get("BLINQ_LIVE_WORKER_TOKEN")
+    if not token:
+        raise RuntimeError("Existing worker credential required for exact morning readback")
+    base = config_url.removesuffix("/api/v1/ui-config")
+    if not re.fullmatch(r"https://[A-Za-z0-9.-]+", base):
+        raise ValueError("Invalid website origin")
+    req = urllib.request.Request(base + "/api/v1/internal/serving-readback",
+        headers={"X-Blinq-Worker-Token": token, "Cache-Control": "no-cache"})
+    with urllib.request.urlopen(req, timeout=25) as response:
+        body = response.read(200001)
+    if len(body) > 200000:
+        raise ValueError("Oversize website readback")
+    return verified_website_morning_parity(confirmed, json.loads(body), now)
 
 
 def messages(x,c,now,free_event_id=None):
@@ -569,6 +596,9 @@ def prepare(a):
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
+    if getattr(a, "verify_site", False):
+        # Validate THIS snapshot in the preparing job, not an earlier waiter snapshot.
+        verify_prepared_site(confirmed, a.config_url, now)
     price_correction=repost and revision in ("aces-local-prices-20261101-v1","aces-standard-feed-20261101-v2")
     ace_ou_reissue=repost and revision=="aces-player-ou-20261102-v1"
     if ace_ou_reissue and day(now)!="2026-11-02":
@@ -616,6 +646,8 @@ def prepare(a):
     save(out/"messages.json",msg)
     slot=reposts if repost else attempts
     slot[ident]={"reserved_at":now.isoformat(),"status":"reserved",
+                 "source_feed_generated_at":confirmed.get("source_feed_generated_at"),
+                 "snapshot_sha256":hashlib.sha256(json.dumps(confirmed,sort_keys=True,separators=(",",":")).encode()).hexdigest(),
                  "rows":sent_rows if (not repost or ace_ou_reissue) else [],
                  "supersedes_daily":bool(ace_ou_reissue),
                  "sha256":hashlib.sha256(json.dumps(msg,ensure_ascii=False).encode()).hexdigest()}
@@ -657,6 +689,7 @@ if __name__=="__main__":
     p.add_argument("--config-url",default="https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/ui-config")
     p.add_argument("--state",default="ops/telegram-bot-state.json");p.add_argument("--output",default="/tmp/blinq-telegram");p.add_argument("--now",default="")
     p.add_argument("--daily",action="store_true",help="Operator-approved full daily offer")
+    p.add_argument("--verify-site",action="store_true",help="Recheck exact prepared generation and issued contracts before reservation")
     p.add_argument("--preview-format",action="store_true",help="One-time repost of exact sent offer with updated presentation")
     p.add_argument("--preview-revision",default="format-v2-no-ev",help="Stable unique operator-approved repost revision")
     a=p.parse_args();{"prepare":prepare,"queue-daily":queue_daily,"send":send,"mark-sent":mark_sent}[a.action](a)

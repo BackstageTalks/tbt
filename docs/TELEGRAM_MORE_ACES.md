@@ -29,10 +29,31 @@ Example, intentionally illustrative (not live picks):
 
 🎾 VIAC ES
 
-🎾 | Smith | 16:00 | viac ES | 78.0%
+🎾 | Smith | 16:00 | viac ES | 78.0% | BlinQ štat. kurz 1.59
 
 ℹ️ Analytical preview by BlinQ Stat Engine
 ```
+
+## VIAC ES — owner-approved local price (8 Nov 2026 onward)
+
+The project owner approved the **1.50–1.70** range for his own statistical
+Most Aces prices when no independently verified exact API Pro Most Aces quote
+exists. The value is a bounded, monotonic presentation mapping of the existing
+frozen, CDB-derived calibrated `projection_confidence`: 60% maps to 1.70 and
+93% to 1.50, rounded to cents. Source provenance:
+`blinq_user_most_aces_confidence_band_v1`. This is **not** a bookmaker quote,
+a conversion of the unrelated Aces player Over/Under line, or a proven
+per-event fair probability including draw/push semantics.
+
+The API decorates only currently visible, qualified `most_aces` rows with
+`statistical_more_aces_odds` and `statistical_more_aces_price_basis`, keeping
+`odds=None`, immutable issuance, CDB and Results/ROI untouched. Website
+desktop/mobile labels the value **BlinQ štat. kurz**. Telegram uses the
+same validated website ball identity, even if the original O/U selection
+points to the opponent, and labels it **BlinQ štat. kurz**. An authenticated,
+contract-specific API Pro price takes priority when present; this local
+fallback does not masquerade as such an API quote. Do not retroactively
+reprice historical Results or confirmed Telegram messages.
 
 ## Sending and identity
 
@@ -60,5 +81,6 @@ tests/test_telegram_daily_cron_contract.py`
 
 Production completion requires an actual next-daily delivery
 message ID in the new private ledger slot. Until then the code is merged/
-deployed but **delivery remains unverified**. At present this is a Telegram
-offer feature; it does not itself add a new website/Admin/stats category.
+deployed but **delivery remains unverified**. The independent website/Admin/Results/STATS VIAC ES category is implemented
+separately. This Telegram extension never changes that category's frozen
+betting economics.

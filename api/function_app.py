@@ -117,6 +117,8 @@ from tbt.services.push_notifications import (
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed, serving_artifact_readback, _row_betting_day
+from tbt.services.ace_winner_bridge import with_issued_ace_leader_signals
+from tbt.services.most_aces_pricing import annotate_most_aces_offer
 from tbt.services.issued_authority import (
     filter_unissued_offers, load_authority, persist_authority, validate_authority,
 )
@@ -586,7 +588,13 @@ def internal_serving_readback(req):
     if not _live_worker_token_ok(req):
         return response({"error": "forbidden"}, 403)
     try:
-        return response(serving_artifact_readback(FEED))
+        from tbt.services.issued_authority import offer_contract_readback
+        readback = serving_artifact_readback(FEED)
+        issued = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
+        if issued.get("generated_at") != readback.get("generated_at"):
+            raise ValueError("Serving generation moved during readback")
+        readback["offer_authority_keys"] = offer_contract_readback(issued)
+        return response(readback)
     except (OSError, ValueError, TypeError):
         logging.exception("Private production serving artifact readback unavailable")
         return response({"error": "serving_readback_unavailable"}, 503)
@@ -1511,6 +1519,10 @@ def feed(req):
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
         source_feed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
+        # The current issued ESÁ cards may predate the separate VIAC ES market.
+        # Display their frozen pre-match ball signal without inventing an issuance.
+        source_feed = with_issued_ace_leader_signals(source_feed)
+        source_feed = annotate_most_aces_offer(source_feed)
         try:
             source_feed = merge_settled_results(source_feed, load_settled_results_archive())
         except AdminStorageUnavailable:
@@ -2096,12 +2108,74 @@ def internal_telegram_site_results_parity(req):
         # Exactly the feed's source, persisted CAS Results and runtime status
         # overlay. Never query tennis providers or run a Results writer.
         deployed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
-        source = merge_settled_results(deployed, load_settled_results_archive())
+        archived = load_settled_results_archive()
+        source = merge_settled_results(deployed, archived)
         snapshot = load_match_status_snapshot() or {}
         status = verified_terminal_statuses(snapshot.get("statuses"))
         source["results"] = runtime_settled_results(source, status)
         exclusions = load_result_exclusions()
         projected = site_day_projection(source, day, exclusions)
+        # Aggregate diagnostics distinguish day reassignment from a lost row.
+        from collections import Counter
+        from tbt.services.results_archive import (
+            _identity, _time, _verified_original_winner_day,
+        )
+        from tbt.services.feed import _betting_day_key
+        by_identity = {_identity(row, pub): row for row in source.get("results") or []
+                       for pub in row.get("market_publications") or [] if isinstance(pub, dict)}
+        gaps = Counter()
+        for row in archived:
+            if _row_betting_day(row) != day:
+                continue
+            for pub in row.get("market_publications") or []:
+                if pub.get("section") not in {"top_daily", "value", "ace"}:
+                    continue
+                merged = by_identity.get(_identity(row, pub))
+                if merged is None:
+                    gaps["archive_contract_not_merged"] += 1
+                elif _row_betting_day(merged) != day:
+                    gaps["archive_contract_shifted_betting_day"] += 1
+                    # Classify only aggregate fail-closed gates; private original
+                    # event/player IDs and quotes never leave the worker.
+                    market = str(pub.get("market") or "match_winner").lower()
+                    if market != "match_winner":
+                        gaps["shifted_other_market"] += 1
+                        continue
+                    key = _identity(row, pub)
+                    published = [p for p in merged.get("market_publications") or []
+                                 if isinstance(p, dict) and _identity(merged, p) == key]
+                    incumbent = published[0] if len(published) == 1 else None
+                    if incumbent is None:
+                        reason = "no_exact_publication"
+                    elif len(merged.get("market_publications") or []) != 1:
+                        reason = "multiple_publications"
+                    elif _time(merged.get("scheduled_at") or merged.get("date")) != _time(
+                            row.get("scheduled_at") or row.get("date")):
+                        reason = "schedule_disagrees"
+                    elif any(
+                        str((merged.get(side) or {}).get("id") or "") !=
+                        str((row.get(side) or {}).get("id") or "")
+                        for side in ("player1", "player2")
+                    ):
+                        reason = "participants_disagree"
+                    elif any(
+                        incumbent.get(field) not in (None, "")
+                        and pub.get(field) not in (None, "")
+                        and str(incumbent.get(field)) != str(pub.get(field))
+                        for field in ("publication_key", "selection_id", "issued_at", "odds")
+                    ):
+                        reason = "issued_contract_disagrees"
+                    elif _time(row.get("scheduled_at") or row.get("date")) is None or (
+                        _row_betting_day(row) != _betting_day_key(
+                            _time(row.get("scheduled_at") or row.get("date")))
+                    ):
+                        reason = "archive_day_disagrees"
+                    elif _verified_original_winner_day(merged, row, incumbent, pub) is not None:
+                        reason = "eligible_but_not_applied"
+                    else:
+                        reason = "other_strict_guard"
+                    gaps["shifted_winner_" + reason] += 1
+        projected["archive_merge_diagnostics"] = dict(gaps)
         return response(projected)
     except AdminStorageUnavailable:
         return response({"error": "parity_source_unavailable"}, 503)

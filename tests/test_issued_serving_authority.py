@@ -170,6 +170,10 @@ class _Utf16LimitedAuthorityTable:
         # Exactly the property that was rejected in production: 64-char SHA
         # identifiers can exceed the Azure Edm.String limit as plain JSON.
         assert len(entity["manifest_json"].encode("utf-16-le")) <= 65536
+        assert all(len(value.encode("utf-16-le")) <= 65536
+                   for value in entity.values() if isinstance(value, str))
+        assert sum(len(value.encode("utf-16-le")) for value in entity.values()
+                   if isinstance(value, str)) < 1000000
         self.rows[(entity["PartitionKey"], entity["RowKey"])] = dict(entity)
 
     def create_entity(self, entity):
@@ -265,3 +269,20 @@ def test_issued_authority_remains_finitely_bounded(monkeypatch):
             "betting_day": "2026-11-08", "keys": keys,
         })
     assert not table.rows
+
+
+def test_successive_generations_preserve_more_than_700_keys_atomically(monkeypatch):
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import load_authority, persist_authority
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    receipt = {"schema": 1, "confirmed_only": True, "betting_day": "2026-11-08"}
+    keys = [hashlib.sha256(str(i).encode()).hexdigest() for i in range(1400)]
+    persist_authority({**receipt, "keys": keys[:700]})
+    result = persist_authority({**receipt, "keys": keys[700:]})
+    assert set(result["keys"]) == set(keys)
+    assert set(load_authority(receipt["betting_day"])["keys"]) == set(keys)
+    # Corruption of one property cannot silently authorize a partial receipt.
+    table.rows[("issued", receipt["betting_day"])]["keys_001"] = "corrupt"
+    with pytest.raises(admin_storage.AdminStorageUnavailable, match="Corrupt"):
+        load_authority(receipt["betting_day"])

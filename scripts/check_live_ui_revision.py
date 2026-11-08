@@ -192,6 +192,8 @@ def main() -> int:
     parser.add_argument("--retries", type=int, default=3)
     parser.add_argument("--delay", type=float, default=10.0)
     parser.add_argument("--token", default="production")
+    parser.add_argument("--require-current", action="store_true",
+                        help="Also reject deployed revisions with runtime differences from this checkout")
     args = parser.parse_args()
 
     if args.retries < 1:
@@ -199,6 +201,12 @@ def main() -> int:
     for attempt in range(1, args.retries + 1):
         try:
             live_sha = verify_once(args.web, args.url, token=f"{args.token}-{attempt}")
+            if args.require_current:
+                changed = subprocess.check_output(
+                    ["git", "-C", str(args.web.resolve().parent), "diff", "--name-only",
+                     live_sha, "HEAD", "--", "web", "api"], text=True).splitlines()
+                if changed:
+                    raise ValueError("Serving release is consistent but not current: " + ", ".join(changed[:8]))
         except (OSError, ValueError, RuntimeError, json.JSONDecodeError, UnicodeError) as exc:
             print(f"UI revision attempt {attempt}/{args.retries}: FAIL: {type(exc).__name__}: {exc}", flush=True)
             if attempt < args.retries:

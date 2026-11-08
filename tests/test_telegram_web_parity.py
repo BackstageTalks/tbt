@@ -180,3 +180,26 @@ def test_site_absence_diagnostics_do_not_expose_issued_bet_identity():
         *another["site_absence_breakdown"],
         *different["site_absence_breakdown"],
     ))
+
+
+def test_archive_merge_diagnostics_are_aggregate_only():
+    reference = sent(channel="top", event="missing")
+    page = site([])
+    page["archive_merge_diagnostics"] = {
+        "archive_contract_not_merged": 1,
+        "archive_contract_shifted_betting_day": 2,
+        "shifted_winner_multiple_publications": 1,
+        "shifted_other_market": 4,
+        "shifted_winner_schedule_disagrees": "bad-secret",
+        "raw_identity": "never-log-event-or-player",
+        "unknown_failure": -1,
+    }
+    report = reconcile_day(DAY, [reference], [settled(reference)], page, None, now=NOW)
+    assert report["archive_merge_diagnostics"] == {
+        "archive_contract_not_merged": 1,
+        "archive_contract_shifted_betting_day": 2,
+        "shifted_winner_multiple_publications": 1,
+        "shifted_other_market": 4,
+    }
+    assert "never-log-event-or-player" not in str(report)
+    assert "bad-secret" not in str(report)

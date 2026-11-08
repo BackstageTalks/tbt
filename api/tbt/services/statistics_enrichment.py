@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 from collections import Counter
+import math
 from datetime import datetime, timezone
 
 from ..errors import ProviderError
@@ -33,6 +34,12 @@ class StatisticsEnricher:
         self.statistics_key_counts = {name: Counter() for name in ("supported", "unsupported", "set_only")}
         self.statistics_key_responses = 0
         self.statistics_invalid_envelopes = 0
+        # Aggregate diagnostics only: no identities or raw provider values.
+        # These counters never authorize replacing canonical statistics.
+        self.conflict_responses = 0
+        self.conflict_field_counts = Counter()
+        self.conflict_rejected_null_fields = Counter()
+        self.conflict_difference_buckets = Counter()
         private_path = os.getenv("BLINQ_TENNIS_RAW_CACHE_SQLITE", "").strip()
         # The caller must mount a private persistent directory. A bad mount
         # fails closed rather than silently reverting to paid requests.
@@ -59,6 +66,25 @@ class StatisticsEnricher:
                 for name, counter in self.statistics_key_counts.items()
             },
             "policy": "Aggregate key discovery from already-read payloads (paid or cache); no new API calls, no raw data, no automatic field promotion.",
+        }
+
+    def conflict_diagnostics(self) -> dict:
+        """Bounded per-field evidence for safe API-yield research, no mutation.
+
+        `rejected_null_field_candidates` are *not* approved CDB values: the
+        provider response is quarantined if any existing field conflicts.
+        """
+        return {
+            "schema": 1,
+            "rejected_responses": self.conflict_responses,
+            "by_conflicting_field": dict(sorted(self.conflict_field_counts.items())),
+            "rejected_null_field_candidates": dict(
+                sorted(self.conflict_rejected_null_fields.items())
+            ),
+            "numeric_difference_buckets": dict(
+                sorted(self.conflict_difference_buckets.items())
+            ),
+            "policy": "Diagnostic only. Entire conflicting responses remain rejected; no canonical overwrite or partial import.",
         }
 
     def _observe_statistics_keys(self, payload) -> None:
@@ -247,6 +273,31 @@ class StatisticsEnricher:
                      if (match.stats or {}).get(key) is not None
                      and match.stats[key] != value]
         if conflicts:
+            self.conflict_responses += 1
+            self.conflict_field_counts.update(conflicts)
+            self.conflict_rejected_null_fields.update(
+                key for key in stats if (match.stats or {}).get(key) is None
+            )
+            for key in conflicts:
+                current = (match.stats or {})[key]
+                try:
+                    delta = abs(float(current) - float(stats[key]))
+                except (TypeError, ValueError, OverflowError):
+                    bucket = "non_numeric"
+                else:
+                    if not math.isfinite(delta):
+                        bucket = "non_finite"
+                    elif delta < 1e-6:
+                        bucket = "lt_0.000001"
+                    elif delta < 1e-3:
+                        bucket = "lt_0.001"
+                    elif delta < 1e-2:
+                        bucket = "lt_0.01"
+                    elif delta < 0.05:
+                        bucket = "lt_0.05"
+                    else:
+                        bucket = "gte_0.05"
+                self.conflict_difference_buckets[bucket] += 1
             match.provider_payload = {**raw, "_tbt_statistics": {
                 "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id),
                 "source": "tennisapi1", "fetched_at": datetime.now(timezone.utc).isoformat(),
