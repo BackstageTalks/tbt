@@ -1,7 +1,8 @@
-"""Read-only BlinQ user-statistics price for the *Most Aces* contract.
+"""BlinQ full-value local statistical price for a newly issued Most Aces bet.
 
-The user-approved 1.50–1.70 price band is a local model presentation value,
-not a bookmaker offer, a made-up API response or an implied ROI contract.
+The owner-approved 1.50–1.70 odds band is a valid 1-unit betting price once
+frozen BEFORE publication; it is never misrepresented as a bookmaker quote.
+Older ESÁ ball-only display signals stay unissued, ungraded and outside ROI.
 The separate ESÁ player-total Over/Under price remains unchanged.
 """
 from __future__ import annotations
