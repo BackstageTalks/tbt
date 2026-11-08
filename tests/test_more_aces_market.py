@@ -175,7 +175,7 @@ def test_locally_priced_most_aces_issuance_reaches_results_archive_without_reiss
     assert 1.50 <= frozen["odds"] <= 1.70
     annotated = annotate_market_publication_candidates([source], ace_picks=[frozen])
     candidate = next(
-        p for p in annotated[0]["market_publications"]
+        p for p in annotated[0]["market_publication_candidates"]
         if p["section"] == "ace_winner"
     )
     assert candidate["market"] == "most_aces"
