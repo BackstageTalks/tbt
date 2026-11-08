@@ -71,6 +71,8 @@ def test_numerically_equivalent_rate_preserves_original_value_and_fills_only_nul
     ({"p1_service_points_won": 0.600001}, 7),
     ({"p1_aces": 7}, 7.00000000005),
     ({"p1_aces": 8}, 7),
+    ({"p1_aces": True}, 1),  # bool must not equal provider count 1
+    ({"p1_service_points_won": float("inf")}, 7),
 ])
 def test_material_rate_or_any_count_conflict_quarantines_entire_response(
         match_factory, tmp_path, existing, ace):
