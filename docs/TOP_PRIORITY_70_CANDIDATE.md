@@ -25,7 +25,7 @@ retained; there is no new TOP1/TOP3 product.
   internally consistent probabilities. Preserve price-integrity guards.
 - Freeze competition, original prediction time, round, model-time ranks,
   rejection reasons and policy version for future auditing.
-- ACES/DF, including existing random ACES prices 1.6â€“1.8, are unchanged.
+- ACES/DF, including existing random ACES prices 1.6-1.8, are unchanged.
   No CDB writes, model fitting, extra provider passes, new cron, or sent messages.
 
 Three valid picks is the target, not permission to fabricate a quote or inflate
