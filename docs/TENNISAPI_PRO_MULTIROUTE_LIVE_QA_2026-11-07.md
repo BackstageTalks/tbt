@@ -150,3 +150,58 @@ semantics with a future bounded, approved observation; then measure actual
 valid new prices per billed call. Preserve CDB single-writer, CAS quota,
 provider reserve and NULL-only protections. No additional paid calls were
 made for this documentation/read-back.
+
+## Live cross-era revalidation, 2026-11-08
+
+Operator authorized at most 300 paid requests **per test**, but the existing
+research-only, quota/CAS-guarded bulk contract validated the requested routes
+using **15 paid calls per cohort / 30 total**. Provider limit and 500-call
+reserve remained enforced, and **0 CDB writes** were performed.
+
+GitHub Actions evidence (both successfully completed):
+- Newer native witness 17449516: [run 42465293411](https://github.com/BackstageTalks/tbt/actions/runs/42465293411),
+  15 attempts, 14 available responses plus one 204. Provider-reported
+  remaining after run: 12916.
+- Archived 2016 Wimbledon native witness 7115726:
+  [run 42465442647](https://github.com/BackstageTalks/tbt/actions/runs/42465442647),
+  15 attempts, 12 available responses, two 204, one HTTP 400 (monthly
+  calendar for July 2016). Provider-reported remaining after run: 12899.
+  The 17-call difference in provider remaining between runs may include
+  outside consumers: do not attribute those two extra changes to these jobs.
+
+| Endpoint / evidence | Newer witness | Archived 2016 witness | Interpretation |
+| --- | ---: | ---: | --- |
+| Daily bulk odds, native keyed events | 994 | 336 | Each has two choices, but no explicit quote clock |
+| Daily odds choice rows with price-shaped field | 1988 | 672 | Both sides labelled; raw values/point-in-time price not verified |
+| Tournament scheduled matches by native date | 32 | 1 | Unique native event IDs in each sample; no CDB identity/import proof |
+| Tournament round, *same independent AO 2023 example* | 32 | 32 | Works for this documented route, not an archived-2016 round check |
+| Tournament season latest page (page 0) | 30 | 30 | First page only; pagination/completeness not proven |
+| Player month events | 8 | 12 | Sample varies; not a fixed 7-row endpoint cap |
+| Team month events for same ID | 8 | 12 | Response SHA-256 exactly identical to player-month in BOTH cohorts |
+
+One research caveat: the generic bulk report labelled market `id` values in
+`match_betting_odds.markets` as `unique_native_event_ids`. Those are **market
+IDs, not match IDs**; do not use that metric for canonical identity or
+coverage. The round sample is independent of the source witness, and the
+daily odds inventory does not prove a single valid pre-match price.
+
+Historical BP correction:
+[prior run 42407952959](https://github.com/BackstageTalks/tbt/actions/runs/42407952959)
+verified 200 attempts / 0 new cells with `breakpointsscored` unsupported in
+all 200. After the guarded alias fix in PR #1446, the
+[100-call read-back 42416694839](https://github.com/BackstageTalks/tbt/actions/runs/42416694839)
+and [400-call WTA read-back 42417826366](https://github.com/BackstageTalks/tbt/actions/runs/42417826366)
+independently verified 3274 **mixed statistic** cells in total, not 3274
+break-point-specific fields. Both had 0 new fully serve/return-ready rows.
+Therefore 200/0 is valid as a *historical failure*, but is no longer proof
+that BP-enrichment should be globally disabled.
+
+Decision: Retain the existing category/day/month batched historical collector.
+Use tournament date/round/last as evidence-backed gap-specific alternatives,
+not blanket replacements without non-overlap, identity and CDB delta checks.
+Do not pay for both player- and team-month aliases for the same ID/month unless
+there is documented incremental data. Daily odds may be a very efficient
+event/selection index, but it cannot replace historical pre-match quotes or
+individual market requests without valid quote timestamp and provider/market
+identity verification. Spend no more calls merely to reach the operator's
+300-per-test permission ceiling. No model or production route changes.
