@@ -149,6 +149,8 @@ def freeze_most_aces_price(row: Mapping[str, Any]) -> dict[str, Any]:
     """
     result = deepcopy(dict(row))
     if (result.get("market") != "most_aces"
+            or result.get("issued_at")
+            or result.get("publication_status") == "published"
             or result.get("ace_winner_source") == "issued_aces_signal_only"
             or result.get("ace_winner_issued") is False):
         return result
