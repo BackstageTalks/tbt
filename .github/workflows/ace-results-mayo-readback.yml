@@ -78,6 +78,7 @@ jobs:
               allowed = {
                   '12f40ecd7293e1ef14ed5f62431252ff31619734',
                   '74106244a4eb2f32045211d3917fdc60d50ef15f',
+                  '1c629f31c69bdbc69c3fa5bf7d597a534ec75bfd',
               }
               if deployed_sha not in allowed:
                   raise SystemExit('Deployed production SHA predates Mayo fix or is not a verified descendant: ' + deployed_sha[:12])
