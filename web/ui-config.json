@@ -980,7 +980,7 @@
       ],
       "requires_odds": true,
       "objective": "rank_full_slate_quality_consensus",
-      "min_probability": 0.6,
+      "min_probability": 0.7,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -990,30 +990,48 @@
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
       "sort": "harmonic_model_market_agreement_then_evidence",
-      "preferred_probability": 0.6,
+      "preferred_probability": 0.8,
       "edge_ev_role": "diagnostic_only",
-      "secondary_probability": null,
-      "standard_probability": null,
+      "secondary_probability": 0.78,
+      "standard_probability": 0.75,
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "Full-day ranked priced slate: three TOP target (max 3), preserve >=1.50 odds, VALUE priority, no automatic confidence cascade; evidence backup depth >=0.75 and 3 matches/surface only if fewer than 3 standard candidates",
+      "cascade": "ATP/WTA first, then Challenger/WTA125, then ITF. Target 3 with 80/78/75/70 probability tiers; never weaken depth 0.80 or 5 surface matches; real odds >=1.50, no upper limit; VALUE priority",
       "confidence_tiers": [
-        0.6
+        0.8,
+        0.78,
+        0.75,
+        0.7
       ],
       "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.6,
+      "fallback_min_probability": 0.7,
       "fallback_only_if_core_count_below": 3,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
-      "backup_min_data_depth": 0.75,
-      "backup_min_surface_matches": 3
+      "backup_min_data_depth": 0.8,
+      "backup_min_surface_matches": 5,
+      "competition_priority": [
+        [
+          "ATP",
+          "WTA"
+        ],
+        [
+          "Challenger",
+          "WTA 125"
+        ],
+        [
+          "ITF"
+        ]
+      ],
+      "quality_fallback": false,
+      "policy": "priority_tours_top_v19"
     },
     "value": {
       "label": "Value Predictions",
       "limit": null,
       "selection_mode": "probability_plus_close_odds",
       "objective": "probability_plus_close_odds",
-      "min_probability": 0.6,
+      "min_probability": 0.65,
       "min_data_depth": 0.75,
       "min_surface_matches": 3,
       "min_odds": 1.8,
@@ -1026,7 +1044,8 @@
       "fill_policy": "all_qualified_probability_60_plus_close_odds_max15pct",
       "fallback_tiers": [],
       "max_two_way_odds_difference": 0.15,
-      "edge_ev_role": "diagnostic_only"
+      "edge_ev_role": "diagnostic_only",
+      "min_odds_inclusive": false
     },
     "ace": {
       "limit": 10,
