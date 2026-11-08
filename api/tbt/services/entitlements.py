@@ -983,6 +983,10 @@ def _published_daily_pick_count(payload: dict) -> int:
         "doubles", "games", "sets", "ace_winner",
     ):
         for index, row in enumerate(_source_rows_for_section(payload, section)):
+            # An ESÁ leader bridge is only a UI signal backed by an existing
+            # issued O/U card. It is NOT a second issued market prediction.
+            if row.get("ace_winner_source") == "issued_aces_signal_only":
+                continue
             surface = str(row.get("surface") or row.get("court_surface") or "").strip().lower()
             if not surface or surface == "unknown":
                 continue  # The dashboard does not publish rows with unknown surface.
