@@ -366,3 +366,103 @@ cross-checks from scored raw points; (4) PBP coverage/completeness
 measurement before any new paid scale; (5) validate whether 68/500 richer
 stroke reports merit dedicated canonical fields. No API calls, imports,
 schema upgrades or model changes were executed for this investigation.
+
+## Four-endpoint supplied fixture: match, statistics, PBP, player-year — independent calculations
+
+Read-only audit on 2026-11-08. **Zero provider calls, zero CDB writes, zero
+model changes.** Uploaded fixture has `getTennisMatchDetails` event
+**14232981**, ATP Kitzbühel, 2025-07-22, Ofner (home
+tennisapi team 83397) vs Struff (away team 46391), finished,
+set scores 4–6 2–6, clay. The separately supplied
+`getMatchStatistics` and `getPointByPointData` JSON bodies **do not
+carry their own event ID**; original requested URLs are still needed to
+independently certify that all three describe this exact event.
+The player-year fixture lacks both team ID and year in its body; do not
+attribute it to a named participant without the original request.
+
+Independently replayed point-by-point **18 games** (10 first set,
+8 second set), **92 explicitly listed** point transitions, with one
+terminal point omitted from each game's `points` list but each game's
+winner and server supplied by `score.scoring` and `score.serving`.
+All 18 end states permitted the winning player to take one terminal
+point; **0 invalid score transitions**. Accounting for 18 inferred
+terminal *point winners* (not inferred ace/DF shot descriptions), the
+result is **110 points**:
+
+| PBP independently calculated | Ofner/home | Struff/away |
+| --- | ---: | ---: |
+| Points won | 45 | 65 |
+| Service points won | 30 / 59 | 36 / 51 |
+| Return points won | 15 / 51 | 29 / 59 |
+| Converted break points | 1 / 3 | 4 / 5 |
+| Saved break points | 1 / 5 | 2 / 3 |
+
+These counts exactly agree with the supplied *SUM OF SETS* in
+`getMatchStatistics` for service won, return won, and all break-point
+counts, as well as the score 4–6 2–6. The `ALL` period, by contrast,
+reports **115** points, away **4** aces vs **3** by set,
+away **0** double faults vs **1** by set,
+away **0** break-point conversions vs **4** by set/PBP,
+home BP saved **3/3** vs **1/5** by set/PBP. This is a real
+fixture-level discrepancy but does NOT alone prove a provider bug
+because stats/PBP response request IDs are missing.
+
+The observed pointDescription flags have preliminary semantics:
+description=1 occurred **7** times, *always a server-won point*,
+with a per-side observed subset matching the set ace counts except
+two missing possible terminal aces. Description=2 occurred **7**
+times, *always receiver-won*, matching **all 7 set double faults**
+by player and set. This suggests 1=ace and 2=double fault, but
+**flag meanings are not yet documented or verified across independent
+events**, and the omitted terminal shot types cannot be reconstructed.
+Do not use these flags as canonical aces/DF until verified.
+
+The existing `tennisapi_extra.py::point_by_point_inventory` is
+explicitly **structural only**, returning
+`eligible_for_cdb_point_features=False`, despite a complete
+fixture permitting replay. The existing `statistics_enrichment.py`
+only accepts ALL-period whole-match rates, rejects *the entire API
+statistics response* when any existing canonical field differs, and
+drops **all** per-set enrichment if a set ace/DF sum exceeds its
+ALL value; the sample's away set DF total 1 exceeds ALL 0, thus the
+existing set parser would discard this otherwise recoverable tape.
+The existing raw-count `breakPointsScored` is intentionally not
+interpreted as a percentage in `statistics.py`. A verified
+opponent-saved break-point numerator/denominator plus crosschecked
+conversion count could provide the missing conversion rate,
+but only with source/event completeness safeguards.
+
+The five surface rows of `getTeamYearStatistics` (player/year unverified)
+yield **63 matches / 42 wins**, **85 aces**, **102 double faults**,
+**4,401 distinct service points**, **5,710 physical serves including
+second attempts**, **2,530 service points won**, service points won
+**57.49%**, first serve landed **70.26%**, break points converted
+**251/524 = 47.90%**, saved **256/465 = 55.05%**.
+For each of five surface rows, the following three exact identities hold:
+`firstServeTotal + secondServeTotal = totalServeAttempts`;
+`firstServeTotal - firstServePointsTotal = secondServeTotal`;
+`secondServeTotal - secondServePointsTotal = doubleFaults`.
+Thus `totalServeAttempts` is **not** the right denominator for service
+point-win rate; use `firstServeTotal`, conditionally on consistent
+provider semantics. Winners/unforced error fields are missing in two
+surface rows; absence means unknown, not zero. Surface aggregates
+must be player/year provenance verified and never used as a full-year
+feature for predictions **earlier in that year** (future leakage).
+They are not evidence to fill a particular match's missing statistics.
+
+Additional identity/caveat: detail says `firstToServe=2`, whereas
+the PBP fixture lists set 1 game 1 server=1; verify response identity
+and field semantics. Historical ranking/currentRanking and prizeCurrent
+from the old event detail are not automatically point-in-time rankings.
+
+Conclusion/next gates: (1) verify requested exact match ID for both
+stats and PBP and team/year for surface summary; (2) read-only
+multi-event PBP completeness and scoring-descriptor validation; (3)
+capture conflict-key/value/tolerance distributions for the existing
+194/500 rejected ATP calls, plus per-field NULL-delta, before changing
+canonical conflict policy; (4) develop independently replayed set/PBP
+evidence sidecar or native provider importer upgrade with explicit
+provenance/NULL-only writer/score identity, rollback, and readback;
+(5) research historical, **prior-season** surface aggregates for
+qualified completed seasons only, not direct match imputation.
+No new CDB import or schema change is claimed.
