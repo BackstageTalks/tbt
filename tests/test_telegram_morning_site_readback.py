@@ -24,6 +24,9 @@ def sources(monkeypatch):
     monkeypatch.setattr(tg,"select_groups",lambda *a,**kw:{
         "top":[{}, {}, {}], "value":[{}], "aces":[{} for _ in range(9)]
     })
+    from tbt.services import issued_authority
+    monkeypatch.setattr(issued_authority, "row_authority_key", lambda row, key: key + ":exact")
+    web["offer_authority_keys"] = {k: [v + ":exact"] for k, v in tg.SECTIONS.items()}
     return offer,web
 
 def test_early_send_allowed_for_current_verified_website_generation(sources):
@@ -61,3 +64,10 @@ def test_no_send_if_private_snapshot_is_wrong_day(sources):
     offer,site=sources
     with pytest.raises(ValueError):
         tg.verified_website_morning_parity({**offer,"betting_day":"2026-11-06"},site,NOW)
+
+
+def test_same_generation_and_counts_do_not_authorize_different_picks(sources):
+    offer, site = sources
+    site["offer_authority_keys"]["top"] = ["another-contract"] * 3
+    with pytest.raises(ValueError, match="exact issued"):
+        tg.verified_website_morning_parity(offer, site, NOW)
