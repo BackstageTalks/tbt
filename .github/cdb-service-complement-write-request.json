@@ -25,15 +25,6 @@
   "new_authorization_required_before_write": false,
   "approval_basis": "2026-11-08 operator 'dokonci' for P2 ATP/WTA/CDB work together with standing safe verified NULL-only import requirement. No provider calls or model promotion.",
   "execution_id": "cdb-service-complements-4178-20261108-manifest-9edbea70-once",
-  "prior_complete_local_parquet_dryrun_run_id": 42527261256,
-  "expected_full_local_readback": {
-    "status": "verified",
-    "canonical_matches": 1005672,
-    "enriched_matches": 1056,
-    "new_stat_values": 4178,
-    "existing_values_overwritten": 0,
-    "quarantined_rows_proven_unchanged": 0
-  },
   "rehearsal_requirements": [
     "SHA-pinned private release and full row count",
     "unique source-native/canonical identity and conflict exclusions",
