@@ -945,6 +945,7 @@ def main():
                 }
                 if enricher is not None:
                     output_report["statistics_provider_key_inventory"] = enricher.statistics_key_summary()
+                    output_report["statistics_conflict_diagnostics"] = enricher.conflict_diagnostics()
             if args.mode == "identity":
                 output_report["identity_backfill"] = {
                     "recovered_native_event_ids": len(identity_recovered_expected),
