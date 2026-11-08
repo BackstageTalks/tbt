@@ -1,5 +1,6 @@
 name: Read-only current CDB Serve Return coverage (audited)
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - 'scripts/audit_cdb_serve_return_coverage.py'
