@@ -84,6 +84,39 @@ def test_history_safety_reports_only_changed_years(match_factory):
     assert report['affected_years'] == [2025]
 
 
+def test_changed_years_matches_prior_full_identity_comparison(match_factory):
+    """Fast path must preserve old full-identity, per-year multiset semantics."""
+    from collections import Counter
+    from datetime import datetime, timezone
+    from tbt.data.history_safety import _changed_years, _identity_tuple
+
+    def previous_implementation(before, after):
+        years = {int(m.scheduled_at.year) for m in [*before, *after]}
+        return [
+            year for year in sorted(years)
+            if Counter(_identity_tuple(m) for m in before if int(m.scheduled_at.year) == year)
+            != Counter(_identity_tuple(m) for m in after if int(m.scheduled_at.year) == year)
+        ]
+
+    originals = [
+        replace(
+            match_factory(f"event-{index}", f"A{index}", f"B{index}", f"A{index}"),
+            scheduled_at=datetime(2016 + index % 11, 6, 1, tzinfo=timezone.utc),
+        )
+        for index in range(110)
+    ]
+    scenarios = [
+        ([], []),
+        (originals, originals),
+        (originals, originals + [originals[0]]),  # identical key, different multiplicity
+        (originals, originals[1:]),                # removed original
+        (originals, [*originals[:-1], replace(originals[-1], winner_id="changed")]),
+        (originals, [*originals[:-1], replace(originals[-1], scheduled_at=datetime(2028, 1, 1, tzinfo=timezone.utc))]),
+    ]
+    for before, after in scenarios:
+        assert _changed_years(before, after) == previous_implementation(before, after)
+
+
 def test_quarantine_budget_is_bounded():
     from tbt.data.history_safety import quarantine_budget
 

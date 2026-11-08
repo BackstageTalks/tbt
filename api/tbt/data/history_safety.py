@@ -8,7 +8,7 @@ collisions that cannot be resolved without guessing. Quarantined rows are
 excluded from model/prediction input and must be reported to the operator.
 """
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import timezone
 from typing import Iterable
 
@@ -38,17 +38,27 @@ def _duplicates(values: Iterable[str]) -> set[str]:
 
 
 def _changed_years(before: list[MatchRecord], after: list[MatchRecord]) -> list[int]:
-    years = {
-        int(match.scheduled_at.year)
-        for match in [*before, *after]
-    }
-    changed = []
-    for year in sorted(years):
-        left = _identity_counter(match for match in before if int(match.scheduled_at.year) == year)
-        right = _identity_counter(match for match in after if int(match.scheduled_at.year) == year)
-        if left != right:
-            changed.append(year)
-    return changed
+    """Group rows by year in one pass, retaining exact duplicate multiplicity.
+
+    The previous implementation rescanned both million-row lists for every
+    historical year on every refresh merge. Keep the same calendar-year and
+    full-identity comparison, but avoid repeated scans.
+    """
+    # Group only references, not full million-row identity Counter keys.
+    # Process each year independently so peak memory stays bounded by that
+    # year's records instead of keeping two full-corpus key tables alive.
+    left_by_year = defaultdict(list)
+    right_by_year = defaultdict(list)
+    for match in before:
+        left_by_year[int(match.scheduled_at.year)].append(match)
+    for match in after:
+        right_by_year[int(match.scheduled_at.year)].append(match)
+
+    return sorted(
+        year for year in (left_by_year.keys() | right_by_year.keys())
+        if _identity_counter(left_by_year.get(year, ()))
+        != _identity_counter(right_by_year.get(year, ()))
+    )
 
 
 def quarantine_budget(
