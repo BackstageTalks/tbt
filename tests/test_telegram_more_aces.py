@@ -12,6 +12,7 @@ import telegram_offer_publisher as tg
 NOW = datetime(2026,11,8,6,30,tzinfo=timezone.utc)  # 07:30 Bratislava
 SCHEDULED = "2026-11-08T15:00:00+00:00"
 GENERATED = "2026-11-08T05:10:00+00:00"
+CONFIRMED_AT = "2026-11-08T06:20:00+00:00"
 
 
 def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", start=SCHEDULED):
@@ -21,12 +22,16 @@ def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", st
             "aces_superiority_hint":hint,"aces_superiority_player_id":hint_id,
             "selection_id":selected,"price_contract":"player_total_ou",
             "market_line":4.5,"ou_side":"over","odds":1.76,
+            "projection_model":"ace-count-projection-v4",
+            "projection":6.2,"opponent_projection":3.1,
             "projection_confidence":0.78}
 
 
 def snapshot(rows=None):
     return {"schema":1,"confirmed_only":True,"betting_day":"2026-11-08",
-            "generated_at":GENERATED,"ace_picks":[row()] if rows is None else rows}
+            "generated_at":CONFIRMED_AT,
+            "source_feed_generated_at":GENERATED,
+            "ace_picks":[row()] if rows is None else rows}
 
 
 def site():
@@ -89,6 +94,18 @@ def test_reject_website_source_conflicts(change):
         more.verify_same_website(snapshot(),{**site(),**change},picked,NOW)
 
 
+def test_reject_website_parity_without_original_serving_generation():
+    picked=more.offered_rows(snapshot(),NOW)
+    with pytest.raises(ValueError):
+        more.verify_same_website(
+            {k:v for k,v in snapshot().items() if k!="source_feed_generated_at"},
+            site(),picked,NOW)
+    with pytest.raises(ValueError):
+        more.verify_same_website(
+            {**snapshot(),"source_feed_generated_at":"2026-11-08T05:11:00+00:00"},
+            site(),picked,NOW)
+
+
 def test_same_format_but_only_selected_name_no_bookmaker_ou():
     picked=more.offered_rows(snapshot(),NOW)
     msgs=more.render_messages(picked,NOW,tg.FOOTER)
@@ -96,11 +113,50 @@ def test_same_format_but_only_selected_name_no_bookmaker_ou():
     message=msgs[0]["text"]
     assert tg.HEADER in message and "08.11.2026" in message
     assert "🎾 VIAC ES" in message
-    assert "🎾 | Smith | 16:00 | viac ES | 78.0%" in message
+    assert "🎾 | Smith | 16:00 | viac ES | 78.0% | BlinQ štat. kurz 1.59" in message
+    assert picked[0]["statistical_more_aces_odds"] == 1.59
+    assert picked[0]["statistical_more_aces_price_basis"] == "blinq_user_most_aces_confidence_band_v1"
     assert "Bob" not in message and "Jones" not in message
     assert "4.5" not in message and "1.76" not in message
     assert tg.BRAND_FOOTER in message
     assert "by BlinQ Stat Engine" in message
+
+
+def test_exact_api_pro_winner_quote_precedes_local_and_never_uses_ou():
+    ball=row()
+    provider={**row(), "market":"most_aces", "selection_id":"p1",
+              "price_contract":"player_superiority", "price_status":"priced_projection",
+              "odds_source":"rapidapi", "provider_id":1,
+              "captured_at":"2026-11-08T05:30:00+00:00",
+              "odds_market_name":"Most Aces", "odds":1.66}
+    picked=more.offered_rows(snapshot([ball,provider]),NOW)
+    assert len(picked)==1
+    assert picked[0]["api_pro_most_aces_odds"]==1.66
+    assert picked[0]["statistical_more_aces_odds"] is None
+    msg=more.render_messages(picked,NOW,tg.FOOTER)[0]["text"]
+    assert "API Pro kurz 1.66" in msg
+    assert "BlinQ štat. kurz" not in msg
+    assert "1.76" not in msg
+
+    # Another player or another O/U bookmaker contract cannot override the ball.
+    provider["selection_id"]="p2"
+    picked=more.offered_rows(snapshot([ball,provider]),NOW)
+    assert picked[0]["api_pro_most_aces_odds"] is None
+    assert picked[0]["statistical_more_aces_odds"]==1.59
+    provider["selection_id"]="p1"
+    provider["odds_market_name"]="Player Aces Total"
+    picked=more.offered_rows(snapshot([ball,provider]),NOW)
+    assert picked[0]["api_pro_most_aces_odds"] is None
+    assert picked[0]["statistical_more_aces_odds"]==1.59
+
+
+def test_bad_source_fails_closed_without_reusing_over_under_price():
+    malformed=row()
+    malformed["projection_model"]="unknown"
+    picked=more.offered_rows(snapshot([malformed]),NOW)
+    assert picked[0]["statistical_more_aces_odds"] is None
+    assert "1.76" not in more.render_messages(picked,NOW,tg.FOOTER)[0]["text"]
+    assert "štat. kurz" not in more.render_messages(picked,NOW,tg.FOOTER)[0]["text"]
 
 
 def test_prepare_requires_regular_daily_receipt_and_keeps_private_ledger(tmp_path,monkeypatch):

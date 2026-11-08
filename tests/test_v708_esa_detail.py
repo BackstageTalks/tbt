@@ -4,7 +4,7 @@ APP=(ROOT/'web/app.js').read_text(encoding='utf-8')
 CSS=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
 
 def test_esa_rows_do_not_use_generic_match_detail():
-    assert "if(sourceTab==='ace'||sourceTab==='double_faults')" in APP
+    assert "if(sourceTab==='ace'||sourceTab==='ace_winner'||sourceTab==='double_faults')" in APP
     assert "openAceProjection(current)" in APP
     assert 'data-hub-market="${escapeHtml(sourceTab)}"' in APP
 
@@ -15,5 +15,5 @@ def test_esa_detail_is_projection_specific_and_hides_missing_stats():
     assert '.ace-detail-grid' in CSS
 
 def test_esa_tab_has_no_forced_detail_column():
-    assert "if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence];" in APP
+    assert "if(tab==='ace'||tab==='ace_winner'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence];" in APP
     assert "prediction=lcopy('PREDICTION','PREDIKCIA','PREDIKCE')" in APP

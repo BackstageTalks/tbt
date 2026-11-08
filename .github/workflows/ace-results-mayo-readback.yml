@@ -1,0 +1,132 @@
+name: BlinQ Mayo Aces Results source readback (P0, read only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - web/app.js
+      - tests/test_ace_result_leader_ball.py
+      - .github/workflows/ace-results-mayo-readback.yml
+  workflow_run:
+    workflows: [Test and deploy]
+    branches: [main]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source:
+    if: >-
+      (github.repository == 'BackstageTalks/tbt' &&
+       github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
+       (github.head_ref == 'fix/ace-results-frozen-selection-readback-20261108' ||
+        github.head_ref == 'fix/results-aces-mayo-actual-ui-20261108')) ||
+      (github.repository == 'BackstageTalks/tbt' &&
+       github.event_name == 'workflow_run' &&
+       ((github.event.workflow_run.conclusion == 'success' &&
+         contains(github.event.workflow_run.head_commit.message, '[ace-mayo-readback]')) ||
+        contains(github.event.workflow_run.head_commit.message, '[ace-retirement-readback]')))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read authentic frozen Mayo Aces archive and web-source contract (no writes)
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          POST_DEPLOY_READBACK: ${{ github.event_name == 'workflow_run' && 'true' || 'false' }}
+          DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${BLINQ_LIVE_WORKER_TOKEN:-}"
+          python - <<'PY'
+          import json, os, urllib.request
+          from urllib.parse import urlsplit
+          
+          base = os.environ['BLINQ_PRODUCTION_URL'].rstrip('/')
+          url = urlsplit(base)
+          if url.scheme != 'https' or url.hostname != 'agreeable-sky-011a7fe10.7.azurestaticapps.net':
+              raise SystemExit('Production origin mismatch')
+          key = os.environ['BLINQ_LIVE_WORKER_TOKEN']
+          postdeploy = os.getenv('POST_DEPLOY_READBACK') == 'true'
+          day = '2026-11-07'
+          if postdeploy:
+              sha = os.environ.get('DEPLOY_SHA', '')
+              if len(sha) != 40 or any(c not in '0123456789abcdef' for c in sha):
+                  raise SystemExit('Invalid deployed revision')
+              with urllib.request.urlopen(base + '/deployment.json?mayo_readback=' + sha, timeout=30) as dep:
+                  manifest = json.load(dep)
+              if manifest.get('git_sha') != sha:
+                  raise SystemExit('Deployed production SHA not confirmed')
+              with urllib.request.urlopen(base + '/app.js?mayo_readback=' + sha, timeout=30) as js:
+                  code = js.read(4_000_001)
+              if len(code) > 4_000_000 or b'frozenTotalName' not in code:
+                  raise SystemExit('Production UI missing frozen O/U name recovery')
+              if b'decidedRetiredAces' not in code:
+                  raise SystemExit('Production UI missing decided-retirement Aces leader logic')
+          expected = {
+              'event_id': '17427331', 'section': 'ace', 'market': 'aces',
+              'selection_id': '309157',
+              'publication_key': 'local-aces-ou-v1:17427331:309157:over:4.5',
+              'market_line': 4.5, 'projection_direction': 'over'
+          }
+          def get(endpoint):
+              request = urllib.request.Request(
+                  base + '/api/v1/internal/telegram/' + endpoint + '?day=' + day,
+                  headers={'Accept': 'application/json', 'X-Blinq-Worker-Token': key}
+              )
+              with urllib.request.urlopen(request, timeout=30) as resp:
+                  body = resp.read(3_000_001)
+                  if resp.status != 200 or len(body) > 3_000_000:
+                      raise RuntimeError('Authenticated source inaccessible')
+              return json.loads(body)
+          def matching(payload):
+              rows = payload.get('rows')
+              if not isinstance(rows, list):
+                  raise RuntimeError('Invalid source rows')
+              return [r for r in rows if isinstance(r, dict) and all(
+                  str(r.get(k) or '') == str(v) if k not in {'market_line'}
+                  else r.get(k) is not None and float(r[k]) == v
+                  for k,v in expected.items())]
+          archive = get('settled-results')
+          site = get('site-results-parity')
+          if (archive.get('source') != 'verified_match_status_snapshot'
+              or site.get('source') != 'website_results_pre_entitlement_v1'
+              or site.get('results_archive_unavailable') is not False
+              or site.get('results_exclusions_unavailable') is not False
+              or site.get('member_render_verified') is not False):
+              raise RuntimeError('Source provenance or availability not verified')
+          a, s = matching(archive), matching(site)
+          def verified(matches):
+              if len(matches) != 1: return False
+              row = matches[0]
+              outcome = row.get('result') or {}
+              return (outcome.get('correct') is True
+                      and outcome.get('status') == 'hit'
+                      and outcome.get('actual_count') == 5
+                      and outcome.get('runtime_source') == 'match_status_snapshot'
+                      and row.get('odds') is not None
+                      and abs(float(row['odds']) - 1.7) < 1e-8)
+          print('Mayo exact original source audit (read-only): archive_rows=%d site_rows=%d archive_verified=%s site_verified=%s member_render_verified=false'
+                % (len(a), len(s), verified(a), verified(s)))
+          if not verified(a) or not verified(s):
+              raise SystemExit('Original Aces result absent or mismatched; do not claim UI fixed')
+          if postdeploy:
+              # The same already-verified frozen Results archive must contain
+              # BOTH provider counts. Never infer null as zero.
+              opponent = (a[0].get('result') or {}).get('opponent_actual_count')
+              paired = type(opponent) in (int, float) and opponent == 0
+              print('Mayo verified opponent Aces count: paired_zero=%s' % paired)
+              if not paired:
+                  raise SystemExit('Verified paired Aces count absent; ball cannot be claimed')
+              sr = s[0].get('result') or {}
+              original_decided = sr.get('retirement_line_decided') is True
+              exact_retirement = sr.get('reason') == 'retired_after_ou_decided'
+              site_paired = type(sr.get('opponent_actual_count')) in (int, float) and sr['opponent_actual_count'] == 0
+              print('Mayo live Results retirement readback: original_decided=%s exact_reason=%s paired_zero=%s'
+                    % (original_decided, exact_retirement, site_paired))
+              if not (original_decided and exact_retirement and site_paired):
+                  raise SystemExit('Actual website source does not carry safe retired-OU decision')
+          PY

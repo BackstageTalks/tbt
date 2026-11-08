@@ -29,7 +29,7 @@ def test_r45_short_odds_and_aces_labels_are_clean():
     assert "prime:'ACCA'" in APP
     assert "ace:'ACES'" in APP
     assert UI['dashboard']['daily_hub']['tabs']['ace']['label'] == 'ACES'
-    assert "?lcopy('Double Faults','Dvojchyby','Dvojchyby'):'Aces'" in APP
+    assert "?lcopy('Double Faults','Dvojchyby','Dvojchyby'):raw.includes('most_aces')?lcopy('Most Aces','Viac es','Více es'):'Aces'" in APP
     assert '${escapeHtml(d.market.toUpperCase())} · ' in APP
 
 
@@ -38,7 +38,7 @@ def test_r45_projection_cards_expose_direction_and_line():
     assert 'function projectionReferenceLine(row,sourceTab=' in APP
     assert 'function projectionPickText(row,sourceTab=' in APP
     assert "if(market==='games')" in APP
-    assert "if(market==='ace'||market==='double_faults'||market==='aces')" in APP
+    assert "if(market==='ace'||market==='ace_winner'||market==='most_aces'||market==='double_faults'||market==='aces')" in APP
     assert "pick=projectionPickText(row,sourceTab)" in APP
     assert "pick=projectionPickText(row,projectionTab)" in APP
     assert "selection:projectionPickText(row,market)" in APP

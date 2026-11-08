@@ -224,3 +224,44 @@ def test_issued_authority_legacy_plain_json_remains_readable_and_migrates(monkey
     saved = persist_authority({**legacy, "keys": [new_key]})
     assert sorted(saved["keys"]) == sorted([legacy_key, new_key])
     assert table.rows[("issued", day)]["manifest_json"].startswith("gzip:")
+
+
+def test_issued_authority_650_exact_keys_fit_azure_and_round_trip(monkeypatch):
+    """The 8 Nov slate exceeded 500; keep the full issued authority, not a sample."""
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import MAX_KEYS, load_authority, persist_authority
+
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    day = "2026-11-08"
+    keys = sorted(hashlib.sha256(str(i).encode()).hexdigest() for i in range(650))
+    assert 650 <= MAX_KEYS
+    receipt = {"schema": 1, "confirmed_only": True, "betting_day": day, "keys": keys}
+
+    confirmed = persist_authority(receipt)
+    assert confirmed["keys"] == keys
+    assert load_authority(day)["keys"] == keys
+    saved = table.rows[("issued", day)]["manifest_json"]
+    assert saved.startswith("gzip:")
+    assert len(saved.encode("utf-16-le")) <= 65536
+    # Never silently truncate to the old 500-key limit.
+    assert len(confirmed["keys"]) == 650
+
+    extra = hashlib.sha256(b"newly-confirmed-market").hexdigest()
+    assert len(persist_authority({**receipt, "keys": [extra]})["keys"]) == 651
+    assert set(load_authority(day)["keys"]) == set(keys + [extra])
+
+
+def test_issued_authority_remains_finitely_bounded(monkeypatch):
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import MAX_KEYS, persist_authority
+
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    keys = sorted(hashlib.sha256(str(i).encode()).hexdigest() for i in range(MAX_KEYS + 1))
+    with pytest.raises(ValueError, match="bounded daily size"):
+        persist_authority({
+            "schema": 1, "confirmed_only": True,
+            "betting_day": "2026-11-08", "keys": keys,
+        })
+    assert not table.rows

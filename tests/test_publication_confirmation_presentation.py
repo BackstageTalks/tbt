@@ -76,3 +76,25 @@ def test_publication_candidate_view_still_detects_prediction_changes():
     left = {"top_daily_picks": [{"event_id": "evt", "player1": {"id": "1", "name": "A"}, "odds": 1.8}]}
     right = {"top_daily_picks": [{"event_id": "evt", "player1": {"id": "1", "name": "A"}, "odds": 1.9}]}
     assert module._publication_candidate_view(left) != module._publication_candidate_view(right)
+
+
+def test_confirmation_retry_accepts_exact_released_feed_after_ledger_restore():
+    original = {
+        "market_selection": {"publication_schema": 1},
+        "top_daily_picks": [{"event_id": "today", "betting": {"odds": 1.8}}],
+    }
+    # A previous partial confirmation can add already-issued historical rows
+    # when restoring market snapshots; the released bytes must still compare.
+    restored = {
+        **original,
+        "top_daily_picks": original["top_daily_picks"] + [
+            {"event_id": "previous-issued", "betting": {"odds": 2.1}}
+        ],
+    }
+    assert module._matches_private_publication_candidate(original, original, restored)
+    assert module._matches_private_publication_candidate(restored, original, restored)
+    mismatched = {
+        **original,
+        "top_daily_picks": [{"event_id": "today", "betting": {"odds": 9.99}}],
+    }
+    assert not module._matches_private_publication_candidate(mismatched, original, restored)

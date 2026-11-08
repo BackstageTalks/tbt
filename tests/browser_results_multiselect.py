@@ -59,7 +59,7 @@ def main():
                     const publication=(section,market,selection,correct=true)=>({
                         section,market,selection,selection_id:selection,
                         issued_at:new Date(Date.now()-7200000).toISOString(),
-                        price_status:['aces','double_faults','sets','games'].includes(market)?'projection_only':'priced',
+                        price_status:['aces','most_aces','double_faults','sets','games'].includes(market)?'projection_only':'priced',
                         odds:market==='match_winner'?1.6:null,
                         result:{status:correct?'hit':'miss',correct,
                             staked_units:market==='match_winner'?1:null,
@@ -86,7 +86,7 @@ def main():
                     s.ui.dashboard=s.ui.dashboard||{};
                     s.ui.dashboard.daily_hub=s.ui.dashboard.daily_hub||{};
                     s.ui.dashboard.daily_hub.tab_order=[
-                        'daily','value','ace','double_faults','sets','doubles','games','prime','see_all'
+                        'daily','value','ace','ace_winner','double_faults','sets','doubles','games','prime','see_all'
                     ];
                     s.resultsFilters={category:'all',tour:'',surface:'',window:'1',
                                       dateFrom:'',dateTo:'',bettingDay:true};
@@ -105,7 +105,7 @@ def main():
                 }""")
                 table = page.locator(".results-table tbody tr")
                 assert table.count() == 7, (scenario, table.count())
-                expected_order = ['all', 'top_daily', 'value', 'ace', 'double_faults',
+                expected_order = ['all', 'top_daily', 'value', 'ace', 'ace_winner', 'double_faults',
                                   'sets', 'doubles', 'games', 'prime']
                 rendered_order = page.locator('.results-category-picker [data-result-category]').evaluate_all(
                     '(nodes) => nodes.map(node => node.dataset.resultCategory)'
@@ -166,6 +166,101 @@ def main():
                 assert table.count() == 7
                 assert page.locator('input[data-result-category="all"]').is_checked()
                 assert not errors, (width, errors)
+                # VIAC ES is a real Results category after ESÁ, with its
+                # own graded record/KPI sample even without bookmaker odds.
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results.push({
+                        event_id:'ace-winner-qa',tour:'ATP',surface:'hard',
+                        scheduled_at:new Date().toISOString(),tournament:'QA',
+                        player1:{id:'a1',name:'Winner candidate'},
+                        player2:{id:'a2',name:'Opponent'},
+                        market_publications:[{
+                          section:'ace_winner',market:'most_aces',
+                          projection_metric:'most_aces',projection_scope:'player',
+                          projection_subject:'Winner candidate',
+                          selection:'Winner candidate',selection_id:'a1',
+                          projection:8.0,opponent_projection:5.0,
+                          price_status:'projection_only',price_contract:'player_superiority',
+                          odds:null,issued_at:new Date(Date.now()-3600000).toISOString(),
+                          result:{status:'hit',correct:true,actual_count:10,opponent_actual_count:3}
+                        }]
+                    });
+                    s.resultsFilters.category='ace_winner';
+                    s.resultsPage=0;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert table.count() == 1, (scenario, "VIAC ES own Results row", table.count())
+                assert "VIAC ES" in page.locator(".results-table tbody").inner_text().upper()
+                assert page.locator(".metric-card strong").last.inner_text() == "1"
+                assert not errors, (scenario, errors)
+                # Full rendered Results DOM, using the actual frozen Telegram
+                # publication shape, not only a standalone helper test.
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results=[{
+                        event_id:'17427331',tour:'ATP',surface:'hard',
+                        scheduled_at:new Date().toISOString(),tournament:'Charlottesville',
+                        player1:{id:'presentation-mayo',name:'Aidan Mayo'},
+                        player2:{id:'presentation-andrade',name:'Andres Andrade'},
+                        market_publications:[{
+                            section:'ace',market:'aces',selection_id:'309157',
+                            selection:'Aidan Mayo Over 4.5 Aces',price_contract:'player_total_ou',
+                            ou_side:'over',market_line:4.5,projection:5.67,
+                            issued_at:new Date(Date.now()-3600000).toISOString(),
+                            odds:1.70,price_status:'priced_projection',
+                            result:{status:'hit',correct:true,void:false,
+                                    reason:'retired_after_ou_decided',retirement_line_decided:true,
+                                    runtime_source:'match_status_snapshot',
+                                    actual_count:5,opponent_actual_count:0,
+                                    staked_units:1,profit_units:0.7}
+                        }]
+                    }];
+                    s.resultsFilters.category='ace';
+                    s.resultsPage=0;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert table.count() == 1, (scenario, "Mayo result missing")
+                mayo_row = page.locator(".results-table tbody .results-match-player")
+                opponent_row = page.locator(".results-table tbody .results-opponent")
+                assert "Aidan Mayo" in mayo_row.inner_text()
+                assert mayo_row.locator(".ace-leader-ball").count() == 1, (scenario, "Mayo leader ball missing in DOM")
+                assert opponent_row.locator(".ace-leader-ball").count() == 0, (scenario, "Andrade incorrectly marked")
+                ball = mayo_row.locator(".ace-leader-ball")
+                assert ball.is_visible(), (scenario, "Mayo marker present but invisible")
+                geometry = ball.evaluate("""svg => {
+                    const r=svg.getBoundingClientRect(),row=svg.closest('.results-match-player').getBoundingClientRect();
+                    const style=getComputedStyle(svg);
+                    return {width:r.width,height:r.height,left:r.left,right:r.right,top:r.top,bottom:r.bottom,
+                            rowLeft:row.left,rowRight:row.right,rowTop:row.top,rowBottom:row.bottom,
+                            opacity:Number(style.opacity),display:style.display,visibility:style.visibility};
+                }""")
+                assert geometry["width"] >= 10 and geometry["height"] >= 10, (scenario, "Mayo icon collapsed", geometry)
+                assert geometry["opacity"] > 0.5 and geometry["visibility"] == "visible" and geometry["display"] != "none", (scenario, "Mayo icon hidden", geometry)
+                assert (geometry["left"] >= geometry["rowLeft"] - 1
+                        and geometry["right"] <= geometry["rowRight"] + 1
+                        and geometry["top"] >= geometry["rowTop"] - 1
+                        and geometry["bottom"] <= geometry["rowBottom"] + 1), (scenario, "Mayo icon clipped outside row", geometry)
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results[0].market_publications[0].result.retirement_line_decided=false;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert page.locator(".results-table .ace-leader-ball").count() == 0, (scenario, "unverified retirement marker")
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results[0].market_publications[0].result.retirement_line_decided=true;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert mayo_row.locator(".ace-leader-ball").count() == 1, (scenario, "verified retirement leader restored")
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results[0].market_publications[0].result.opponent_actual_count=null;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert page.locator(".results-table .ace-leader-ball").count() == 0, (scenario, "unknown opponent falsely marked")
+                assert "súper —" in table.inner_text(), (scenario, "unknown stat rendered as false zero")
+                assert not errors, (scenario, errors)
                 context.close()
             print("Results category multi-select including Android Desktop site and 24h: PASS")
         finally:

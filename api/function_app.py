@@ -117,6 +117,8 @@ from tbt.services.push_notifications import (
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed, serving_artifact_readback, _row_betting_day
+from tbt.services.ace_winner_bridge import with_issued_ace_leader_signals
+from tbt.services.most_aces_pricing import annotate_most_aces_offer
 from tbt.services.issued_authority import (
     filter_unissued_offers, load_authority, persist_authority, validate_authority,
 )
@@ -1511,6 +1513,10 @@ def feed(req):
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
         source_feed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
+        # The current issued ESÁ cards may predate the separate VIAC ES market.
+        # Display their frozen pre-match ball signal without inventing an issuance.
+        source_feed = with_issued_ace_leader_signals(source_feed)
+        source_feed = annotate_most_aces_offer(source_feed)
         try:
             source_feed = merge_settled_results(source_feed, load_settled_results_archive())
         except AdminStorageUnavailable:
@@ -2057,7 +2063,8 @@ def internal_telegram_settled_results(req):
                     "result": {
                         k: pub["result"].get(k)
                         for k in ("correct", "void", "status", "actual_count",
-                                  "profit_units", "staked_units", "runtime_source")
+                                  "opponent_actual_count", "profit_units",
+                                  "staked_units", "runtime_source")
                     },
                 })
         if len(approved) > 1000:

@@ -29,6 +29,7 @@ def _payload():
                 _published("value"),
                 _published("doubles"),
                 _published("ace", "aces"),
+                _published("ace_winner", "most_aces"),
                 # A historical inconsistent section must not promote DF into Aces.
                 _published("ace", "double_faults"),
                 _published("sets", "sets"),
@@ -84,10 +85,10 @@ def _returned(data):
 @pytest.mark.parametrize("plan, expected", [
     ("rookie", {"top_daily", "prime", "value"}),
     ("pro", {"top_daily", "prime", "value"}),
-    ("elite", {"top_daily", "prime", "value", "doubles", "aces", "double_faults", "sets", "games"}),
-    ("legend", {"top_daily", "prime", "value", "doubles", "aces", "double_faults", "sets", "games"}),
-    ("goat", {"top_daily", "prime", "value", "doubles", "aces", "double_faults", "sets", "games"}),
-    ("admin", {"top_daily", "prime", "value", "doubles", "aces", "double_faults", "sets", "games"}),
+    ("elite", {"top_daily", "prime", "value", "doubles", "aces", "most_aces", "double_faults", "sets", "games"}),
+    ("legend", {"top_daily", "prime", "value", "doubles", "aces", "most_aces", "double_faults", "sets", "games"}),
+    ("goat", {"top_daily", "prime", "value", "doubles", "aces", "most_aces", "double_faults", "sets", "games"}),
+    ("admin", {"top_daily", "prime", "value", "doubles", "aces", "most_aces", "double_faults", "sets", "games"}),
 ])
 def test_default_results_respect_each_tiers_market_permissions(plan, expected):
     data, ent = _read(plan, _config())
@@ -108,7 +109,7 @@ def test_elite_mixed_row_strips_disabled_blurred_hidden_and_zero_categories():
     )
     original = _payload()
     data, ent = _read("elite", cfg, original)
-    assert set(_returned(data)) == {"top_daily", "aces", "sets"}
+    assert set(_returned(data)) == {"top_daily", "aces", "most_aces", "sets"}
     assert "double_faults" not in ent["result_categories"]
     assert original == _payload()  # Never mutate canonical ledger.
 
@@ -132,16 +133,16 @@ def test_admin_keeps_complete_audit_with_disabled_categories():
     })
     for plan in ("elite", "legend", "goat"):
         data, _ = _read(plan, cfg)
-        assert len(_returned(data)) == 7
+        assert len(_returned(data)) == 8
     admin, ent = _read("admin", cfg)
-    assert len(_returned(admin)) == 8
-    assert len(ent["result_categories"]) == 8
+    assert len(_returned(admin)) == 9
+    assert len(ent["result_categories"]) == 9
 
 
 def test_all_categories_disabled_fails_closed_with_zero_rows():
     cfg = _config({
         ("elite", cat): {"visible_rows": 0, "display_state": "active"}
-        for cat in ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games")
+        for cat in ("top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games")
     })
     data, ent = _read("elite", cfg)
     assert ent["results"] is True
@@ -213,3 +214,26 @@ def test_restricted_markets_do_not_leak_through_raw_performance_windows():
     admin, _ = _read("admin", cfg, payload)
     assert admin["performance"]["secret_all_categories"] == "hidden-market-result"
     assert payload["performance"]["secret_all_categories"] == "hidden-market-result"
+
+
+def test_more_aces_result_requires_its_own_level_permission_not_ou_permission():
+    payload = _payload()
+    cfg = _config({
+        ("elite", "ace_winner"): {"visible_rows": 0, "display_state": "active"},
+    })
+    data, manifest = _read("elite", cfg, payload)
+    assert "aces" in _returned(data)
+    assert "most_aces" not in _returned(data)
+    assert "ace" in manifest["result_categories"]
+    assert "ace_winner" not in manifest["result_categories"]
+    assert payload == _payload()
+
+    cfg = _config({
+        ("elite", "ace"): {"visible_rows": 0, "display_state": "active"},
+        ("elite", "ace_winner"): {"visible_rows": "ALL", "display_state": "active"},
+    })
+    data, manifest = _read("elite", cfg)
+    assert "aces" not in _returned(data)
+    assert "most_aces" in _returned(data)
+    assert "ace" not in manifest["result_categories"]
+    assert "ace_winner" in manifest["result_categories"]

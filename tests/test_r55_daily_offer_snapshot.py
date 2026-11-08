@@ -223,7 +223,10 @@ def test_r55_confirmed_snapshot_excludes_pending_rows():
         {"event_id": "pending", "market_publications": [publication_for(pending, "top_daily", issued=False)]},
     ]
 
+    feed["generated_at"] = "2026-09-21T06:00:00+00:00"
     snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now)
+    assert snapshot["generated_at"] == now.isoformat()
+    assert snapshot["source_feed_generated_at"] == feed["generated_at"]
     assert [row["event_id"] for row in snapshot["top_daily_picks"]] == ["issued"]
     assert snapshot["confirmed_only"] is True
     assert snapshot["totals"]["top_daily_picks"] == 1

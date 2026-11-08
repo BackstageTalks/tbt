@@ -18,6 +18,7 @@ import unicodedata
 import urllib.request
 
 import telegram_offer_publisher as tg
+from tbt.services.most_aces_pricing import statistical_most_aces_odds, verified_api_pro_most_aces_odds, PRICE_BASIS
 
 
 def _normal(value):
@@ -67,6 +68,19 @@ def offered_rows(snapshot, now):
     rows = snapshot.get("ace_picks")
     if not isinstance(rows, list):
         raise ValueError("Missing ACES website offer")
+    # Independently published Most Aces provider prices can supersede our
+    # local band only on the *same event and ball player*. Never reuse O/U.
+    api_quotes = {}
+    for candidate in rows:
+        if not isinstance(candidate, dict) or candidate.get("market") != "most_aces":
+            continue
+        price = verified_api_pro_most_aces_odds(candidate)
+        if price is None:
+            continue
+        identity = (str(candidate.get("event_id") or ""),
+                    str(candidate.get("selection_id") or ""),
+                    str(candidate.get("scheduled_at") or ""))
+        api_quotes.setdefault(identity, []).append((candidate, price))
     selected = []
     identities = set()
     for row in rows:
@@ -87,10 +101,22 @@ def offered_rows(snapshot, now):
         conf = tg.num(confidence)
         if conf is not None and (not math.isfinite(conf) or not 0.5 <= conf <= 1.0):
             conf = None
+        matched = api_quotes.get((identity[0], identity[1], str(row["scheduled_at"]))) or []
+        matching = [price for candidate, price in matched
+                    if {str(candidate.get("player1", {}).get("id") or ""),
+                        str(candidate.get("player2", {}).get("id") or "")}
+                    == {str(row["player1"]["id"]), str(row["player2"]["id"])}]
+        api_price = matching[0] if len(matching) == 1 else None
+        price = None if api_price is not None else statistical_most_aces_odds(
+            row, ball_player_id=identity[1])
         selected.append({
             "event_id": identity[0], "selection_id": identity[1],
             "name": str(player["name"]).strip(),
             "scheduled_at": row["scheduled_at"], "confidence": conf,
+            "api_pro_most_aces_odds": api_price,
+            "api_pro_price_contract": "player_superiority" if api_price is not None else None,
+            "statistical_more_aces_odds": price,
+            "statistical_more_aces_price_basis": PRICE_BASIS if price is not None else None,
         })
     return selected
 
@@ -121,7 +147,8 @@ def verify_same_website(snapshot, site, selected, now):
             or site.get("schema") != 1 or site.get("ready") is not True
             or site.get("stale") is not False
             or site.get("betting_day") != day
-            or site.get("generated_at") != snapshot.get("generated_at")):
+            or not isinstance(snapshot.get("source_feed_generated_at"), str)
+            or site.get("generated_at") != snapshot.get("source_feed_generated_at")):
         raise ValueError("Live website and confirmed ACE feed differ")
     counts = site.get("visible_counts")
     if (not isinstance(counts, dict)
@@ -147,6 +174,17 @@ def render_messages(rows, now, footer):
         time = tg.stamp(row["scheduled_at"]).astimezone(tg.TZ).strftime("%H:%M")
         confidence = row.get("confidence")
         suffix = f" | {confidence*100:.1f}%" if confidence is not None else ""
+        api = row.get("api_pro_most_aces_odds")
+        if (row.get("api_pro_price_contract") == "player_superiority"
+                and isinstance(api, (int, float)) and math.isfinite(api)
+                and 1.01 <= api <= 100):
+            suffix += f" | API Pro kurz {api:.2f}"
+        else:
+            local = row.get("statistical_more_aces_odds")
+            if (row.get("statistical_more_aces_price_basis") == PRICE_BASIS
+                    and isinstance(local, (int, float)) and math.isfinite(local)
+                    and 1.50 <= local <= 1.70):
+                suffix += f" | BlinQ štat. kurz {local:.2f}"
         line = f"🎾 | {name} | {time} | viac ES{suffix}"
         if len(page([*current, line]).encode("utf-16-le")) // 2 > 4096:
             if not current:

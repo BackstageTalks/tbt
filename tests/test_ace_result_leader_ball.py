@@ -43,7 +43,11 @@ for(const result of [
   {...pub.result,actual_count:'not known'},
   {...pub.result,actual_count:9.5},
   {...pub.result,status:'retired'},
-  {...pub.result,status:'hit',reason:'retired_after_ou_decided'}
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided'},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided',retirement_line_decided:true},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided',retirement_line_decided:true,runtime_source:'unverified'},
+  {...pub.result,status:'retired',reason:'retired_after_ou_decided',retirement_line_decided:true,runtime_source:'match_status_snapshot'},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided',retirement_line_decided:true,runtime_source:'match_status_snapshot',void:true}
 ])assert.equal(mark({...pub,result},a),'','unknown/invalid/interrupted');
 assert.equal(mark({...pub,result:null},a),'','missing settlement');
 assert.equal(mark({...pub,market:'double_faults'},a),'','not an Aces publication');
@@ -77,6 +81,71 @@ assert.equal(mark({...legacy,aces_superiority_player_id:andrade.id},mayo,andrade
   'auxiliary hint ID cannot override verified issued subject');
 // Identity recovery is not permissible without the opponent to prove uniqueness.
 assert.equal(mark(legacy,mayo),'');
+// The real Nov 7 Telegram bridge stores "Aidan Mayo Over 4.5 Aces" as
+// publication.selection, without any projection_subject. The previous fix
+// never parsed this frozen field, so old ID namespaces still lost the ball.
+const frozenOU={...legacy,projection_subject:undefined,selection:'Aidan Mayo Over 4.5 Aces',
+  price_contract:'player_total_ou',ou_side:'over',market_line:4.5};
+assert(mark(frozenOU,mayo,andrade).includes('ace-leader-ball'),
+  'frozen issued Aces Over 4.5 record must label Mayo, even with presentation ID drift');
+// The authentic Mayo match was RETIRED; Over 4.5 was irrevocably decided
+// when the verified player had five Aces. A 'retired_after_ou_decided' reason
+// must not suppress the correctly settled 5:0 Aces leader.
+const decidedOnRetirement={...frozenOU,result:{
+  ...frozenOU.result,status:'hit',correct:true,void:false,
+  reason:'retired_after_ou_decided',retirement_line_decided:true,
+  runtime_source:'match_status_snapshot'
+}};
+assert(mark(decidedOnRetirement,mayo,andrade).includes('ace-leader-ball'),
+  'Mayo decided Over on retirement and verified 5:0 must get leader ball');
+assert.equal(mark(decidedOnRetirement,andrade,mayo),'','no opponent ball');
+for(const invalid of [
+  {...decidedOnRetirement.result,retirement_line_decided:false},
+  {...decidedOnRetirement.result,runtime_source:undefined},
+  {...decidedOnRetirement.result,reason:'retired'},
+  {...decidedOnRetirement.result,status:'retired'},
+  {...decidedOnRetirement.result,void:true},
+  {...decidedOnRetirement.result,opponent_actual_count:null},
+  {...decidedOnRetirement.result,actual_count:undefined},
+  {...decidedOnRetirement.result,actual_count:0,opponent_actual_count:5},
+])assert.equal(mark({...decidedOnRetirement,result:invalid},mayo,andrade),'',
+  'retirement needs exact verified decided counts');
+
+assert.equal(mark(frozenOU,andrade,mayo),'','must not label Andrade instead');
+for(const incorrect of [
+  {...frozenOU,market_line:5.5},
+  {...frozenOU,ou_side:'under'},
+  {...frozenOU,selection:'Andres Andrade Over 4.5 Aces'},
+  {...frozenOU,selection:'Aidan Mayo Over 4.5 Double Faults'},
+  {...frozenOU,projection_subject:'Andres Andrade'},
+  {...frozenOU,selection_id:andrade.id},
+]){
+  assert.equal(mark(incorrect,mayo,andrade),'','contract mismatch cannot label a different bet');
+}
+assert.equal(mark({...frozenOU,result:{...frozenOU.result,opponent_actual_count:null}},mayo,andrade),'',
+  'a missing opponent count must not be fabricated as zero');
+const mostAces={...frozenOU,market:'most_aces',selection:'Aidan Mayo',
+  price_contract:'player_superiority',ou_side:null,market_line:null,
+  issued_at:'2026-11-07T07:00:00Z'};
+assert(mark(mostAces,mayo,andrade).includes('ace-leader-ball'),'settled Most Aces win gets ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,correct:false}},mayo,andrade),'',
+  'Most Aces loss never gets leader win ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,actual_count:5,opponent_actual_count:5}},mayo,andrade),'',
+  'Most Aces tie never gets ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,status:'void'}},mayo,andrade),'',
+  'void Most Aces never gets ball');
+assert.equal(mark({...mostAces,result:{...mostAces.result,opponent_actual_count:null}},mayo,andrade),'',
+  'incomplete Most Aces source cannot be scored');
+// Results must not render null/missing opponent statistics as zero.
+const textBegin=src.indexOf('  function projectionResultUnitLabel(');
+const textEnd=src.indexOf('  function resultCategoryLabel(',textBegin);
+assert(textBegin>0&&textEnd>textBegin);
+sandbox.lcopy=(en,sk)=>sk;
+vm.runInContext(src.slice(textBegin,textEnd),sandbox);
+assert.equal(sandbox.projectionResultActualText(frozenOU),'5 esá · súper 0 esá');
+assert.equal(sandbox.projectionResultActualText({...frozenOU,result:{...frozenOU.result,opponent_actual_count:null}}),'5 esá · súper —');
+assert.equal(sandbox.projectionResultActualText({...frozenOU,result:{...frozenOU.result,actual_count:null}}),'—');
+
 // Prediction still labels the pre-match projected leader independently.
 assert(sandbox.aceLeaderHintHtml(pub,a,a.name).includes('ace-leader-ball'));
 const results=src.slice(renderStart,renderEnd);
@@ -87,7 +156,7 @@ assert(!results.includes('aceLeaderHintHtml(r,p2,p2Name)'));
 assert(results.includes('publicationOutcome(publication)'));
 // No O/U settlement, local Aces pricing, ROI or source archive writes in the helper.
 const helper=src.slice(src.indexOf('  function aceSettledLeaderBallHtml('),end);
-for(const forbidden of ['market_line','ou_side','result.correct','profit_units','statistical_ace_odds','fetch(']) {
+for(const forbidden of ['profit_units','statistical_ace_odds','fetch(', 'result.profit_units=']) {
  assert(!helper.includes(forbidden),'leader marker must stay independent: '+forbidden);
 }
 console.log('ACES leader result marker: PASS');
@@ -96,3 +165,39 @@ console.log('ACES leader result marker: PASS');
                          capture_output=True, timeout=20)
     assert run.returncode == 0, run.stdout + run.stderr
     assert "PASS" in run.stdout
+
+
+def test_worker_only_site_parity_preserves_native_retired_aces_evidence():
+    """Auditable web-source evidence: never infer retirement approval from status hit alone."""
+    from tbt.services.telegram_site_parity import site_day_projection
+
+    feed = {"results": [{
+        "event_id": "17427331", "betting_day": "2026-11-07",
+        "scheduled_at": "2026-11-07T18:30:00+00:00",
+        "player1": {"id": "309157", "name": "Aidan Mayo"},
+        "player2": {"id": "168420", "name": "Andres Andrade"},
+        "market_publications": [{
+            "section": "ace", "market": "aces",
+            "publication_status": "published",
+            "selection": "Aidan Mayo Over 4.5 Aces",
+            "selection_id": "309157",
+            "publication_key": "local-aces-ou-v1:17427331:309157:over:4.5",
+            "issued_at": "2026-11-07T06:46:28+00:00",
+            "result": {
+                "status": "hit", "correct": True, "void": False,
+                "reason": "retired_after_ou_decided",
+                "retirement_line_decided": True,
+                "actual_count": 5, "opponent_actual_count": 0,
+                "runtime_source": "match_status_snapshot",
+            },
+        }],
+    }]}
+    output = site_day_projection(feed, "2026-11-07")
+    assert output["member_render_verified"] is False
+    assert output["provider_requests"] == 0
+    assert len(output["rows"]) == 1
+    result = output["rows"][0]["result"]
+    assert result["reason"] == "retired_after_ou_decided"
+    assert result["retirement_line_decided"] is True
+    assert result["actual_count"] == 5
+    assert result["opponent_actual_count"] == 0

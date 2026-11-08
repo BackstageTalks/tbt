@@ -14,7 +14,7 @@ def test_r27_short_odds_is_public_and_admin_managed():
     assert prime["label"] == "ACCA"
     assert prime["plans"]["rookie"]["visible_rows"] == 1
     assert "const tabs=orderedDailyHubTabs();" in APP
-    assert "const DAILY_HUB_TABS=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
+    assert "const DAILY_HUB_TABS=['daily','prime','value','ace','ace_winner','double_faults','doubles','games','sets','see_all'];" in APP
     assert "if(tab==='prime')return shortOddsDisplayRows(marketRows('prime'));" in APP
     assert "const rows=orderedDailyHubTabs().map" in APP
 

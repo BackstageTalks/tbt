@@ -150,3 +150,151 @@ semantics with a future bounded, approved observation; then measure actual
 valid new prices per billed call. Preserve CDB single-writer, CAS quota,
 provider reserve and NULL-only protections. No additional paid calls were
 made for this documentation/read-back.
+
+## Live cross-era revalidation, 2026-11-08
+
+Operator authorized at most 300 paid requests **per test**, but the existing
+research-only, quota/CAS-guarded bulk contract validated the requested routes
+using **15 paid calls per cohort / 30 total**. Provider limit and 500-call
+reserve remained enforced, and **0 CDB writes** were performed.
+
+GitHub Actions evidence (both successfully completed):
+- Newer native witness 17449516: [run 42465293411](https://github.com/BackstageTalks/tbt/actions/runs/42465293411),
+  15 attempts, 14 available responses plus one 204. Provider-reported
+  remaining after run: 12916.
+- Archived 2016 Wimbledon native witness 7115726:
+  [run 42465442647](https://github.com/BackstageTalks/tbt/actions/runs/42465442647),
+  15 attempts, 12 available responses, two 204, one HTTP 400 (monthly
+  calendar for July 2016). Provider-reported remaining after run: 12899.
+  The 17-call difference in provider remaining between runs may include
+  outside consumers: do not attribute those two extra changes to these jobs.
+
+| Endpoint / evidence | Newer witness | Archived 2016 witness | Interpretation |
+| --- | ---: | ---: | --- |
+| Daily bulk odds, native keyed events | 994 | 336 | Each has two choices, but no explicit quote clock |
+| Daily odds choice rows with price-shaped field | 1988 | 672 | Both sides labelled; raw values/point-in-time price not verified |
+| Tournament scheduled matches by native date | 32 | 1 | Unique native event IDs in each sample; no CDB identity/import proof |
+| Tournament round, *same independent AO 2023 example* | 32 | 32 | Works for this documented route, not an archived-2016 round check |
+| Tournament season latest page (page 0) | 30 | 30 | First page only; pagination/completeness not proven |
+| Player month events | 8 | 12 | Sample varies; not a fixed 7-row endpoint cap |
+| Team month events for same ID | 8 | 12 | Response SHA-256 exactly identical to player-month in BOTH cohorts |
+
+One research caveat: the generic bulk report labelled market `id` values in
+`match_betting_odds.markets` as `unique_native_event_ids`. Those are **market
+IDs, not match IDs**; do not use that metric for canonical identity or
+coverage. The round sample is independent of the source witness, and the
+daily odds inventory does not prove a single valid pre-match price.
+
+Historical BP correction:
+[prior run 42407952959](https://github.com/BackstageTalks/tbt/actions/runs/42407952959)
+verified 200 attempts / 0 new cells with `breakpointsscored` unsupported in
+all 200. After the guarded alias fix in PR #1446, the
+[100-call read-back 42416694839](https://github.com/BackstageTalks/tbt/actions/runs/42416694839)
+and [400-call WTA read-back 42417826366](https://github.com/BackstageTalks/tbt/actions/runs/42417826366)
+independently verified 3274 **mixed statistic** cells in total, not 3274
+break-point-specific fields. Both had 0 new fully serve/return-ready rows.
+Therefore 200/0 is valid as a *historical failure*, but is no longer proof
+that BP-enrichment should be globally disabled.
+
+Decision: Retain the existing category/day/month batched historical collector.
+Use tournament date/round/last as evidence-backed gap-specific alternatives,
+not blanket replacements without non-overlap, identity and CDB delta checks.
+Do not pay for both player- and team-month aliases for the same ID/month unless
+there is documented incremental data. Daily odds may be a very efficient
+event/selection index, but it cannot replace historical pre-match quotes or
+individual market requests without valid quote timestamp and provider/market
+identity verification. Spend no more calls merely to reach the operator's
+300-per-test permission ceiling. No model or production route changes.
+
+## Verified ATP 2024 100-call breakpoint-focus CDB enrichment — 2026-11-08
+
+Authorized follow-up to test ATP where the legacy 2023 cohort had a low 47
+new values / 92 calls and 70 conflicts. The existing **provider-native**
+guarded statistics importer (not the read-only bulk probe) selected ATP 2024
+from its current canonical gap plan, with no model changes.
+
+[GitHub Actions run 42466110083](https://github.com/BackstageTalks/tbt/actions/runs/42466110083)
+**completed successfully**, all of Acquire global CDB writer, Execute
+operation, Independently verify every targeted CDB statistics publication,
+Upload report, and Release global CDB writer **succeeded**. The cross-repository
+lock tag was independently observed absent after release.
+
+Exact report/read-back:
+- Provider-native 100 paid attempts (including retries), 99 enriched
+  matches, one empty whole-match response, **779 net-new canonical statistic
+  values**, **7.79 new values per paid call**; zero conflicts and zero
+  new complete serve+return-quality rows.
+- Read-back `status=VERIFIED`, `persisted_new_statistic_values=779`,
+  `persisted_new_per_set_matches=89`, target
+  `history-2024.parquet` SHA-256
+  `cc64fbe1c55e894d60bf339e15cfdbc3932ed42298c14a8c9b49199c2ba8c1fb`.
+- Current ATP 2024 candidate plan: 73,092 completed matches, 39,860 already
+  fully quality-ready, 2,321 eligible breakpoint-focus matches; 48,848
+  on retry cooldown, 17,787 without unambiguous provider event ID, 4,136
+  already with target BP fields present. **These are mutually exclusive
+  selector skip reasons, not 70k safe import candidates**.
+- Provider key inventory: supported `breakpointssaved` and
+  `breakpointsscored` present in 99 payloads each, plus other serve/return
+  and ace/DF keys. The 779 canonical cells include **mixed provider
+  statistics**, NOT 779 proven break-point-only cells; aggregate report
+  did not split exact new field counts by name.
+- The 7.79 ATP 2024 return is close to the independently measured WTA 2023
+  7.9475 return; it **does not** prove the 2024 yield will remain stable
+  after the first 100, or establish trained-model benefits.
+- Artifacts: `blinq-statistics-42466110083` containing
+  `download_report.json`, `statistics_gap_plan.json`,
+  `statistics_readback.json`, `download_progress.json`.
+
+Decision: ATP 2024 is a validated productive cohort, but continue
+ATP/WTA 2016–2026 prioritization based on **fresh persisted cells per paid
+call**, not a fixed season or blanket re-fetch of BP-only gaps. Preserve
+NULL-only canonical precedence, 500 reserve and global single-writer;
+do not claim serve/return quality improvements from the value count alone.
+
+## ATP 2024 next 500-call canonical import — 2026-11-08
+
+Operator explicitly authorized 500 NEW paid attempts after the previous
+100-call ATP 2024 pilot yielded 779 verified net-new statistical values.
+Existing native targeted break-point-focus statistics importer was reused,
+without any provider route, model, quality, or writer-contract changes.
+
+[Actions run 42468614163](https://github.com/BackstageTalks/tbt/actions/runs/42468614163)
+completed **successfully**. All of acquire owner-only global CDB writer,
+execute native operation, independent canonical publication read-back, artifact
+upload and owner-only lock release succeeded. The tag observed soon afterward
+was a **different, later owner**, run 42469575334; do not confuse this with
+failure to release the completed run's lock.
+
+Read-back from `blinq-statistics-42468614163`:
+- **500 paid attempts**, 306 enriched matches, 194 responses classified
+  as conflicts and safely rejected, 0 empty whole-match results.
+- **2,787 actually persisted net-new canonical statistic cells**
+  (`status=VERIFIED`, 5.574 cells per paid attempt); 282 matches with
+  persisted per-set data.
+- 0 new fully serve/return-ready rows and 0 new ace/DF cells.
+- `history-2024.parquet` independently verified SHA-256:
+  `b18c0efa98ee1248ef2971d354ece216068188f1fb6529e188a9794a5afdecff`.
+- 2,221 eligible candidates in the pre-run plan. The earlier 100-call pilot
+  had 2,321, before its 100 selected matches entered cooldown.
+- Source statistics payload key inventory observed 500 complete payloads
+  with both break-point keys, but the canonical delta reported all safe
+  statistical fields together: **2,787 is not proven BP-only**.
+- This aggregated report does not itemize the 194 conflict reason labels.
+  The guarded enricher refuses any response conflicting with existing
+  authoritative statistics; it never overwrites the existing cell.
+
+Comparison:
+| ATP 2024 cohort | Paid calls | Enriched matches | Rejected conflicts | Net-new CDB values | Values / paid call |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pilot run 42466110083 | 100 | 99 | 0 | 779 | 7.790 |
+| Continuation run 42468614163 | 500 | 306 | 194 | 2787 | 5.574 |
+| **ATP 2024 combined** | **600** | **405** | **194** | **3566** | **5.943** |
+
+The incremental yield fell ~28.4% relative to the pilot, with a 38.8%
+conflict rate in the new cohort. **Do not repeat a large blind ATP 2024
+same-order batch** merely because many CDB cells remain NULL. Next
+read-only improvement: report per-reason conflict counts and per-field
+net-new CDB deltas from the existing importer, then compare eligible WTA
+and other ATP season windows using evidence-backed yield without changing
+global budget, identity, precedence or point-in-time constraints. Production
+model/forecast changes remain out of scope.

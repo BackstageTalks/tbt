@@ -81,6 +81,19 @@ def _publication_candidate_view(value, *, player_context: bool = False):
         )
     return result
 
+def _matches_private_publication_candidate(deployed: dict, released: dict, restored: dict) -> bool:
+    """After issuing, the immutable ledger can alter restored market snapshots.
+
+    The exact released feed remains a valid candidate on an idempotent retry;
+    never accept a feed that differs from both trusted release representations.
+    """
+    observed = _publication_candidate_view(deployed)
+    return (
+        observed == _publication_candidate_view(released)
+        or observed == _publication_candidate_view(restored)
+    )
+
+
 def read_json(path: Path, default):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
 
@@ -229,12 +242,13 @@ def main(argv=None):
     if not isinstance(ledger, list) or not isinstance(feed, dict):
         raise ValueError("Invalid prediction publication artifacts")
 
+    released_feed = feed
     if (feed.get("market_selection") or {}).get("publication_schema") == 1:
         feed = restore_published_market_snapshots(feed, ledger)
 
     if deployed_feed is None:
         deployed_feed = feed
-    elif _publication_candidate_view(deployed_feed) != _publication_candidate_view(feed):
+    elif not _matches_private_publication_candidate(deployed_feed, released_feed, feed):
         raise RuntimeError(
             "Deployed feed does not match the current private publication candidate; "
             "refusing to confirm issuance"

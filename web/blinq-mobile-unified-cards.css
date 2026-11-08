@@ -161,13 +161,13 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   /* Special markets retain numeric projection separately, never mistake it
      for the bookmaker odds. A native Detail button is mobile-only. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked)[data-hub-market] {
     grid-template-areas:"tournament time" "match confidence" "match number" "pick action" "projection projection"!important;
     grid-template-rows:auto minmax(48px,auto) minmax(46px,auto) auto auto!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(7) {
     grid-area:projection!important;display:flex!important;justify-content:flex-start!important;
     align-items:center!important;min-height:35px!important;width:100%!important;
@@ -175,12 +175,12 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
     background:rgba(19,75,53,.20)!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(8) {
     grid-area:confidence!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
-  #dailyHub:is([data-tab="ace"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
+  #dailyHub:is([data-tab="ace"],[data-tab="ace_winner"],[data-tab="double_faults"],[data-tab="games"],[data-tab="sets"])
   .daily-hub-table tbody tr:not(.hub-row-locked) > td:nth-child(9).hub-mobile-only {
     grid-area:action!important;display:block!important;min-height:44px!important;
   }
