@@ -230,3 +230,97 @@ def test_breakpointsscored_and_converted_disagreement_fails_closed():
     }]}]}
     with pytest.raises(ProviderError, match="Conflicting whole-match statistic"):
         parse_statistics(payload, home_is_player1=True)
+
+
+def test_provider_scored_counts_cross_validate_opponent_saved_chances():
+    """One paid ALL-period payload can safely fill previously NULL BP rates."""
+    from tbt.providers.statistics import parse_statistics
+    raw = {"statistics": [{"period": "ALL", "groups": [
+        {"statisticsItems": [
+            {"key": "breakPointsSaved",
+             "homeValue": 3, "homeTotal": 3,
+             "awayValue": 2, "awayTotal": 3},
+            {"key": "breakPointsScored", "homeValue": 1, "awayValue": 0},
+        ]},
+    ]}]}
+    values = parse_statistics(raw, home_is_player1=True)
+    assert values["p1_break_point_serve_win"] == 1.0
+    assert values["p2_break_point_serve_win"] == pytest.approx(2 / 3)
+    assert values["p1_break_point_return_win"] == pytest.approx(1 / 3)
+    assert values["p2_break_point_return_win"] == 0.0
+    assert values["p1_break_points_won"] == pytest.approx(1 / 3)
+    assert values["p2_break_points_won"] == 0.0
+    swapped = parse_statistics(raw, home_is_player1=False)
+    assert swapped["p2_break_point_return_win"] == pytest.approx(1 / 3)
+    assert swapped["p1_break_point_return_win"] == 0.0
+
+
+def test_bp_count_derivation_rejects_inconsistent_missing_and_zero_chances():
+    from tbt.providers.statistics import parse_statistics
+    base = [
+        {"key": "breakPointsSaved",
+         "homeValue": 3, "homeTotal": 3,
+         "awayValue": 2, "awayTotal": 3},
+        {"key": "breakPointsScored", "homeValue": 9, "awayValue": 0},
+    ]
+    raw = {"statistics": [{"period": "ALL", "groups": [
+        {"statisticsItems": base},
+    ]}]}
+    values = parse_statistics(raw, home_is_player1=True)
+    assert "p1_break_point_return_win" not in values
+    assert "p1_break_points_won" not in values
+    assert values["p2_break_point_return_win"] == 0.0
+    # No score count => saved-BP percentage never generates a return rate.
+    base.pop()
+    values = parse_statistics(raw, home_is_player1=True)
+    assert "p1_break_point_return_win" not in values
+    assert "p2_break_point_return_win" not in values
+    # Faced 0/0 is undefined and must never be treated as 100% or 0%.
+    base[0] = {"key": "breakPointsSaved",
+               "homeValue": 0, "homeTotal": 0,
+               "awayValue": 0, "awayTotal": 0}
+    base.append({"key": "breakPointsScored", "homeValue": 0, "awayValue": 0})
+    with pytest.raises(Exception, match="no supported"):
+        parse_statistics(raw, home_is_player1=True)
+
+
+def test_diagnostics_do_not_weaken_existing_conflict_quarantine(match_factory, tmp_path):
+    from tbt.services.statistics_enrichment import StatisticsEnricher
+
+    class Provider:
+        calls = 0
+
+        def _get(self, path, **kwargs):
+            self.calls += 1
+            assert path == "/api/tennis/event/123/statistics"
+            return {"statistics": [{"period": "ALL", "groups": [
+                {"statisticsItems": [
+                    {"key": "aces", "homeValue": 4, "awayValue": 3},
+                    {"key": "breakPointsSaved",
+                     "homeValue": 3, "homeTotal": 5,
+                     "awayValue": 4, "awayTotal": 6},
+                    {"key": "breakPointsScored",
+                     "homeValue": 2, "awayValue": 2},
+                ]},
+            ]}]}
+
+    m = ready_match(match_factory, key="conflict-audit")
+    before = dict(m.stats)
+    provider = Provider()
+    e = StatisticsEnricher(provider, tmp_path/"conflict.sqlite",
+                           targeted=True, break_points_focus=True)
+    try:
+        assert e.enrich(m) == "conflict"
+        assert m.stats == before
+        d = e.conflict_diagnostics()
+        assert d["rejected_responses"] == 1
+        assert d["by_conflicting_field"] == {"p1_aces": 1}
+        assert d["rejected_null_field_candidates"]["p1_break_point_return_win"] == 1
+        assert d["rejected_null_field_candidates"]["p2_break_point_serve_win"] == 1
+        assert d["numeric_difference_buckets"]["gte_0.05"] == 1
+        assert "conflict-audit" not in str(d) and '"homeValue"' not in str(d)
+        assert "Diagnostic only" in d["policy"]
+        assert e.enrich(m) == "cached"  # no second paid attempt
+        assert provider.calls == 1
+    finally:
+        e.close()
