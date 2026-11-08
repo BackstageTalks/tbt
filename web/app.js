@@ -1398,7 +1398,12 @@
       &&Number.isFinite(confidence)&&confidence>=.60&&confidence<=.93;
   }
   function authenticMarketSectionRow(row,key){
-    return authenticLiveProjection(row)||(key==='ace'&&(authenticLocalAceProjection(row)||authenticAceWinnerProjection(row)));
+    // Issued BlinQ statistical Most Aces prices have no provider ID. They
+    // still belong in VIAC ES after strict frozen-contract validation.
+    return authenticLiveProjection(row)||(key==='ace'&&(
+      authenticLocalAceProjection(row)||authenticAceWinnerProjection(row)
+      ||(String(row?.market||'').toLowerCase()==='most_aces'
+        &&Number.isFinite(verifiedFrozenMostAcesLocalOdds(row)))));
   }
   function marketRows(key){
     // TOP200 has been retired. Old feed data must not recreate active picks.
