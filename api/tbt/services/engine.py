@@ -548,7 +548,7 @@ def _settle_match_winner_publications(row, match, now):
 
 
 def _projection_price_units(publication, correct):
-    """Return flat-1u settlement only when a real provider price was frozen."""
+    """Return flat-1u settlement for a frozen provider or owner-local price."""
     try:
         odds = float(publication.get("odds"))
     except (TypeError, ValueError):
@@ -832,9 +832,10 @@ from .local_ace_results import local_ace_result_odds
 
 
 def _genuine_publication_odds(publication):
-    """A financial quote must be an actual bookmaker snapshot, never a display
-    filler or projection-only/model-only price. Legacy winner publications may
-    omit price_status; their immutable issued odds remain authoritative.
+    """Use only frozen full betting quotes, never view-only estimates.
+
+    Preserves real provider quotes and source-labeled owner statistical odds.
+    Legacy winner publications may omit a price_status field.
     """
     status = str(publication.get("price_status") or "").strip().lower()
     market = str(publication.get("market") or "").strip().lower()
@@ -850,6 +851,15 @@ def _genuine_publication_odds(publication):
         odds = float(publication.get("odds"))
     except (TypeError, ValueError):
         return None
+    if market == "most_aces" and publication.get("odds_source") == "blinq_statistical":
+        from .most_aces_pricing import PRICE_BASIS, LOCAL_CONTRACT_VERSION, MIN_PRICE, MAX_PRICE
+        if (publication.get("price_basis") != PRICE_BASIS
+                or publication.get("odds_contract_version") != LOCAL_CONTRACT_VERSION
+                or publication.get("price_contract") != "player_superiority"
+                or publication.get("provider_id") not in (None, "")
+                or publication.get("captured_at") not in (None, "")
+                or not math.isfinite(odds) or not MIN_PRICE <= odds <= MAX_PRICE):
+            return None
     return odds if math.isfinite(odds) and odds > 1 else None
 
 
@@ -986,7 +996,7 @@ def betting_performance(results):
     canonical_publications = canonical_entries
 
     sections = {}
-    for section in ("top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"):
+    for section in ("top200", "top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games"):
         section_entries = [(row, p) for row, p in canonical_entries if p.get("section") == section]
         sections[section] = _betting_metrics(section_entries)
     markets = {}
@@ -1088,6 +1098,7 @@ def performance_windows(winner_results, public_results, *, now):
         "value": ("betting", "sections", "value"),
         "doubles": ("betting", "sections", "doubles"),
         "ace": ("betting", "projections", "aces"),
+        "ace_winner": ("betting", "projections", "most_aces"),
         "double_faults": ("betting", "projections", "double_faults"),
         "sets": ("betting", "projections", "sets"),
         "games": ("betting", "projections", "games"),
