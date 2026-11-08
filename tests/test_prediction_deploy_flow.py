@@ -144,7 +144,10 @@ def test_prepare_and_confirm_restore_same_issued_market_snapshot(monkeypatch, tm
     assert uploaded == ['ledger.json', 'daily_offer_snapshot.json']
     # Do not silently normalize an actually deployed, inconsistent snapshot.
     deployed.write_text(json.dumps(feed))
-    with pytest.raises(RuntimeError, match='does not match'):
+    # The released but non-restored market snapshot must still be rejected.
+    # Candidate validation may reject it either at the candidate gate or at
+    # the exact frozen market/ledger consistency gate.
+    with pytest.raises(RuntimeError, match='does not match|Market feed/ledger mismatch'):
         confirm.main(['--data-repository', 'test/private', '--deployed-feed', str(deployed)])
 
 
@@ -366,3 +369,59 @@ def test_confirm_rejects_same_event_with_different_ledger_pick(monkeypatch, tmp_
     with pytest.raises(RuntimeError, match="feed/ledger mismatch"):
         confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
     assert uploaded == []
+
+
+def test_confirm_retry_after_authority_sync_failure_is_idempotent(monkeypatch, tmp_path):
+    """First attempt already persisted the ledger: a retry must not reissue bets."""
+    from test_market_snapshot_restore import artifacts
+    from tbt.services.publication import restore_published_market_snapshots
+    market_feed, market_ledger = artifacts()
+    released = _valid_feed('16983980')
+    released.update(market_feed, market_selection={'publication_schema': 1})
+    ledger = _ledger_for_feed(released)
+    ledger[0]['market_publications'] = market_ledger[0]['market_publications']
+    released = restore_published_market_snapshots(released, ledger)
+
+    state = {'feed': released, 'ledger': ledger, 'uploads': 0}
+
+    class Store:
+        def __init__(self, repository, tag, directory):
+            self.directory = Path(directory)
+        def _asset_names(self):
+            return {'feed.json', 'ledger.json', '_tbt_bundle_manifest.json'}
+        def download(self, extra_names=(), required_names=()):
+            self.directory.mkdir(parents=True, exist_ok=True)
+            (self.directory / 'feed.json').write_text(json.dumps(state['feed']))
+            (self.directory / 'ledger.json').write_text(json.dumps(state['ledger']))
+        def upload_bundle(self, paths):
+            state['uploads'] += 1
+            state['ledger'] = json.loads(
+                next(Path(p) for p in paths if Path(p).name == 'ledger.json').read_text()
+            )
+
+    monkeypatch.setattr(confirm, 'ROOT', tmp_path)
+    monkeypatch.setattr(confirm, 'ReleaseStore', Store)
+    attempts = []
+    def sync_once_failed(_path, _feed, _ledger):
+        attempts.append(True)
+        if len(attempts) == 1:
+            raise RuntimeError('transient authority service unavailable')
+        return {'confirmed_keys': 1}
+    monkeypatch.setattr(confirm, 'sync_confirmed_authority', sync_once_failed)
+    deployed = tmp_path / 'deployed.json'
+    deployed.write_text(json.dumps(released))
+    args = [
+        '--data-repository', 'test/private',
+        '--deployed-feed', str(deployed), '--sync-serving-authority',
+    ]
+
+    with pytest.raises(RuntimeError, match='transient authority'):
+        confirm.main(args)
+    first_ledger = json.loads(json.dumps(state['ledger']))
+    assert first_ledger[0]['issued_at']
+    assert state['uploads'] == 1
+
+    confirm.main(args)
+    assert state['ledger'] == first_ledger
+    assert state['uploads'] == 2
+    assert len(attempts) == 2
