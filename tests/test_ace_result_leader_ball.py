@@ -165,3 +165,39 @@ console.log('ACES leader result marker: PASS');
                          capture_output=True, timeout=20)
     assert run.returncode == 0, run.stdout + run.stderr
     assert "PASS" in run.stdout
+
+
+def test_worker_only_site_parity_preserves_native_retired_aces_evidence():
+    """Auditable web-source evidence: never infer retirement approval from status hit alone."""
+    from tbt.services.telegram_site_parity import site_day_projection
+
+    feed = {"results": [{
+        "event_id": "17427331", "betting_day": "2026-11-07",
+        "scheduled_at": "2026-11-07T18:30:00+00:00",
+        "player1": {"id": "309157", "name": "Aidan Mayo"},
+        "player2": {"id": "168420", "name": "Andres Andrade"},
+        "market_publications": [{
+            "section": "ace", "market": "aces",
+            "publication_status": "published",
+            "selection": "Aidan Mayo Over 4.5 Aces",
+            "selection_id": "309157",
+            "publication_key": "local-aces-ou-v1:17427331:309157:over:4.5",
+            "issued_at": "2026-11-07T06:46:28+00:00",
+            "result": {
+                "status": "hit", "correct": True, "void": False,
+                "reason": "retired_after_ou_decided",
+                "retirement_line_decided": True,
+                "actual_count": 5, "opponent_actual_count": 0,
+                "runtime_source": "match_status_snapshot",
+            },
+        }],
+    }]}
+    output = site_day_projection(feed, "2026-11-07")
+    assert output["member_render_verified"] is False
+    assert output["provider_requests"] == 0
+    assert len(output["rows"]) == 1
+    result = output["rows"][0]["result"]
+    assert result["reason"] == "retired_after_ou_decided"
+    assert result["retirement_line_decided"] is True
+    assert result["actual_count"] == 5
+    assert result["opponent_actual_count"] == 0
