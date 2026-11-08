@@ -466,3 +466,61 @@ provenance/NULL-only writer/score identity, rollback, and readback;
 (5) research historical, **prior-season** surface aggregates for
 qualified completed seasons only, not direct match imputation.
 No new CDB import or schema change is claimed.
+
+## Completed implementation: validated BP ratios and conflict observability — 2026-11-08
+
+Scope delivered autonomously on the existing native provider importer, no
+new writer or data source:
+
+- [PR #1486](https://github.com/BackstageTalks/tbt/pull/1486)
+  **MERGED** squash commit
+  `8ab1d8c62ee0fb1484d6258cd7aac40ccabf6bc9`.
+  The parser now derives a missing BP return-conversion rate from
+  `breakPointsScored` count only if the opposite side's
+  `breakPointsSaved` won/faced denominator is known, greater than zero,
+  and the independent count equals `faced - saved`. Orientation and
+  direct canonical values remain preserved; bare count alone is
+  never a rate. `statistics_conflict_diagnostics` reports aggregated
+  conflicting canonical fields, numerical delta bands, and counts of
+  otherwise-null fields rejected with any conflicting response.
+  **No partial import and no existing CDB overwrite** was introduced.
+- [PR #1488](https://github.com/BackstageTalks/tbt/pull/1488)
+  **MERGED** squash commit
+  `ab7dda4ded9d4236fa4f6c59a0f47226ddeb7c99`.
+  Additional parser-level fail-closed guard: if observed set-level BP
+  saved/faced or converted-count totals exceed the corresponding ALL
+  totals, **no newly derived BP conversion rate is produced**. This
+  explicitly covers the supplied Kitzbühel-shaped contradictory
+  ALL/1ST/2ND fixture, including player-order swapping. Consistent
+  fixtures still produce validated conversion rates.
+- Required PR CI completed **success** for
+  [run 42524078198](https://github.com/BackstageTalks/tbt/actions/runs/42524078198)
+  and
+  [run 42525173660](https://github.com/BackstageTalks/tbt/actions/runs/42525173660):
+  full backend pytest suite, browser runtime, optimized Chromium assets,
+  and production web artifact checks. On actual `main`,
+  [run 42525701737](https://github.com/BackstageTalks/tbt/actions/runs/42525701737)
+  independently passed all checks and Azure production deployment.
+  Verified deployment steps included frontend release, worker serving
+  snapshot, prediction publication and health endpoint, not HTTP 200 alone.
+- Independent main read-back at `ab7dda4ded9d4236fa4f6c59a0f47226ddeb7c99`
+  confirmed the BP set-contradiction guard and conflict-report keys are
+  present in the committed provider and importer code. An unrelated
+  concurrent `VIAC ES` change to `scripts/pipeline.py` and
+  `tests/test_more_aces_market.py` was protected; PR #1488 merged cleanly
+  after verifying zero file overlap.
+- **API paid requests for this implementation: 0. CDB data writes: 0.
+  New persisted statistic values: 0.** These are code and diagnostic
+  improvements, not a new import. The previously measured 194 rejected
+  ATP 2024 responses were not retroactively recovered by this commit;
+  future runs can measure conflict-field histograms without weakening
+  precedence. No deployment of PBP-derived CDB fields or new point-in-time
+  player features; no model/champion or external-cron changes.
+
+NEXT: obtain exact eventID witness for uploaded stats/PBP (those JSON
+bodies lack event IDs), then run a read-only multi-event PBP
+completeness/semantic audit before considering any point-derived
+match-level canonical import. For canonical conflict recovery, analyze
+independent field-level provenance and clean NULL-only candidates using
+the existing native lock, budget, dry-run, read-back and identity checks;
+no unapproved partial promotion.
