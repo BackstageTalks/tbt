@@ -38,22 +38,26 @@ def _duplicates(values: Iterable[str]) -> set[str]:
 
 
 def _changed_years(before: list[MatchRecord], after: list[MatchRecord]) -> list[int]:
-    """Count exact identities by year in one pass, retaining duplicate multiplicity.
+    """Group rows by year in one pass, retaining exact duplicate multiplicity.
 
     The previous implementation rescanned both million-row lists for every
     historical year on every refresh merge. Keep the same calendar-year and
     full-identity comparison, but avoid repeated scans.
     """
-    left_by_year = defaultdict(Counter)
-    right_by_year = defaultdict(Counter)
+    # Group only references, not full million-row identity Counter keys.
+    # Process each year independently so peak memory stays bounded by that
+    # year's records instead of keeping two full-corpus key tables alive.
+    left_by_year = defaultdict(list)
+    right_by_year = defaultdict(list)
     for match in before:
-        left_by_year[int(match.scheduled_at.year)][_identity_tuple(match)] += 1
+        left_by_year[int(match.scheduled_at.year)].append(match)
     for match in after:
-        right_by_year[int(match.scheduled_at.year)][_identity_tuple(match)] += 1
+        right_by_year[int(match.scheduled_at.year)].append(match)
 
     return sorted(
         year for year in (left_by_year.keys() | right_by_year.keys())
-        if left_by_year[year] != right_by_year[year]
+        if _identity_counter(left_by_year.get(year, ()))
+        != _identity_counter(right_by_year.get(year, ()))
     )
 
 
