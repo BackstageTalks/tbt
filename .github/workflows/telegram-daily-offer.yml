@@ -169,10 +169,11 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
           BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         run: |
           set -euo pipefail
-          python scripts/telegram_offer_publisher.py prepare --daily --config-url "$BLINQ_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json
+          python scripts/telegram_offer_publisher.py prepare --daily --verify-site --config-url "$BLINQ_URL/api/v1/ui-config" --state .private-telegram/ops/telegram-bot-state.json
           if [[ ! -s /tmp/blinq-telegram/ready ]]; then
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Previously reserved or no longer eligible. No duplicate."

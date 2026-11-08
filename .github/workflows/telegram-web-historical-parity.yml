@@ -44,7 +44,8 @@ jobs:
           import json, os
           from pathlib import Path
           now=datetime.now(timezone.utc).astimezone(ZoneInfo('Europe/Bratislava'))
-          enabled=os.environ['GITHUB_EVENT_NAME']!='schedule' or now.hour == 8
+          # Delayed cron still runs: read-only audits are safe to repeat.
+          enabled=True
           if os.environ['GITHUB_EVENT_NAME']=='push':
               req=json.loads(Path('.github/telegram-web-parity-audit-request.json').read_text())
               assert req=={

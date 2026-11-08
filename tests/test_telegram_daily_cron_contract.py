@@ -29,7 +29,7 @@ def test_daily_workflow_waits_for_data_writers_and_verifies_telegram_receipts():
     assert "cancel-in-progress: false" in text
     assert "group: blinq-telegram-ledger" in text
     assert 'queue-daily --state .private-telegram/ops/telegram-bot-state.json' in text
-    assert 'prepare --daily --config-url' in text
+    assert 'prepare --daily --verify-site --config-url' in text
     assert "python scripts/telegram_offer_publisher.py send" in text
     assert "python scripts/telegram_offer_publisher.py mark-sent" in text
     assert "ls-remote origin refs/heads/telegram-bot-state" in text

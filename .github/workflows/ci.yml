@@ -51,6 +51,17 @@ jobs:
             echo 'pending=false' >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Reject audit-only labels on runtime changes
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [[ "$COMMIT_MESSAGE" == *"[audit-only]"* ]]; then
+            git fetch --no-tags origin "$BEFORE_SHA" --depth=1
+            python scripts/verify_audit_only_diff.py --base "$BEFORE_SHA" --head "$GITHUB_SHA"
+          fi
+
       - name: Sanitize generated artifacts
         run: python scripts/clean_generated_artifacts.py
 
@@ -442,6 +453,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Reject audit-only labels on runtime changes
+        if: github.event_name == 'push'
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if [[ "$COMMIT_MESSAGE" == *"[audit-only]"* ]]; then
+            git fetch --no-tags origin "$BEFORE_SHA" --depth=1
+            python scripts/verify_audit_only_diff.py --base "$BEFORE_SHA" --head "$GITHUB_SHA"
+          fi
 
       - name: Sanitize generated artifacts
         run: python scripts/clean_generated_artifacts.py

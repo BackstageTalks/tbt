@@ -588,7 +588,13 @@ def internal_serving_readback(req):
     if not _live_worker_token_ok(req):
         return response({"error": "forbidden"}, 403)
     try:
-        return response(serving_artifact_readback(FEED))
+        from tbt.services.issued_authority import offer_contract_readback
+        readback = serving_artifact_readback(FEED)
+        issued = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
+        if issued.get("generated_at") != readback.get("generated_at"):
+            raise ValueError("Serving generation moved during readback")
+        readback["offer_authority_keys"] = offer_contract_readback(issued)
+        return response(readback)
     except (OSError, ValueError, TypeError):
         logging.exception("Private production serving artifact readback unavailable")
         return response({"error": "serving_readback_unavailable"}, 503)
@@ -2102,12 +2108,31 @@ def internal_telegram_site_results_parity(req):
         # Exactly the feed's source, persisted CAS Results and runtime status
         # overlay. Never query tennis providers or run a Results writer.
         deployed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
-        source = merge_settled_results(deployed, load_settled_results_archive())
+        archived = load_settled_results_archive()
+        source = merge_settled_results(deployed, archived)
         snapshot = load_match_status_snapshot() or {}
         status = verified_terminal_statuses(snapshot.get("statuses"))
         source["results"] = runtime_settled_results(source, status)
         exclusions = load_result_exclusions()
         projected = site_day_projection(source, day, exclusions)
+        # Aggregate diagnostics distinguish day reassignment from a lost row.
+        from collections import Counter
+        from tbt.services.results_archive import _identity
+        by_identity = {_identity(row, pub): row for row in source.get("results") or []
+                       for pub in row.get("market_publications") or [] if isinstance(pub, dict)}
+        gaps = Counter()
+        for row in archived:
+            if _row_betting_day(row) != day:
+                continue
+            for pub in row.get("market_publications") or []:
+                if pub.get("section") not in {"top_daily", "value", "ace"}:
+                    continue
+                merged = by_identity.get(_identity(row, pub))
+                if merged is None:
+                    gaps["archive_contract_not_merged"] += 1
+                elif _row_betting_day(merged) != day:
+                    gaps["archive_contract_shifted_betting_day"] += 1
+        projected["archive_merge_diagnostics"] = dict(gaps)
         return response(projected)
     except AdminStorageUnavailable:
         return response({"error": "parity_source_unavailable"}, 503)
