@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
+import pytest
+
 from tbt.schemas import MatchRecord
 from tbt.services.ace_selection import select_ace_winner_picks
 from tbt.services.match_status import _grade_runtime_projection
@@ -214,7 +216,7 @@ def test_locally_priced_most_aces_issuance_reaches_results_archive_without_reiss
     assert (publication["section"], publication["market"]) == ("ace_winner", "most_aces")
     assert publication["result"]["correct"] is True
     assert publication["result"]["opponent_actual_count"] == 4
-    assert publication["result"]["profit_units"] == round(frozen["odds"] - 1.0, 2)
+    assert publication["result"]["profit_units"] == pytest.approx(frozen["odds"] - 1.0)
 
     # A prepared but *unissued* card must never create financial Results.
     pending = deepcopy(visible)
