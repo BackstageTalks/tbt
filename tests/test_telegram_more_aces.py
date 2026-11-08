@@ -122,6 +122,34 @@ def test_same_format_but_only_selected_name_no_bookmaker_ou():
     assert "by BlinQ Stat Engine" in message
 
 
+def test_exact_api_pro_winner_quote_precedes_local_and_never_uses_ou():
+    ball=row()
+    provider={**row(), "market":"most_aces", "selection_id":"p1",
+              "price_contract":"player_superiority", "price_status":"priced_projection",
+              "odds_source":"rapidapi", "provider_id":1,
+              "captured_at":"2026-11-08T05:30:00+00:00",
+              "odds_market_name":"Most Aces", "odds":1.66}
+    picked=more.offered_rows(snapshot([ball,provider]),NOW)
+    assert len(picked)==1
+    assert picked[0]["api_pro_most_aces_odds"]==1.66
+    assert picked[0]["statistical_more_aces_odds"] is None
+    msg=more.render_messages(picked,NOW,tg.FOOTER)[0]["text"]
+    assert "API Pro kurz 1.66" in msg
+    assert "BlinQ štat. kurz" not in msg
+    assert "1.76" not in msg
+
+    # Another player or another O/U bookmaker contract cannot override the ball.
+    provider["selection_id"]="p2"
+    picked=more.offered_rows(snapshot([ball,provider]),NOW)
+    assert picked[0]["api_pro_most_aces_odds"] is None
+    assert picked[0]["statistical_more_aces_odds"]==1.59
+    provider["selection_id"]="p1"
+    provider["odds_market_name"]="Player Aces Total"
+    picked=more.offered_rows(snapshot([ball,provider]),NOW)
+    assert picked[0]["api_pro_most_aces_odds"] is None
+    assert picked[0]["statistical_more_aces_odds"]==1.59
+
+
 def test_bad_source_fails_closed_without_reusing_over_under_price():
     malformed=row()
     malformed["projection_model"]="unknown"
