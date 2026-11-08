@@ -71,3 +71,80 @@ def test_wrong_external_set_score_never_yields_verified_replay():
     with pytest.raises(ProviderError, match="score differs"):
         replay_point_by_point(
             six_love_fixture(), event_id=14232981, expected_sets=[(6, 1)])
+
+
+def test_user_fixture_18_games_crosschecks_actual_set_stat_counts():
+    """Original two provider responses, not invented replacement data.
+
+    Original requested URLs/event identity are not embedded in both bodies;
+    matching the numbers is strong QA, but NOT import authorization.
+    """
+    import json
+    from pathlib import Path
+
+    folder = Path(__file__).parent / "fixtures"
+    pbp = json.loads((folder / "tennisapi_pbp_14232981_minimal.json").read_text())
+    stats = json.loads((folder / "tennisapi_stats_14232981_minimal.json").read_text())
+    assert "eventId" not in pbp  # Original upload had no identity claim.
+    r = replay_point_by_point(pbp, event_id=14232981,
+                             expected_sets=[(4, 6), (2, 6)])
+    assert r["provider_event_id_present"] is False
+    assert r["counts"]["sets"] == 2
+    assert r["counts"]["games"] == 18
+    assert r["counts"]["points"] == 110
+    assert r["counts"]["observed_points"] == 92
+    assert r["counts"]["inferred_terminal_points"] == 18
+    assert r["counts"]["p1_points_won"] == 45
+    assert r["counts"]["p2_points_won"] == 65
+    assert r["counts"]["p1_service_points_won"] == 30
+    assert r["counts"]["p2_service_points_won"] == 36
+    assert r["counts"]["p1_return_points_won"] == 15
+    assert r["counts"]["p2_return_points_won"] == 29
+    assert r["counts"]["p1_bp_converted"] == 1
+    assert r["counts"]["p1_bp_chances"] == 3
+    assert r["counts"]["p2_bp_converted"] == 4
+    assert r["counts"]["p2_bp_chances"] == 5
+    assert r["counts"]["p1_bp_saved"] == 1
+    assert r["counts"]["p1_bp_faced"] == 5
+    assert r["counts"]["p2_bp_saved"] == 2
+    assert r["counts"]["p2_bp_faced"] == 3
+    assert r["eligible_for_cdb_point_features"] is False
+
+    by_period = {
+        block["period"]: {item["key"]: item for group in block["groups"]
+                          for item in group["statisticsItems"]}
+        for block in stats["statistics"]
+    }
+    for num, period in (("1", "1ST"), ("2", "2ND")):
+        reported = by_period[period]
+        calculated = r["sets"][num]
+        for player, side in (("p1", "homeValue"), ("p2", "awayValue")):
+            opponent_side = "awayValue" if side == "homeValue" else "homeValue"
+            expected_service = reported["servicePointsScored"][side]
+            expected_return = reported["receiverPointsScored"][side]
+            expected_bp_converted = reported["breakPointsScored"][side]
+            expected_bp_saved = reported["breakPointsSaved"][side]
+            expected_bp_faced = reported["breakPointsSaved"][
+                "homeTotal" if player == "p1" else "awayTotal"
+            ]
+            assert calculated[f"{player}_service_points_won"] == expected_service
+            assert calculated[f"{player}_return_points_won"] == expected_return
+            assert calculated.get(f"{player}_bp_converted", 0) == expected_bp_converted
+            assert calculated.get(f"{player}_bp_saved", 0) == expected_bp_saved
+            assert calculated.get(f"{player}_bp_faced", 0) == expected_bp_faced
+    # ALL disagrees with independently replayed 1ST/2ND, so no 'ALL' BP recovery.
+    assert sum(by_period["ALL"]["pointsTotal"][s] for s in ("homeValue","awayValue")) == 115
+    assert by_period["ALL"]["breakPointsScored"]["awayValue"] == 0
+    assert r["counts"]["p2_bp_converted"] == 4
+
+
+def test_pbp_fixture_cannot_be_misattached_to_another_event():
+    import json
+    from pathlib import Path
+    payload = json.loads(
+        (Path(__file__).parent / "fixtures" / "tennisapi_pbp_14232981_minimal.json").read_text()
+    )
+    # No event claim in uploaded body: cannot prove native event identity from it.
+    report = replay_point_by_point(payload, event_id=999)
+    assert report["provider_event_id_present"] is False
+    assert report["eligible_for_cdb_point_features"] is False
