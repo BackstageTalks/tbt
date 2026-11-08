@@ -1,7 +1,10 @@
-# TOP priority / 70% floor candidate
+# TOP production policy and morning runbook
 
-PREPARED, not deployed. Based on main `958019b1ebcc739487ba4a39a632978c6cafc3ff`
-after PR #1454; do not overwrite concurrent ACES, Telegram or admin work.
+Active policy: `priority_tours_top_v19`. Supersedes v18 and the earlier stepped-probability proposal.
+
+VERIFIED deployment: PR #1459, commit `f4e0eda72dd5c6a5065c0df93a3428250b8c5ed6`,
+[successful checks and deployment](https://github.com/BackstageTalks/tbt/actions/runs/42480094670).
+Independent production deployment.json and ui-config.json readback matched this commit and policy on 2026-11-08.
 
 The owner's latest instruction is to aim for at least three TOP picks and allow
 probabilities to fall to approximately 70%. This supersedes the earlier proposal
@@ -22,7 +25,7 @@ retained; there is no new TOP1/TOP3 product.
   internally consistent probabilities. Preserve price-integrity guards.
 - Freeze competition, original prediction time, round, model-time ranks,
   rejection reasons and policy version for future auditing.
-- ACES/DF, including existing random ACES prices 1.6–1.8, are unchanged.
+- ACES/DF, including existing random ACES prices 1.6â€“1.8, are unchanged.
   No CDB writes, model fitting, extra provider passes, new cron, or sent messages.
 
 Three valid picks is the target, not permission to fabricate a quote or inflate
@@ -42,8 +45,37 @@ Existing v18 historical ranking and raw/depth experiments now import frozen
 research policy modules so this production change cannot silently rewrite their
 baseline. No private data or performance report belongs in this public repo.
 
-Before promotion: review same-period availability and results, pass CI at the
-exact commit, verify the applicable rollback under AGENTS.md, then independently
-read the new morning feed and publication receipts. Check three-pick/shortfall
-counts, tier order, VALUE exclusivity, actual timestamps and unchanged ACES.
-Do not describe a green test, commit or merge as a verified deployment.
+## Morning execution and verification
+
+The existing external morning dispatch invokes `morning-refresh.yml`; its child
+is `data.yml --ref main --mode refresh --morning_refresh true`, with betting-day
+start 06:00 Europe/Bratislava. `data.yml` checks out the dispatched main revision.
+`pipeline.py` calls `attach_market_sections_to_feed`, which calls the current
+`select_market_sections`; frozen v18 research modules are not used for issuance.
+No scheduler change or additional paid refresh is needed for this policy.
+
+Before refresh/current-refresh, `verify_top_morning_policy.py` checks the active
+backend metadata, UI contract, competition priority, probability ordering and
+70% floor without provider calls. A mismatch stops the job before data work.
+
+After the first new morning run, inspect the child run, saved candidate snapshot,
+feed and publication receipts. Require policy `priority_tours_top_v19`, floor .70,
+three picks or explicit shortfall, unique events, category priority, descending
+probability within each category group, VALUE exclusivity, and pre-start evidence.
+Check unchanged ACES/DF contracts. Do not rewrite already-issued picks to make
+an older feed match the new policy. A shortfall is diagnostic, never permission
+to relax the evidence requirements or invent odds/probabilities.
+
+The next intended morning is 2026-11-09. The external dispatcher was observed on
+2026-11-08 at 05:15 Bratislava; its future enabled state was not independently
+read from the scheduler. Native GitHub scheduled runs are gated and were skipped.
+The Nov 8 wrapper failed after a stale-code deployment handoff and publication
+candidate mismatch (child 42450099227). Later deployment 42480094670 passed the
+publication/readback checks. Do not claim the next scheduled run succeeded until
+its actual feed and receipts have been checked.
+
+Rollback: existing immutable `blinq-full-training-backup-42294330038-1` was reused;
+serving model bytes and isolated restored predictions matched (difference zero).
+No training, model promotion, CDB mutation, extra backups or provider calls were
+performed for this policy rollout. A code rollback must preserve newer unrelated
+changes and must not retroactively alter published betting contracts.

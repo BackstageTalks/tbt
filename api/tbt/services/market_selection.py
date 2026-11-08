@@ -1322,7 +1322,7 @@ def select_market_sections(
             },
             "top_daily_rule": {
                 "product_label": "Top Bets",
-                "objective": "ranked_market_model_consensus",
+                "objective": "competition_then_probability",
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,

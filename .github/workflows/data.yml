@@ -379,6 +379,10 @@ jobs:
       - name: Install data-pipeline dependencies
         if: env.MODE != 'deploy-current'
         run: python -m pip install -r api/requirements-train.txt
+      - name: Verify approved morning TOP policy without provider calls
+        if: env.MODE == 'refresh' || env.MODE == 'current-refresh'
+        run: python scripts/verify_top_morning_policy.py
+
       - name: Reuse current candidate without duplicate pipeline assembly
         if: env.MODE == 'deploy-current'
         run: echo "Deployment job will assemble and verify the immutable serving snapshot once."
