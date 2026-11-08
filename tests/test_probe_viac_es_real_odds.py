@@ -66,6 +66,15 @@ def test_dont_mix_two_books_or_conflicting_outcomes():
     assert probe.exact_aces_quote(market,"Ana A","Bob B")[0] is None
 
 
+def test_reject_mixed_bookmakers_even_with_same_market_name():
+    book=payload()
+    book["markets"][0]["sourceId"]="book-A"
+    book["markets"][1]["sourceId"]="book-B"
+    quote, evidence=probe.exact_aces_quote(book,"Ana A","Bob B")
+    assert quote is None
+    assert evidence["rejected"]["mixed_bookmaker"] == 1
+
+
 def test_ball_player_not_ou_selection():
     class Rapid:
         request_count=0
