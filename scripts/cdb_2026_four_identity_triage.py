@@ -193,6 +193,66 @@ def cases(original, prewrite, live):
     return report
 
 
+
+def missing_cross_source_pair(original, prewrite, live):
+    """Find only independently recognizable same public fixture in both backups.
+
+    A candidate alias is evidence for review, never permission to drop either
+    original historical row or to overwrite an existing canonical identity.
+    """
+    old = index(original, "source")
+    before = index(prewrite, "prewrite")
+    current = index(live, "current")
+    findings = []
+    for oid in sorted(set(old) - set(current)):
+        oi = old[oid]
+        for pid in sorted(set(before) - set(current)):
+            if oid == pid:
+                continue
+            pi = before[pid]
+            if (str(value(original, oi, "tour") or "").lower()
+                    != str(value(prewrite, pi, "tour") or "").lower()
+                    or name_pair(original, oi) != name_pair(prewrite, pi)
+                    or clean(value(original, oi, "tournament"))
+                    != clean(value(prewrite, pi, "tournament"))
+                    or clean(value(original, oi, "round_name"))
+                    != clean(value(prewrite, pi, "round_name"))
+                    or value(original, oi, "scheduled_at").date()
+                    != value(prewrite, pi, "scheduled_at").date()):
+                continue
+            a_stats = json.loads(value(original, oi, "stats_json") or "{}")
+            b_stats = json.loads(value(prewrite, pi, "stats_json") or "{}")
+            a_ev, a_marker = native_evidence(original, oi)
+            b_ev, b_marker = native_evidence(prewrite, pi)
+            same = sum(x is not None and x == b_stats.get(k)
+                       for k, x in a_stats.items())
+            diff = sum(x is not None and b_stats.get(k) is not None
+                       and x != b_stats[k] for k, x in a_stats.items())
+            findings.append({
+                "original": safe_describe(original, oi),
+                "prewrite": safe_describe(prewrite, pi),
+                "native_id_equal": a_ev is not None and a_ev == b_ev,
+                "both_native_ids_present": a_ev is not None and b_ev is not None,
+                "identity_comparison": compare_participants(
+                    original, oi, prewrite, pi),
+                "original_nonnull_stats": sum(v is not None for v in a_stats.values()),
+                "prewrite_nonnull_stats": sum(v is not None for v in b_stats.values()),
+                "same_nonnull_stat_fields": same,
+                "conflicting_nonnull_stat_fields": diff,
+                "original_only_nonnull_stat_fields": sum(
+                    v is not None and b_stats.get(k) is None
+                    for k, v in a_stats.items()),
+                "prewrite_only_nonnull_stat_fields": sum(
+                    v is not None and a_stats.get(k) is None
+                    for k, v in b_stats.items()),
+                "original_statistics_source": a_marker.get("stats_source")
+                    if isinstance(a_marker, dict) else None,
+                "prewrite_statistics_source": b_marker.get("stats_source")
+                    if isinstance(b_marker, dict) else None,
+            })
+    return findings
+
+
 def main():
     import pyarrow.parquet as pq
     p = argparse.ArgumentParser()
@@ -228,11 +288,13 @@ def main():
     before = pq.read_table(prev, columns=list(FIELDS))
     live = pq.read_table(a.out / "live" / "history-2026.parquet", columns=list(FIELDS))
     findings = cases(old, before, live)
+    cross_source = missing_cross_source_pair(old, before, live)
     result = {
         "schema": 1, "state": "FOUR_SOURCE_IDENTITIES_REVIEW_ONLY",
         "current_manifest_sha256": snapshot["manifest_sha256"],
         "original_cases": len(findings),
-        "cases": findings, "cdb_writes": 0, "provider_requests": 0,
+        "cases": findings, "matching_absent_ids_in_original_and_prewrite": cross_source,
+        "cdb_writes": 0, "provider_requests": 0,
         "raw_ids_exported": False, "candidate_imported": False,
     }
     # Never serialize source rows or canonical/provider IDs.
