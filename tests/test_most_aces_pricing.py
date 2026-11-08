@@ -146,7 +146,7 @@ def test_owner_local_most_aces_is_frozen_full_value_with_readback():
     assert frozen["provider_id"] is None and frozen["captured_at"] is None
     assert verified_frozen_local_most_aces_odds(frozen) == 1.59
     publication = {**frozen, "section": "ace_winner", "issued_at": "2026-11-08T10:00:00+00:00"}
-    assert _projection_price_units(publication, True)["profit_units"] == 0.59
+    assert _projection_price_units(publication, True)["profit_units"] == pytest.approx(0.59)
     assert _projection_price_units(publication, False)["profit_units"] == -1.0
     publication["result"] = {
         "status": "hit", "correct": True, "staked_units": 1.0,
@@ -154,7 +154,7 @@ def test_owner_local_most_aces_is_frozen_full_value_with_readback():
     }
     report = _betting_metrics([(frozen, publication)])
     assert report["n"] == 1 and report["staked_units"] == 1.0
-    assert report["avg_odds"] == 1.59 and report["roi"] == 0.59
+    assert report["avg_odds"] == 1.59 and report["roi"] == pytest.approx(0.59)
 
 
 def test_api_precedes_local_and_old_issued_rows_never_change():
@@ -200,7 +200,7 @@ def test_live_results_grade_1u_local_quote_and_equal_aces_refund():
     win = _grade_runtime_projection(base, published, status)
     assert win["result"]["status"] == "hit"
     assert win["result"]["staked_units"] == 1.0
-    assert win["result"]["profit_units"] == 0.59
+    assert win["result"]["profit_units"] == pytest.approx(0.59)
     status["projection_stats"]["p1_aces"] = 1
     loss = _grade_runtime_projection(base, published, status)
     assert loss["result"]["profit_units"] == -1.0
