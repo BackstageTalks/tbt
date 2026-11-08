@@ -121,7 +121,8 @@ def verify_same_website(snapshot, site, selected, now):
             or site.get("schema") != 1 or site.get("ready") is not True
             or site.get("stale") is not False
             or site.get("betting_day") != day
-            or site.get("generated_at") != snapshot.get("generated_at")):
+            or not isinstance(snapshot.get("source_feed_generated_at"), str)
+            or site.get("generated_at") != snapshot.get("source_feed_generated_at")):
         raise ValueError("Live website and confirmed ACE feed differ")
     counts = site.get("visible_counts")
     if (not isinstance(counts, dict)
