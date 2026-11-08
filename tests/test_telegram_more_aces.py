@@ -12,6 +12,7 @@ import telegram_offer_publisher as tg
 NOW = datetime(2026,11,8,6,30,tzinfo=timezone.utc)  # 07:30 Bratislava
 SCHEDULED = "2026-11-08T15:00:00+00:00"
 GENERATED = "2026-11-08T05:10:00+00:00"
+CONFIRMED_AT = "2026-11-08T06:20:00+00:00"
 
 
 def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", start=SCHEDULED):
@@ -26,7 +27,9 @@ def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", st
 
 def snapshot(rows=None):
     return {"schema":1,"confirmed_only":True,"betting_day":"2026-11-08",
-            "generated_at":GENERATED,"ace_picks":[row()] if rows is None else rows}
+            "generated_at":CONFIRMED_AT,
+            "source_feed_generated_at":GENERATED,
+            "ace_picks":[row()] if rows is None else rows}
 
 
 def site():
@@ -87,6 +90,18 @@ def test_reject_website_source_conflicts(change):
     picked=more.offered_rows(snapshot(),NOW)
     with pytest.raises(ValueError):
         more.verify_same_website(snapshot(),{**site(),**change},picked,NOW)
+
+
+def test_reject_website_parity_without_original_serving_generation():
+    picked=more.offered_rows(snapshot(),NOW)
+    with pytest.raises(ValueError):
+        more.verify_same_website(
+            {k:v for k,v in snapshot().items() if k!="source_feed_generated_at"},
+            site(),picked,NOW)
+    with pytest.raises(ValueError):
+        more.verify_same_website(
+            {**snapshot(),"source_feed_generated_at":"2026-11-08T05:11:00+00:00"},
+            site(),picked,NOW)
 
 
 def test_same_format_but_only_selected_name_no_bookmaker_ou():
