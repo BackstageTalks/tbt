@@ -362,7 +362,7 @@ def test_ranked_top_uses_only_real_pre_start_prices_and_target_three():
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
-    assert rule['probability_tiers'] == [.80, .78, .75, .70]
+    assert rule['probability_tiers'] == [.70]
     assert rule['min_odds'] == 1.50
     assert rule['daily_preferred_count'] == 3
 
@@ -461,7 +461,7 @@ def test_all_four_quality_qualified_selections_are_ordered_in_top():
             row("d75", .75, 1.60, 3.00, depth=1.0)]
     result = select_market_sections(rows)
     assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78']
-    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .78
+    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .70
 
 
 def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():

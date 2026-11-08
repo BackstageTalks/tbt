@@ -74,3 +74,17 @@ def test_aces_random_prices_and_source_rows_remain_unchanged():
     before=deepcopy(rows)
     out=select_market_sections(rows,ace_picks=aces)
     assert out["ace_picks"]==aces and rows==before
+
+
+def test_probability_wins_over_market_consensus_within_same_group():
+    # Lower probability has a stronger bookmaker agreement, but must rank last.
+    rows = [pick("lower", .81, odds=1.5, other=4.0),
+            pick("higher", .89, odds=1.8, other=2.0),
+            pick("middle", .85, "WTA", odds=1.7, other=2.1)]
+    assert ids(select_market_sections(rows)) == ["higher", "middle", "lower"]
+
+
+def test_secondary_probability_order_and_itf_only_fill_remaining_slots():
+    rows = [pick("itf", .95, "ITF Men"), pick("secondary-low", .71, "Challenger"),
+            pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
+    assert ids(select_market_sections(rows)) == ["main", "secondary-high", "secondary-low"]

@@ -194,14 +194,14 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["preferred_probability"] == 0.80
     assert rules["top_daily"]["secondary_probability"] == .78
     assert rules["top_daily"]["standard_probability"] == .75
-    assert rules["top_daily"]["confidence_tiers"] == [.80, .78, .75, .70]
+    assert rules["top_daily"]["confidence_tiers"] == [.70]
     assert rules["top_daily"]["min_probability"] == 0.70
     assert rules["top_daily"]["min_odds"] == 1.50
     assert rules["top_daily"]["max_odds"] is None
     assert rules["top_daily"]["min_edge"] is None
     assert rules["top_daily"]["min_expected_value"] is None
     assert rules["top_daily"]["edge_ev_role"] == "diagnostic_only"
-    assert rules["top_daily"]["objective"] == "rank_full_slate_quality_consensus"
+    assert rules["top_daily"]["objective"] == "competition_then_probability"
     assert rules["value"]["selection_mode"] == "probability_plus_close_odds"
     assert rules["value"]["min_probability"] == 0.65
     assert rules["value"]["min_data_depth"] == 0.75

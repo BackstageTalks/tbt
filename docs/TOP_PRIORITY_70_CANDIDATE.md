@@ -8,10 +8,10 @@ probabilities to fall to approximately 70%. This supersedes the earlier proposal
 of a fixed 80% floor with no daily target. The existing three-slot output is
 retained; there is no new TOP1/TOP3 product.
 
-- Within ATP/WTA, search 80%, 78%, 75%, 70% until three eligible picks exist.
-- Then use Challenger/WTA125, and finally ITF, with the same probability tiers.
+- Within ATP/WTA, rank by descending probability with a fixed 70% floor.
+- Then use Challenger/WTA125, and finally ITF, with the same 70% floor and probability ordering.
   Tour names alone cannot identify competition: ATP also contains male ITF/UTR.
-- Preserve the existing model/bookmaker agreement ranking within each tier.
+- Use the existing model/bookmaker agreement ranking only to break probability ties.
   This score is a ranking heuristic, never a displayed calibrated probability.
 - No drop below 70%, depth 80%, or five prior surface matches for either player.
   Remove v18's 60% floor and .75-depth/three-surface-match backup.
