@@ -123,8 +123,9 @@ def replay_point_by_point(payload, *, event_id, expected_sets=None):
             def record_point(winner, *, inferred=False):
                 result["points"] += 1
                 result[f"p{winner}_points_won"] += 1
-                result[f"p{server}_{'service' if winner == server else 'return'}_points_won"] += 1 if winner == server else 0
-                if winner != server:
+                if winner == server:
+                    result[f"p{server}_service_points_won"] += 1
+                else:
                     result[f"p{winner}_return_points_won"] += 1
                 result[f"p{server}_service_points_played"] += 1
                 if _next_point(state, receiver) is None:
