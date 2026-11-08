@@ -9,12 +9,14 @@ import telegram_offer_publisher as tg
 
 NOW = datetime(2026,11,7,5,30,tzinfo=timezone.utc)
 GENERATED = "2026-11-07T05:25:00+00:00"
+CONFIRMED_AT = "2026-11-07T05:29:00+00:00"
 
 @pytest.fixture
 def sources(monkeypatch):
     # These are already vetted by the existing signed private release reader.
     offer={"schema":1,"confirmed_only":True,"betting_day":"2026-11-07",
-           "generated_at":GENERATED}
+           "generated_at":CONFIRMED_AT,
+           "source_feed_generated_at":GENERATED}
     web={"ok":True,"schema":1,"ready":True,"stale":False,
          "betting_day":"2026-11-07","generated_at":GENERATED,
          "visible_counts":{"top_daily_picks":3,"value_picks":1,
@@ -46,6 +48,14 @@ def test_no_send_for_stale_partial_or_unverified_website(sources,change):
     offer,site=sources
     with pytest.raises(ValueError):
         tg.verified_website_morning_parity(offer,{**site,**change},NOW)
+
+def test_no_send_if_source_feed_generation_missing_or_changed(sources):
+    offer,site=sources
+    for source in (None, "", "2026-11-07T05:26:00+00:00"):
+        with pytest.raises(ValueError):
+            tg.verified_website_morning_parity(
+                {**offer, "source_feed_generated_at":source}, site, NOW)
+
 
 def test_no_send_if_private_snapshot_is_wrong_day(sources):
     offer,site=sources
