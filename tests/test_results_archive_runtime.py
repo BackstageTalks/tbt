@@ -367,3 +367,76 @@ def test_original_winner_day_never_crosses_identity_or_evidence_conflicts():
     wrong_market_day["betting_day"] = "2026-10-09"
     merged = merge_settled_results({"results": [wrong_market_day]}, [other_market])
     assert merged["results"][0]["betting_day"] == "2026-10-09"
+
+
+def test_verified_rescheduled_original_winner_retains_exact_issued_betting_day():
+    """A source reschedule must not erase an immutable bet's original day."""
+    from tbt.services.telegram_site_parity import site_day_projection
+
+    archived = settled_archive_candidates(_feed(), _status())[0]
+    archived["betting_day"] = "2026-10-08"
+    archived_pub = archived["market_publications"][0]
+    archived_pub["issued_at"] = "2026-10-08T05:00:00Z"
+    current = deepcopy(archived)
+    current["betting_day"] = "2026-10-09"
+    current["scheduled_at"] = "2026-10-09T12:00:00Z"
+    frozen_current, frozen_archive = deepcopy(current), deepcopy(archived)
+
+    result = merge_settled_results({"results": [current]}, [archived])
+    assert current == frozen_current and archived == frozen_archive
+    assert len(result["results"]) == 1
+    assert result["results"][0]["betting_day"] == "2026-10-08"
+    # The current provider kickoff stays unchanged; this is only a day-label
+    # correction for the original, pre-reschedule issued contract.
+    assert result["results"][0]["scheduled_at"] == current["scheduled_at"]
+    projected = site_day_projection(result, "2026-10-08")["rows"]
+    assert len(projected) == 1
+    assert projected[0]["odds"] == archived_pub["odds"]
+    assert projected[0]["selection_id"] == archived_pub["selection_id"]
+    assert projected[0]["result"]["runtime_source"] == "match_status_snapshot"
+    assert site_day_projection(result, "2026-10-09")["rows"] == []
+
+
+def test_rescheduled_winner_requires_same_explicit_prestart_issued_evidence():
+    """No cross-day repair on inferred, post-start or disagreeing issuer data."""
+    archived = settled_archive_candidates(_feed(), _status())[0]
+    archived["betting_day"] = "2026-10-08"
+    archived["market_publications"][0]["issued_at"] = "2026-10-08T05:00:00Z"
+    canonical = deepcopy(archived)
+    canonical["betting_day"] = "2026-10-09"
+    canonical["scheduled_at"] = "2026-10-09T12:00:00Z"
+
+    def verify_no_move(current, original):
+        current_before, original_before = deepcopy(current), deepcopy(original)
+        merged = merge_settled_results({"results": [current]}, [original])
+        assert len(merged["results"]) == 1
+        assert merged["results"][0]["betting_day"] == "2026-10-09"
+        assert current == current_before and original == original_before
+
+    missing_archive_issue = deepcopy(archived)
+    missing_archive_issue["market_publications"][0].pop("issued_at")
+    verify_no_move(deepcopy(canonical), missing_archive_issue)
+
+    missing_current_issue = deepcopy(canonical)
+    missing_current_issue["market_publications"][0].pop("issued_at")
+    verify_no_move(missing_current_issue, deepcopy(archived))
+
+    altered_issue = deepcopy(canonical)
+    altered_issue["market_publications"][0]["issued_at"] = "2026-10-08T06:00:00Z"
+    verify_no_move(altered_issue, deepcopy(archived))
+
+    post_start = deepcopy(archived)
+    post_start["market_publications"][0]["issued_at"] = "2026-10-08T13:00:00Z"
+    verify_no_move(deepcopy(canonical), post_start)
+
+    earlier_current = deepcopy(canonical)
+    earlier_current["scheduled_at"] = "2026-10-08T11:00:00Z"
+    verify_no_move(earlier_current, deepcopy(archived))
+
+    not_verified = deepcopy(archived)
+    not_verified["market_publications"][0]["result"].pop("runtime_source")
+    verify_no_move(deepcopy(canonical), not_verified)
+
+    altered_price = deepcopy(canonical)
+    altered_price["market_publications"][0]["odds"] = 9.99
+    verify_no_move(altered_price, deepcopy(archived))
