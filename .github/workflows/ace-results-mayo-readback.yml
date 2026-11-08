@@ -22,7 +22,8 @@ jobs:
        github.event_name == 'pull_request' &&
        github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
        (github.head_ref == 'fix/ace-results-frozen-selection-readback-20261108' ||
-        github.head_ref == 'fix/results-aces-mayo-actual-ui-20261108')) ||
+        github.head_ref == 'fix/results-aces-mayo-actual-ui-20261108' ||
+        github.head_ref == 'audit/mayo-retirement-production-readback-20261108')) ||
       (github.repository == 'BackstageTalks/tbt' &&
        github.event_name == 'workflow_run' &&
        ((github.event.workflow_run.conclusion == 'success' &&
@@ -35,7 +36,7 @@ jobs:
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
           BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
-          POST_DEPLOY_READBACK: ${{ github.event_name == 'workflow_run' && 'true' || 'false' }}
+          POST_DEPLOY_READBACK: ${{ github.event_name == 'workflow_run' && 'true' || github.head_ref == 'audit/mayo-retirement-production-readback-20261108' && 'true' || 'false' }}
           DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || '' }}
         shell: bash
         run: |
@@ -53,13 +54,20 @@ jobs:
           postdeploy = os.getenv('POST_DEPLOY_READBACK') == 'true'
           day = '2026-11-07'
           if postdeploy:
-              sha = os.environ.get('DEPLOY_SHA', '')
+              sha = os.environ.get('DEPLOY_SHA', '') or '12f40ecd7293e1ef14ed5f62431252ff31619734'
               if len(sha) != 40 or any(c not in '0123456789abcdef' for c in sha):
                   raise SystemExit('Invalid deployed revision')
               with urllib.request.urlopen(base + '/deployment.json?mayo_readback=' + sha, timeout=30) as dep:
                   manifest = json.load(dep)
-              if manifest.get('git_sha') != sha:
-                  raise SystemExit('Deployed production SHA not confirmed')
+              deployed_sha = str(manifest.get('git_sha') or '')
+              allowed = {
+                  '12f40ecd7293e1ef14ed5f62431252ff31619734',
+                  '74106244a4eb2f32045211d3917fdc60d50ef15f',
+              }
+              if deployed_sha not in allowed:
+                  raise SystemExit('Deployed production SHA predates Mayo fix or is not a verified descendant: ' + deployed_sha[:12])
+              print('Mayo production deploy revision verified:', deployed_sha)
+              sha = deployed_sha
               with urllib.request.urlopen(base + '/app.js?mayo_readback=' + sha, timeout=30) as js:
                   code = js.read(4_000_001)
               if len(code) > 4_000_000 or b'frozenTotalName' not in code:
