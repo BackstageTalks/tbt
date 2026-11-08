@@ -1,0 +1,88 @@
+name: BlinQ Mayo Aces Results source readback (P0, read only)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - web/app.js
+      - tests/test_ace_result_leader_ball.py
+      - .github/workflows/ace-results-mayo-readback.yml
+
+permissions:
+  contents: read
+
+jobs:
+  exact-source:
+    if: >-
+      github.repository == 'BackstageTalks/tbt' &&
+      github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' &&
+      github.head_ref == 'fix/ace-results-frozen-selection-readback-20261108'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Read authentic frozen Mayo Aces archive and web-source contract (no writes)
+        env:
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${BLINQ_LIVE_WORKER_TOKEN:-}"
+          python - <<'PY'
+          import json, os, urllib.request
+          from urllib.parse import urlsplit
+          
+          base = os.environ['BLINQ_PRODUCTION_URL'].rstrip('/')
+          url = urlsplit(base)
+          if url.scheme != 'https' or url.hostname != 'agreeable-sky-011a7fe10.7.azurestaticapps.net':
+              raise SystemExit('Production origin mismatch')
+          key = os.environ['BLINQ_LIVE_WORKER_TOKEN']
+          day = '2026-11-07'
+          expected = {
+              'event_id': '17427331', 'section': 'ace', 'market': 'aces',
+              'selection_id': '309157',
+              'publication_key': 'local-aces-ou-v1:17427331:309157:over:4.5',
+              'market_line': 4.5, 'projection_direction': 'over'
+          }
+          def get(endpoint):
+              request = urllib.request.Request(
+                  base + '/api/v1/internal/telegram/' + endpoint + '?day=' + day,
+                  headers={'Accept': 'application/json', 'X-Blinq-Worker-Token': key}
+              )
+              with urllib.request.urlopen(request, timeout=30) as resp:
+                  body = resp.read(3_000_001)
+                  if resp.status != 200 or len(body) > 3_000_000:
+                      raise RuntimeError('Authenticated source inaccessible')
+              return json.loads(body)
+          def matching(payload):
+              rows = payload.get('rows')
+              if not isinstance(rows, list):
+                  raise RuntimeError('Invalid source rows')
+              return [r for r in rows if isinstance(r, dict) and all(
+                  str(r.get(k) or '') == str(v) if k not in {'market_line'}
+                  else r.get(k) is not None and float(r[k]) == v
+                  for k,v in expected.items())]
+          archive = get('settled-results')
+          site = get('site-results-parity')
+          if (archive.get('source') != 'verified_match_status_snapshot'
+              or site.get('source') != 'website_results_pre_entitlement_v1'
+              or site.get('results_archive_unavailable') is not False
+              or site.get('results_exclusions_unavailable') is not False
+              or site.get('member_render_verified') is not False):
+              raise RuntimeError('Source provenance or availability not verified')
+          a, s = matching(archive), matching(site)
+          def verified(matches):
+              if len(matches) != 1: return False
+              row = matches[0]
+              outcome = row.get('result') or {}
+              return (outcome.get('correct') is True
+                      and outcome.get('status') == 'hit'
+                      and outcome.get('actual_count') == 5
+                      and outcome.get('runtime_source') == 'match_status_snapshot'
+                      and row.get('odds') is not None
+                      and abs(float(row['odds']) - 1.7) < 1e-8)
+          print('Mayo exact original source audit (read-only): archive_rows=%d site_rows=%d archive_verified=%s site_verified=%s member_render_verified=false'
+                % (len(a), len(s), verified(a), verified(s)))
+          if not verified(a) or not verified(s):
+              raise SystemExit('Original Aces result absent or mismatched; do not claim UI fixed')
+          PY
