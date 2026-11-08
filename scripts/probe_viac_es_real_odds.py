@@ -43,6 +43,7 @@ def exact_aces_quote(payload, p1, p2):
     invalid = Counter()
     for market, outcomes in groups.items():
         prices = {}
+        provenance = {}
         extra = False
         for row in outcomes:
             # A market with a third Tie/Draw selection is a distinct contract.
@@ -56,6 +57,13 @@ def exact_aces_quote(payload, p1, p2):
                 extra = True
                 break
             prices[side] = round(float(price), 3)
+            provenance[side] = str(row.get("sourceId") or row.get("source_id")
+                                    or row.get("bookmaker") or "").strip()
+        # The same named market must not silently join prices from
+        # different books, or one labeled book with an unlabeled selection.
+        if set(prices) == {1, 2} and provenance[1] != provenance[2]:
+            extra = True
+            invalid["mixed_bookmaker"] += 1
         if extra:
             invalid["extra_draw_unknown_or_duplicate"] += 1
             continue
