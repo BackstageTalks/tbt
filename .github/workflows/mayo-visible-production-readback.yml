@@ -24,6 +24,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh run list --repo BackstageTalks/tbt --branch main --workflow ci.yml --limit 6 --json databaseId,headSha,status,conclusion,event --jq '.[] | {id:.databaseId,sha:(.headSha[0:12]),status,conclusion,event}'
+          for run in $(gh api 'repos/BackstageTalks/tbt/actions/runs?per_page=40' --jq '.workflow_runs[] | select(.status != "completed") | .id' | head -20); do
+            gh api "repos/BackstageTalks/tbt/actions/runs/$run/jobs?per_page=100" \
+              --jq '.jobs[] | select(.name == "deploy") | {run_id: "'"${run}"'",name,status,conclusion,started_at,runner_name}'
+          done
       - name: Verify served Azure release and exact native Mayo Results source
         env:
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
