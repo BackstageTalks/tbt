@@ -1,0 +1,132 @@
+name: BlinQ VIAC ES provider 1 vs 2770 diagnostic (branch-only read-only)
+on:
+  push:
+    branches: [research/viac-es-fanduel-2770-20261108]
+    paths: [.github/workflows/viac-es-fanduel-2770-readonly.yml]
+permissions:
+  contents: read
+concurrency:
+  group: blinq-viac-es-2770-20261108-readonly
+  cancel-in-progress: false
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+      BLINQ_RAPIDAPI_MAX_RPS: '3'
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require metered credentials
+        run: |
+          test -n "$RAPIDAPI_KEY"
+          test -n "$BLINQ_SHARED_API_BUDGET_TOKEN"
+      - name: Install existing API dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Compare exact Most Aces market, max 3 paid calls including native identity check
+        shell: bash
+        run: |
+          mkdir -p .cache/tbt/viac-es-2770
+          cat > /tmp/viac_es_provider_compare.py <<'PY'
+          import json
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+          sys.path.insert(0, "api")
+          sys.path.insert(0, "scripts")
+          from tbt.providers.rapidapi import RapidTennisClient
+          from probe_viac_es_real_odds import exact_aces_quote
+          TARGET = 17512431
+          PROVIDERS = (1, 2770)
+          report = {
+              "schema": 1, "scope": "read_only_diagnostic_not_a_publishable_quote",
+              "event_id": TARGET, "providers": [], "identity_verified": False,
+              "cdb_writes": 0, "telegram_sends": 0,
+          }
+          client = None
+          try:
+              client = RapidTennisClient()
+              client.request_limit = 3
+              client.retry_attempts = 1
+              detail = client._get(f"/api/tennis/event/{TARGET}", enrichment=True)
+              event = detail.get("event", detail) if isinstance(detail, dict) else {}
+              home = event.get("homeTeam") or {}
+              away = event.get("awayTeam") or {}
+              native_ids = {home.get("id"), away.get("id")}
+              stamp = event.get("startTimestamp")
+              if str(event.get("id", event.get("eventId", ""))) != str(TARGET):
+                  raise ValueError("native_event_id_mismatch")
+              if native_ids != {26204, 124916}:
+                  raise ValueError("native_player_ids_mismatch")
+              if not isinstance(stamp, int) or stamp <= 0:
+                  raise ValueError("invalid_native_start_time")
+              name1, name2 = str(home.get("name") or ""), str(away.get("name") or "")
+              if not name1 or not name2:
+                  raise ValueError("missing_native_player_names")
+              now = datetime.now(timezone.utc)
+              start = datetime.fromtimestamp(stamp, tz=timezone.utc)
+              status = event.get("status") or {}
+              report["identity_verified"] = True
+              report["players"] = [name1, name2]
+              report["provider_event_start_utc"] = start.isoformat()
+              report["observed_at_utc"] = now.isoformat()
+              report["event_status_type"] = str(status.get("type") or "unknown")
+              report["was_pre_match_at_read"] = now < start and status.get("type") == "notstarted"
+              for provider_id in PROVIDERS:
+                  rec = {"provider_id": provider_id, "exact_most_aces": False}
+                  report["providers"].append(rec)
+                  try:
+                      data = client.event_odds(TARGET, provider_id=provider_id)
+                      quote, diagnostic = exact_aces_quote(data, name1, name2)
+                      rec["parser_diagnostics"] = diagnostic
+                      mkts = data.get("markets") if isinstance(data, dict) else None
+                      rec["native_market_count"] = len(mkts) if isinstance(mkts, list) else None
+                      rec["aces_market_inventory"] = [
+                          {"market_id": x.get("marketId"), "market_name": x.get("marketName"),
+                           "choice_count": len(x.get("choices") or [])}
+                          for x in (mkts or []) if isinstance(x, dict)
+                          and "ace" in str(x.get("marketName") or "").lower()
+                      ][:30]
+                      if quote:
+                          rec["exact_most_aces"] = True
+                          rec["native_two_way_quote"] = quote
+                      rec["payload_available"] = bool(data)
+                  except Exception as exc:
+                      rec["error_class"] = type(exc).__name__
+                      rec["error_code"] = str(exc).split(" for ")[0][:120] if "HTTP " in str(exc) else None
+              report["status"] = "audited"
+          except Exception as exc:
+              report["status"] = "blocked"
+              report["blocker_class"] = type(exc).__name__
+              report["blocker_reason"] = str(exc) if type(exc) is ValueError else None
+          finally:
+              report["provider_requests"] = client.request_count if client is not None else 0
+              report["header_remaining"] = client.rate_limit_remaining if client is not None else None
+              if client is not None:
+                  client.close()
+              p = Path(".cache/tbt/viac-es-2770/comparison.json")
+              p.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True)+"\n", encoding="utf-8")
+              print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+              assert report["provider_requests"] <= 3
+              assert report["cdb_writes"] == report["telegram_sends"] == 0
+          PY
+          python /tmp/viac_es_provider_compare.py
+      - name: Preserve research evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: viac-es-provider1-2770-${{ github.run_id }}
+          path: .cache/tbt/viac-es-2770/comparison.json
+          retention-days: 7
+          if-no-files-found: warn
