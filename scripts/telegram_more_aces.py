@@ -74,12 +74,16 @@ def offered_rows(snapshot, now):
     # Independently published Most Aces provider prices can supersede our
     # local band only on the *same event and ball player*. Never reuse O/U.
     api_quotes, local_quotes = {}, {}
+    claimed_local_quotes = set()
     for candidate in rows:
         if not isinstance(candidate, dict) or candidate.get("market") != "most_aces":
             continue
         identity = (str(candidate.get("event_id") or ""),
                     str(candidate.get("selection_id") or ""),
                     str(candidate.get("scheduled_at") or ""))
+        if (candidate.get("price_status") == "priced_projection"
+                and candidate.get("odds_source") == "blinq_statistical"):
+            claimed_local_quotes.add(identity)
         api_price = verified_api_pro_most_aces_odds(candidate)
         if api_price is not None:
             api_quotes.setdefault(identity, []).append((candidate, api_price))
@@ -122,8 +126,9 @@ def offered_rows(snapshot, now):
         # rendering the auxiliary ESÁ-ball Telegram signal.
         price = None if api_price is not None else (
             matching_local[0] if len(matching_local) == 1
+            else None if ((identity[0], identity[1], str(row["scheduled_at"]))
+                          in claimed_local_quotes or frozen_local)
             else statistical_most_aces_odds(row, ball_player_id=identity[1])
-            if not frozen_local else None
         )
         selected.append({
             "event_id": identity[0], "selection_id": identity[1],
