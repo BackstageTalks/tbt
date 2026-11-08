@@ -133,3 +133,14 @@ def test_deployed_legacy_feed_can_have_pending_nested_publications_but_issued_au
     after_start["generated_at"] = "2026-11-08T17:00:00Z"
     rows = with_issued_ace_leader_signals(after_start)["ace_picks"]
     assert len([r for r in rows if r["market"] == "most_aces"]) == 2
+
+
+def test_ball_player_resolution_matches_existing_esa_projection_subject():
+    p = _fixture()
+    for row in p["ace_picks"]:
+        row.pop("aces_superiority_hint", None)
+    converted = with_issued_ace_leader_signals(p)
+    assert len([r for r in converted["ace_picks"] if r["market"] == "most_aces"]) == 4
+    p["ace_picks"][0]["projection_subject"] = "Opponent"
+    converted = with_issued_ace_leader_signals(p)
+    assert len([r for r in converted["ace_picks"] if r["market"] == "most_aces"]) == 3
