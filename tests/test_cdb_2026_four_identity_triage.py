@@ -5,7 +5,7 @@ import pyarrow as pa
 import pytest
 
 from cdb_2026_four_identity_triage import (
-    cases, clean, compare_participants, native_evidence,
+    cases, clean, compare_participants, native_evidence, missing_cross_source_pair,
 )
 
 WHEN = datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
@@ -54,6 +54,19 @@ def test_source_event_disagreement_fails_closed():
         "_tbt_statistics": {"event_id": "different-event"},
     })
     assert native_evidence(pa.Table.from_pylist(original), 0)[1] == "conflicting"
+
+
+
+def test_same_real_fixture_can_have_two_missing_source_match_ids():
+    original = tab([("legacy-name-id", "Jo Yee Chan", "Hanna Chang", "event-25")])
+    previous = tab([("other-source-id", "Jo Yee Chan", "Hanna Chang", "event-25")])
+    live = tab([("unrelated", "other", "people", "event-77")])
+    pair = missing_cross_source_pair(original, previous, live)
+    assert len(pair) == 1
+    assert pair[0]["native_id_equal"] is True
+    assert pair[0]["identity_comparison"]["same_player_ids_unordered"]
+    assert pair[0]["conflicting_nonnull_stat_fields"] == 0
+    assert pair[0]["same_nonnull_stat_fields"] == 1
 
 
 def test_unpinned_cohort_fails_closed_even_if_four_missing():
