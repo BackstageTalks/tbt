@@ -3,16 +3,16 @@
   "kind": "operator-approved-tennisapi-breakpoint-null-only-v1",
   "mode": "statistics",
   "source": "tennisapi1",
-  "description": "Continue user-authorized max-500 total paid-call test after exact 100-call readback showed WTA 2023 48 new canonical stats cells per 8 calls versus ATP 2023 47 per 92; bounded 400-call WTA-only provider-native NULL-only import with independent readback.",
-  "start": "2023-01-01",
-  "end": "2023-12-31",
-  "max_requests": 400,
+  "description": "Operator-authorized 100 paid ATP 2024 break-point NULL-only experiment in high-gap 2024 cohort; do not repeat known low-yield ATP 2023; use existing locked native writer, preserve 500 provider reserve, identity validation, read-back and model unchanged",
+  "start": "2024-01-01",
+  "end": "2024-12-31",
+  "max_requests": 100,
   "promote": false,
   "targeted_statistics": true,
   "high_yield_statistics": false,
   "break_points_focus": true,
   "cdb_writes_allowed": true,
   "model_changes": false,
-  "diagnostic_attempt": 4,
-  "target_tour": "wta"
+  "diagnostic_attempt": 5,
+  "target_tour": "atp"
 }
