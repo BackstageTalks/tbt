@@ -106,3 +106,29 @@ def test_both_plans_are_checked_by_normal_server_entitlement_filter():
     assert pro_access["sections"]["ace_winner"]["returned"] == 0
     assert elite_access["sections"]["ace_winner"]["returned"] == 4
     assert pro["results"] == elite["results"] == []
+
+
+def test_deployed_legacy_feed_can_have_pending_nested_publications_but_issued_authority():
+    # Actual serving flow: asset is generated first, then the exact row is
+    # confirmed after deployment. Its embedded candidate is still pending.
+    src = _fixture()
+    src["generated_at"] = "2026-11-08T05:07:24Z"
+    src["publication_authority_status"] = "confirmed"
+    src["ace_picks"][0]["market_publications"][0]["publication_status"] = "pending"
+    src["ace_picks"][0]["market_publications"][0]["issued_at"] = None
+    src["ace_picks"][1]["market_publications"] = []
+    converted = with_issued_ace_leader_signals(src)
+    assert len([r for r in converted["ace_picks"] if r["market"] == "most_aces"]) == 4
+    assert converted["ace_picks"][4]["ace_winner_issued"] is False
+    assert converted["ace_picks"][5]["ace_winner_source_publication"] == ""
+
+    # Authority missing or created after the match => fail closed.
+    without_authority = deepcopy(src)
+    without_authority["publication_authority_status"] = "unavailable"
+    rows = with_issued_ace_leader_signals(without_authority)["ace_picks"]
+    assert len([r for r in rows if r["market"] == "most_aces"]) == 2
+
+    after_start = deepcopy(src)
+    after_start["generated_at"] = "2026-11-08T17:00:00Z"
+    rows = with_issued_ace_leader_signals(after_start)["ace_picks"]
+    assert len([r for r in rows if r["market"] == "most_aces"]) == 2
