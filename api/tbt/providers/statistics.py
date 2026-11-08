@@ -77,10 +77,16 @@ def _set_bp_counts_exceed_all(periods, *, home_is_player1, saved, scored):
         label = str(period.get("period") or "").strip().upper()
         if not re.fullmatch(r"(?:[1-5](?:ST|ND|RD|TH)?|S[1-5]|SET\s*[1-5])", label):
             continue
-        for group in period.get("groups", []):
+        groups = period.get("groups")
+        if not isinstance(groups, list):
+            continue
+        for group in groups:
             if not isinstance(group, dict):
                 continue
-            for item in group.get("statisticsItems", []):
+            items = group.get("statisticsItems")
+            if not isinstance(items, list):
+                continue
+            for item in items:
                 if not isinstance(item, dict):
                     continue
                 key = re.sub(r"[^a-z0-9]", "",
