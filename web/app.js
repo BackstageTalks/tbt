@@ -2495,9 +2495,20 @@
     if(!result||typeof result!=='object')return '';
     const status=String(result.status||'').trim().toLowerCase();
     const reason=String(result.reason||'').trim().toLowerCase();
-    if(['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(status)
+    // A retired match can still leave an irrevocably decided player Aces O/U.
+    // That issued bet may be a legitimate hit even though match-winner is void.
+    // Require the verified native result; then compare paired Aces below.
+    const decidedRetiredAces=market==='aces'
+      &&reason==='retired_after_ou_decided'
+      &&result.retirement_line_decided===true
+      &&result.runtime_source==='match_status_snapshot'
+      &&result.void!==true
+      &&['hit','miss'].includes(status)
+      &&typeof result.correct==='boolean';
+    if((['retired','ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(status)
       ||reason.startsWith('retired')
-      ||['ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(reason))return '';
+      ||['ret','walkover','walk over','w/o','abandoned','cancelled','canceled','postponed','interrupted','suspended'].includes(reason))
+      &&!decidedRetiredAces)return '';
     // Number(null) is zero in JS; missing or fractional source counts must not
     // turn an unevaluated prediction into a claimed successful prediction.
     const count=value=>{
