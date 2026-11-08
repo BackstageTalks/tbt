@@ -173,8 +173,8 @@ def test_api_precedes_local_and_old_issued_rows_never_change():
     assert freeze_most_aces_price(signal) == signal
     original = row(price_status="projection_only", odds=None)
     original["issued_at"] = "2026-11-07T06:00:00+00:00"
-    # The freezer is invoked on fresh model selections only; never on
-    # a persisted/issued legacy row or results.
+    # Never retroactively price a prior-day published, originally unpriced bet.
+    assert freeze_most_aces_price(original) == original
     assert verified_frozen_local_most_aces_odds(original) is None
     tampered = freeze_most_aces_price(row())
     tampered["odds"] = 1.65
