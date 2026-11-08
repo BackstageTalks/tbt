@@ -7,6 +7,7 @@ import pytest
 from tbt.services.most_aces_pricing import (
     MIN_PRICE, MAX_PRICE, PRICE_BASIS,
     annotate_most_aces_offer, statistical_most_aces_odds,
+    verified_api_pro_most_aces_odds,
 )
 
 
@@ -90,6 +91,23 @@ def test_only_new_current_offer_is_decorated_never_results_or_source():
     assert out["ace_picks"][2]["odds"] == 1.66
     assert out["ace_picks"][3]["statistical_more_aces_odds"] == 1.59
     assert out["ace_picks"][3]["ace_winner_issued"] is False
+
+
+def test_api_pro_real_most_aces_quote_wins_but_ou_never_qualifies():
+    offered=row(price_status="priced_projection",odds=1.62,provider_id=1,
+                odds_source="rapidapi", captured_at="2026-11-08T06:00:00+00:00",
+                odds_market_name="Most Aces")
+    assert verified_api_pro_most_aces_odds(offered) == 1.62
+    assert statistical_most_aces_odds(offered) is None
+    for change in (
+        {"odds_market_name":"Player Aces Total"},
+        {"odds_market_name":"Most Aces First Set"},
+        {"odds_source":"propline"},
+        {"provider_id":2},
+        {"captured_at":"2026-11-08T18:00:00+00:00"},
+        {"selection_id":"unknown"},
+    ):
+        assert verified_api_pro_most_aces_odds({**offered, **change}) is None
 
 
 def test_not_backfilled_and_not_added_to_results_roi():
