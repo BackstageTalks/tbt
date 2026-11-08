@@ -210,7 +210,7 @@ def align_prewrite_exact_observed_types(pre, live):
     original = pre
     if "best_of" in delta:
         for n in pre["best_of"].to_pylist():
-            if n is not None and (type(n) is not int or n not in (2, 3, 5)):
+            if n is not None and (type(n) is not int or not 1 <= n <= 5):
                 raise ValueError("Nonstandard source best_of; exact widen blocked")
         pre = pre.set_column(pre.schema.get_field_index("best_of"),
                              live.schema.field("best_of"),
