@@ -76,6 +76,39 @@ def statistical_most_aces_odds(
     return round(MAX_PRICE - (MAX_PRICE - MIN_PRICE) * fraction + 1e-10, 2)
 
 
+def verified_api_pro_most_aces_odds(row: Mapping[str, Any]) -> float | None:
+    """Only an explicitly source-marked exact provider-1 Most Aces player quote.
+
+    Does not recover prices from O/U, and never guesses a bookmaker source.
+    The source importer is responsible for confirming both offered market sides.
+    """
+    if (not isinstance(row, Mapping)
+            or str(row.get("market") or "") != "most_aces"
+            or str(row.get("price_contract") or "") != "player_superiority"
+            or row.get("price_status") != "priced_projection"
+            or row.get("odds_source") != "rapidapi"
+            or row.get("provider_id") != 1
+            or not row.get("captured_at")
+            or not _valid_subject(row, str(row.get("selection_id") or ""))):
+        return None
+    name = str(row.get("odds_market_name") or "").lower()
+    if (not "ace" in name
+            or not any(word in name for word in ("most", "more", "winner", "higher"))
+            or any(word in name for word in ("total", "over", "under", "handicap", "set", "period"))):
+        return None
+    try:
+        captured = datetime.fromisoformat(str(row["captured_at"]).replace("Z", "+00:00"))
+        scheduled = datetime.fromisoformat(str(row["scheduled_at"]).replace("Z", "+00:00"))
+        quote = float(row["odds"])
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
+    if (captured.tzinfo is None or scheduled.tzinfo is None
+            or captured >= scheduled or not math.isfinite(quote)
+            or not 1.01 <= quote <= 100):
+        return None
+    return round(quote, 3)
+
+
 def annotate_most_aces_offer(feed: dict) -> dict:
     """Decorate only the authorized *current* offer; leave results/ledger immutable."""
     if not isinstance(feed, dict) or not isinstance(feed.get("ace_picks"), list):
