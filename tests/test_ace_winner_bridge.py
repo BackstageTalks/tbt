@@ -64,10 +64,36 @@ def test_four_existing_issued_balls_are_visible_in_more_aces_without_extra_bets(
     assert _published_daily_pick_count(bridged) == _published_daily_pick_count(source) == 4
 
 
-def test_existing_independently_issued_winner_does_not_mix_with_fallback():
+def test_independent_winner_only_replaces_fallback_for_its_own_event():
+    payload = _fixture()
+    # A valid new market on one event must not blank the other three issued
+    # pre-match ESÁ ball signals.
+    payload["ace_picks"].append({
+        "market": "most_aces", "event_id": "0",
+        "selection_id": "0-p2", "ace_winner_issued": True,
+    })
+    before = deepcopy(payload)
+    bridged = with_issued_ace_leader_signals(payload)
+    assert payload == before
+    winners = [row for row in bridged["ace_picks"] if row.get("market") == "most_aces"]
+    assert len(winners) == 4
+    assert len([row for row in winners if row.get("event_id") == "0"]) == 1
+    assert [row["pick"] for row in winners if row.get("ace_winner_source") == "issued_aces_signal_only"] == list(NAMES[1:])
+    assert bridged["results"] == before["results"]
+
+
+def test_unrelated_independent_winner_never_disables_all_existing_balls():
     payload = _fixture()
     payload["ace_picks"].append({"market": "most_aces", "event_id": "new"})
-    assert with_issued_ace_leader_signals(payload) is payload
+    derived = with_issued_ace_leader_signals(payload)["ace_picks"][5:]
+    assert [row["pick"] for row in derived] == list(NAMES)
+
+
+def test_bridge_is_idempotent_and_does_not_derive_from_derived_rows():
+    once = with_issued_ace_leader_signals(_fixture())
+    twice = with_issued_ace_leader_signals(once)
+    assert len(twice["ace_picks"]) == 8
+    assert twice["ace_picks"] == once["ace_picks"]
 
 
 def test_unissued_stale_ambiguous_or_wrong_player_sources_are_never_promoted():

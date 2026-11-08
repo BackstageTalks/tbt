@@ -93,13 +93,22 @@ def with_issued_ace_leader_signals(payload: dict) -> dict:
 
     Runs *after* the issued-authority check but *before* per-level filtering.
     A derived row is an explicit non-settleable display signal. When a normal
-    Most Aces publication exists, never mix it with fallback ESÁ signals.
+    Most Aces publication exists for an event, never mix it with its
+    fallback ESÁ signal.
     """
     rows = payload.get("ace_picks")
     if not isinstance(rows, list) or not rows:
         return payload
-    if any(isinstance(row, dict) and row.get("market") == "most_aces" for row in rows):
-        return payload
+    # An independently issued Most Aces card only supersedes the same event.
+    # A global early return would hide every valid ESÁ ball whenever even
+    # one other event in the feed has its own Most Aces card.
+    independent_events = {
+        str(row.get("event_id") or "").strip()
+        for row in rows
+        if isinstance(row, dict)
+        and str(row.get("market") or "").strip().lower() == "most_aces"
+        and str(row.get("event_id") or "").strip()
+    }
     by_event: dict[str, list[tuple[dict, str, dict]]] = {}
     for row in rows:
         leader = _issued_leader(row, payload)
@@ -109,6 +118,8 @@ def with_issued_ace_leader_signals(payload: dict) -> dict:
         by_event.setdefault(event, []).append((row, player, publication))
     derived = []
     for event, entries in by_event.items():
+        if event in independent_events:
+            continue
         # Conflicting player identities, ambiguous publications or duplicate
         # lines are not safe leader predictions. Reject the entire event.
         if len(entries) != 1:
