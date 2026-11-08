@@ -187,7 +187,20 @@ def build_candidate(original, prewrite, live):
     selected, proof = validate_four(original, prewrite, live)
     aligned_pre, aligned_live = _align_exact_2026_schema(prewrite, live)
     if not aligned_pre.schema.equals(aligned_live.schema, check_metadata=False):
-        raise ValueError("Source/canonical 2026 schemas not strictly compatible")
+        a = {field.name: str(field.type) for field in aligned_pre.schema}
+        b = {field.name: str(field.type) for field in aligned_live.schema}
+        delta = {
+            "prewrite_only": sorted(set(a) - set(b)),
+            "live_only": sorted(set(b) - set(a)),
+            "type_diffs": {k: [a[k], b[k]] for k in sorted(set(a) & set(b))
+                           if a[k] != b[k]},
+            "field_order_differs": list(a) != list(b),
+            "nullability_diffs": sorted(
+                k for k in set(a) & set(b)
+                if aligned_pre.schema.field(k).nullable != aligned_live.schema.field(k).nullable),
+        }
+        raise ValueError("Source/canonical 2026 schemas not strictly compatible: "
+                         + json.dumps(delta, sort_keys=True))
     old_ids, live_ids = index(aligned_pre, "prewrite"), index(aligned_live, "live")
     missing = set(old_ids) - set(live_ids)
     if len(missing) != 1 or old_ids[next(iter(missing))] != selected:
