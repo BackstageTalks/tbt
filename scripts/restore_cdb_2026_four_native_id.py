@@ -182,10 +182,58 @@ def load_three(root: Path):
     return old, before, live, baseline, snapshot
 
 
+
+def align_prewrite_exact_observed_types(pre, live):
+    """Only lossless observed Nov1 -> current type widening, zero data changes.
+
+    Int64 best_of values from the immutable backup widen exactly to float64.
+    Entirely-null prewrite ranking fields may widen from null to float64.
+    No other schema types, value coercions or live field changes are permitted.
+    """
+    import pyarrow as pa
+    if pre.column_names != live.column_names:
+        raise ValueError("Prewrite/live annual column identities/order differ")
+    fields_a = {f.name: str(f.type) for f in pre.schema}
+    fields_b = {f.name: str(f.type) for f in live.schema}
+    delta = {k: (fields_a[k], fields_b[k]) for k in fields_a
+             if fields_a[k] != fields_b[k]}
+    allowed = {
+        "best_of": ("int64", "double"),
+        "player1_rank": ("null", "double"),
+        "player2_rank": ("null", "double"),
+    }
+    if any(allowed.get(k) != v for k, v in delta.items()):
+        raise ValueError("Unapproved prewrite/live schema type difference")
+    if any(pre.schema.field(k).nullable != live.schema.field(k).nullable
+           for k in fields_a):
+        raise ValueError("Source/live nullability changed")
+    original = pre
+    if "best_of" in delta:
+        for n in pre["best_of"].to_pylist():
+            if n is not None and (type(n) is not int or n not in (2, 3, 5)):
+                raise ValueError("Nonstandard source best_of; exact widen blocked")
+        pre = pre.set_column(pre.schema.get_field_index("best_of"),
+                             live.schema.field("best_of"),
+                             pre["best_of"].cast(pa.float64(), safe=True))
+    for name in ("player1_rank", "player2_rank"):
+        if name in delta:
+            if pre[name].null_count != pre.num_rows:
+                raise ValueError("Unrecognized prewrite rank evidence")
+            pre = pre.set_column(
+                pre.schema.get_field_index(name), live.schema.field(name),
+                pa.nulls(pre.num_rows, type=pa.float64()))
+    if not pre.schema.equals(live.schema, check_metadata=False):
+        raise ValueError("Lossless source/live schema conversion incomplete")
+    for name in original.column_names:
+        if name not in delta and not original[name].equals(pre[name]):
+            raise ValueError("Unexpected prewrite field changed during alignment")
+    return pre, live
+
+
 def build_candidate(original, prewrite, live):
     import pyarrow as pa
     selected, proof = validate_four(original, prewrite, live)
-    aligned_pre, aligned_live = _align_exact_2026_schema(prewrite, live)
+    aligned_pre, aligned_live = align_prewrite_exact_observed_types(prewrite, live)
     if not aligned_pre.schema.equals(aligned_live.schema, check_metadata=False):
         a = {field.name: str(field.type) for field in aligned_pre.schema}
         b = {field.name: str(field.type) for field in aligned_live.schema}
