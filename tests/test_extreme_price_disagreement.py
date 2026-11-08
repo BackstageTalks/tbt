@@ -25,7 +25,8 @@ def winner(event_id, probability, odds, opponent_odds):
     return {
         "event_id": event_id,
         "scheduled_at": "2026-11-06T14:00:00+00:00",
-        "tour": "ATP", "surface": "hard",
+        "tour": "ATP", "surface": "hard", "competition": "ATP",
+        "created_at": "2026-11-06T06:00:00Z", "model_version": "test",
         "player1": {"id": "p1", "name": event_id, "probability": probability},
         "player2": {"id": "p2", "name": "Opponent", "probability": 1 - probability},
         "winner_id": "p1",
@@ -42,7 +43,7 @@ def winner(event_id, probability, odds, opponent_odds):
             "blinq_probability": probability, "fair_implied_probability": implied,
             "edge": probability - implied,
             "expected_value": probability * odds - 1,
-            "provider_id": 1, "betting_day": "2026-11-06",
+            "provider_id": 1, "betting_day": "2026-11-06", "captured_at": "2026-11-06T07:00:00Z",
         },
         "match_winner_market": market,
     }

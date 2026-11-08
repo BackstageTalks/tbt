@@ -639,6 +639,17 @@ def _daily_rows(payload: dict) -> list[dict]:
         out.append(row)
 
     rule=(payload.get("market_selection") or {}).get("top_daily_rule") or {}
+    if rule.get("policy") == "priority_tours_top_v19":
+        from .market_selection import _market_card
+        from .top_policy import rejection_reasons
+        out = [row for row in out if (card := _market_card(row)) is not None
+               and not rejection_reasons(card, min_probability=.70,
+                   min_depth=max(.80, float(rule.get("min_data_depth", .80))),
+                   min_surface=max(5, int(rule.get("min_surface_matches_each", 5))),
+                   min_odds=max(1.50, float(rule.get("min_odds", 1.50))))]
+        # Preserve the selector's competition/tier order. Old publications and
+        # settled results are not mutated by this active-board filter.
+        return out
     try:
         core_floor=float(rule.get("core_min_probability",0.68))
         core_floor=core_floor/100 if core_floor>1 else core_floor

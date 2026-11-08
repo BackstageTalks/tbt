@@ -18,7 +18,7 @@ from pathlib import Path
 from replay_selection_reliability import (
     anchors, canonical_index, dt, load_snapshots, metrics, prepare, sha,
 )
-from tbt.services.market_selection import select_market_sections
+from research.legacy_market_selection_v18 import select_market_sections
 
 SECTIONS = ("value", "top_daily", "prime")
 RETURNED = {"value": "value_picks", "top_daily": "top_daily_picks", "prime": "prime_picks"}
@@ -68,6 +68,8 @@ def reconstructed_card(source, evidence, *, raw_instead_of_shrunk, day):
     }
     return {
         "event_id": evidence["event"],
+        "competition": source.get("competition"),
+        "created_at": source.get("created_at"),
         "scheduled_at": source["scheduled_at"],
         "tour": evidence["tour"],
         "surface": evidence["surface"],

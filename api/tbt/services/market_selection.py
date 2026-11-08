@@ -35,7 +35,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME retains its own policy. TOP is a ranked full-slate choice (up to 5), not a confidence cascade. VALUE keeps the existing 65% floor and 15% odds gap.
+# PRIME retains its own policy. TOP targets three with ATP/WTA priority and a 70% hard floor. VALUE keeps the existing 65% floor and 15% odds gap.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -46,7 +46,7 @@ PUBLICATION_MIN_PROBABILITY = 0.65
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70
 TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
@@ -79,15 +79,15 @@ TOP_FALLBACK_MIN_ODDS = 1.50
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
 TOP_LIMIT: int | None = 3
-TOP_BACKUP_MIN_DATA_DEPTH = 0.75
-TOP_BACKUP_MIN_SURFACE_MATCHES = 3
+TOP_BACKUP_MIN_DATA_DEPTH = TOP_MIN_DATA_DEPTH
+TOP_BACKUP_MIN_SURFACE_MATCHES = TOP_MIN_SURFACE_MATCHES
 
 # VALUE: >=1.80 and a close two-way market. "15% odds difference" is measured
 # symmetrically as abs(o1-o2) / mean(o1,o2), avoiding home/away asymmetry.
 VALUE_MIN_PROBABILITY = PUBLICATION_MIN_PROBABILITY
 VALUE_MIN_DATA_DEPTH = 0.75
 VALUE_MIN_SURFACE_MATCHES = 3
-VALUE_MIN_ODDS = 1.80
+VALUE_MIN_ODDS = 1.80  # exclusive; exactly 1.80 remains TOP
 VALUE_MAX_ODDS_DIFFERENCE = 0.15
 VALUE_MIN_EDGE = 0.0  # compatibility only; not used for qualification
 VALUE_MIN_EXPECTED_VALUE = -1.0  # compatibility only; not used for qualification
@@ -565,7 +565,7 @@ def _value_qualification_audit(
             and p2_surface >= int(min_surface_matches)
         )
         odds = _number(card.get("odds"))
-        odds_ok = odds is not None and odds + 1e-12 >= float(min_odds)
+        odds_ok = odds is not None and odds > max(VALUE_MIN_ODDS, float(min_odds))
         difference = _market_odds_difference(card)
         two_way_ok = difference is not None
         spread_ok = two_way_ok and difference <= float(max_odds_difference) + 1e-12
@@ -733,8 +733,7 @@ def enrich_current_betting_day_odds(
 
     Odds calls are intentionally *not* spent on the entire upcoming board.
     Discovery uses the lower TOP/Value probability floor so morning TOP can
-    rank the entire eligible slate rather than leaving its 60–65% candidates
-    unpriced. The existing provider quota, 6/s throttle and common budget
+    cover supported Match Winner candidates. The existing provider quota, 6/s throttle and common budget
     guard remain the only paid API path. Final market gates stay independent.
     """
     start, end, day_key = betting_day_bounds(
@@ -1007,33 +1006,41 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int = TOP_TARGET_COUNT,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """One TOP offer: three highest-ranked real priced, evidence-qualified picks.
+    """Prefer ATP/WTA, then secondary tours, then ITF; never weaken evidence.
 
-    Backup uses a controlled 0.75 depth / 3 surface matches floor if the
-    standard 0.80 / 5 pool cannot supply three. Never creates a quote.
+    Within each competition group, rank by descending model probability.
+    ``backup`` is retained for call compatibility but cannot bypass core gates.
     """
-    selected = sorted(core, key=_top_quality_rank, reverse=True)[:target]
-    appended = 0
-    seen = {_selection_identity(item) for item in selected}
-    if len(selected) < minimum:
-        for item in sorted(backup, key=_top_quality_rank, reverse=True):
-            if len(selected) >= minimum or len(selected) >= target:
-                break
-            key = _selection_identity(item)
-            if not key or key in seen:
+    from .top_policy import competition_group
+    selected = []
+    seen = set()
+    applied = []
+    for label, groups in (("main", {"ATP", "WTA"}),
+                          ("secondary", {"Challenger", "WTA 125"}),
+                          ("itf", {"ITF"})):
+        eligible = sorted(
+            [card for card in core if competition_group(card) in groups
+             and (_number(card.get("probability")) or 0) >= .70],
+            key=lambda card: (float(_number(card.get("probability")) or 0),
+                              _top_quality_rank(card)), reverse=True)
+        for card in eligible:
+            event = str(card.get("event_id") or "")
+            if event in seen or len(selected) >= target:
                 continue
-            selected.append(deepcopy(item))
-            seen.add(key)
-            appended += 1
-        selected.sort(key=_top_quality_rank, reverse=True)
-    return selected, appended, {
-        "step": 1 if appended else 0,
-        "min_probability": TOP_MIN_PROBABILITY,
-        "min_odds": TOP_FALLBACK_MIN_ODDS,
-        "target": target, "minimum": minimum,
-        "core_pool": len(core), "backup_pool": len(backup),
-        "backup_selected": appended, "shortfall": max(0, minimum-len(selected)),
-        "rank": "harmonic_model_market_consensus_evidence",
+            item = deepcopy(card)
+            item["selection_tier"] = f"{label}_0.70"
+            selected.append(item)
+            seen.add(event)
+        if eligible:
+            applied.append({"competition_tier": label, "min_probability": .70})
+        if len(selected) >= target:
+            break
+    return selected, 0, {
+        "step": 0, "min_probability": .70,
+        "min_odds": TOP_FALLBACK_MIN_ODDS, "target": target, "minimum": minimum,
+        "core_pool": len(core), "backup_pool": 0, "backup_selected": 0,
+        "shortfall": max(0, minimum-len(selected)), "applied_tiers": applied,
+        "rank": "competition_then_probability_then_model_market_consensus",
     }
 
 
@@ -1136,6 +1143,7 @@ def select_market_sections(
     prime_fallback: list[dict[str, Any]] = []
     top_core: list[dict[str, Any]] = []
     top_fallback: list[dict[str, Any]] = []
+    top_rejection_counts: dict[str, int] = {}
 
     extreme_inversion_quarantined = 0
     market_conflict_missing_rank_quarantined = 0
@@ -1158,7 +1166,7 @@ def select_market_sections(
             continue
 
         if (
-            odds >= float(value_min_odds)
+            odds > max(VALUE_MIN_ODDS, float(value_min_odds))
             and _passes_candidate_gate(
                 card, min_probability=value_floor,
                 min_data_depth=value_min_data_depth,
@@ -1175,23 +1183,19 @@ def select_market_sections(
         ):
             (prime_core if probability >= prime_core_floor else prime_fallback).append(card)
 
-        top_core_odds = max(TOP_FALLBACK_MIN_ODDS, float(top_min_odds or TOP_MIN_ODDS or 1.50))
-        if odds >= top_core_odds and _passes_candidate_gate(
+        from .top_policy import rejection_reasons
+        reasons = rejection_reasons(
             card, min_probability=top_core_floor,
-            min_data_depth=top_min_data_depth,
-            min_surface_matches=top_min_surface_matches,
-        ):
+            min_depth=max(TOP_MIN_DATA_DEPTH, float(top_min_data_depth)),
+            min_surface=max(TOP_MIN_SURFACE_MATCHES, int(top_min_surface_matches)),
+            min_odds=max(TOP_FALLBACK_MIN_ODDS, float(top_min_odds or 1.50)),
+        )
+        for reason in reasons:
+            top_rejection_counts[reason] = top_rejection_counts.get(reason, 0) + 1
+        if not reasons:
             tagged = deepcopy(card)
             tagged["selection_tier"] = "ranked_core"
             top_core.append(tagged)
-        elif odds >= top_core_odds and _passes_candidate_gate(
-            card, min_probability=top_core_floor,
-            min_data_depth=min(float(top_min_data_depth), TOP_BACKUP_MIN_DATA_DEPTH),
-            min_surface_matches=min(int(top_min_surface_matches), TOP_BACKUP_MIN_SURFACE_MATCHES),
-        ):
-            tagged = deepcopy(card)
-            tagged["selection_tier"] = "ranked_backup"
-            top_fallback.append(tagged)
 
     rank = lambda card: (
         _number(card.get("probability")) or 0.0,
@@ -1247,7 +1251,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "active_value_top_prime_rank_v18",
+            "selection_policy": "priority_tours_top_v19",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1291,7 +1295,7 @@ def select_market_sections(
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
-                "top_probability_tiers": [TOP_MIN_PROBABILITY],
+                "top_probability_tiers": [0.70],
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1322,7 +1326,7 @@ def select_market_sections(
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,
-                "probability_tiers": [TOP_MIN_PROBABILITY],
+                "probability_tiers": [0.70],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": False,
                 "no_forced_fill": True,
@@ -1342,8 +1346,11 @@ def select_market_sections(
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
-                "sort": "quality_consensus_then_evidence",
+                "sort": "competition_then_probability_then_quality_consensus",
                 "ranked_full_slate": True,
+                "policy": "priority_tours_top_v19",
+                "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125"], ["ITF"]],
+                "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
                 "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,
                 "backup_min_surface_matches_each": TOP_BACKUP_MIN_SURFACE_MATCHES,
@@ -1355,6 +1362,7 @@ def select_market_sections(
                 "requires_real_match_winner_odds": True,
                 "published": len(doubles_picks or []),
             },
+            "top_rejection_counts": top_rejection_counts,
             "value_audit": value_audit,
             "value_rule": {
                 "objective": "probability_plus_close_odds",
@@ -1362,7 +1370,8 @@ def select_market_sections(
                 "min_probability": value_floor,
                 "min_data_depth": float(value_min_data_depth),
                 "min_surface_matches_each": int(value_min_surface_matches),
-                "min_odds": float(value_min_odds),
+                "min_odds": 1.80 if value_min_odds == VALUE_MIN_ODDS else float(value_min_odds),
+                "min_odds_inclusive": False,
                 "max_two_way_odds_difference": VALUE_MAX_ODDS_DIFFERENCE,
                 "odds_difference_formula": "abs(o1-o2)/mean(o1,o2)",
                 "edge_ev_role": "diagnostic_only",
@@ -1410,9 +1419,18 @@ def build_selection_candidate_snapshot(
         q1 = quality.get("player1") if isinstance(quality.get("player1"), dict) else {}
         q2 = quality.get("player2") if isinstance(quality.get("player2"), dict) else {}
         identity = _selection_identity(card or source) if (card is not None or betting) else ""
+        from .top_policy import rejection_reasons
+        reasons = rejection_reasons(card) if card else ["missing_match_winner_quote"]
+        if assigned.get(identity) == "value":
+            reasons.append("assigned_to_value")
         rows.append({
+            "top_rejection_reasons": reasons,
             "event_id": str(source.get("event_id") or source.get("id") or ""),
             "scheduled_at": source.get("scheduled_at"),
+            "created_at": source.get("created_at"),
+            "competition": source.get("competition"),
+            "tournament_level": source.get("tournament_level"),
+            "round": source.get("round"),
             "tour": source.get("tour"),
             "tournament": source.get("tournament"),
             "surface": source.get("surface"),
@@ -1449,6 +1467,7 @@ def build_selection_candidate_snapshot(
                 "provider_id": betting.get("provider_id"),
                 "captured_at": betting.get("captured_at"),
                 "betting_day": betting.get("betting_day"),
+                "model_time_ranks": deepcopy(betting.get("model_time_ranks")),
             } if betting else None),
             "two_way_market": ({
                 "player1_odds": market.get("player1_odds"),
@@ -1561,6 +1580,7 @@ def annotate_market_publication_candidates(
                     "selection_key": selection_key,
                     "section": section_name,
                     "primary_section": section_name,
+                    "selection_policy": sections.get("market_selection", {}).get("selection_policy"),
                     "market": "match_winner",
                     "selection": canonical_selection,
                     "selection_id": selection_id,

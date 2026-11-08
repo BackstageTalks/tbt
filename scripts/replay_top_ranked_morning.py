@@ -1,4 +1,4 @@
-"""Read-only same-slate replay for the production-shaped ranked TOP morning offer.
+"""Read-only same-slate replay for the frozen v18 ranked TOP morning offer (not the current selector).
 
 Measures daily TOP-1/3/5 positions inside ONE original TOP market, not new offers.
 Never changes the immutable issued ledger, model, CDB or provider quota. The
@@ -13,7 +13,7 @@ import json
 from pathlib import Path
 
 from replay_selection_reliability import anchors, canonical_index, dt, load_snapshots, prepare, verify_pins
-from tbt.services.market_selection import (
+from research.legacy_top_rank_v18 import (
     TOP_MIN_COUNT, TOP_TARGET_COUNT, TOP_MIN_PROBABILITY, TOP_MIN_ODDS,
     TOP_BACKUP_MIN_DATA_DEPTH, TOP_BACKUP_MIN_SURFACE_MATCHES,
     TOP_MIN_DATA_DEPTH, TOP_MIN_SURFACE_MATCHES,
