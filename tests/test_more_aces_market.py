@@ -3,6 +3,8 @@ from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 
+import pytest
+
 from tbt.schemas import MatchRecord
 from tbt.services.ace_selection import select_ace_winner_picks
 from tbt.services.match_status import _grade_runtime_projection
@@ -136,3 +138,101 @@ def test_new_tab_has_results_kpis_admin_export_and_responsive_placement():
     assert 'if(value===\'aces_equal\')return lcopy(\'TIE\',\'REMÍZA\',\'REMÍZA\')' in app
     assert "const sample=graded.length" in app
     assert "roi:stake?profit/stake:null" in app
+
+
+def test_locally_priced_most_aces_issuance_reaches_results_archive_without_reissue():
+    """Follow the actual market candidate, frozen offer, ledger and Results path.
+
+    A model signal alone is never a retroactively issued bet. Only a verified
+    pre-match published contract with both player counts can reach Results.
+    """
+    from copy import deepcopy
+    from tbt.services.most_aces_pricing import freeze_most_aces_price
+    from tbt.services.market_selection import annotate_market_publication_candidates
+    from tbt.services.publication import (
+        restore_published_market_snapshots, validate_market_publication_candidate,
+    )
+    from tbt.services.results_archive import settled_archive_candidates
+
+    source = {
+        "event_id": "new-most-aces-01",
+        "scheduled_at": "2026-11-08T16:00:00+00:00",
+        "tour": "ATP", "surface": "hard", "tournament": "Fixture",
+        "player1": {"id": "A", "name": "Alpha"},
+        "player2": {"id": "B", "name": "Beta"},
+    }
+    model_signal = {
+        **source, "market": "most_aces", "selection_id": "A",
+        "selection": "Alpha", "pick": "Alpha",
+        "projection_model": "ace-count-projection-v4",
+        "projection_scope": "player", "projection_metric": "most_aces",
+        "projection_label": "Hráč · Viac es než súper",
+        "projection": 7.3, "opponent_projection": 3.1,
+        "projection_confidence": 0.78, "price_contract": "player_superiority",
+        "price_status": "projection_only", "odds": None,
+        "market_line": None, "ou_side": None,
+    }
+    frozen = freeze_most_aces_price(model_signal)
+    assert frozen["price_status"] == "priced_projection"
+    assert 1.50 <= frozen["odds"] <= 1.70
+    annotated = annotate_market_publication_candidates([source], ace_picks=[frozen])
+    candidate = next(
+        p for p in annotated[0]["market_publication_candidates"]
+        if p["section"] == "ace_winner"
+    )
+    assert candidate["market"] == "most_aces"
+    assert candidate["price_contract"] == "player_superiority"
+    assert candidate["odds"] == frozen["odds"]
+    assert candidate["issued_at"] is None
+
+    issued = {
+        **candidate,
+        "issued_at": "2026-11-08T10:00:00+00:00",
+        "publication_status": "published",
+    }
+    ledger = [{"event_id": source["event_id"], "market_publications": [issued]}]
+    visible = {
+        "generated_at": "2026-11-08T09:00:00+00:00",
+        "ace_picks": [{
+            **frozen, "issued_at": issued["issued_at"],
+            "publication_status": "published",
+        }],
+        "results": [],
+    }
+    restored = restore_published_market_snapshots(visible, ledger)
+    assert validate_market_publication_candidate(restored, ledger) == 1
+    assert len(restored["ace_picks"]) == 1
+    assert restored["ace_picks"][0]["market_publications"][0]["issued_at"] == issued["issued_at"]
+    status = {
+        "status": "win", "provider_status": "finished",
+        "checked_at": "2026-11-08T18:00:00+00:00",
+        "provider_home_id": "A", "provider_away_id": "B",
+        "projection_stats_p1_id": "A", "projection_stats_p2_id": "B",
+        "projection_stats": {"p1_aces": 9, "p2_aces": 4},
+    }
+    archived = settled_archive_candidates(restored, {source["event_id"]: status})
+    assert len(archived) == 1
+    publication = archived[0]["market_publications"][0]
+    assert (publication["section"], publication["market"]) == ("ace_winner", "most_aces")
+    assert publication["result"]["correct"] is True
+    assert publication["result"]["opponent_actual_count"] == 4
+    assert publication["result"]["profit_units"] == pytest.approx(frozen["odds"] - 1.0)
+
+    # A prepared but *unissued* card must never create financial Results.
+    pending = deepcopy(visible)
+    pending["ace_picks"][0]["publication_status"] = "pending"
+    pending["ace_picks"][0]["issued_at"] = None
+    pending_ledger = [{
+        "event_id": source["event_id"],
+        "market_publications": [candidate],
+    }]
+    preissued = restore_published_market_snapshots(pending, pending_ledger)
+    assert settled_archive_candidates(preissued, {source["event_id"]: status}) == []
+
+
+def test_refresh_report_exposes_real_more_aces_issuance_counts():
+    script = (Path(__file__).resolve().parents[1] / "scripts" / "pipeline.py").read_text()
+    assert '"ace_winner": {' in script
+    assert '"fresh_published": int(' in script
+    assert '"ledger_quarantined": int(' in script
+    assert '"most_aces_selected"' in script

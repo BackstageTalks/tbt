@@ -2002,6 +2002,25 @@ def main():
         "prime": len(feed.get("prime_picks", [])),
         "value": len(feed.get("value_picks", [])),
         "ace": len(feed.get("ace_picks", [])),
+        # The independent VIAC ES issue contract was added after the 2026-11-08
+        # morning release. Report the *actual* frozen rows and the selector /
+        # ledger restoration counts separately so an empty offer cannot be
+        # mistaken for a UI-only regression or a successful publication.
+        "ace_winner": {
+            "selected": int((ace_winner_report or {}).get("most_aces_selected") or 0),
+            "presented": sum(
+                isinstance(row, dict) and str(row.get("market") or "").lower() == "most_aces"
+                for row in feed.get("ace_picks", [])
+            ),
+            "fresh_published": int(
+                ((feed.get("market_selection") or {}).get("presentation_integrity") or {})
+                .get("published", {}).get("most_aces") or 0
+            ),
+            "ledger_quarantined": int(
+                ((feed.get("market_selection") or {}).get("presentation_integrity") or {})
+                .get("ledger_quarantined", {}).get("most_aces") or 0
+            ),
+        },
         "ace_projection": ace_report or {},
         "ace_df_settlement_statistics": ace_df_settlement_stats_report or {},
         "sg": len(feed.get("sg_picks", [])),
