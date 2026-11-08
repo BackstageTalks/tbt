@@ -3021,9 +3021,9 @@
     }
     return odds;
   }
-  // Own-model 1.50–1.70 price for the distinct Most Aces superiority bet.
-  // An API Pro contract (if independently verified) always wins; this
-  // sidecar display price is NOT a bookmaker quote or a Results/ROI rewrite.
+  // Two distinct paths: frozen 1.50–1.70 owner odds are a full issued 1u
+  // betting contract with Results/ROI; unissued signal-only sidecar values
+  // remain display-only. Genuine exact bookmaker Most Aces quotes win.
   function verifiedMostAcesApiProOdds(row){
     if(String(row?.market||'').toLowerCase()!=='most_aces'
       ||row?.price_contract!=='player_superiority'
