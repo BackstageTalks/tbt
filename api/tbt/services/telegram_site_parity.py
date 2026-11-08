@@ -14,7 +14,8 @@ from .feed import _row_betting_day
 from .result_exclusions import result_bet_id
 
 _SECTIONS = frozenset(("top_daily", "value", "ace"))
-_FIELDS = ("correct", "void", "status", "actual_count", "profit_units",
+_FIELDS = ("correct", "void", "status", "reason", "retirement_line_decided",
+           "actual_count", "opponent_actual_count", "profit_units",
            "staked_units", "runtime_source", "ou_readback_regraded")
 
 

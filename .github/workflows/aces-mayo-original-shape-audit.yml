@@ -1,0 +1,51 @@
+name: Diagnose Mayo result marker from private issued feed (read-only)
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/aces-mayo-original-shape-audit.yml
+permissions:
+  contents: read
+jobs:
+  source-shape:
+    if: ${{ github.repository == 'BackstageTalks/tbt' && github.event.pull_request.head.repo.full_name == 'BackstageTalks/tbt' && github.head_ref == 'fix/results-aces-mayo-actual-ui-20261108' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Inspect exact Mayo record in private release without writes
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN:-}"
+          mkdir -p "$RUNNER_TEMP/mayo-source"
+          gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern feed.json --dir "$RUNNER_TEMP/mayo-source" --clobber
+          DATA="$RUNNER_TEMP/mayo-source/feed.json" python - <<'PY'
+          import json,os
+          feed=json.load(open(os.environ['DATA'],encoding='utf-8'))
+          for coll in ('results','ace_picks','board_results'):
+              rows=[r for r in feed.get(coll,[]) if str(r.get('event_id') or '')=='17427331']
+              print('MAYO_SOURCE_COLLECTION',coll,'matches',len(rows))
+              for row in rows[:3]:
+                  people=[row.get('player1') or {},row.get('player2') or {}]
+                  publications=[p for p in row.get('market_publications') or [] if
+                      p.get('market') in ('aces','most_aces') and (
+                      str(p.get('selection_id') or '')=='309157' or
+                      'Mayo' in str(p.get('selection') or ''))]
+                  print('MAYO_MATCH_IDS',json.dumps([{
+                      'id':str(p.get('id') or ''),'name':p.get('name'),
+                  } for p in people]))
+                  print('MAYO_RAW_ROW',json.dumps({
+                      k:row.get(k) for k in (
+                      'market','selection','selection_id','betting','projection_subject','aces_superiority_hint'
+                      )},ensure_ascii=False))
+                  for p in publications[:4]:
+                      print('MAYO_PUBLICATION',json.dumps({
+                          k:p.get(k) for k in (
+                          'publication_key','section','market','selection','selection_id','issued_at','projection_subject',
+                          'aces_superiority_hint','aces_superiority_player_id','projection_subject_id',
+                          'price_contract','ou_side','projection_direction','market_line','price_status',
+                          'issued_snapshot','result',
+                          )},ensure_ascii=False))
+          PY

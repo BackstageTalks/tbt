@@ -209,8 +209,11 @@ def main():
                             ou_side:'over',market_line:4.5,projection:5.67,
                             issued_at:new Date(Date.now()-3600000).toISOString(),
                             odds:1.70,price_status:'priced_projection',
-                            result:{status:'hit',correct:true,actual_count:5,
-                                    opponent_actual_count:0,staked_units:1,profit_units:0.7}
+                            result:{status:'hit',correct:true,void:false,
+                                    reason:'retired_after_ou_decided',retirement_line_decided:true,
+                                    runtime_source:'match_status_snapshot',
+                                    actual_count:5,opponent_actual_count:0,
+                                    staked_units:1,profit_units:0.7}
                         }]
                     }];
                     s.resultsFilters.category='ace';
@@ -223,6 +226,18 @@ def main():
                 assert "Aidan Mayo" in mayo_row.inner_text()
                 assert mayo_row.locator(".ace-leader-ball").count() == 1, (scenario, "Mayo leader ball missing in DOM")
                 assert opponent_row.locator(".ace-leader-ball").count() == 0, (scenario, "Andrade incorrectly marked")
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results[0].market_publications[0].result.retirement_line_decided=false;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert page.locator(".results-table .ace-leader-ball").count() == 0, (scenario, "unverified retirement marker")
+                page.evaluate("""() => {
+                    const s=resultsMultiTest.state;
+                    s.feed.results[0].market_publications[0].result.retirement_line_decided=true;
+                    resultsMultiTest.renderRoute('results');
+                }""")
+                assert mayo_row.locator(".ace-leader-ball").count() == 1, (scenario, "verified retirement leader restored")
                 page.evaluate("""() => {
                     const s=resultsMultiTest.state;
                     s.feed.results[0].market_publications[0].result.opponent_actual_count=null;
