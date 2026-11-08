@@ -6,6 +6,8 @@ This module never rewrites the feed, the ledger, odds, or settled Results.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 from datetime import datetime, timezone
 
@@ -27,7 +29,29 @@ MARKET_KEYS = (
 )
 ACTIVE_KEYS = ("upcoming", *MARKET_KEYS)
 LEGACY_ALIASES = ("daily_picks", "top_daily", "value", "doubles", "aces", "sets_games")
-MAX_KEYS = 500
+MAX_KEYS = 700  # Daily public board + distinct market contracts; storage remains size-gated.
+
+
+def _decode_stored_authority(value: object) -> dict | None:
+    """Read legacy plain/gzip manifests and compact exact SHA-256 receipts."""
+    from .admin_storage import _decode_runtime_ui_payload
+
+    payload = _decode_runtime_ui_payload(value)
+    if not isinstance(payload, dict) or "keys_packed_v1" not in payload:
+        return payload
+    encoded = payload["keys_packed_v1"]
+    if not isinstance(encoded, str) or "keys" in payload:
+        raise ValueError("Malformed packed issued authority")
+    try:
+        binary = base64.b64decode(encoded.encode("ascii"), validate=True)
+    except (ValueError, UnicodeError, binascii.Error) as exc:
+        raise ValueError("Invalid packed issued authority") from exc
+    if len(binary) % 32 or len(binary) // 32 > MAX_KEYS:
+        raise ValueError("Invalid packed issued authority size")
+    return {
+        **{key: item for key, item in payload.items() if key != "keys_packed_v1"},
+        "keys": [binary[index:index + 32].hex() for index in range(0, len(binary), 32)],
+    }
 
 
 def row_authority_key(row: dict, feed_key: str) -> str:
@@ -161,7 +185,7 @@ def filter_unissued_offers(feed: dict, manifest: dict | None) -> dict:
 
 def load_authority(day: str) -> dict | None:
     """Durable independent publication receipt; missing is not permission."""
-    from .admin_storage import _table, _decode_runtime_ui_payload, AdminStorageUnavailable
+    from .admin_storage import _table, AdminStorageUnavailable
 
     try:
         row = _table(TABLE).get_entity(partition_key=PARTITION, row_key=day)
@@ -170,7 +194,7 @@ def load_authority(day: str) -> dict | None:
             return None
         raise AdminStorageUnavailable("Issued publication authority unavailable") from exc
     try:
-        result = _decode_runtime_ui_payload(row["manifest_json"])
+        result = _decode_stored_authority(row["manifest_json"])
         if (not isinstance(result, dict) or result.get("betting_day") != day
                 or result.get("schema") != 1 or result.get("confirmed_only") is not True
                 or not isinstance(result.get("keys"), list)):
@@ -183,7 +207,7 @@ def load_authority(day: str) -> dict | None:
 def persist_authority(manifest: dict) -> dict:
     """Merge only previously confirmed keys using ETag CAS; never revoke history."""
     from .admin_storage import (
-        _table, _decode_runtime_ui_payload, _encode_runtime_ui_payload,
+        _table, _encode_runtime_ui_payload,
         AdminStorageUnavailable,
     )
     from azure.core import MatchConditions
@@ -203,7 +227,7 @@ def persist_authority(manifest: dict) -> dict:
             prior = set()
         else:
             try:
-                previous = _decode_runtime_ui_payload(existing["manifest_json"])
+                previous = _decode_stored_authority(existing["manifest_json"])
                 if (not isinstance(previous, dict) or previous.get("schema") != 1 or previous.get("betting_day") != day
                         or previous.get("confirmed_only") is not True):
                     raise ValueError("Invalid prior authority")
@@ -216,12 +240,22 @@ def persist_authority(manifest: dict) -> dict:
         updated = {
             "schema": 1, "confirmed_only": True, "betting_day": day, "keys": keys,
         }
+        # Keep all exact SHA-256 identities while packing each to 32 bytes
+        # before the existing gzip codec. Plain hex JSON exceeds Azure's 64 KiB
+        # UTF-16 property cap on today's full slate; neither drop nor reissue rows.
+        packed = {
+            "schema": 1, "confirmed_only": True, "betting_day": day,
+            "keys_packed_v1": base64.b64encode(
+                b"".join(bytes.fromhex(key) for key in keys)
+            ).decode("ascii"),
+        }
+        stored_json = _encode_runtime_ui_payload(packed)
+        if len(stored_json.encode("utf-16-le")) > 65536:
+            raise ValueError("Issued authority exceeds Azure Table string limit")
         entity = {
             "PartitionKey": PARTITION,
             "RowKey": day,
-            # Azure Table string properties are limited to 64 KiB UTF-16;
-            # a full day of 64-character hashes exceeds that uncompressed.
-            "manifest_json": _encode_runtime_ui_payload(updated),
+            "manifest_json": stored_json,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         try:
