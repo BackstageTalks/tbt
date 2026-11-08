@@ -43,7 +43,11 @@ for(const result of [
   {...pub.result,actual_count:'not known'},
   {...pub.result,actual_count:9.5},
   {...pub.result,status:'retired'},
-  {...pub.result,status:'hit',reason:'retired_after_ou_decided'}
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided'},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided',retirement_line_decided:true},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided',retirement_line_decided:true,runtime_source:'unverified'},
+  {...pub.result,status:'retired',reason:'retired_after_ou_decided',retirement_line_decided:true,runtime_source:'match_status_snapshot'},
+  {...pub.result,status:'hit',reason:'retired_after_ou_decided',retirement_line_decided:true,runtime_source:'match_status_snapshot',void:true}
 ])assert.equal(mark({...pub,result},a),'','unknown/invalid/interrupted');
 assert.equal(mark({...pub,result:null},a),'','missing settlement');
 assert.equal(mark({...pub,market:'double_faults'},a),'','not an Aces publication');
@@ -84,6 +88,29 @@ const frozenOU={...legacy,projection_subject:undefined,selection:'Aidan Mayo Ove
   price_contract:'player_total_ou',ou_side:'over',market_line:4.5};
 assert(mark(frozenOU,mayo,andrade).includes('ace-leader-ball'),
   'frozen issued Aces Over 4.5 record must label Mayo, even with presentation ID drift');
+// The authentic Mayo match was RETIRED; Over 4.5 was irrevocably decided
+// when the verified player had five Aces. A 'retired_after_ou_decided' reason
+// must not suppress the correctly settled 5:0 Aces leader.
+const decidedOnRetirement={...frozenOU,result:{
+  ...frozenOU.result,status:'hit',correct:true,void:false,
+  reason:'retired_after_ou_decided',retirement_line_decided:true,
+  runtime_source:'match_status_snapshot'
+}};
+assert(mark(decidedOnRetirement,mayo,andrade).includes('ace-leader-ball'),
+  'Mayo decided Over on retirement and verified 5:0 must get leader ball');
+assert.equal(mark(decidedOnRetirement,andrade,mayo),'','no opponent ball');
+for(const invalid of [
+  {...decidedOnRetirement.result,retirement_line_decided:false},
+  {...decidedOnRetirement.result,runtime_source:undefined},
+  {...decidedOnRetirement.result,reason:'retired'},
+  {...decidedOnRetirement.result,status:'retired'},
+  {...decidedOnRetirement.result,void:true},
+  {...decidedOnRetirement.result,opponent_actual_count:null},
+  {...decidedOnRetirement.result,actual_count:undefined},
+  {...decidedOnRetirement.result,actual_count:0,opponent_actual_count:5},
+])assert.equal(mark({...decidedOnRetirement,result:invalid},mayo,andrade),'',
+  'retirement needs exact verified decided counts');
+
 assert.equal(mark(frozenOU,andrade,mayo),'','must not label Andrade instead');
 for(const incorrect of [
   {...frozenOU,market_line:5.5},
