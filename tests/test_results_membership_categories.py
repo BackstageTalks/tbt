@@ -418,7 +418,8 @@ def test_member_offer_denominator_counts_only_unlocked_distinct_tips(plan):
     payload["results"] = []
     payload["top_daily_picks"] = [{
         "event_id": f"bet-{i}", "winner_id": "p1", "selection_id": "p1",
-        "odds": 2.0, "scheduled_at": "2026-11-09T12:00:00+00:00",
+        "odds": 2.0, "surface": "hard",
+        "scheduled_at": "2026-11-09T12:00:00+00:00",
         "player1": {"id": "p1", "name": "A"},
         "player2": {"id": "p2", "name": "B"},
     } for i in range(1, 4)]
