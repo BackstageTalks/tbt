@@ -1173,6 +1173,36 @@ def _source_rows_for_section(payload: dict, section: str) -> list[dict]:
     return [row for row in (rows if isinstance(rows,list) else []) if isinstance(row,dict)]
 
 
+def _member_visible_daily_pick_count(payload: dict) -> int:
+    """Count distinct currently authorized offer tips, never global event count.
+
+    This is an offer-side denominator for Results; the immutable result ledger
+    remains the only source for settled WIN/LOSS/VOID and ROI.
+    """
+    seen = set()
+    for tab in ("daily", "prime", "value", "doubles", "ace", "ace_winner",
+                "double_faults", "games", "sets"):
+        for row in _source_rows_for_section(payload, tab):
+            if (row.get("ace_winner_issued") is False or
+                    row.get("ace_winner_source") == "issued_aces_signal_only" or
+                    (tab == "ace_winner" and
+                     str(row.get("price_status") or "").lower() == "projection_only")):
+                continue
+            betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+            as_publication = {
+                "market": row.get("market") or "match_winner",
+                "selection_id": row.get("selection_id") or row.get("winner_id")
+                or row.get("pick_id") or betting.get("selection_id"),
+                "price_contract": row.get("price_contract"),
+                "ou_side": row.get("ou_side"),
+                "market_line": row.get("market_line"),
+            }
+            key = _result_contract_identity(row, as_publication)
+            if key:
+                seen.add(key)
+    return len(seen)
+
+
 def _published_daily_pick_count(payload: dict) -> int:
     """Count actual published picks in all eight markets, without SEE ALL.
 
@@ -1595,6 +1625,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     result["results"] = filter_results_for_member_limits(
         result["results"], manifest, access, authorized_feed=result,
     )
+    manifest["member_daily_pick_count"] = _member_visible_daily_pick_count(result)
     # Apply the exact issued-day Results gate only after all market arrays have
     # been redacted for this specific account and durable allocations loaded.
     result["results"] = filter_results_for_issued_day(
