@@ -64,9 +64,16 @@ def _count(item, side):
 
 
 def _whole_point_count(item, side):
-    """Accept only explicit, finite non-negative integer whole-match point counts."""
+    """Accept only consistent explicit non-negative integer point-count fields.
+
+    When both raw and display fields are present, they must agree exactly.
+    A malformed explicit field is not permission to fall back to another.
+    """
+    observed = []
     for field in (side + "Value", side):
-        raw = item.get(field)
+        if field not in item or item[field] is None:
+            continue
+        raw = item[field]
         if type(raw) is int:
             value = raw
         elif type(raw) is float and math.isfinite(raw) and raw.is_integer():
@@ -74,10 +81,11 @@ def _whole_point_count(item, side):
         elif isinstance(raw, str) and re.fullmatch(r"[0-9]{1,7}", raw.strip()):
             value = int(raw.strip())
         else:
-            continue
-        if 0 <= value <= 1_000_000:
-            return value
-    return None
+            return None
+        if not 0 <= value <= 1_000_000:
+            return None
+        observed.append(value)
+    return observed[0] if observed and len(set(observed)) == 1 else None
 
 
 def _set_bp_counts_exceed_all(periods, *, home_is_player1, saved, scored):
@@ -265,6 +273,8 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                 for side in ("home", "away"):
                     count = _whole_point_count(item, side)
                     if count is None:
+                        if side + "Value" in item or side in item:
+                            point_counts_unreliable = True
                         continue
                     identity = (side, count_kind)
                     if identity in point_counts and point_counts[identity] != count:
