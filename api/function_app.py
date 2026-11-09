@@ -143,6 +143,7 @@ from tbt.services.entitlements import (
     filter_feed_for_access,
     filter_results_for_categories,
     filter_results_for_issued_day,
+    filter_results_for_member_limits,
     entitlement_manifest,
     match_detail_entitlements,
     match_intelligence_row_authorized,
@@ -1607,6 +1608,11 @@ def feed(req):
                 # authorized market rows may embed other category publications.
                 data["results"] = filter_results_for_categories(
                     data.get("results") or [], entitlements.get("result_categories") or []
+                )
+                # Recheck the exact tier category/position grants after
+                # response-time settlement; this must not expand access.
+                data["results"] = filter_results_for_member_limits(
+                    data["results"], entitlements, access_context, authorized_feed=data
                 )
                 # The post-settlement pass must also honor the exact issued
                 # 2 Nov offer, not just its broad TOP / VALUE / Aces category.
