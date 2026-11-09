@@ -79,15 +79,21 @@ jobs:
         run: |
           python scripts/cdb_canonical_gap_audit.py \
             --history-dir work/local-view --output cdb-gap-audit.json \
-            --expected-provider-quarantine 6
+            --expected-provider-quarantine 0
           python - <<'PY'
           import json
           report=json.load(open("cdb-gap-audit.json"))
           if report.get("production_mutated") is not False or report.get("api_requests") != 0:
               raise SystemExit("Unsafe gap audit contract")
-          if (report.get("excluded_ambiguous_provider_rows") != 6
-                  or report.get("canonical_raw_rows") != report.get("canonical_rows", -1) + 6):
-              raise SystemExit("Known CDB provider-ID quarantine/row conservation drift")
+          if (report.get("excluded_ambiguous_provider_rows") != 0
+                  or report.get("canonical_raw_rows") != report.get("canonical_rows", -1)):
+              raise SystemExit("CDB zero-quarantine identity or row conservation drift")
+          agg = report.get("aggregate_2016_2026", {})
+          if agg.get("matches") != report.get("canonical_rows"):
+              raise SystemExit("Aggregate 2016–2026 coverage mismatch")
+          for field, value in agg.get("fields", {}).items():
+              if value["missing_cells"] + value["present_cells"] != 2 * agg["matches"]:
+                  raise SystemExit("Aggregate field conservation failed: " + field)
           for row in report["year_tour"]:
               if row["matches"] < 0 or row["core_complete_matches"] > row["matches"]:
                   raise SystemExit("Invalid canonical gap report count")
