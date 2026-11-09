@@ -8599,6 +8599,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(!state.feed?.member_result_rules?.[membership])return null;
       return memberResultCohort(membership,bratislavaBettingDayKey(Date.now(),6)).size;
     }
+    const memberCount=state.feed?.entitlements?.member_daily_pick_count;
+    if(!isAdminAccount()&&memberCount!=null){
+      const n=Number(memberCount);
+      return Number.isFinite(n)&&n>=0?Math.trunc(n):null;
+    }
     const n=Number(state.feed?.entitlements?.daily_pick_count);
     return Number.isFinite(n)&&n>=0?Math.trunc(n):null;
   }
@@ -8626,7 +8631,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       &&!filters.tour&&!filters.surface;
     const todayTotal=(filters.window==='today'||exactCurrentBettingDay)
       &&category==='all'&&!statsHaveExcludedMarkets()
-      &&availableResultCategories().length===orderedResultCategories().length
+      &&(availableResultCategories().length===orderedResultCategories().length
+        ||(!isAdminAccount()&&state.feed?.entitlements?.member_daily_pick_count!=null))
         ?todayPublishedPickCount(filters.membership):null;
     const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
     const memberName=filters.membership?String(filters.membership).toUpperCase():'';
