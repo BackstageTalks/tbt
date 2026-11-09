@@ -343,11 +343,11 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
     font-size:14px!important;color:#e7f4eb!important;
     font-variant-numeric:tabular-nums!important;
   }
-  /* Settled approved/bookmaker quotes are standard green odds, not neutral text.
-     This file loads after blinq-app.css and has higher specificity on mobile. */
+  /* Published/accepted odds stay white like every other Results quote.
+     This later-loaded mobile layer must agree with blinq-app.css. */
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-odds.is-quoted {
-    color:#42e897!important;
+    color:#eef8f4!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-status {
