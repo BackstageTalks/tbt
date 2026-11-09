@@ -3,6 +3,8 @@ name: BlinQ SK/CZ evening bookmaker aces audit (read-only)
 # External scheduler calls workflow_dispatch at 22:00 Europe/Bratislava.
 # No native GitHub cron and no dependency on the paid TennisAPI budget.
 on:
+  repository_dispatch:
+    types: [blinq-fortuna-evening-odds-tick]
   workflow_dispatch:
     inputs:
       target_day:
