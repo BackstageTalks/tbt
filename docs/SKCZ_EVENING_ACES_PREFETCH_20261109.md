@@ -6,7 +6,7 @@ Capture publicly visible **pre-match** ESÁ player Over/Under lines and full-mat
 This is a **research pilot**, not an operational claim of SK/CZ ace-price coverage. The public Fortuna pages verified on 2026-11-09 showed ordinary tennis prices and structured outcome IDs, **but no ace market in the tested matches**. A valid zero-ace result must remain a zero-ace result.
 
 ## Timing and source
-- External cron only: dispatch .github/workflows/skcz-evening-odds.yml at **17:15 Europe/Bratislava** for the next betting day. This is 12 hours ahead of the legacy 05:15 morning-refresh workflow and 13h05m before the Telegram 06:20 queue. Never activate GitHub's native schedule.
+- External cron only: dispatch `.github/workflows/skcz-evening-odds.yml` at **22:00 Europe/Bratislava** for the next betting day (e.g. collection 9 Nov at 22:00 for the 10 Nov betting day). This is normally **7h15m before** the existing 05:15 morning-refresh workflow and **8h20m before** the Telegram 06:20 queue; across daylight-saving changes, elapsed durations may differ. Never activate GitHub's native schedule. Configure the **existing external scheduler** using the `Europe/Bratislava` timezone (not a fixed UTC offset).
 - Run no more than 20 public event-detail requests by default (absolute parser cap: 60). Exponential retries, proxy rotation, auth bypass or session reuse are not part of this collector.
 - First source: https://www.ifortuna.sk/stavkovanie/tenis?tab=matches and its published detail links.
 - Parse each named match's stable provider event ID, player labels, scheduled start, individual market ID, outcome ID, actual decimal price and market line. Keep only matches between 06:00 local on the target betting day and 06:00 the next day.
