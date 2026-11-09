@@ -121,8 +121,8 @@ def normalize_daily_bulk_odds(payload: Any, *, max_events: int = 50_000) -> dict
         if not isinstance(value, dict):
             counts["malformed_event_entry"] += 1
             continue
-        claimed = value.get("eventId", value.get("event_id"))
-        if claimed is not None and _source_id(claimed) != ident:
+        if any(_source_id(value[key]) != ident for key in ("eventId", "event_id")
+               if key in value):
             counts["event_id_mismatch"] += 1
             continue
 
@@ -149,12 +149,16 @@ def normalize_daily_bulk_odds(payload: Any, *, max_events: int = 50_000) -> dict
 
         valid_in_event = 0
         for provider, node in nodes:
+            if (provider is not None and "providerId" in node
+                    and _source_id(node["providerId"]) != provider):
+                counts["rejected_provider_id_mismatch"] += 1
+                continue
             selections, reason = _pair(node)
             if selections is None:
                 counts["rejected_" + reason] += 1
                 continue
-            echo = node.get("eventId", node.get("event_id"))
-            if echo is not None and _source_id(echo) != ident:
+            if any(_source_id(node[key]) != ident for key in ("eventId", "event_id")
+                   if key in node):
                 counts["rejected_nested_event_id_mismatch"] += 1
                 continue
             # Unknown market ID / bookmaker and missing quote-time provenance
