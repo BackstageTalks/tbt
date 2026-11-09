@@ -29,7 +29,7 @@ MARKET_KEYS = (
 )
 ACTIVE_KEYS = ("upcoming", *MARKET_KEYS)
 LEGACY_ALIASES = ("daily_picks", "top_daily", "value", "doubles", "aces", "sets_games")
-MAX_KEYS = 700  # Daily public board + distinct market contracts; storage remains size-gated.
+MAX_KEYS = 700  # Keys per Azure string property, not per confirmation request.
 MAX_DAILY_KEYS = 7000  # Bounded union of successive issued generations, never truncated.
 
 
@@ -152,7 +152,7 @@ def build_confirmed_authority(feed: dict, ledger: list, *, now=None) -> dict:
             if (isinstance(row, dict)
                     and _issued_exact_market_row(row, feed_key, ledger_index)):
                 keys.add(row_authority_key(row, feed_key))
-    if len(keys) > MAX_KEYS:
+    if len(keys) > MAX_DAILY_KEYS:
         raise ValueError("Issued authority exceeds bounded daily size")
     return {
         "schema": 1,
@@ -173,7 +173,7 @@ def validate_authority(manifest: dict, feed: dict, *, now=None) -> dict:
     if manifest.get("betting_day") != visible.get("daily_offer_day"):
         raise ValueError("Issued authority day differs from serving day")
     keys = manifest.get("keys")
-    if (not isinstance(keys, list) or len(keys) > MAX_KEYS
+    if (not isinstance(keys, list) or len(keys) > MAX_DAILY_KEYS
             or len(keys) != len(set(map(str, keys)))
             or any(not isinstance(key, str) or len(key) != 64
                    or any(char not in "0123456789abcdef" for char in key)
@@ -252,7 +252,7 @@ def persist_authority(manifest: dict) -> dict:
 
     day = manifest["betting_day"]
     incoming = set(manifest["keys"])
-    if (len(manifest["keys"]) > MAX_KEYS or len(incoming) != len(manifest["keys"])
+    if (len(manifest["keys"]) > MAX_DAILY_KEYS or len(incoming) != len(manifest["keys"])
             or any(not isinstance(key, str) or len(key) != 64
                    or any(c not in "0123456789abcdef" for c in key) for key in incoming)):
         raise ValueError("Issued authority exceeds bounded daily size or has invalid keys")
