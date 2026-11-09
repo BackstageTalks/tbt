@@ -3185,7 +3185,7 @@
       const api=verifiedMostAcesApiProOdds(row);
       if(Number.isFinite(api))return hubNumberHtml(api.toFixed(2),lcopy('API Pro odds','Kurz API Pro','Kurz API Pro'));
       const frozen=verifiedFrozenMostAcesLocalOdds(row);
-      if(Number.isFinite(frozen))return hubNumberHtml(frozen.toFixed(2),lcopy('BlinQ statistical odds','Štat. kurz BlinQ','Stat. kurz BlinQ'));
+      if(Number.isFinite(frozen))return hubNumberHtml(frozen.toFixed(2));
       const local=localMostAcesDisplayOdds(row);
       if(Number.isFinite(local))return hubNumberHtml(local.toFixed(2),lcopy('BlinQ statistical signal','Štat. signál BlinQ','Stat. signál BlinQ'));
       return hubNumberHtml('—',lcopy('No Most Aces odds','Bez kurzu Viac es','Bez kurzu Více es'));
