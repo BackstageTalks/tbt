@@ -98,7 +98,7 @@ def test_exact_nineteen_bet_archive_matches_dashboard_accounting():
     assert finance["observed_publications"] == 22
     assert finance["settled_priced"] == feed_audit["settled_priced"] == 19
     assert finance["wins"] == 13 and finance["losses"] == 6
-    assert finance["void"] == 2
+    assert finance["counts"]["void"] == 2
     assert finance["counts"]["settled_unpriced"] == 1
     assert dashboard["stake_count"] == 19
     assert dashboard["wins"] == 14  # frozen-contract guard is financial, not grading
