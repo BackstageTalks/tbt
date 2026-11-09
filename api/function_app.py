@@ -1583,15 +1583,8 @@ def feed(req):
             # Do not expose stale terminal rows if the original provider state
             # still said this event was live. The worker will repair on recheck.
             raw_statuses = verified_terminal_statuses(status_snapshot.get("statuses"))
-            # KPI and Results share the same response-time settlement overlay.
-            # Only configured scalar cards cross entitlement boundaries.
-            if runtime_ui is not None:
-                kpi_source = dict(source_feed)
-                kpi_source["results"] = runtime_settled_results(source_feed, raw_statuses)
-                kpi_source = apply_result_exclusions(kpi_source, excluded_result_ids)
-                if not exclusions_available:
-                    kpi_source["results"] = []
-                data["dashboard_kpi_cards"] = selected_dashboard_cards(kpi_source, runtime_ui)
+            # KPI source is finalized after settlement AND member authorization,
+            # not from the unrestricted source feed for customer result metrics.
             data["match_statuses"] = {
                 str(event_id): value
                 for event_id, value in raw_statuses.items()
@@ -1622,6 +1615,25 @@ def feed(req):
                 if not exclusions_available:
                     data["results"] = []
                     data["results_exclusions_unavailable"] = True
+            # Results-based dashboard scalars must observe exactly the same
+            # category, position and per-account grants as the Results table.
+            # ADMIN retains the unrestricted global operational KPI universe.
+            if runtime_ui is not None:
+                kpi_source = dict(source_feed)
+                if is_admin(user, settings):
+                    kpi_source["results"] = runtime_settled_results(
+                        source_feed, raw_statuses
+                    )
+                    kpi_source = apply_result_exclusions(
+                        kpi_source, excluded_result_ids
+                    )
+                else:
+                    kpi_source["results"] = data.get("results") or []
+                if not exclusions_available:
+                    kpi_source["results"] = []
+                data["dashboard_kpi_cards"] = selected_dashboard_cards(
+                    kpi_source, runtime_ui
+                )
             # Response-only schedule corrections for rows this member can already
             # see; the published feed/ledger and betting odds remain untouched.
             data = apply_verified_schedule_overlay(
