@@ -188,6 +188,22 @@ def normalize_daily_bulk_odds(payload: Any, *, max_events: int = 50_000) -> dict
         else:
             counts["native_events_without_parseable_pair"] += 1
 
+    # Stable schema: zero is distinct from an unobserved/absent metric.
+    # In particular, a provider event without any choices still reports
+    # parseable_two_sided_pairs=0 and native_events_with_parseable_pair=0.
+    for metric in (
+        "raw_event_entries", "native_event_key_entries",
+        "native_events_with_parseable_pair",
+        "native_events_without_parseable_pair",
+        "parseable_two_sided_pairs", "pairs_without_source_provider_id",
+        "pair_with_clock_field_only",
+        "invalid_event_key", "duplicate_normalized_event_id",
+        "malformed_event_entry", "event_id_mismatch",
+        "ambiguous_nested_and_direct_market", "invalid_source_provider_id",
+        "unsupported_event_market_shape",
+    ):
+        counts.setdefault(metric, 0)
+
     # A map key says nothing about CDB match identity, bookmaker, historic
     # quote timestamp, market orientation, or net-new canonical prices.
     summary = {
