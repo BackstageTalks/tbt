@@ -3020,7 +3020,9 @@
     const source=String(row?.odds_source||'').toLowerCase(),id=Number(row?.provider_id);
     const verified=(source==='rapidapi'&&id===1)
       ||(source==='propline'&&id===2&&Boolean(row?.odds_bookmaker))
-      ||(source==='moviodds'&&id===3&&row?.odds_bookmaker==='bet365');
+      ||(source==='moviodds'&&id===3&&row?.odds_bookmaker==='bet365')
+      ||(source==='fortuna_sk'&&id===4&&row?.odds_bookmaker==='Fortuna SK'
+        &&String(row?.odds_provider_event_id||'').startsWith('ufo:mtch:'));
     if(!verified)return NaN;
     if(row?.price_contract==='player_total_ou'){
       const line=Number(row?.market_line);
@@ -3035,11 +3037,15 @@
     if(String(row?.market||'').toLowerCase()!=='most_aces'
       ||row?.price_contract!=='player_superiority'
       ||row?.price_status!=='priced_projection'
-      ||row?.odds_source!=='rapidapi'||Number(row?.provider_id)!==1
+      ||!((row?.odds_source==='rapidapi'&&Number(row?.provider_id)===1)
+        ||(row?.odds_source==='fortuna_sk'&&Number(row?.provider_id)===4
+          &&row?.odds_bookmaker==='Fortuna SK'
+          &&row?.odds_contract_version==='most_aces_fortuna_v1'
+          &&String(row?.odds_provider_event_id||'').startsWith('ufo:mtch:')))
       ||!row?.captured_at)return NaN;
     const market=String(row?.odds_market_name||'').toLowerCase();
-    if(!market.includes('ace')||!/(most|more|winner|higher)/.test(market)
-      ||/(total|over|under|handicap|set|period)/.test(market))return NaN;
+    if(!/(ace|\bes\b|esa)/.test(market)||!/(most|more|winner|higher|viac|najviac)/.test(market)
+      ||/(total|over|under|handicap|set|period|sete|setu)/.test(market))return NaN;
     const value=row?.odds==null?NaN:Number(row.odds);
     return Number.isFinite(value)&&value>1&&value<=100?value:NaN;
   }
@@ -3105,7 +3111,8 @@
   // standalone bookmaker prices replace the placeholder upstream. Read-only.
   function acePlaceholderOdds(row){
     return String(row?.market||row?.projection_metric||'').toLowerCase()==='aces'
-      &&row?.odds!=null&&Number(row.odds)===2;
+      &&row?.odds!=null&&Number(row.odds)===2
+      &&String(row?.odds_source||'').toLowerCase()!=='fortuna_sk';
   }
   function localAceOuDisplayLine(row){
     // Same model-based half-ace OVER threshold as approved Telegram fallback.
@@ -3185,20 +3192,20 @@
     // An exact provider O/U wins; otherwise show the local BlinQ O/U price.
     if(String(row?.market||'').toLowerCase()==='most_aces'){
       const api=verifiedMostAcesApiProOdds(row);
-      if(Number.isFinite(api))return hubNumberHtml(api.toFixed(2),lcopy('API Pro odds','Kurz API Pro','Kurz API Pro'));
+      if(Number.isFinite(api))return hubNumberHtml(api.toFixed(2));
       const frozen=verifiedFrozenMostAcesLocalOdds(row);
-      if(Number.isFinite(frozen))return hubNumberHtml(frozen.toFixed(2),lcopy('BlinQ statistical odds','Štat. kurz BlinQ','Stat. kurz BlinQ'));
+      if(Number.isFinite(frozen))return hubNumberHtml(frozen.toFixed(2));
       const local=localMostAcesDisplayOdds(row);
-      if(Number.isFinite(local))return hubNumberHtml(local.toFixed(2),lcopy('BlinQ statistical signal','Štat. signál BlinQ','Stat. signál BlinQ'));
+      if(Number.isFinite(local))return hubNumberHtml(local.toFixed(2));
       return hubNumberHtml('—',lcopy('No Most Aces odds','Bez kurzu Viac es','Bez kurzu Více es'));
     }
     if(String(row?.market||'').toLowerCase()==='aces'){
       if(row?.price_contract==='player_total_ou'&&Number.isFinite(verifiedAceProviderOdds(row)))
-        return hubNumberHtml(Number(row.odds).toFixed(2),lcopy('odds','kurz','kurz'));
+        return hubNumberHtml(Number(row.odds).toFixed(2));
       const local=row?.statistical_ace_odds==null?NaN:Number(row.statistical_ace_odds);
       const line=row?.ui_local_ace_ou_line==null?NaN:Number(row.ui_local_ace_ou_line);
       if(Number.isFinite(line)&&Number.isFinite(local)&&local>=1.60&&local<=1.80)
-        return hubNumberHtml(local.toFixed(2),lcopy('odds','kurz','kurz'));
+        return hubNumberHtml(local.toFixed(2));
       const modelBand=localAceOuModelBand(row);
       if(modelBand)
         return hubNumberHtml(modelBand,lcopy('MODEL RANGE · No O/U price','MODELOVÉ PÁSMO · Bez O/U kurzu','MODELOVÉ PÁSMO · Bez O/U kurzu'));

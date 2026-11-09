@@ -43,6 +43,7 @@ from tbt.services.publication import (
 from tbt.services.ace_selection import select_ace_picks, select_ace_winner_picks
 from tbt.services.most_aces_pricing import freeze_most_aces_price
 from ace_working_odds import eligible_local_ace_projection, verified_ace_odds, local_player_aces_ou
+from skcz_evening_quotes import attach_prices as attach_evening_fortuna_prices, load_evening_report as load_evening_fortuna_report, TZ as SKCZ_TZ
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
     enrich_projection_odds, prefetch_projection_market_board,
@@ -1841,6 +1842,37 @@ def main():
             )
             projection_odds_report.update(attachment_report)
             projection_odds_report["discovery"] = projection_discovery_report
+        # Optional pre-fetched Fortuna SK quote for the SAME already-selected
+        # player, match and model O/U line. Never add a card or replace a
+        # provider-verified price. Absent/mismatched research stays on the
+        # existing local statistical fallback. No UI or CDB change.
+        if args.morning_refresh:
+            import_day = selection_now.astimezone(SKCZ_TZ).date().isoformat()
+            try:
+                observed_at = datetime.now(timezone.utc)
+                evening, source_status = load_evening_fortuna_report(
+                    betting_day=import_day, now=observed_at,
+                )
+                if evening is not None:
+                    ace_picks, ace_winner_picks, fortuna_summary = attach_evening_fortuna_prices(
+                        ace_picks, ace_winner_picks, evening,
+                        now=observed_at, betting_day=import_day,
+                    )
+                else:
+                    fortuna_summary = {"aces": 0, "most_aces": 0}
+                projection_odds_report["fortuna_evening"] = {
+                    "source_status": source_status,
+                    **fortuna_summary,
+                }
+                print(json.dumps({"fortuna_evening_odds": projection_odds_report["fortuna_evening"]},
+                                 sort_keys=True), flush=True)
+            except (OSError, TypeError, ValueError, RuntimeError) as exc:
+                # Optional odds source must never block a valid morning release.
+                # A failed read is NOT evidence that the market did not exist.
+                print(json.dumps({"fortuna_evening_odds": {
+                    "source_status": "unavailable:" + type(exc).__name__,
+                    "aces": 0, "most_aces": 0, "fallback_unchanged": True,
+                }}, sort_keys=True), flush=True)
         # Market-first publication is strict: an unmatched card remains an
         # internal model diagnostic, never a bookmaker-looking bet.
         if projection_odds_cap:
@@ -1875,6 +1907,12 @@ def main():
                                 source == "moviodds"
                                 and provider == 3
                                 and row.get("odds_bookmaker") == "bet365"
+                            )
+                            or (
+                                source == "fortuna_sk"
+                                and provider == 4
+                                and row.get("odds_bookmaker") == "Fortuna SK"
+                                and str(row.get("odds_provider_event_id") or "").startswith("ufo:mtch:")
                             )
                         )
                     )

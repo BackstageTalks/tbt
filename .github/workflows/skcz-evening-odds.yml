@@ -1,0 +1,116 @@
+name: BlinQ SK/CZ evening bookmaker aces audit (read-only)
+
+# External scheduler calls workflow_dispatch at 22:00 Europe/Bratislava.
+# No native GitHub cron and no dependency on the paid TennisAPI budget.
+on:
+  repository_dispatch:
+    types: [blinq-fortuna-evening-odds-tick]
+  workflow_dispatch:
+    inputs:
+      target_day:
+        description: "Bratislava betting day YYYY-MM-DD (blank = tomorrow)"
+        required: false
+        type: string
+        default: ''
+      max_events:
+        description: "Maximum public Fortuna tennis event pages (1-60)"
+        required: false
+        type: number
+        default: 20
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-skcz-evening-odds-research
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      MAX_EVENTS: ${{ inputs.max_events || 20 }}
+      INPUT_TARGET_DAY: ${{ inputs.target_day || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Offline source/parser regressions (no provider requests)
+        run: python -m unittest discover -s tests -p 'test_skcz_evening_*.py' -v
+      - name: Resolve next Bratislava betting day
+        id: day
+        shell: bash
+        run: |
+          set -euo pipefail
+          target="$INPUT_TARGET_DAY"
+          if [[ -z "$target" ]]; then
+            target="$(TZ=Europe/Bratislava date -d tomorrow +%F)"
+          fi
+          python - "$target" <<'PY'
+          import datetime,sys
+          datetime.date.fromisoformat(sys.argv[1])
+          PY
+          echo "date=$target" >> "$GITHUB_OUTPUT"
+      - name: Capture public bookmaker markets without paid APIs or CDB changes
+        env:
+          BETTING_DAY: ${{ steps.day.outputs.date }}
+        run: |
+          set -euo pipefail
+          python scripts/skcz_evening_fortuna.py \
+            --target-day "$BETTING_DAY" --max-events "$MAX_EVENTS" \
+            --out reports/skcz-evening/fortuna.json
+      - name: Validate audit and create-only store in separate private research path
+        env:
+          BETTING_DAY: ${{ steps.day.outputs.date }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python - <<'PY'
+          import base64, hashlib, json, os, pathlib, subprocess
+          data = pathlib.Path("reports/skcz-evening/fortuna.json").read_bytes()
+          report = json.loads(data)
+          assert report["schema"] == 1
+          assert report["target_betting_day"] == os.environ["BETTING_DAY"]
+          assert report["cdb_writes"] == 0 and report["published_picks_changed"] == 0
+          assert report["provider_paid_calls"] == 0
+          assert report["status"] in ("audited", "no_exact_aces_market_available")
+          assert report["exact_aces_pairs"] == sum(
+              len(m["verified_pairs"]) for e in report["events_in_target_window"]
+              for m in e["aces_markets"])
+          repo = os.environ["DATA_REPO"]
+          if repo != "BackstageTalks/tbt-data":
+              raise SystemExit("Unexpected target repo; refuse research write")
+          run_id = os.environ["GITHUB_RUN_ID"]
+          path = f"research/skcz-evening-odds/{report['target_betting_day']}/fortuna-{run_id}.json"
+          api = f"repos/{repo}/contents/{path}"
+          payload = {"message": f"research: immutable SKCZ evening quotes {run_id} [skip ci]",
+                     "content": base64.b64encode(data).decode("ascii")}
+          body = pathlib.Path("/tmp/skcz-evening-odds-write.json")
+          body.write_text(json.dumps(payload), encoding="utf-8")
+          subprocess.run(["gh", "api", "-X", "PUT", api, "--input", str(body)],
+                         check=True, capture_output=True)
+          saved = json.loads(subprocess.check_output(["gh", "api", api], text=True))
+          actual = base64.b64decode(saved["content"])
+          assert hashlib.sha256(actual).digest() == hashlib.sha256(data).digest(), (
+              "Independent persisted research read-back mismatch")
+          print(json.dumps({"status": "PERSISTED_VERIFIED_READBACK",
+                            "private_path": path,
+                            "exact_aces_pairs": report["exact_aces_pairs"],
+                            "aces_market_groups": report["aces_market_groups"],
+                            "source_errors": len(report["errors"]),
+                            "cdb_writes": 0}, sort_keys=True))
+          PY
+      - name: Keep local evidence even if provider access is blocked
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-skcz-evening-research-${{ github.run_id }}
+          path: reports/skcz-evening/fortuna.json
+          if-no-files-found: warn
+          retention-days: 14

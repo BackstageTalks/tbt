@@ -78,24 +78,34 @@ def statistical_most_aces_odds(
 
 
 def verified_api_pro_most_aces_odds(row: Mapping[str, Any]) -> float | None:
-    """Only an explicitly source-marked exact provider-1 Most Aces player quote.
+    """Only an exact pre-match two-player Most Aces price from approved sources.
 
-    Does not recover prices from O/U, and never guesses a bookmaker source.
-    The source importer is responsible for confirming both offered market sides.
+    Provider-1 and independently paired Fortuna SK quotes are supported.
+    Never convert player-total O/U to superiority or guess a bookmaker.
     """
     if (not isinstance(row, Mapping)
             or str(row.get("market") or "") != "most_aces"
             or str(row.get("price_contract") or "") != "player_superiority"
             or row.get("price_status") != "priced_projection"
-            or row.get("odds_source") != "rapidapi"
-            or row.get("provider_id") != 1
+            or not (
+                (row.get("odds_source") == "rapidapi" and row.get("provider_id") == 1)
+                or (
+                    row.get("odds_source") == "fortuna_sk"
+                    and row.get("provider_id") == 4
+                    and row.get("odds_bookmaker") == "Fortuna SK"
+                    and row.get("odds_contract_version") == "most_aces_fortuna_v1"
+                    and str(row.get("odds_provider_event_id") or "").startswith("ufo:mtch:")
+                )
+            )
             or not row.get("captured_at")
             or not _valid_subject(row, str(row.get("selection_id") or ""))):
         return None
     name = str(row.get("odds_market_name") or "").lower()
-    if (not "ace" in name
-            or not any(word in name for word in ("most", "more", "winner", "higher"))
-            or any(word in name for word in ("total", "over", "under", "handicap", "set", "period"))):
+    # Fortuna names the same full-match contract 'Viac es'; set-only odds
+    # must never be mistaken for the full-match Most Aces market.
+    if (not any(term in name for term in ("ace", " es", "es ", "esa"))
+            or not any(word in name for word in ("most", "more", "winner", "higher", "viac", "najviac"))
+            or any(word in name for word in ("total", "over", "under", "handicap", "set", "period", "sete", "setu"))):
         return None
     try:
         captured = datetime.fromisoformat(str(row["captured_at"]).replace("Z", "+00:00"))
