@@ -4038,6 +4038,28 @@
     if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}${totalContract}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
+  function effectiveMemberResultRule(plan,tab){
+    const server=state.feed?.member_result_rules?.[plan]?.[tab];
+    if(!server)return null;
+    // Admin cohort comparisons must never exceed either the server's
+    // entitlement snapshot or the currently loaded Admin display rule.
+    // This closes the discrepancy between a changed Admin UI and stale
+    // server totals without widening public access or editing the ledger.
+    const cfg=state.ui?.dashboard?.daily_hub?.tabs?.[tab];
+    const local=cfg?.plans?.[plan];
+    if(!cfg||!local)return server;
+    const display=String(local.display_state||'active').toLowerCase();
+    if(cfg.enabled===false||local.tab_enabled===false||display!=='active')
+      return {...server,enabled:false,display_state:'hidden',visible_picks:0};
+    const serverCount=String(server.visible_picks).toUpperCase()==='ALL'?Infinity:Math.max(0,Number(server.visible_picks)||0);
+    const localCount=String(local.visible_rows??'ALL').toUpperCase()==='ALL'?Infinity:Math.max(0,Number(local.visible_rows)||0);
+    const cap=Math.min(serverCount,localCount);
+    const overrides={...(server.row_overrides||{})};
+    for(const [slot,value] of Object.entries(local.row_overrides||{})){
+      if(['hidden','blurred'].includes(String(value).toLowerCase()))overrides[slot]=String(value).toLowerCase();
+    }
+    return {...server,visible_picks:Number.isFinite(cap)?cap:'ALL',row_overrides:overrides};
+  }
   function memberResultCohort(plan,bettingDayFilter=''){
     // Select from the full daily pool before settlement, time and category filters.
     // Current membership rules model historical access; they are not user allocations.
@@ -4090,7 +4112,7 @@
     const allowed=new Map();
     const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
     for(const pool of groups.values()){
-      const rule=rules[pool[0].tab];
+      const rule=effectiveMemberResultRule(plan,pool[0].tab);
       if(!rule.enabled||rule.display_state!=='active')continue;
       pool.sort((a,b)=>(Date.parse(a.p.issued_at)||Infinity)-(Date.parse(b.p.issued_at)||Infinity)||(Number(a.p.offer_position)||Infinity)-(Number(b.p.offer_position)||Infinity)||a.key.localeCompare(b.key));
       const all=String(rule.visible_picks).toUpperCase()==='ALL';
@@ -4154,7 +4176,7 @@
         // whose legacy offer identity is incomplete. The Results feed itself
         // has already passed the server's publication/access checks.
         const tab=categoryTag==='top_daily'?'daily':categoryTag;
-        const rule=cohort?state.feed?.member_result_rules?.[filters?.membership]?.[tab]:null;
+        const rule=cohort?effectiveMemberResultRule(filters.membership,tab):null;
         const allVisible=rule?.enabled===true
           &&rule.display_state==='active'
           &&String(rule.visible_picks).toUpperCase()==='ALL'
