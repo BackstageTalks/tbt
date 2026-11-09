@@ -22,6 +22,19 @@ This is a **research pilot**, not an operational claim of SK/CZ ace-price covera
 - All report quotes are research evidence only. **Do not** use them for EV, ROI, Telegram or actual morning prediction cards until a separate morning reader matches event/date/player/market/line and independently checks that the quote was observable *before* the decision timestamp. Re-check at issuance, since an evening price may change or disappear.
 - Do not present absent SK/CZ ace markets as synthetic bookmaker prices.
 
+## Approved morning behavior — exact quote or existing fallback
+
+Only Fortuna SK is in scope for this pilot; Tipsport is excluded.
+
+- At 22:00 Bratislava, a read-only collector stores optional exact bookmaker ESÁ/VIAC ES quotes in a private, separate, create-only research path.
+- During the existing morning model selection, unchanged model-selected ESÁ and VIAC ES bets receive an exact pre-match Fortuna quote **only when** player identity, event start, market contract and ESÁ O/U line match unambiguously. Existing provider-backed prices are never overwritten.
+- Without a matching Fortuna quote, use the **pre-existing** local price behavior: ESÁ 1.60–1.80 and VIAC ES 1.50–1.70; preserve their internal non-bookmaker provenance. A missing/stale research snapshot never blocks or deletes a valid model pick.
+- Do not change the approved model, selected event count, the CDB, historical Results, already published picks or Admin categories. The fallback is not a claim that Fortuna offered that selection.
+- UI contract requested by the owner: **no new badges, price-source text, bookmaker names, icons, tags or extra rows**. Existing price values fit the same card layout. For ESÁ / VIAC ES, remove the previously rendered tiny labels under price numbers (e.g. "Štat. kurz BlinQ", "Kurz API Pro") so both sources display only a price number, without a second-line source tag.
+- Private provenance and audit remain inside the canonical publication data and research report, not as additional website labels.
+
+**Implementation status:** Morning attachment, internal price verification and the tiny ESÁ/VIAC ES source-label removal are prepared in PR #1514, but not merged, deployed or independently runtime-tested. This is not evidence of actually bettable ESÁ/VIAC ES quotes from Fortuna.
+
 ## Acceptance before production use
 1. Verify external scheduler really dispatched the pilot before the next morning job, on a real Bratislava day, not just workflow configuration.
 2. Show the runner's live source HTTP response, exact selected fixture, bookmaker market and line; classify no-aces vs parser failure.
