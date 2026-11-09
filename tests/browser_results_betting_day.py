@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,settledPublishedEntries,renderResults,aceLeaderHintHtml,projectionOddsHtml};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -696,6 +696,34 @@ def main():
                 "pro": 1, "overridden": 0, "disabled": 0,
                 "ledgerUnchanged": True,
             }, all_aces
+
+            # Viac Es displays only the numeric frozen BlinQ price in the
+            # offer; removing the subtitle must not alter odds provenance.
+            no_label = page.evaluate("""() => {
+              const row={
+                event_id:'most-aces-1',market:'most_aces',
+                price_contract:'player_superiority',
+                price_status:'priced_projection',
+                odds_source:'blinq_statistical',
+                price_basis:'blinq_user_most_aces_confidence_band_v1',
+                odds_contract_version:'most_aces_local_statistical_v1',
+                projection_model:'ace-count-projection-v4',
+                selection_id:'p1',player1:{id:'p1'},player2:{id:'p2'},
+                scheduled_at:'2026-11-10T12:00:00Z',
+                projection_confidence:0.93,projection:7,
+                opponent_projection:4,odds:1.50
+              };
+              const sourceBefore=JSON.stringify(row);
+              const html=bettingDayTest.projectionOddsHtml(row);
+              const el=document.createElement('div');
+              el.innerHTML=html;
+              return {
+                number:el.querySelector('.hub-number-stack strong')?.textContent,
+                subtitle:el.querySelector('.hub-number-stack small')?.textContent||'',
+                unchanged:sourceBefore===JSON.stringify(row),
+              };
+            }""")
+            assert no_label == {'number':'1.50','subtitle':'','unchanged':True}, no_label
 
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
