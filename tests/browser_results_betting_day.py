@@ -466,6 +466,118 @@ def main():
                 "legendCohort": 9, "goatCohort": 9
             }, morning
 
+
+            # Current Admin ELITE: TOP first five, all VALUE/ACES/MOST ACES,
+            # but no ACCA/DF/SETS/GAMES/DOUBLES. An excluded ACCA publication
+            # sharing a TOP identity must not borrow its membership grant.
+            current_admin = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state,day=t.bratislavaBettingDayKey(Date.now(),6);
+                const when=day+'T12:00:00Z',issued=day+'T07:00:00Z';
+                const make=(id,section,market,pos,outcome='win')=>{
+                  const pub={
+                    section,market,selection_id:'player-'+id,selection:'Player '+id,
+                    issued_at:issued,publication_status:'published',betting_day:day,
+                    offer_position:pos,odds:1.70,
+                    price_status:market==='match_winner'?'priced':'priced_projection',
+                    result:outcome==='pending'?{}:{
+                      correct:outcome==='win',status:outcome==='win'?'hit':'miss',
+                      staked_units:1,profit_units:outcome==='win'?.7:-1}
+                  };
+                  return {event_id:id,scheduled_at:when,tour:'ATP',surface:'hard',
+                    player1:{id:'player-'+id},player2:{id:'opp-'+id},
+                    market_publications:[pub]};
+                };
+                const top=Array.from({length:6},(_,i)=>make('top'+i,'top_daily','match_winner',i+1,i===3?'pending':'win'));
+                const value=[make('value1','value','match_winner',2)];
+                // Same frozen winner is also issued into VALUE; it is ONE wager.
+                top[0].market_publications.push({...structuredClone(top[0].market_publications[0]),
+                  section:'value',offer_position:1});
+                const aces=Array.from({length:3},(_,i)=>make('ace'+i,'ace','aces',i+1,i===1?'pending':'win'));
+                const more=Array.from({length:2},(_,i)=>make('most'+i,'ace_winner','most_aces',i+1));
+                const acca=Array.from({length:30},(_,i)=>make('acca'+i,'prime','match_winner',i+1));
+                // Identity collision: TOP and hidden ACCA are different Admin tabs.
+                top[0].market_publications.push({...structuredClone(top[0].market_publications[0]),
+                  section:'prime',offer_position:1});
+                const df=[make('df-hidden','double_faults','double_faults',1)];
+                const sets=[make('sets-hidden','sets','sets',1)];
+                const games=[make('games-hidden','games','games',1)];
+                const doubles=[make('doubles-hidden','doubles','match_winner',1)];
+                const unissued=make('unissued-top','top_daily','match_winner',7);
+                delete unissued.market_publications[0].issued_at;
+                // ESÁ bridge inherits a valid issue timestamp, but VIAC ES
+                // was never independently issued; it must NOT count in sample.
+                const bridge={...structuredClone(aces[0]),event_id:'bridge-leader',
+                  market:'most_aces',price_status:'projection_only',
+                  ace_winner_issued:false,issued_at:issued,
+                  selection_id:'player-bridge-leader',market_publications:[]};
+                const active=(limit)=>({enabled:true,display_state:'active',
+                  visible_picks:limit,selection_mode:'first',row_overrides:{}});
+                const hidden=()=>({enabled:true,display_state:'blurred',
+                  visible_picks:0,selection_mode:'first',row_overrides:{}});
+                s.feed={account:{is_admin:true,role:'admin',plan:'admin',status:'active'},
+                  entitlements:{daily_pick_count:62},
+                  member_result_rules:{elite:{
+                    daily:active(5),value:active('ALL'),ace:active('ALL'),
+                    ace_winner:active('ALL'),prime:hidden(),double_faults:hidden(),
+                    sets:hidden(),games:hidden(),doubles:hidden()}},
+                  results:[...top,...value,...aces,...more,...acca,...df,...sets,...games,...doubles],
+                  daily_picks:top,top_daily_picks:[...top,unissued],
+                  value_picks:[top[0],...value],prime_picks:acca,
+                  ace_picks:[...aces,...more,...df,bridge],sg_picks:[...sets,...games],
+                  doubles_picks:doubles};
+                s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
+                  bettingDay:true,membership:'elite'};
+                const disabled=['prime','double_faults','sets','games','doubles'];
+                const activeIds=t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters)
+                  .map(entry=>entry.row.event_id);
+                const total=t.todayPublishedPickCount('elite');
+                const summary=t.resultsSummary();
+                const excluded={};
+                for(const category of disabled){
+                  const f={...s.resultsFilters,category};
+                  excluded[category]=t.settledPublishedEntries(t.filteredResults(f),category,f).length;
+                }
+                const primeOverlappingTop=t.settledPublishedEntries(
+                  t.filteredResults({...s.resultsFilters,category:'prime'}),'prime',
+                  {...s.resultsFilters,category:'prime'}).length;
+                // Simulate a newer, server-authoritative Admin publish:
+                // all counts must immediately follow the new category/limit
+                // without any hard-coded ELITE market list.
+                const refresh=()=>({
+                  total:t.todayPublishedPickCount('elite'),
+                  settled:t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length
+                });
+                s.feed.member_result_rules.elite.prime=active('ALL');
+                const withPrime=refresh();
+                s.feed.member_result_rules.elite.prime=hidden();
+                s.feed.member_result_rules.elite.games=active('ALL');
+                const withGames=refresh();
+                s.feed.member_result_rules.elite.ace_winner=hidden();
+                const withoutMoreAces=refresh();
+                s.feed.member_result_rules.elite.sets=active('ALL');
+                const withSets=refresh();
+                s.feed.member_result_rules.elite.daily=active(6);
+                const withSixTop=refresh();
+                return {total,settled:activeIds.length,activeIds,excluded,
+                  primeOverlappingTop,sample:summary.includes('9/11'),
+                  nonMemberTotal:s.feed.entitlements.daily_pick_count,
+                  withPrime,withGames,withoutMoreAces,withSets,withSixTop};
+            }""")
+            assert current_admin["total"] == 11,current_admin
+            assert current_admin["settled"] == 9,current_admin
+            assert current_admin["sample"],current_admin
+            assert current_admin["nonMemberTotal"] == 62,current_admin
+            assert all(n == 0 for n in current_admin["excluded"].values()),current_admin
+            assert current_admin["primeOverlappingTop"] == 0,current_admin
+            assert current_admin["withPrime"] == {"total":41,"settled":39},current_admin
+            assert current_admin["withGames"] == {"total":12,"settled":10},current_admin
+            assert current_admin["withoutMoreAces"] == {"total":10,"settled":8},current_admin
+            assert current_admin["withSets"] == {"total":11,"settled":9},current_admin
+            assert current_admin["withSixTop"] == {"total":12,"settled":10},current_admin
+            assert 'top5' not in current_admin["activeIds"],current_admin
+            assert 'unissued-top' not in current_admin["activeIds"],current_admin
+            print("ELITE current Admin category caps, hidden categories, duplicate and issuance scope: PASS")
+
             # Browser: Aces leader icon independent of its O/U contract.
             # A parent result row may have stale match-level hints; the issued
             # publication and exact two final counts remain authoritative.

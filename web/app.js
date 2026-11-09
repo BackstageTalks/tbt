@@ -4028,7 +4028,7 @@
     // Current membership rules model historical access; they are not user allocations.
     if(!isAdminAccount()||!plan)return null;
     const rules=state.feed?.member_result_rules?.[plan];
-    if(!rules)return new Set();
+    if(!rules)return new Map();
     const groups=new Map(),seen=new Set();
     const add=(row,p)=>{
       const market=String(p.market||'').toLowerCase();
@@ -4046,18 +4046,33 @@
     // Settled rows only fill missing historical identities after the offer.
     [['daily_picks','top_daily'],['top_daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
       (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
-        const pubs=(Array.isArray(row?.market_publications)?row.market_publications:[])
-          .filter(p=>p&&typeof p==='object'&&String(p.publication_status||'published')==='published');
+        const publications=Array.isArray(row?.market_publications)?row.market_publications:[];
+        const pubs=publications.filter(p=>p&&typeof p==='object'
+          &&String(p.publication_status||'published')==='published'
+          &&Boolean(p.issued_at));
         if(pubs.length){pubs.forEach(p=>add(row,{...p,offer_position:p.offer_position||row.offer_position||rowIndex+1}));return;}
+        // An offer row (or projection) without a confirmed pre-match issuance
+        // is not a published pick. It must not inflate the ELITE denominator.
+        // Older flat issued rows are supported only with explicit issuance.
+        if(publications.length)return;
+        // VIAC ES display-only leader bridges inherit the ESÁ issued timestamp
+        // but were never independently issued. A genuine issued publication
+        // above always takes precedence over stale row-level display hints.
+        if(row?.ace_winner_issued===false||String(row?.price_status||'').toLowerCase()==='projection_only')return;
+        const issuedAt=row?.issued_at||row?.published_at||row?.betting?.issued_at;
+        if(!issuedAt||String(row?.publication_status||'published')!=='published')return;
         const market=row.market||(section==='ace'?'aces':section==='sg'?'':'match_winner');
         add(row,{...row,section:market==='most_aces'?'ace_winner':market==='double_faults'?'double_faults':market==='sets'?'sets':market==='games'?'games':section,
           selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,
           market,offer_position:row.offer_position||rowIndex+1,
-          issued_at:row.issued_at||row.published_at||row.created_at});
+          issued_at:issuedAt});
       });
     });
     (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
-    const allowed=new Set();
+    // Keep the unique wager key for the sample denominator, but retain
+    // the granting category. A TOP grant must never unlock an otherwise
+    // hidden ACCA publication sharing the same event/market/selection.
+    const allowed=new Map();
     const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
     for(const pool of groups.values()){
       const rule=rules[pool[0].tab];
@@ -4068,7 +4083,10 @@
       const sample=rule.selection_mode==='stable_random'&&!all?new Set(pool.slice(0,10).map(x=>[hash(plan+'|'+x.day+'|'+x.tab+'|'+x.key),x.key]).sort((a,b)=>a[0]-b[0]||a[1].localeCompare(b[1])).slice(0,limit).map(x=>x[1])):null;
       pool.forEach((item,i)=>{
         const override=rule.row_overrides?.[String(i+1)];
-        if(override==='active'||(!['hidden','blurred'].includes(override)&&(all||(sample?sample.has(item.key):i<limit))))allowed.add(item.key);
+        if(override==='active'||(!['hidden','blurred'].includes(override)&&(all||(sample?sample.has(item.key):i<limit)))){
+          if(!allowed.has(item.key))allowed.set(item.key,new Set());
+          allowed.get(item.key).add(item.tab);
+        }
       });
     }
     return allowed;
@@ -4126,7 +4144,14 @@
           &&rule.display_state==='active'
           &&String(rule.visible_picks).toUpperCase()==='ALL'
           &&Object.keys(rule.row_overrides||{}).length===0;
-        if(cohort&&!allVisible&&!cohort.has(resultBetIdentity(row,publication)))return;
+        if(cohort){
+          // The current Admin category rule is authoritative, even for ALL.
+          // Disabled/hidden/blurred markets must never borrow another tab's
+          // membership identity or enter Results, ROI, or the settled sample.
+          if(rule?.enabled!==true||rule.display_state!=='active')return;
+          const key=resultBetIdentity(row,publication);
+          if(!allVisible&&!cohort.get(key)?.has(tab))return;
+        }
         const current=unique.get(key);
         if(!current){
           unique.set(key,{row,publication,categories:categoryTag?[categoryTag]:[]});
@@ -7386,11 +7411,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       showStatus('Nastavenie bolo publikované na live web.');
       renderAllUiContent();
       rerenderAdmin();
-      if(state.adminTab==='dashboard'||state.adminTab==='layout'){
-        // After publishing, re-read only the three server-approved KPI scalars.
-        // Do not derive restricted historical metrics from the browser's feed.
-        await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové KPI ešte nenačítali.'));
-      }
+      // ELITE Results/KPI membership rules are server-generated from the
+      // published Admin config. Re-read them after EVERY successful publish,
+      // not just dashboard/layout edits, so changing any category applies
+      // without code changes or a manual page reload.
+      await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové pravidlá členstva ešte nenačítali.'));
       return true;
     }catch(error){
       const message=error?.status===503?'Admin storage nie je dostupný. Skontroluj Admin → Systém.':(error?.message||'Nastavenie sa nepodarilo publikovať.');
@@ -8570,7 +8595,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Prediction</th><th>Probability</th><th>Odds</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
   function todayPublishedPickCount(membership=''){
-    if(membership&&isAdminAccount())return memberResultCohort(membership,bratislavaBettingDayKey(Date.now(),6)).size;
+    if(membership&&isAdminAccount()){
+      if(!state.feed?.member_result_rules?.[membership])return null;
+      return memberResultCohort(membership,bratislavaBettingDayKey(Date.now(),6)).size;
+    }
     const n=Number(state.feed?.entitlements?.daily_pick_count);
     return Number.isFinite(n)&&n>=0?Math.trunc(n):null;
   }
