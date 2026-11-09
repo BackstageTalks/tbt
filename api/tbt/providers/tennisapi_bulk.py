@@ -51,14 +51,28 @@ def _pair(node: dict) -> tuple[dict | None, str]:
     choices = node.get("choices")
     if not isinstance(choices, list) or len(choices) < 2 or len(choices) > 12:
         return None, "missing_or_invalid_choices"
-    if node.get("isLive") not in (None, False) or node.get("suspended") not in (None, False):
-        return None, "live_or_suspended"
+    if "marketId" in node and (
+            type(node["marketId"]) not in (int, str)
+            or str(node["marketId"]) != "1"):
+        return None, "non_match_winner_market"
+    name = node.get("marketName")
+    if name is not None and str(name).strip().casefold() not in {
+            "match winner", "winner", "full time", "fulltime"}:
+        return None, "non_match_winner_market"
+    for field in ("isLive", "suspended"):
+        if field in node and type(node[field]) is not bool:
+            return None, "ambiguous_status"
+        if node.get(field) is True:
+            return None, "live_or_suspended"
     selections: dict[str, dict] = {}
     for choice in choices:
         if not isinstance(choice, dict):
             return None, "malformed_choice"
-        if choice.get("isLive") not in (None, False) or choice.get("suspended") not in (None, False):
-            return None, "live_or_suspended"
+        for field in ("isLive", "suspended"):
+            if field in choice and type(choice[field]) is not bool:
+                return None, "ambiguous_status"
+            if choice.get(field) is True:
+                return None, "live_or_suspended"
         side = _SELECTION.get(str(choice.get("name", "")).strip().casefold())
         if side is None:
             return None, "unknown_selection"
@@ -121,6 +135,9 @@ def normalize_daily_bulk_odds(payload: Any, *, max_events: int = 50_000) -> dict
                 counts["ambiguous_nested_and_direct_market"] += 1
                 continue
             provider = _source_id(value.get("providerId"))
+            if "providerId" in value and provider is None:
+                counts["invalid_source_provider_id"] += 1
+                continue
             nodes = [(provider, value)]
         else:
             nodes = [(_source_id(key), child) for key, child in value.items()
@@ -178,6 +195,7 @@ def normalize_daily_bulk_odds(payload: Any, *, max_events: int = 50_000) -> dict
         == (counts["invalid_event_key"] + counts["duplicate_normalized_event_id"]
             + counts["malformed_event_entry"] + counts["event_id_mismatch"]
             + counts["ambiguous_nested_and_direct_market"]
+            + counts["invalid_source_provider_id"]
             + counts["unsupported_event_market_shape"]
             + counts["native_events_with_parseable_pair"]
             + counts["native_events_without_parseable_pair"]),
