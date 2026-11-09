@@ -6,7 +6,7 @@ Capture publicly visible **pre-match** ESÁ player Over/Under lines and full-mat
 This is a **research pilot**, not an operational claim of SK/CZ ace-price coverage. The public Fortuna pages verified on 2026-11-09 showed ordinary tennis prices and structured outcome IDs, **but no ace market in the tested matches**. A valid zero-ace result must remain a zero-ace result.
 
 ## Timing and source
-- External cron only: send `repository_dispatch` event `blinq-fortuna-evening-odds-tick` to `.github/workflows/skcz-evening-odds.yml` at **22:00 Europe/Bratislava** for the next betting day (e.g. collection 9 Nov at 22:00 for the 10 Nov betting day). This is normally **7h15m before** the existing 05:15 morning-refresh workflow and **8h20m before** the Telegram 06:20 queue; across daylight-saving changes, elapsed durations may differ. Never activate GitHub's native schedule. Configure the **existing external scheduler** using the `Europe/Bratislava` timezone (not a fixed UTC offset).
+- External cron only: send `repository_dispatch` event `blinq-fortuna-evening-odds-tick` to `.github/workflows/skcz-evening-odds.yml` at **23:00 Europe/Bratislava** for the next betting day (e.g. collection 9 Nov at 23:00 for the 10 Nov betting day). This is normally **6h15m before** the existing 05:15 morning-refresh workflow and **7h20m before** the Telegram 06:20 queue; across daylight-saving changes, elapsed durations may differ. Never activate GitHub's native schedule. Configure the **existing external scheduler** using the `Europe/Bratislava` timezone (not a fixed UTC offset).
 - Run no more than 20 public event-detail requests by default (absolute parser cap: 60). Exponential retries, proxy rotation, auth bypass or session reuse are not part of this collector.
 - First source: https://www.ifortuna.sk/stavkovanie/tenis?tab=matches and its published detail links.
 - Parse each named match's stable provider event ID, player labels, scheduled start, individual market ID, outcome ID, actual decimal price and market line. Keep only matches between 06:00 local on the target betting day and 06:00 the next day.
@@ -26,7 +26,7 @@ This is a **research pilot**, not an operational claim of SK/CZ ace-price covera
 
 Only Fortuna SK is in scope for this pilot; Tipsport is excluded.
 
-- At 22:00 Bratislava, a read-only collector stores optional exact bookmaker ESÁ/VIAC ES quotes in a private, separate, create-only research path.
+- At 23:00 Bratislava, a read-only collector stores optional exact bookmaker ESÁ/VIAC ES quotes in a private, separate, create-only research path.
 - During the existing morning model selection, unchanged model-selected ESÁ and VIAC ES bets receive an exact pre-match Fortuna quote **only when** player identity, event start, market contract and ESÁ O/U line match unambiguously. Existing provider-backed prices are never overwritten.
 - Without a matching Fortuna quote, use the **pre-existing** local price behavior: ESÁ 1.60–1.80 and VIAC ES 1.50–1.70; preserve their internal non-bookmaker provenance. A missing/stale research snapshot never blocks or deletes a valid model pick.
 - Do not change the approved model, selected event count, the CDB, historical Results, already published picks or Admin categories. The fallback is not a claim that Fortuna offered that selection.
@@ -44,3 +44,8 @@ Only Fortuna SK is in scope for this pilot; Tipsport is excluded.
 
 ## Status 2026-11-09
 Parser, exact-matcher, fallback regression suite, external `repository_dispatch` workflow, separate private archival path and morning hook prepared in PR #1514. The existing frontend ESÁ/VIAC ES small source labels have been removed from the planned rendering; no new UI tags or controls added. Source HTML structure was sampled from Fortuna SK, but **no real ESÁ/VIAC ES numeric quote** was obtained from the public samples. External scheduler activation, private store write/read-back and a real evening-to-morning match remain **not verified**. No canonical CDB/model mutations.
+
+## Schedule change 2026-11-09
+- Owner approved moving the nightly collector from **22:00** to **23:00 Europe/Bratislava**; actual cron configuration is `docs/cron/fortuna-evening-odds-2300.json`. This is a template, **not** evidence of the external scheduler being enabled.
+- The current GitHub workflow already exists and accepts `repository_dispatch`. No native GitHub cron added; no website, CDB, model, or morning job changes.
+- To tolerate an external dispatch queued past midnight, before 06:00 local the resolver targets the same local calendar day rather than the following day.
