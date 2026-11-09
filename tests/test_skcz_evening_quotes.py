@@ -128,6 +128,17 @@ class FortunaMorningAttachment(unittest.TestCase):
         self.assertGreaterEqual(local["odds"], 1.5)
         self.assertLessEqual(local["odds"], 1.7)
 
+    def test_unpublishable_short_fortuna_prices_preserve_both_fallbacks(self):
+        r = report()
+        r["events_in_target_window"][0]["aces_markets"][0]["verified_pairs"][0]["over"] = 1.20
+        r["events_in_target_window"][0]["aces_markets"][1]["verified_pairs"][0]["two_way_outcomes"][0]["odds"] = 1.20
+        a, w = row("aces"), row("most_aces")
+        aces, most, info = attach_prices([a], [w], r, now=NOW)
+        self.assertEqual((aces, most), ([a], [w]))
+        self.assertEqual((info["aces"], info["most_aces"]), (0, 0))
+        self.assertIsNotNone(local_player_aces_ou(aces[0]))
+        self.assertEqual(freeze_most_aces_price(most[0])["odds_source"], "blinq_statistical")
+
     def test_set_specific_market_not_used_for_full_match(self):
         a = row("most_aces")
         r = report(markets=[{"kind": "aces_set_other", "market_name": "1. set: Viac es",
