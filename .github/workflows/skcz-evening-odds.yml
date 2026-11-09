@@ -66,6 +66,11 @@ jobs:
           datetime.date.fromisoformat(sys.argv[1])
           PY
           echo "date=$target" >> "$GITHUB_OUTPUT"
+      - name: Install isolated Chromium for public client-rendered match cards
+        run: |
+          set -euo pipefail
+          python -m pip install playwright==1.57.0
+          python -m playwright install chromium
       - name: Capture public bookmaker markets without paid APIs or CDB changes
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
