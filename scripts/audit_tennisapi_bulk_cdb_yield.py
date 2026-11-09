@@ -16,6 +16,8 @@ from pathlib import Path
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.providers.tennisapi_bulk import normalize_daily_bulk_odds
+from tbt.errors import ProviderError
 from audit_tennisapi_prediction_signals import source_event
 
 
@@ -228,6 +230,29 @@ def run(provider, matches, *, max_requests=MAX_PAID):
         meta["2026_daily_odds"]["native_keys_without_cdb_claim"] = sum(e not in idx for e in valid_keys)
         meta["2026_daily_odds"]["verified_pre_match_quotes"] = 0
         meta["2026_daily_odds"]["canonical_odds_import_authorized"] = False
+        # This SAME paid daily response can include 700–1,000 selection pairs.
+        # Parse them all and count candidate/native-claim overlap WITHOUT
+        # treating event-key overlap as verified bookmaker/market/time identity.
+        try:
+            intake = normalize_daily_bulk_odds(odds)
+        except ProviderError:
+            meta["2026_daily_odds"]["bulk_pair_intake_state"] = "unsupported_shape"
+        else:
+            candidates = intake["candidates"]
+            ids = {int(row["source_event_id"]) for row in candidates}
+            meta["2026_daily_odds"]["bulk_pair_intake"] = intake["summary"]
+            meta["2026_daily_odds"]["candidate_native_events_with_single_cdb_claim"] = sum(
+                len(idx.get(ident, [])) == 1 for ident in ids
+            )
+            meta["2026_daily_odds"]["candidate_native_events_with_ambiguous_cdb_claim"] = sum(
+                len(idx.get(ident, [])) > 1 for ident in ids
+            )
+            meta["2026_daily_odds"]["candidate_native_events_without_cdb_claim"] = sum(
+                not idx.get(ident) for ident in ids
+            )
+            meta["2026_daily_odds"]["candidate_identity_verified_against_cdb"] = 0
+            meta["2026_daily_odds"]["validated_historical_quote_pairs"] = 0
+            meta["2026_daily_odds"]["cdb_odds_writes"] = 0
     else:
         meta["2026_daily_odds"]["shape_unverified"] = True
 
