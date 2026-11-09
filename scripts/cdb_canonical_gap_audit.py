@@ -71,11 +71,36 @@ def coverage(matches) -> dict:
     table = []
     for (year, tour), item in sorted(slots.items()):
         table.append({"year": year, "tour": tour, **item})
+    # Reuse the exact per-year/tour census to report actionable, all-ATP/WTA
+    # field gaps. This is a read-only reduction, never inferred API coverage.
+    field_totals = {}
+    for field in FIELDS:
+        present = sum(group["fields"][field]["present_cells"] for group in table)
+        missing = sum(group["fields"][field]["missing_cells"] for group in table)
+        if present + missing != 2 * total:
+            raise ValueError("Canonical field coverage conservation failed")
+        field_totals[field] = {
+            "present_cells": present,
+            "missing_cells": missing,
+            "coverage_pct": round(100 * present / (2 * total), 4) if total else None,
+        }
+    complete = sum(group["core_complete_matches"] for group in table)
+    fully_missing = sum(group["core_fully_missing_matches"] for group in table)
+    if complete > total or fully_missing > total or complete + fully_missing > total:
+        raise ValueError("Canonical core coverage conservation failed")
+    aggregate = {
+        "matches": total,
+        "core_complete_matches": complete,
+        "core_fully_missing_matches": fully_missing,
+        "core_complete_pct": round(100 * complete / total, 4) if total else None,
+        "fields": field_totals,
+    }
     return {
         "schema": 1,
         "state": "CDB_GAP_AUDIT_READ_ONLY",
         "production_mutated": False, "api_requests": 0,
         "canonical_rows": total, "year_tour": table,
+        "aggregate_2016_2026": aggregate,
         "note": "Counts of presently missing canonical cells only; not validated source additions.",
     }
 
