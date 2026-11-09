@@ -157,6 +157,79 @@ def main():
                     throw new Error('Missing included pick needs an availability explanation');
                   }
                 }''')
+                # Exercise the actual desktop/mobile DOM, not just source
+                # string assertions. ELITE must see its three API-authorized
+                # rows, never the 62-row source total or fake locked rows.
+                # LEGEND retains a genuinely full 62-row server offer.
+                page.evaluate('''() => {
+                  const app=accessTest, state=app.state;
+                  const makeRow=(i)=>({
+                    event_id:'tier-regression-'+i,
+                    scheduled_at:new Date(Date.now()+3600000).toISOString(),
+                    surface:'hard',tournament:'Tier Regression',
+                    winner_id:'11',betting:{odds:1.80},
+                    player1:{id:'11',name:'Alpha',probability:.75},
+                    player2:{id:'22',name:'Beta',probability:.25},
+                  });
+                  const rows=Array.from({length:62},(_,i)=>makeRow(i));
+                  const allowed=[rows[5],rows[12],rows[61]];
+                  const slots=Array(62).fill('blurred');
+                  [5,12,61].forEach(i=>slots[i]='active');
+                  const ent={
+                    enabled:true,display_state:'active',selection_mode:'curated',
+                    visible_picks:3,returned:3,total:62,locked_count:59,
+                    see_all:true,blur_remaining:true,slot_states:slots,
+                  };
+                  const setOffer=(plan,offer,sectionEnt)=> {
+                    state.feed={
+                      account:{status:'active',plan},
+                      daily_picks:offer,prime_picks:offer,value_picks:offer,
+                      entitlements:{plan,sections:{
+                        daily:sectionEnt,prime:sectionEnt,value:sectionEnt,
+                      }},
+                    };
+                    state.dashboardSearch='';
+                    state.dailyHubTournament='';
+                    state.dailyHubExpanded=false;
+                  };
+                  state.ui=state.ui||state.uiSource;
+                  setOffer('elite',allowed,ent);
+                  for(const tab of ['daily','prime','value']){
+                    state.dailyHubTab=tab;
+                    app.renderDailyHub();
+                    const count=document.querySelector(
+                      '#dailyHubTabs [data-daily-hub-tab="'+tab+'"] b'
+                    );
+                    if(!count||count.textContent.trim()!=='3')
+                      throw new Error(tab+': ELITE tab exposed global total');
+                    const visible=document.querySelectorAll(
+                      '#dailyHubBody tr[data-hub-event]'
+                    );
+                    if(visible.length!==3)
+                      throw new Error(tab+': ELITE rendered '+visible.length+' instead of three authorized rows');
+                    if(document.querySelector('#dailyHubBody .hub-row-locked'))
+                      throw new Error(tab+': ELITE rendered a fake global locked placeholder');
+                    const expected=new Set(allowed.map(row=>row.event_id));
+                    for(const tr of visible){
+                      if(!expected.delete(tr.dataset.hubEvent))
+                        throw new Error(tab+': unexpected or duplicated ELITE event '+tr.dataset.hubEvent);
+                    }
+                    if(expected.size)throw new Error(tab+': some authorized ELITE rows were hidden');
+                  }
+                  setOffer('legend',rows,{
+                    ...ent,visible_picks:62,returned:62,locked_count:0,
+                    slot_states:Array(62).fill('active')
+                  });
+                  state.dailyHubTab='daily';
+                  app.renderDailyHub();
+                  const count=document.querySelector(
+                    '#dailyHubTabs [data-daily-hub-tab="daily"] b'
+                  );
+                  if(!count||count.textContent.trim()!=='62')
+                    throw new Error('LEGEND must retain full authorized offer count');
+                  if(document.querySelectorAll('#dailyHubBody tr[data-hub-event]').length!==10)
+                    throw new Error('LEGEND must retain ten-card default preview');
+                }''')
                 assert not errors, errors
                 context.close()
                 print(f'PASS access/odds browser regression at {width}px')
