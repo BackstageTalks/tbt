@@ -504,6 +504,12 @@ def main():
                 const doubles=[make('doubles-hidden','doubles','match_winner',1)];
                 const unissued=make('unissued-top','top_daily','match_winner',7);
                 delete unissued.market_publications[0].issued_at;
+                // ESÁ bridge inherits a valid issue timestamp, but VIAC ES
+                // was never independently issued; it must NOT count in sample.
+                const bridge={...structuredClone(aces[0]),event_id:'bridge-leader',
+                  market:'most_aces',price_status:'projection_only',
+                  ace_winner_issued:false,issued_at:issued,
+                  selection_id:'player-bridge-leader',market_publications:[]};
                 const active=(limit)=>({enabled:true,display_state:'active',
                   visible_picks:limit,selection_mode:'first',row_overrides:{}});
                 const hidden=()=>({enabled:true,display_state:'blurred',
@@ -517,7 +523,7 @@ def main():
                   results:[...top,...value,...aces,...more,...acca,...df,...sets,...games,...doubles],
                   daily_picks:top,top_daily_picks:[...top,unissued],
                   value_picks:[top[0],...value],prime_picks:acca,
-                  ace_picks:[...aces,...more,...df],sg_picks:[...sets,...games],
+                  ace_picks:[...aces,...more,...df,bridge],sg_picks:[...sets,...games],
                   doubles_picks:doubles};
                 s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
                   bettingDay:true,membership:'elite'};
@@ -531,11 +537,31 @@ def main():
                   const f={...s.resultsFilters,category};
                   excluded[category]=t.settledPublishedEntries(t.filteredResults(f),category,f).length;
                 }
+                const primeOverlappingTop=t.settledPublishedEntries(
+                  t.filteredResults({...s.resultsFilters,category:'prime'}),'prime',
+                  {...s.resultsFilters,category:'prime'}).length;
+                // Simulate a newer, server-authoritative Admin publish:
+                // all counts must immediately follow the new category/limit
+                // without any hard-coded ELITE market list.
+                const refresh=()=>({
+                  total:t.todayPublishedPickCount('elite'),
+                  settled:t.settledPublishedEntries(t.filteredResults(),'all',s.resultsFilters).length
+                });
+                s.feed.member_result_rules.elite.prime=active('ALL');
+                const withPrime=refresh();
+                s.feed.member_result_rules.elite.prime=hidden();
+                s.feed.member_result_rules.elite.games=active('ALL');
+                const withGames=refresh();
+                s.feed.member_result_rules.elite.ace_winner=hidden();
+                const withoutMoreAces=refresh();
+                s.feed.member_result_rules.elite.sets=active('ALL');
+                const withSets=refresh();
+                s.feed.member_result_rules.elite.daily=active(6);
+                const withSixTop=refresh();
                 return {total,settled:activeIds.length,activeIds,excluded,
-                  primeOverlappingTop:t.settledPublishedEntries(
-                    t.filteredResults({...s.resultsFilters,category:'prime'}),'prime',
-                    {...s.resultsFilters,category:'prime'}).length,
-                  sample:summary.includes('9/11'),nonMemberTotal:s.feed.entitlements.daily_pick_count};
+                  primeOverlappingTop,sample:summary.includes('9/11'),
+                  nonMemberTotal:s.feed.entitlements.daily_pick_count,
+                  withPrime,withGames,withoutMoreAces,withSets,withSixTop};
             }""")
             assert current_admin["total"] == 11,current_admin
             assert current_admin["settled"] == 9,current_admin
@@ -543,6 +569,11 @@ def main():
             assert current_admin["nonMemberTotal"] == 62,current_admin
             assert all(n == 0 for n in current_admin["excluded"].values()),current_admin
             assert current_admin["primeOverlappingTop"] == 0,current_admin
+            assert current_admin["withPrime"] == {"total":41,"settled":39},current_admin
+            assert current_admin["withGames"] == {"total":12,"settled":10},current_admin
+            assert current_admin["withoutMoreAces"] == {"total":10,"settled":8},current_admin
+            assert current_admin["withSets"] == {"total":11,"settled":9},current_admin
+            assert current_admin["withSixTop"] == {"total":12,"settled":10},current_admin
             assert 'top5' not in current_admin["activeIds"],current_admin
             assert 'unissued-top' not in current_admin["activeIds"],current_admin
             print("ELITE current Admin category caps, hidden categories, duplicate and issuance scope: PASS")
