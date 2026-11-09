@@ -129,3 +129,22 @@ def test_recent_window_allows_recovery_and_late_outage():
         gate.observe(rows[i % 3], "unavailable", 1, {"new_statistic_values": 0})
     assert gate.tripped
     assert gate.summary()["paid_matches_observed"] <= 270
+
+
+def test_cross_tour_evidence_survives_skewed_adaptive_recent_window():
+    """The live adaptive collector over-samples one cohort after exploration."""
+    gate = StatisticsAvailabilityCircuit()
+    for match in (row("atp", 2024), row("wta", 2023), row("atp", 2026)):
+        for _ in range(8):
+            assert not gate.observe(match, "unavailable", 1,
+                                    {"new_statistic_values": 0})
+    # Last 120 matches are entirely ATP 2026, but prior independently sampled
+    # ATP/WTA cohorts already proved the empty-route condition.
+    for i in range(120):
+        stopped = gate.observe(row("atp", 2026), "unavailable", 1,
+                               {"new_statistic_values": 0})
+        if stopped:
+            break
+    assert stopped
+    assert gate.summary()["trigger"]["sampled_tours"] == 2
+    assert gate.summary()["paid_matches_observed"] == 120
