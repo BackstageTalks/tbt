@@ -63,6 +63,31 @@ def _count(item, side):
     return None
 
 
+def _whole_point_count(item, side):
+    """Accept only consistent explicit non-negative integer point-count fields.
+
+    When both raw and display fields are present, they must agree exactly.
+    A malformed explicit field is not permission to fall back to another.
+    """
+    observed = []
+    for field in (side + "Value", side):
+        if field not in item or item[field] is None:
+            continue
+        raw = item[field]
+        if type(raw) is int:
+            value = raw
+        elif type(raw) is float and math.isfinite(raw) and raw.is_integer():
+            value = int(raw)
+        elif isinstance(raw, str) and re.fullmatch(r"[0-9]{1,7}", raw.strip()):
+            value = int(raw.strip())
+        else:
+            return None
+        if not 0 <= value <= 1_000_000:
+            return None
+        observed.append(value)
+    return observed[0] if observed and len(set(observed)) == 1 else None
+
+
 def _set_bp_counts_exceed_all(periods, *, home_is_player1, saved, scored):
     """Veto *newly derived* BP rates if observed set counts exceed ALL.
 
@@ -140,6 +165,13 @@ RATE_ALIASES = {
     "secondreturnpoints": "second_return_win",
 }
 
+# Direct observed point COUNTS, not point-win percentages or totals.
+_WHOLE_POINT_COUNT_ALIASES = {
+    "servicepointsscored": "service",
+    "receiverpointsscored": "receiver",
+    "pointstotal": "won_total",
+}
+
 COUNT_ALIASES = {
     "ace": "aces",
     "aces": "aces",
@@ -177,7 +209,7 @@ def inventory_statistics_keys(payload: dict) -> dict[str, object]:
                     continue
                 if period_name != "ALL":
                     set_only.add(key)
-                elif key in RATE_ALIASES or key in COUNT_ALIASES:
+                elif key in RATE_ALIASES or key in COUNT_ALIASES or key in _WHOLE_POINT_COUNT_ALIASES:
                     supported.add(key)
                 else:
                     unsupported.add(key)
@@ -225,6 +257,8 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
     # Bare converted-BP counts require an independently observed denominator.
     bp_saved_counts = {}
     bp_scored_counts = {}
+    point_counts = {}
+    point_counts_unreliable = False
     for group in whole[0]["groups"]:
         if not isinstance(group, dict):
             continue
@@ -234,6 +268,19 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             key = re.sub(r"[^a-z0-9]", "", str(item.get("key") or item.get("name") or "").lower())
             rate_name = RATE_ALIASES.get(key)
             count_name = COUNT_ALIASES.get(key)
+            count_kind = _WHOLE_POINT_COUNT_ALIASES.get(key)
+            if count_kind:
+                for side in ("home", "away"):
+                    count = _whole_point_count(item, side)
+                    if count is None:
+                        if side + "Value" in item or side in item:
+                            point_counts_unreliable = True
+                        continue
+                    identity = (side, count_kind)
+                    if identity in point_counts and point_counts[identity] != count:
+                        point_counts_unreliable = True
+                    point_counts[identity] = count
+                continue
             if not rate_name and not count_name:
                 continue
 
@@ -363,6 +410,42 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                     and abs(rate + complementary - 1.) < 1e-8):
                 values.setdefault(f"{opponent}_{other_total}", points)
 
+
+    # Reuse ALL-period counts from this same response. Opponent's receiver
+    # points WON close the exact denominator of each player's service points.
+    # Optional pointsTotal is WON by that player, not points served.
+    # Missing or internally contradictory count evidence creates no rates.
+    mandatory = ((side, kind) for side in ("home", "away")
+                 for kind in ("service", "receiver"))
+    if not point_counts_unreliable and all(key in point_counts for key in mandatory):
+        hs, away_service = point_counts["home", "service"], point_counts["away", "service"]
+        hr, away_receive = point_counts["home", "receiver"], point_counts["away", "receiver"]
+        home_serves, away_serves = hs + away_receive, away_service + hr
+        agrees = (
+            home_serves > 0 and away_serves > 0
+            and point_counts.get(("home", "won_total"), hs + hr) == hs + hr
+            and point_counts.get(("away", "won_total"), away_service + away_receive)
+                == away_service + away_receive
+        )
+        if agrees:
+            home = "p1" if home_is_player1 else "p2"
+            away = "p2" if home_is_player1 else "p1"
+            derived = {
+                f"{home}_service_points_won": hs / home_serves,
+                f"{away}_return_points_won": away_receive / home_serves,
+                f"{away}_service_points_won": away_service / away_serves,
+                f"{home}_return_points_won": hr / away_serves,
+                f"{home}_service_points_total": float(home_serves),
+                f"{away}_return_points_total": float(home_serves),
+                f"{away}_service_points_total": float(away_serves),
+                f"{home}_return_points_total": float(away_serves),
+            }
+            for field, value in derived.items():
+                current = values.get(field)
+                tol = 0.0 if field.endswith("_total") else 1e-6
+                if current is not None and abs(current - value) > tol:
+                    raise ProviderError(f"Conflicting whole-match statistic: {field}")
+                values.setdefault(field, value)
 
     if not values:
         raise NoSupportedStatisticsError("Statistics contain no supported rate/count fields; no imputation performed")

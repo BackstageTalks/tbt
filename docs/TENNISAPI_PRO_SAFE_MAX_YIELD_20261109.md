@@ -25,8 +25,12 @@ schema change authorized by this checkpoint.
 - Current private CDB conflict audit: 611 persistent native conflict
   markers, 1,696 existing NULL BP cells among them; no evidence yet that
   those NULLs correspond to safe provider values. Separate SHA-pinned
-  CDB complement recovery workflow is operating under its own lock;
-  never compete with it or mistake candidates for imports.
+  CDB complement write **completed 2026-11-09** in
+  [run #42580292332](https://github.com/BackstageTalks/tbt/actions/runs/42580292332):
+  **4,178 persisted new NULL-only service/return values across 1,056 matches**,
+  1,006,232 canonical matches retained, 0 overwritten original values,
+  0 unverified identities; private reread verified the published release.
+  The 1,685 contradictory rate matches remain quarantined.
 
 ## Priority register / evidence gates
 
@@ -71,3 +75,34 @@ Evidence:
 - https://github.com/BackstageTalks/tbt/actions/runs/42465442647
 - https://github.com/BackstageTalks/tbt/actions/runs/42468614163
 - https://github.com/BackstageTalks/tbt/blob/main/docs/TENNISAPI_PRO_MULTIROUTE_LIVE_QA_2026-11-07.md
+
+## 2026-11-09: process the entire already-paid statistics response
+
+- **Implemented on unmerged PR #1504**, baseline main
+  `f8ce18db223a09101f4108af5b7725a10b35e4d2`; do not call this
+  merged/deployed until exact-head CI and merge are verified.
+- The checked-in authentic ALL-period statistics sample has complementary
+  `servicePointsScored` + `receiverPointsScored` counts and a
+  `pointsTotal` witness. These were previously inventoried but did not
+  become serve/return cells. The new parser can derive up to 4 rates plus
+  4 denominators **from one existing statistics payload**, with strict
+  both-player closure, correct home/away orientation, no guessed denominator,
+  no set-only mixing and no provider calls.
+- Missing, malformed or internally contradictory count evidence produces
+  no new inferred cells. Explicit direct-stat conflicts are rejected.
+  The existing native importer still protects every non-NULL canonical cell
+  and quarantines any entire conflicting response. Regression tests cover
+  fixture conservation, inverted home/away, malformed evidence, direct
+  disagreement, and actual enricher NULL-only/quarantine flow.
+- **Unverified**: real future provider-response prevalence, per-response
+  net-new CDB cell yield, additional 2016–2026 coverage and end-to-end
+  performance. This PR does not replay historical raw cache or trigger
+  paid API calls, CDB writing, model changes, production deployment or
+  external-cron schedule changes.
+- **Next**: exact-commit CI → review/merge → current-runtime processing
+  readback → count real valid parsed rates and native CDB NULL-only persisted
+  delta with the existing lock/CAS/audit path. Keep bulk odds research-only
+  until real bookmaker/market/pre-start quote provenance is proven.
+- **Evidence**: PR https://github.com/BackstageTalks/tbt/pull/1504;
+  service-complement persisted readback:
+  https://github.com/BackstageTalks/tbt/actions/runs/42580292332.
