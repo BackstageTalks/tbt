@@ -3958,6 +3958,12 @@
     return `<div class="results-access-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}"><span aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div>`;
   }
   function shortRangeDate(value){const parts=String(value||'').split('-');return parts.length===3?`${Number(parts[2])}. ${Number(parts[1])}. ${parts[0].slice(-2)}`:'—';}
+  function resultsMobileScopeLabel(filters,periodLabel=''){
+    const member=({rookie:'FREE',pro:'PRO',elite:'ELITE',legend:'LEGEND',goat:'GOAT'})[String(filters?.membership||'')]||'';
+    const category=filters?.category==='all'?'':resultCategoryLabel(filters?.category||'all');
+    return [member,category,periodLabel].filter(Boolean).join(' · ')
+      ||resultCategoryLabel(filters?.category||'all');
+  }
   function renderResultsFilters(){
     const rows=state.feed.results||[],filters=state.resultsFilters||{},hours=resultsHistoryHours();
     filters.category=normalizedResultsCategory(filters.category||'all');
@@ -3978,11 +3984,8 @@
     }
     // The collapsed mobile control must identify the *actual result scope*.
     // "All published" is only a market category; it is not the ALL-membership tier.
-    const memberLabel=({rookie:'FREE',pro:'PRO',elite:'ELITE',legend:'LEGEND',goat:'GOAT'})[String(filters.membership||'')]||'';
-    const categoryLabel=filters.category==='all'?'':resultCategoryLabel(filters.category||'all');
     const periodLabel=periodOptions.find(([value])=>value===String(filters.window||'all'))?.[1]||'';
-    const mobileFilterLabel=[memberLabel,categoryLabel,periodLabel].filter(Boolean).join(' · ')
-      ||resultCategoryLabel(filters.category||'all');
+    const mobileFilterLabel=resultsMobileScopeLabel(filters,periodLabel);
     return `<section class="results-filter-shell">
       <button class="results-mobile-filter-toggle" type="button" data-results-filter-toggle aria-expanded="false">
         <span class="results-mobile-filter-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6.2 7.1v5.7l-3.6 1.7v-7.4z"></path></svg><strong>${escapeHtml(lcopy('Filters','Filtre','Filtry'))}</strong></span>
@@ -4816,13 +4819,8 @@
       }
       const mobileCurrent=host.querySelector('.results-mobile-filter-current');
       if(mobileCurrent&&mobileCurrent.firstChild?.nodeType===Node.TEXT_NODE){
-        const filters=state.resultsFilters||{};
-        const member=({rookie:'FREE',pro:'PRO',elite:'ELITE',legend:'LEGEND',goat:'GOAT'})[String(filters.membership||'')]||'';
-        const category=filters.category==='all'?'':resultCategoryLabel(filters.category||'all');
-        const period=String(filters.window||'all')==='today'?lcopy('Today','Dnes','Dnes')
-          :String(filters.window||'all')==='all'?publicText('All time'):'';
-        mobileCurrent.firstChild.nodeValue=[member,category,period].filter(Boolean).join(' · ')
-          ||resultCategoryLabel(filters.category||'all');
+        const period=$('resultsWindow')?.selectedOptions?.[0]?.textContent||'';
+        mobileCurrent.firstChild.nodeValue=resultsMobileScopeLabel(state.resultsFilters||{},period);
       }
       // The pagination controls are replaced with the listing, so bind again.
       wireResultsFilters();
