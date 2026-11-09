@@ -84,6 +84,16 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(data['cdb_writes'], 0)
         self.assertEqual(data['published_picks_changed'], 0)
 
+    def test_unrendered_client_side_shell_is_source_unavailable(self):
+        # A plain HTTP 200 page may have a tennis heading but no fixtures:
+        # this MUST NOT be counted as a real scan of missing ace prices.
+        html_shell = '<html><a href="/stavkovanie/tenis/atp">ATP</a></html>'
+        result = f.collect(date(2026, 11, 10), max_events=2, sleep_seconds=0,
+                           now=NOW, get=lambda _: html_shell)
+        self.assertEqual(result['status'], 'source_unavailable')
+        self.assertEqual(result['candidate_urls'], 0)
+        self.assertEqual(result['exact_aces_pairs'], 0)
+
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):
             f.collect(date(2026, 11, 8), now=NOW, get=lambda _: INDEX)
