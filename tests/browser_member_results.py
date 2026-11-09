@@ -7,7 +7,7 @@ from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
 def route_request(route):
     if urlparse(route.request.url).path == "/app.js":
         source=(WEB/"app.js").read_text(encoding="utf-8")
-        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,renderResults,resultsSummary,wireResultsFilters,todayPublishedPickCount};\n  boot();")
+        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,renderResults,resultsSummary,wireResultsFilters,todayPublishedPickCount,effectiveMemberResultRule,bratislavaBettingDayKey};\n  boot();")
         route.fulfill(content_type="application/javascript",body=source)
     else: static_route(route)
 
@@ -100,6 +100,28 @@ def main():
                 sample:t.resultsSummary().includes('0/2')};
             }""")
             assert member_total == {'count':2,'sample':True},member_total
+            narrowed=page.evaluate("""() => {
+              const t=memberTest,s=t.state,day=t.bratislavaBettingDayKey(Date.now(),6);
+              const make=(i,market)=>({event_id:market+'-'+i,scheduled_at:day+'T12:00:00Z',
+                market_publications:[{section:market==='most_aces'?'ace_winner':'top_daily',
+                  market,selection_id:'p1',issued_at:day+'T07:00:00Z',betting_day:day,
+                  price_status:'priced',odds:1.8,result:{correct:true,profit_units:0.8,staked_units:1}}]});
+              const data=[...Array.from({length:9},(_,i)=>make(i,'match_winner')),
+                ...Array.from({length:53},(_,i)=>make(i,'most_aces'))];
+              const rule={enabled:true,display_state:'active',visible_picks:'ALL',row_overrides:{}};
+              s.feed={account:{is_admin:true,plan:'admin'},results:data,
+                member_result_rules:Object.fromEntries(['elite','legend','goat'].map(p=>[p,{daily:rule,ace_winner:rule}]))};
+              s.ui={dashboard:{daily_hub:{tabs:{
+                daily:{enabled:true,plans:{elite:{visible_rows:'ALL',tab_enabled:true},
+                  legend:{visible_rows:'ALL'},goat:{visible_rows:'ALL'}}},
+                ace_winner:{enabled:true,plans:{elite:{tab_enabled:true,visible_rows:0,display_state:'active'},
+                  legend:{visible_rows:'ALL'},goat:{visible_rows:'ALL'}}}
+              }}}};
+              const counts=Object.fromEntries(['elite','legend','goat'].map(p=>[p,t.todayPublishedPickCount(p)]));
+              const elite=t.settledPublishedEntries(data,'all',{window:'all',membership:'elite'});
+              return {counts,elite:elite.length,aceInElite:elite.some(x=>x.publication.market==='most_aces')};
+            }""")
+            assert narrowed=={'counts':{'elite':9,'legend':62,'goat':62},'elite':9,'aceInElite':False},narrowed
             print("Admin membership cohort, pending slots, mobile scope and empty-state diagnostics: PASS")
         finally: browser.close()
 if __name__=="__main__":main()
