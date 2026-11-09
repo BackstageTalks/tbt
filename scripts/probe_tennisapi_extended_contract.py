@@ -17,6 +17,7 @@ from typing import Any
 
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.tennisapi_extra import point_by_point_inventory
+from tbt.providers.tennisapi_bulk_choices import extract_bulk_match_winner_choices
 from tbt.providers.statistics import inventory_statistics_keys
 
 
@@ -184,6 +185,19 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "entries_with_clock_like_field": with_quote_clock,
                 "individual_event_market_replacement_authorized": False,
                 "historical_pre_match_quote_time_verified": False,
+                "cdb_import_authorized": False,
+            }
+            # Process ALL native event-key entries from the same paid bulk
+            # response. The decoded prices/IDs stay in memory, and only
+            # aggregate safe counters are emitted in this research report.
+            decoded = extract_bulk_match_winner_choices(
+                payload, processed_at=datetime.now(timezone.utc))
+            result["daily_odds_value_profile"]["full_batch_research_decode"] = {
+                "raw_entry_count": decoded["raw_entry_count"],
+                "valid_native_event_key_count": decoded["valid_native_event_key_count"],
+                "decoded_research_pair_count": decoded["decoded_research_pair_count"],
+                "rejected_by_reason": decoded["rejected_by_reason"],
+                "provider_quote_timestamp_verified": False,
                 "cdb_import_authorized": False,
             }
         else:
