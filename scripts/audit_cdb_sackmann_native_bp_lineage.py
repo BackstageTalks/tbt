@@ -24,7 +24,7 @@ def reject_reasons(match, row, tour, kind, path):
     if match.scheduled_at >= datetime.now(timezone.utc):
         reasons.append("future")
     raw=str(row.get("tourney_date") or "").strip()
-    if not re.fullmatch(r"\\d{8}",raw):
+    if not re.fullmatch(r"\d{8}",raw):
         reasons.append("source_date_invalid")
     elif match.scheduled_at.strftime("%Y%m%d") != raw:
         reasons.append("date_differs")
