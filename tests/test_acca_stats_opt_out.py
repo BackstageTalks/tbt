@@ -220,4 +220,8 @@ def test_stats_opt_out_is_only_for_stats_and_not_visibility_or_betting_history()
     assert "statsOnly?statsExcludedSections():null" in app
     assert "const entries=settledPublishedEntries(rows,category,filters);" in app
     assert "const metricEntries=statsHaveExcludedMarkets()?" in app
-    assert "statsHaveExcludedMarkets()||!allCategories?null:todayPublishedPickCount()" in app
+    # Stats opt-out still suppresses denominators, but a member's partial
+    # category access now uses the verified per-account count instead of zero.
+    assert "const hasMemberTotal=!isAdminAccount()&&state.feed?.entitlements?.member_daily_pick_count!=null;" in app
+    assert "total=statsHaveExcludedMarkets()||(!allCategories&&!hasMemberTotal)" in app
+    assert "?null:todayPublishedPickCount();" in app

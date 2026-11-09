@@ -7,7 +7,7 @@ from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
 def route_request(route):
     if urlparse(route.request.url).path == "/app.js":
         source=(WEB/"app.js").read_text(encoding="utf-8")
-        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,renderResults,resultsSummary,wireResultsFilters};\n  boot();")
+        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,renderResults,resultsSummary,wireResultsFilters,todayPublishedPickCount};\n  boot();")
         route.fulfill(content_type="application/javascript",body=source)
     else: static_route(route)
 
@@ -84,6 +84,22 @@ def main():
             assert '06:00–06:00' in diagnostics['unsettled'],diagnostics
             assert 'Archív' in diagnostics['unavailable'],diagnostics
             assert not errors,errors
+            # Real members must get their personal Admin-authorized denominator,
+            # not the global 62-match total exposed to the dashboard.
+            member_total=page.evaluate("""() => {
+              const t=memberTest,s=t.state;
+              s.feed={
+                account:{is_admin:false,role:'user',plan:'pro',status:'active'},
+                entitlements:{daily_pick_count:62,member_daily_pick_count:2,
+                  result_categories:['top_daily']},
+                results:[]
+              };
+              s.resultsFilters={category:'all',tour:'',surface:'',
+                window:'today',bettingDay:true};
+              return {count:t.todayPublishedPickCount(),
+                sample:t.resultsSummary().includes('0/2')};
+            }""")
+            assert member_total == {'count':2,'sample':True},member_total
             print("Admin membership cohort, pending slots, mobile scope and empty-state diagnostics: PASS")
         finally: browser.close()
 if __name__=="__main__":main()

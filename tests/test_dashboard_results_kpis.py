@@ -131,3 +131,75 @@ def test_all_time_selector_no_data_and_reject_incompatible_periods():
     with pytest.raises(ValueError):
         published_results_metrics(sample_feed(), "30", now=NOW.replace(tzinfo=None))
 
+
+
+
+@pytest.mark.parametrize("plan", ["rookie", "pro", "elite", "legend", "goat"])
+def test_member_dashboard_results_kpis_exclude_admin_disabled_and_over_limit_picks(plan):
+    """The KPI source must be the account-authorized ledger, not global Results."""
+    from tbt.services.entitlements import filter_feed_for_access
+
+    def issued_result(event, section, market, slot, correct):
+        return {
+            "event_id": event, "scheduled_at": "2026-11-05T13:00:00Z",
+            "player1": {"id": "a", "name": "A"}, "player2": {"id": "b", "name": "B"},
+            "market_publications": [{
+                "section": section, "market": market,
+                "selection_id": "a", "betting_day": "2026-11-05",
+                "issued_at": "2026-11-05T09:00:00Z",
+                "offer_position": slot, "odds": 2.0,
+                "price_status": "priced", "publication_status": "published",
+                "result": {"correct": correct, "staked_units": 1,
+                           "profit_units": 1 if correct else -1},
+            }],
+        }
+
+    payload = {
+        "results": [
+            issued_result("top-one", "top_daily", "match_winner", 1, True),
+            issued_result("top-two", "top_daily", "match_winner", 2, False),
+            issued_result("more-aces", "ace_winner", "most_aces", 1, False),
+        ],
+        "top_daily_picks": [], "prime_picks": [], "value_picks": [],
+        "ace_picks": [], "sg_picks": [], "doubles_picks": [],
+    }
+    config = {"elements": {"SIDEBAR_RESULTS": {
+        "access": {plan: "active"}
+    }}, "dashboard": {
+        "results_history_window": {plan: "all"},
+        "daily_hub": {"tabs": {
+            "daily": {"plans": {plan: {"visible_rows": 1,
+                                        "display_state": "active"}}},
+            "ace_winner": {"plans": {plan: {"visible_rows": "ALL",
+                                             "display_state": "hidden"}}},
+        }},
+        "kpi_cards": [
+            {"metric": "results_success", "period": "all"},
+            {"metric": "results_top_success", "period": "all"},
+            {"metric": "results_roi", "period": "all"},
+        ],
+    }}
+    account_feed, manifest = filter_feed_for_access(
+        payload, {"plan": plan, "status": "active"}, config,
+    )
+    assert "top_daily" in manifest["result_categories"]
+    assert "ace_winner" not in manifest["result_categories"]
+    assert [row["event_id"] for row in account_feed["results"]] == ["top-one"]
+    member_kpis = selected_dashboard_cards(
+        {**payload, "results": account_feed["results"]}, config,
+        now=datetime(2026, 11, 9, 13, tzinfo=timezone.utc),
+    )
+    global_kpis = selected_dashboard_cards(
+        payload, config, now=datetime(2026, 11, 9, 13, tzinfo=timezone.utc),
+    )
+    assert member_kpis[0]["value"] == 1
+    assert member_kpis[1]["value"] == 1
+    assert member_kpis[2]["value"] == 1
+    assert global_kpis[0]["value"] == pytest.approx(1 / 3)
+    # The serving endpoint must calculate result-derived cards AFTER
+    # membership and position filtering (including runtime settlements).
+    app = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
+    assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(data, runtime_ui)' in app
+    final = app.index('data["dashboard_kpi_cards"] = selected_dashboard_cards(\n                kpi_source, runtime_ui')
+    scoped = app.index('data["results"] = filter_results_for_member_limits(')
+    assert scoped < final
