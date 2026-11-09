@@ -102,3 +102,36 @@ The fixed dashboard order is:
 9. BTTS Bonus BETA
 
 Prime Picks are all Match Winner predictions above the configured probability threshold (default 70%), with no odds or count requirement. Top 10 Daily is a future daily betting shortlist across supported tennis markets. Value defaults to odds > 1.70 and maximum 15% implied-probability gap. Ace Picks cover Aces/Double Faults, S/G covers Sets/Games, and BTTS links to the separate football `#btts` product.
+
+
+## Results membership cohort contract — 2026-11-09
+
+**Goal:** Results, record, sample, hit rate and ROI for FREE/ROOKIE, PRO,
+ELITE, LEGEND and GOAT must reflect only markets and pick slots authorized by
+the *currently published* Admin daily-hub rules. ADMIN remains a separate,
+full-ledger operational/audit role.
+
+**Required behavior:** Server-side filtering applies `enabled`,
+`display_state=active`, `visible_picks` including `ALL`, and
+`row_overrides` for each market. Explicit historical `offer_position` is
+preserved, including positions occupied by unsettled tips. ESÁ and VIAC ES
+are independent; display-only VIAC ES leader bridges never become bets.
+Recheck the same authorizations after the response-time settlement overlay.
+The member Results denominator comes from the account-authorized offer,
+not the global match/pick count. Changes to Admin settings take effect on
+the next authenticated feed refresh.
+
+**Data safety:** No CDB modification, historical settlement rewrite, odds
+substitution, or personal bets inferred from access rules. For the current
+betting day, the server's persisted per-account random allocation is
+authoritative. Older days without a stored issued allocation can show only
+a deterministic *modeled membership cohort*, not evidence that a particular
+customer personally received or placed those bets.
+
+**Evidence and handoff:** ELITE client-side rule comparison was merged in
+PR #1508 and deployed. The per-account API enforcement is tracked in
+[PR #1513](https://github.com/BackstageTalks/tbt/pull/1513), with tier
+matrices, hidden/active row overrides, pending positions, individualized
+same-day random selections, an unchanged ADMIN audit, and denominator
+regressions. Final status requires green CI, merge, production deployment
+SHA read-back and an independent runtime contract check.
