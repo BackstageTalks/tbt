@@ -289,6 +289,21 @@ def test_single_large_confirmed_generation_survives_build_validate_and_storage(m
         validate_authority({**receipt, "keys": [*receipt["keys"], "a" * 64]}, feed, now=NOW)
 
 
+def test_maximum_single_batch_fits_atomic_entity_and_union_stays_bounded(monkeypatch):
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import MAX_DAILY_KEYS, load_authority, persist_authority
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    keys = sorted(hashlib.sha256(str(i).encode()).hexdigest() for i in range(MAX_DAILY_KEYS))
+    receipt = {"schema": 1, "confirmed_only": True, "betting_day": "2026-11-09", "keys": keys}
+    assert persist_authority(receipt)["keys"] == keys
+    entity = table.rows[("issued", receipt["betting_day"])]
+    assert sum(len(v.encode("utf-16-le")) for v in entity.values() if isinstance(v, str)) < 1024 * 1024
+    with pytest.raises(ValueError, match="bounded daily size"):
+        persist_authority({**receipt, "keys": [hashlib.sha256(b"extra").hexdigest()]})
+    assert load_authority(receipt["betting_day"])["keys"] == keys
+
+
 def test_successive_generations_preserve_more_than_700_keys_atomically(monkeypatch):
     from tbt.services import admin_storage
     from tbt.services.issued_authority import load_authority, persist_authority
