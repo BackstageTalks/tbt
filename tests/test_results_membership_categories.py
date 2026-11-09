@@ -237,3 +237,136 @@ def test_more_aces_result_requires_its_own_level_permission_not_ou_permission():
     assert "most_aces" in _returned(data)
     assert "ace" not in manifest["result_categories"]
     assert "ace_winner" in manifest["result_categories"]
+
+
+def _positioned_results(n=4, *, section="top_daily", market="match_winner"):
+    """Distinct published bets; explicit slots survive missing/pending results."""
+    rows = []
+    for position in range(1, n + 1):
+        rows.append({
+            "event_id": f"{section}-{position}",
+            "scheduled_at": "2026-10-30T12:00:00+00:00",
+            "player1": {"id": "p1"}, "player2": {"id": "p2"},
+            "market_publications": [{
+                "section": section, "market": market,
+                "selection_id": "p1", "selection": "A",
+                "issued_at": "2026-10-30T08:00:00+00:00",
+                "betting_day": "2026-10-30", "offer_position": position,
+                "publication_status": "published",
+                "price_status": "priced_projection" if market != "match_winner" else "priced",
+                "odds": 1.66, "result": {"status": "hit", "correct": True},
+            }],
+        })
+    return rows
+
+
+@pytest.mark.parametrize("plan", ["rookie", "pro", "elite", "legend", "goat"])
+def test_all_memberships_results_follow_admin_position_limits(plan):
+    payload = _payload()
+    payload["results"] = _positioned_results(5)
+    payload["top_daily_picks"] = []
+    config = _config({
+        (plan, "top_daily"): {"visible_rows": 2, "display_state": "active"},
+    })
+    original = deepcopy(payload)
+    data, ent = _read(plan, config, payload)
+    assert [r["event_id"] for r in data["results"]] == ["top_daily-1", "top_daily-2"]
+    assert ent["sections"]["daily"]["visible_picks"] == 2
+    assert payload == original
+
+    config["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"][plan]["visible_rows"] = 4
+    expanded, _ = _read(plan, config, payload)
+    assert [r["event_id"] for r in expanded["results"]] == [
+        "top_daily-1", "top_daily-2", "top_daily-3", "top_daily-4"
+    ]
+
+
+@pytest.mark.parametrize("plan", ["rookie", "pro", "elite", "legend", "goat"])
+def test_all_tiers_apply_hidden_row_overrides_and_disabled_categories(plan):
+    payload = _payload()
+    payload["results"] = _positioned_results(4) + _positioned_results(
+        2, section="ace_winner", market="most_aces"
+    )
+    cfg = _config({
+        (plan, "top_daily"): {
+            "visible_rows": 2, "display_state": "active",
+            "row_overrides": {"1": "hidden", "4": "active"},
+        },
+        (plan, "ace_winner"): {
+            "visible_rows": "ALL", "display_state": "hidden",
+        },
+    })
+    data, _ = _read(plan, cfg, payload)
+    assert [r["event_id"] for r in data["results"]] == [
+        "top_daily-2", "top_daily-4"
+    ]
+    cfg["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"][plan]["display_state"] = "blurred"
+    denied, _ = _read(plan, cfg, payload)
+    assert denied["results"] == []
+
+
+def test_explicit_offer_position_preserves_pending_slot_and_prevents_result_backfill():
+    payload = _payload()
+    payload["results"] = _positioned_results(3)[1:]  # The first offer is unsettled.
+    config = _config({
+        ("pro", "top_daily"): {"visible_rows": 1, "display_state": "active"},
+    })
+    data, _ = _read("pro", config, payload)
+    assert data["results"] == []  # Settled position #2 must not become position #1.
+    config["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]["pro"]["visible_rows"] = 2
+    allowed, _ = _read("pro", config, payload)
+    assert [r["event_id"] for r in allowed["results"]] == ["top_daily-2"]
+
+
+def test_display_only_more_aces_bridge_does_not_enter_member_results_even_if_tab_allowed():
+    payload = _payload()
+    payload["results"] = _positioned_results(
+        2, section="ace_winner", market="most_aces"
+    )
+    bridge = payload["results"][0]["market_publications"][0]
+    bridge["ace_winner_issued"] = False
+    bridge["price_status"] = "projection_only"
+    cfg = _config({
+        ("elite", "ace_winner"): {"visible_rows": "ALL", "display_state": "active"},
+    })
+    data, _ = _read("elite", cfg, payload)
+    assert [r["event_id"] for r in data["results"]] == ["ace_winner-2"]
+
+
+def test_stable_random_membership_result_positions_are_account_scoped_and_repeatable():
+    payload = _payload()
+    payload["results"] = _positioned_results(10, section="prime")
+    cfg = _config({
+        ("rookie", "prime"): {
+            "visible_rows": 2, "display_state": "active",
+            "selection_mode": "stable_random",
+        },
+    })
+    account = {"status": "active", "plan": "rookie", "id": "member-alpha"}
+    first, manifest = filter_feed_for_access(payload, account, cfg)
+    second, _ = filter_feed_for_access(payload, account, cfg)
+    assert [r["event_id"] for r in first["results"]] == [
+        r["event_id"] for r in second["results"]
+    ]
+    assert len(first["results"]) == 2
+    assert manifest["sections"]["prime"]["selection_mode"] == "stable_random"
+
+
+def test_admin_keeps_full_audit_when_membership_limit_is_tightened():
+    payload = _payload()
+    payload["results"] = _positioned_results(5)
+    cfg = _config({
+        ("rookie", "top_daily"): {"visible_rows": 1, "display_state": "active"},
+        ("elite", "top_daily"): {"visible_rows": 1, "display_state": "active"},
+    })
+    admin, _ = _read("admin", cfg, payload)
+    assert len(admin["results"]) == 5
+
+
+def test_runtime_post_settlement_rechecks_position_caps_not_only_category():
+    from pathlib import Path
+    app = (Path(__file__).resolve().parents[1] / "api/function_app.py").read_text(
+        encoding="utf-8"
+    )
+    assert app.count('data["results"] = filter_results_for_member_limits(') == 1
+    assert "authorized_feed=data" in app
