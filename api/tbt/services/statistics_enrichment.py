@@ -20,6 +20,31 @@ from .tennis_remote_cache_client import HttpRawResponseCache
 STATISTICS_SCHEMA_VERSION = 3
 
 
+_COUNT_SUFFIXES = ("_aces", "_double_faults", "_service_points_total",
+                   "_return_points_total")
+
+
+def _same_canonical_stat(key, current, incoming) -> bool:
+    """Protect canonical precision while tolerating binary float representation.
+
+    Count fields require *exact* numerical equality. Rates may differ by
+    at most 1e-10 (absolute), far below the precision of reported tennis
+    percentages; actual conflicting rates are still quarantined.
+    """
+    if (isinstance(current, bool) or isinstance(incoming, bool)
+            or not isinstance(current, (int, float))
+            or not isinstance(incoming, (int, float))):
+        return False
+    if not (math.isfinite(current) and math.isfinite(incoming)):
+        return False
+    if current == incoming:
+        return True
+    if key.endswith(_COUNT_SUFFIXES):
+        return False
+    return math.isclose(float(current), float(incoming),
+                        rel_tol=0.0, abs_tol=1e-10)
+
+
 class StatisticsEnricher:
     """Reuse settled statistics and verified identity to avoid redundant calls."""
 
@@ -40,6 +65,7 @@ class StatisticsEnricher:
         self.conflict_field_counts = Counter()
         self.conflict_rejected_null_fields = Counter()
         self.conflict_difference_buckets = Counter()
+        self.equivalent_numeric_fields_preserved = Counter()
         private_path = os.getenv("BLINQ_TENNIS_RAW_CACHE_SQLITE", "").strip()
         # The caller must mount a private persistent directory. A bad mount
         # fails closed rather than silently reverting to paid requests.
@@ -83,6 +109,9 @@ class StatisticsEnricher:
             ),
             "numeric_difference_buckets": dict(
                 sorted(self.conflict_difference_buckets.items())
+            ),
+            "equivalent_numeric_fields_preserved": dict(
+                sorted(self.equivalent_numeric_fields_preserved.items())
             ),
             "policy": "Diagnostic only. Entire conflicting responses remain rejected; no canonical overwrite or partial import.",
         }
@@ -269,9 +298,18 @@ class StatisticsEnricher:
 
         # A paid response is not permission to replace authoritative history.
         # Reject the entire conflicting response, including unrelated additions.
+        existing_stats = match.stats or {}
+        # A tiny binary-float representation difference is not a substantive
+        # conflict, but it also never permits replacement of the stored value.
+        self.equivalent_numeric_fields_preserved.update(
+            key for key, value in stats.items()
+            if existing_stats.get(key) is not None
+            and existing_stats[key] != value
+            and _same_canonical_stat(key, existing_stats[key], value)
+        )
         conflicts = [key for key, value in stats.items()
-                     if (match.stats or {}).get(key) is not None
-                     and match.stats[key] != value]
+                     if existing_stats.get(key) is not None
+                     and not _same_canonical_stat(key, existing_stats[key], value)]
         if conflicts:
             self.conflict_responses += 1
             self.conflict_field_counts.update(conflicts)
@@ -343,7 +381,12 @@ class StatisticsEnricher:
                 "event_id": str(event_id), "orientation": "provider_home_away",
                 "scope": "post_match_only", "sets": per_set,
             }}
-        match.stats = {**(match.stats or {}), **stats}
+        # Exact NULL-only import: preserve existing canonical values and their
+        # original precision/type, including numerically equivalent rates.
+        match.stats = {**existing_stats, **{
+            key: value for key, value in stats.items()
+            if existing_stats.get(key) is None
+        }}
         match.provider_payload = {**raw, "_tbt_statistics": {
             "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
             "fetched_at": datetime.now(timezone.utc).isoformat(),
