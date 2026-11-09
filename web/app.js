@@ -4641,7 +4641,7 @@
     }
     if(String(filters?.window||'')==='today')return lcopy(
       'No published picks have settled in the current 06:00–06:00 betting day. Choose All time to inspect history.',
-      'V dnešnom betting day (06:00–06:00) zatiaľ nie sú vyhodnotené publikované tipy. Históriu zobrazí Celé obdobie.',
+      'Pre zvolené filtre nie sú dostupné vyhodnotené predikcie. V dnešnom betting day (06:00–06:00) zatiaľ nie sú vyhodnotené publikované tipy. Históriu zobrazí Celé obdobie.',
       'V dnešním betting day (06:00–06:00) zatím nejsou vyhodnocené publikované tipy. Historii zobrazí Celé období.');
     return lcopy('No settled published predictions match these filters.',
       'Pre zvolené filtre nie sú dostupné vyhodnotené predikcie.',
