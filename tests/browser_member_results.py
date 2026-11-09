@@ -114,7 +114,7 @@ def main():
               s.ui={dashboard:{daily_hub:{tabs:{
                 daily:{enabled:true,plans:{elite:{visible_rows:'ALL',tab_enabled:true},
                   legend:{visible_rows:'ALL'},goat:{visible_rows:'ALL'}}},
-                ace_winner:{enabled:true,plans:{elite:{tab_enabled:false,visible_rows:0,display_state:'hidden'},
+                ace_winner:{enabled:true,plans:{elite:{tab_enabled:true,visible_rows:0,display_state:'active'},
                   legend:{visible_rows:'ALL'},goat:{visible_rows:'ALL'}}}
               }}}};
               const counts=Object.fromEntries(['elite','legend','goat'].map(p=>[p,t.todayPublishedPickCount(p)]));
