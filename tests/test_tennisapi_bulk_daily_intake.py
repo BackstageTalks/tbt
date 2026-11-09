@@ -89,6 +89,10 @@ def test_hundred_bad_entries_isolate_to_review_without_losing_good_pairs():
      "unknown_selection"),
     (pair(isLive=True), "live_or_suspended"),
     (pair(suspended=True), "live_or_suspended"),
+    (pair(isLive=0), "ambiguous_status"),
+    (pair(suspended="false"), "ambiguous_status"),
+    (pair(marketId=11), "non_match_winner_market"),
+    (pair(marketName="Total Aces"), "non_match_winner_market"),
     (pair(home="0"), "unparseable_or_ambiguous_price"),
     ({"choices": [{"name": "1", "fractionalValue": "3/2", "decimalValue": 9.99},
                   {"name": "2", "fractionalValue": "2/3"}]},
@@ -130,3 +134,8 @@ def test_no_unsafe_bulk_overrides_from_unsupported_or_cross_event_envelopes():
     assert not wrong_nested["candidates"]
     assert wrong_nested["summary"]["counts"]["rejected_nested_event_id_mismatch"] == 1
     assert wrong_nested["summary"]["raw_events_accounted_for"] is True
+    bad_provider = normalize_daily_bulk_odds(
+        {"odds": {"101": pair(providerId="invalid-source")}})
+    assert not bad_provider["candidates"]
+    assert bad_provider["summary"]["counts"]["invalid_source_provider_id"] == 1
+    assert bad_provider["summary"]["raw_events_accounted_for"] is True
