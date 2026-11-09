@@ -434,3 +434,41 @@ def test_member_offer_denominator_counts_only_unlocked_distinct_tips(plan):
     limited, next_ent = _read(plan, config, payload)
     assert len(limited["daily_picks"]) == 1
     assert next_ent["member_daily_pick_count"] == 1
+
+
+def test_elite_excludes_large_more_aces_offer_but_legend_and_goat_retain_all():
+    """The 62-match public universe is not the ELITE membership Results sample."""
+    payload = _payload()
+    # Nine TOP contracts and 53 independently issued VIAC ES contracts.
+    payload["results"] = (
+        _positioned_results(9, section="top_daily")
+        + _positioned_results(53, section="ace_winner", market="most_aces")
+    )
+    config = _config({
+        ("elite", "top_daily"): {"visible_rows": 5, "display_state": "active"},
+        ("elite", "ace_winner"): {
+            "visible_rows": "ALL", "display_state": "hidden",
+        },
+        ("legend", "top_daily"): {"visible_rows": "ALL", "display_state": "active"},
+        ("legend", "ace_winner"): {"visible_rows": "ALL", "display_state": "active"},
+        ("goat", "top_daily"): {"visible_rows": "ALL", "display_state": "active"},
+        ("goat", "ace_winner"): {"visible_rows": "ALL", "display_state": "active"},
+    })
+    original = deepcopy(payload)
+    elite, elite_ent = _read("elite", config, payload)
+    assert [r["event_id"] for r in elite["results"]] == [
+        f"top_daily-{i}" for i in range(1, 6)
+    ]
+    assert "ace_winner" not in elite_ent["result_categories"]
+
+    for plan in ("legend", "goat"):
+        visible, entitlement = _read(plan, config, payload)
+        assert len(visible["results"]) == 62
+        assert sum(
+            pub["market"] == "most_aces"
+            for row in visible["results"]
+            for pub in row["market_publications"]
+        ) == 53
+        assert "ace_winner" in entitlement["result_categories"]
+        assert entitlement["sections"]["ace_winner"]["visible_picks"] == "ALL"
+    assert payload == original
