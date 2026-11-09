@@ -32,6 +32,7 @@ from release_store import ReleaseStore
 from date_window import history_window
 from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
+from statistics_availability_circuit import StatisticsAvailabilityCircuit
 from adaptive_verified_prior import read_prior
 from recover_native_event_id import candidate_days, recover_day, identity_gap_inventory
 
@@ -708,6 +709,7 @@ def main():
     statistics_value = Counter()
     statistics_segments = {}
     statistics_adaptive_queue = None
+    statistics_coverage_circuit = None
     statistics_unavailable_reasons = Counter()
     expected_statistics = {}
     expected_per_set = {}
@@ -847,6 +849,7 @@ def main():
                     statistics_candidates, statistics_plan["bucket_coverage"],
                     verified_prior=prior)
                 statistics_plan["online_adaptive_priority"] = True
+                statistics_coverage_circuit = StatisticsAvailabilityCircuit()
             print(json.dumps({"statistics_gap_plan": statistics_plan}, ensure_ascii=False), flush=True)
             processed = 0
             for match in (statistics_adaptive_queue if statistics_adaptive_queue is not None
@@ -885,6 +888,19 @@ def main():
                     if processed % (250 if args.targeted_statistics else 50) == 0:
                         checkpoint(changed, True)
                         changed.clear()
+                # Only the scheduled, adaptive high-yield statistics route can
+                # pause on cross-tour evidence of near-universal paid misses.
+                # Record the already-processed row before stopping. The normal
+                # checkpoint and independent read-back still run unchanged.
+                if (statistics_coverage_circuit is not None
+                        and statistics_coverage_circuit.observe(
+                            match, status, provider.request_count - requests_before,
+                            value_change)):
+                    report["statistics_availability_circuit_open"] += 1
+                    print(json.dumps({
+                        "statistics_availability_circuit": statistics_coverage_circuit.summary(),
+                    }, sort_keys=True), flush=True)
+                    break
             checkpoint(changed, True)
     except RequestBudgetExceeded as exc:
         report["budget_stopped"] = 1
@@ -933,6 +949,8 @@ def main():
                     }
                 requests = provider.request_count
                 output_report["break_points_focus"] = args.break_points_focus
+                if statistics_coverage_circuit is not None:
+                    output_report["statistics_availability_circuit"] = statistics_coverage_circuit.summary()
                 output_report["statistics_data_value"] = {
                     **dict(statistics_value),
                     "api_quality_ready_rows_per_1000_requests": (
