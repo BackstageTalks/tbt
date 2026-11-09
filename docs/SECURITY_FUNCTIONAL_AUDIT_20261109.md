@@ -18,8 +18,8 @@ Deep audit of production branch `BackstageTalks/tbt:main` for access controls, b
 | Issued results | `issued_authority.py` uses exact confirmation/receipt identity for member-serving candidates. Existing `tests/test_issued_serving_authority.py` and `tests/test_serving_artifact_readback.py` test fail-closed and exact SHA/section-count canaries. | Real end-to-end member UI, Viac Es settled priced outcomes, Telegram ↔ Web ↔ Results parity on an actual published betting day. |
 
 ### New regression
-- [PR #1499](https://github.com/BackstageTalks/tbt/pull/1499) adds a fail-closed static regression for privileged route authorization, Firebase revocation, role validation and CSP.
-- Source-only inspection: 59 sensitive routes, no missing early guard at inspected SHA.
+- [PR #1499](https://github.com/BackstageTalks/tbt/pull/1499) adds fail-closed source contracts AND a parameterized anonymous-request negative test for every enumerated privileged Admin/Internal handler (59 at baseline); Firebase revocation, role validation and CSP remain independently asserted. Dynamic tests do not use live member identities or production endpoints.
+- Source inspection: 59 sensitive routes, no missing early guard at inspected SHA. Anonymous test is implemented but not yet independently CI-verified on the updated PR head.
 - CI is required to verify the new test file itself. No CI/test or live deployment PASS should be claimed before checking its final result.
 
 ## Existing operational alert (separate from the five audit surfaces)
