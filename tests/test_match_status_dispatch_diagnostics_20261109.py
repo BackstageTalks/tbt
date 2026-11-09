@@ -57,7 +57,7 @@ def test_worker_returns_only_safe_stage_and_never_spends_quota_on_preflight_erro
         ),
     )
 
-    def invalid():
+    def invalid(*_args, **_kwargs):
         raise ValueError("SECRET_AND_PRIVATE_SOURCE_MUST_NOT_LEAK")
 
     monkeypatch.setattr(
