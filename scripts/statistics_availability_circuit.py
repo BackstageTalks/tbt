@@ -31,6 +31,7 @@ class StatisticsAvailabilityCircuit:
 
     def __init__(self):
         self.samples = deque(maxlen=self.WINDOW)
+        self.paid_cohort_counts = Counter()
         self.paid_attempts_observed = 0
         self.paid_matches_observed = 0
         self.tripped = False
@@ -52,6 +53,7 @@ class StatisticsAvailabilityCircuit:
         reason = marker.get("reason") if isinstance(marker, dict) else None
         empty = status == "unavailable" and reason in self.EMPTY_REASONS
         self.samples.append((tour, year, paid_attempts, bool(empty), added))
+        self.paid_cohort_counts[(tour, year)] += 1
         self.paid_matches_observed += 1
         self.paid_attempts_observed += paid_attempts
 
@@ -61,8 +63,10 @@ class StatisticsAvailabilityCircuit:
         if len(window) < self.MIN_PAID_MATCHES:
             return False
         attempts = sum(row[2] for row in window)
-        cohorts = Counter((row[0], row[1]) for row in window)
-        eligible_cohorts = {key for key, count in cohorts.items()
+        # Prove cross-tour availability from ALL paid samples in this run;
+        # adaptive selection may put >75% of the most recent window in one
+        # cohort, making a purely rolling cross-tour test ineffective.
+        eligible_cohorts = {key for key, count in self.paid_cohort_counts.items()
                             if count >= self.MIN_COHORT_MATCHES}
         tours = {key[0] for key in eligible_cohorts if key[0] in {"atp", "wta"}}
         empty_matches = sum(int(row[3]) for row in window)
