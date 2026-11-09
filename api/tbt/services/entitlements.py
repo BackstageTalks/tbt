@@ -222,10 +222,20 @@ def _filter_result_history(
 def _result_contract_identity(row: dict, publication: dict) -> str:
     """Identify one issued contract; same match/selection can have distinct O/U lines."""
     event = str(row.get("event_id") or row.get("match_id") or row.get("id") or "").strip().lower()
-    market = str(publication.get("market") or "match_winner").strip().lower()
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    market = str(
+        publication.get("market") or publication.get("projection_metric")
+        or row.get("market") or betting.get("market") or "match_winner"
+    ).strip().lower()
+    if market in {"top", "daily", "prime", "value", "top200"}:
+        market = "match_winner"
     selection = str(
-        publication.get("selection_id") or publication.get("winner_id")
-        or publication.get("pick_id") or publication.get("selection") or ""
+        publication.get("selection_id") or betting.get("selection_id")
+        or row.get("selection_id") or publication.get("winner_id")
+        or row.get("winner_id") or publication.get("pick_id")
+        or row.get("pick_id") or publication.get("selection")
+        or publication.get("pick") or row.get("selection")
+        or row.get("pick") or row.get("prediction") or ""
     ).strip().lower()
     if not event or not selection:
         return ""
@@ -279,7 +289,7 @@ def filter_results_for_member_limits(
                 day = blinq_access_day(stamp) if stamp is not None else ""
             if not day or not contract:
                 continue  # Unknown issuance/identity must not grant a position.
-            raw_position = publication.get("offer_position")
+            raw_position = publication.get("offer_position", row.get("offer_position"))
             try:
                 position = int(raw_position) if raw_position is not None else None
             except (ValueError, TypeError):
@@ -369,13 +379,14 @@ def filter_results_for_member_limits(
             override = str(overrides.get(str(position)) or "").lower()
             if override in {"hidden", "blurred"}:
                 continue
-            if not (override == "active" or all_visible or
-                    (position in random_slots if random_slots is not None
-                     else position <= limit)):
-                continue
-            # An authenticated daily offer can be narrower than the tier
-            # cap, especially with persisted user-specific random picks.
-            if day == today and tab in offered and item["contract"] not in offered[tab]:
+            if day == today and tab in offered:
+                # The server has already applied this user's persisted daily
+                # allocation. NEVER replace it with a newly sampled cohort.
+                if item["contract"] not in offered[tab]:
+                    continue
+            elif not (override == "active" or all_visible or
+                      (position in random_slots if random_slots is not None
+                       else position <= limit)):
                 continue
             allowed.add((day, tab, item["contract"]))
 
