@@ -62,6 +62,53 @@ def _settled_ace_winner_record():
     }
 
 
+def test_exact_nineteen_bet_archive_matches_dashboard_accounting():
+    """Paired fixture for browser VIAC ES parity: 21 valid Results + 1 bad quote status.
+
+    Only actual pre-match frozen paid/fallback Most Aces settlements count
+    as financial stakes; a void and a legacy 'priced' projection do not.
+    """
+    from tbt.services.most_aces_roi_accounting import audit
+    from tbt.services.dashboard_kpis import published_results_metrics
+
+    rows = []
+    for i in range(22):
+        row = _settled_ace_winner_record()
+        row["event_id"] = f"viac-parity-{i}"
+        p = row["market_publications"][0]
+        p["publication_key"] = f"issued-viac-parity-{i}"
+        if 13 <= i < 19:
+            p["result"] = {"status": "miss", "correct": False,
+                           "staked_units": 1, "profit_units": -1}
+        elif 19 <= i < 21:
+            p["result"] = {"status": "void", "correct": None,
+                           "void": True, "staked_units": 0,
+                           "profit_units": 0}
+        elif i == 21:
+            p["price_status"] = "priced"  # not a frozen Most Aces contract
+        rows.append(row)
+
+    immutable_snapshot = deepcopy(rows)
+    at = datetime(2026, 11, 9, 18, tzinfo=timezone.utc)
+    finance = read_only_archive_category_counts(rows, now=at)["ace_winner_finance"]
+    feed_audit = audit({"results": rows})
+    dashboard = published_results_metrics({"results": rows}, "all", now=at)
+
+    assert finance["status"] == feed_audit["status"] == "VERIFIED_ACCOUNTING"
+    assert finance["observed_publications"] == 22
+    assert finance["settled_priced"] == feed_audit["settled_priced"] == 19
+    assert finance["wins"] == 13 and finance["losses"] == 6
+    assert finance["void"] == 2
+    assert finance["counts"]["settled_unpriced"] == 1
+    assert dashboard["stake_count"] == 19
+    assert dashboard["wins"] == 14  # frozen-contract guard is financial, not grading
+    assert abs(finance["profit_units"] - 1.8) < 1e-9
+    assert abs(dashboard["profit_units"] - finance["profit_units"]) < 1e-9
+    assert abs(finance["roi"] - 1.8 / 19) < 1e-9
+    assert abs(dashboard["roi"] - finance["roi"]) < 1e-9
+    assert rows == immutable_snapshot
+
+
 def test_durable_archive_uses_same_frozen_issued_accounting_as_feed_audit():
     from tbt.services.most_aces_roi_accounting import audit
     rows = [_settled_ace_winner_record()]
