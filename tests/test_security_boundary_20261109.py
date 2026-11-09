@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 from pathlib import Path
+
+import azure.functions as func
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "api" / "function_app.py"
@@ -107,3 +111,48 @@ def test_frontend_policy_keeps_scripts_same_origin_and_prevents_embedding():
     assert headers["X-Content-Type-Options"] == "nosniff"
     assert "unsafe-eval" not in csp
     assert "/api/*" in cfg["navigationFallback"]["exclude"]
+
+
+_PRIVILEGED = [
+    (route, handler.name) for route, handler in _routes()
+    if route.startswith(("v1/admin/", "v1/internal/"))
+]
+
+
+@pytest.mark.parametrize("route,handler_name", _PRIVILEGED)
+def test_privileged_routes_deny_anonymous_without_side_effects(
+    monkeypatch, route, handler_name,
+):
+    """Exercise the actual function handler, not merely its source token names.
+
+    No account, token or expensive provider is available to a caller here. A
+    revoked/unauthenticated request cannot reach any protected business logic.
+    """
+    import function_app as api
+
+    monkeypatch.setattr(api, "_verified_user", lambda req: None)
+    monkeypatch.setattr(api, "_live_worker_token_ok", lambda req: False)
+    monkeypatch.setattr(api, "_account_worker_token_ok", lambda req: False)
+    monkeypatch.setattr(
+        api, "RapidTennisClient",
+        lambda *args, **kwargs: pytest.fail(
+            "Anonymous privileged request attempted a paid provider call"
+        ),
+    )
+    args = {key: "anonymous-probe" for key in re.findall(r"{([^{}]+)}", route)}
+    url = "/api/" + re.sub(r"{[^{}]+}", "anonymous-probe", route)
+    request = func.HttpRequest(
+        method="POST", url="http://localhost" + url,
+        headers={}, body=b"{}", route_params=args,
+    )
+    response = getattr(api, handler_name)(request)
+    assert response.status_code in {401, 403, 503}, (
+        route, handler_name, response.status_code
+    )
+    content = response.get_body().decode("utf-8")
+    assert "access_token" not in content
+    assert "firebase_private_key" not in content
+
+
+def test_sensitive_route_inventory_is_not_empty():
+    assert len(_PRIVILEGED) >= 59
