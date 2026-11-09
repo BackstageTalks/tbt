@@ -1,6 +1,6 @@
 name: BlinQ SK/CZ evening bookmaker aces audit (read-only)
 
-# External scheduler calls workflow_dispatch at 22:00 Europe/Bratislava.
+# External scheduler sends repository_dispatch at 23:00 Europe/Bratislava.
 # No native GitHub cron and no dependency on the paid TennisAPI budget.
 on:
   repository_dispatch:
@@ -50,7 +50,16 @@ jobs:
           set -euo pipefail
           target="$INPUT_TARGET_DAY"
           if [[ -z "$target" ]]; then
-            target="$(TZ=Europe/Bratislava date -d tomorrow +%F)"
+            # The 23:00 external dispatch may queue past local midnight.
+            # Before 06:00 local, today is still the upcoming betting day.
+            target="$(python - <<'PY'
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          now = datetime.now(ZoneInfo("Europe/Bratislava"))
+          day = now.date() if now.hour < 6 else (now + timedelta(days=1)).date()
+          print(day.isoformat())
+          PY
+          )"
           fi
           python - "$target" <<'PY'
           import datetime,sys
