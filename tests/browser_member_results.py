@@ -31,6 +31,8 @@ def main():
               const m=t.localResultMetrics(t.state.feed.results,'all',filters);
               const all=t.settledPublishedEntries(t.state.feed.results,'all',{window:'all'}).length;
               const html=t.renderResultsFilters();
+              // Simulate the explicit Results category entitlements returned by the API.
+              t.state.feed.entitlements={result_categories:['top_daily','prime']};
               t.state.feed.account={is_admin:false};
               const hidden=!t.renderResultsFilters().includes('resultsMembership');
               const regular=t.settledPublishedEntries(t.state.feed.results,'all',filters).length;
