@@ -4053,6 +4053,10 @@
       return {...server,enabled:false,display_state:'hidden',visible_picks:0};
     const serverCount=String(server.visible_picks).toUpperCase()==='ALL'?Infinity:Math.max(0,Number(server.visible_picks)||0);
     const localCount=String(local.visible_rows??'ALL').toUpperCase()==='ALL'?Infinity:Math.max(0,Number(local.visible_rows)||0);
+    // A locally disabled zero-row market must not be revived by stale
+    // server-side active row overrides from an older Admin snapshot.
+    if(localCount===0&&!Object.values(local.row_overrides||{}).some(v=>String(v).toLowerCase()==='active'))
+      return {...server,enabled:false,display_state:'hidden',visible_picks:0};
     const cap=Math.min(serverCount,localCount);
     const overrides={...(server.row_overrides||{})};
     for(const [slot,value] of Object.entries(local.row_overrides||{})){
