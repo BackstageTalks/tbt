@@ -73,3 +73,8 @@ No automatic model promotion, no change to TOP 70%, no new job or provider refre
 
 ### Safety and disposition
 Prior VIAC ES market, UI, issue→Results and finance PRs #1457, #1483, #1487, #1489, #1505 and #1506 are merged. This checkpoint is documentation only, no CDB writes, external request budget changes, new Telegram sends, model training or historic archive mutation. Status: **PRODUCTION ISSUANCE/SETTLEMENT/ARCHIVE FINANCE VERIFIED; MEMBER/UI AND END-TO-END DASHBOARD PARITY NOT YET VERIFIED**.
+
+### Guarded no-provider serving promotion requested after PR #1508
+- PR #1508 changed the ELITE Results category-scoped cohort and issued-only sample counting; PR CI [#42661585696](https://github.com/BackstageTalks/tbt/actions/runs/42661585696) passed and it merged at `9292aa0ed75507095b28829578584a8776cbd534`.
+- The original push deploy was cancelled when the docs-only checkpoint superseded `main`. An empty `[deploy-current]` commit did not trigger `ci.yml` because it changed no paths. This *non-empty documentation checkpoint* requests the existing guarded CI + no-provider app deploy, and changes no application behavior, prediction artifacts, provider calls, CDB, Telegram or historical bets.
+- Do not mark the new runtime serving SHA or member-view gate VERIFIED until its exact guarded deployment and independent Azure read-back complete.
