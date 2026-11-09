@@ -3976,7 +3976,13 @@
       state.resultsFilters.dateFrom='';
       state.resultsFilters.dateTo='';
     }
-    const mobileFilterLabel=resultCategoryLabel(filters.category||'all');
+    // The collapsed mobile control must identify the *actual result scope*.
+    // "All published" is only a market category; it is not the ALL-membership tier.
+    const memberLabel=({rookie:'FREE',pro:'PRO',elite:'ELITE',legend:'LEGEND',goat:'GOAT'})[String(filters.membership||'')]||'';
+    const categoryLabel=filters.category==='all'?'':resultCategoryLabel(filters.category||'all');
+    const periodLabel=periodOptions.find(([value])=>value===String(filters.window||'all'))?.[1]||'';
+    const mobileFilterLabel=[memberLabel,categoryLabel,periodLabel].filter(Boolean).join(' · ')
+      ||resultCategoryLabel(filters.category||'all');
     return `<section class="results-filter-shell">
       <button class="results-mobile-filter-toggle" type="button" data-results-filter-toggle aria-expanded="false">
         <span class="results-mobile-filter-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6.2 7.1v5.7l-3.6 1.7v-7.4z"></path></svg><strong>${escapeHtml(lcopy('Filters','Filtre','Filtry'))}</strong></span>
@@ -4614,10 +4620,35 @@
       'Údaje sú len na čítanie; produkčné výsledky a lokálne kurzy sa nemenia.</p>')+'</section>';
   }
 
+  function emptyResultsExplanation(rows,category,filters){
+    if(state.feed?.results_archive_unavailable)
+      return lcopy('The settled Results archive is temporarily unavailable; an empty record cannot be verified.',
+        'Archív vyhodnotených výsledkov je dočasne nedostupný. Nulovú bilanciu teraz nemožno overiť.',
+        'Archiv vyhodnocených výsledků je dočasně nedostupný. Nulovou bilanci nyní nelze ověřit.');
+    const plan=String(filters?.membership||'').toLowerCase();
+    if(isAdminAccount()&&plan){
+      const rule=state.feed?.member_result_rules?.[plan];
+      if(!rule)return lcopy('Membership rules are missing; the zero result is not a verified record.',
+        'Pravidlá zvoleného členstva chýbajú. Bilancia 0–0 nie je overený výsledok.',
+        'Pravidla vybraného členství chybí. Bilance 0–0 není ověřený výsledek.');
+      const other=settledPublishedEntries(rows,category,{...filters,membership:''}).length;
+      if(other)return lcopy(`${other} settled published picks match the date/category, but none is assigned to ${plan.toUpperCase()} by the current rules.`,
+        `${other} vyhodnotených publikovaných tipov zodpovedá dátumu/kategórii, ale aktuálne pravidlá nepriraďujú žiadny do ${plan.toUpperCase()}.`,
+        `${other} vyhodnocených publikovaných tipů odpovídá datu/kategorii, ale aktuální pravidla nepřiřazují žádný do ${plan.toUpperCase()}.`);
+    }
+    if(String(filters?.window||'')==='today')return lcopy(
+      'No published picks have settled in the current 06:00–06:00 betting day. Choose All time to inspect history.',
+      'V dnešnom betting day (06:00–06:00) zatiaľ nie sú vyhodnotené publikované tipy. Históriu zobrazí Celé obdobie.',
+      'V dnešním betting day (06:00–06:00) zatím nejsou vyhodnocené publikované tipy. Historii zobrazí Celé období.');
+    return lcopy('No settled published predictions match these filters.',
+      'Pre zvolené filtre nie sú dostupné vyhodnotené publikované tipy.',
+      'Pro vybrané filtry nejsou dostupné vyhodnocené publikované tipy.');
+  }
+
   function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
-    if(!entries.length){state.resultsPage=0;return '<div class="state-card">Pre zvolené filtre nie sú dostupné vyhodnotené predikcie.</div>';}
+    if(!entries.length){state.resultsPage=0;return `<div class="state-card" role="status">${escapeHtml(emptyResultsExplanation(rows,category,filters))}</div>`;}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
     const pages=Math.max(1,Math.ceil(entries.length/pageSize));
@@ -4785,7 +4816,13 @@
       }
       const mobileCurrent=host.querySelector('.results-mobile-filter-current');
       if(mobileCurrent&&mobileCurrent.firstChild?.nodeType===Node.TEXT_NODE){
-        mobileCurrent.firstChild.nodeValue=resultCategoryLabel(state.resultsFilters.category||'all');
+        const filters=state.resultsFilters||{};
+        const member=({rookie:'FREE',pro:'PRO',elite:'ELITE',legend:'LEGEND',goat:'GOAT'})[String(filters.membership||'')]||'';
+        const category=filters.category==='all'?'':resultCategoryLabel(filters.category||'all');
+        const period=String(filters.window||'all')==='today'?lcopy('Today','Dnes','Dnes')
+          :String(filters.window||'all')==='all'?publicText('All time'):'';
+        mobileCurrent.firstChild.nodeValue=[member,category,period].filter(Boolean).join(' · ')
+          ||resultCategoryLabel(filters.category||'all');
       }
       // The pagination controls are replaced with the listing, so bind again.
       wireResultsFilters();
@@ -8553,6 +8590,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
   function resultsSummary(){
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
+    const missingMemberRules=Boolean(isAdminAccount()&&filters.membership&&!state.feed?.member_result_rules?.[filters.membership]);
     // A custom range covering exactly today's 06:00–06:00 betting day is
     // the same published cohort as the Today preset. Historical ranges have
     // no authoritative all-published total in this results payload.
@@ -8572,7 +8610,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         ?lcopy(`settled from ${todayTotal} ${memberName} picks published today`,`vyhodnotené z ${todayTotal} dnešných ${memberName} pickov`,`vyhodnocené z ${todayTotal} dnešních ${memberName} tipů`)
         :lcopy(`settled from ${todayTotal} published picks in the current betting day`,`vyhodnotené z ${todayTotal} dnešných publikovaných pickov`,`vyhodnocené z ${todayTotal} dnešních publikovaných tipů`);
     return metricCards([
-      [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
+      [publicText('Record'),missingMemberRules?'—':`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
       ['ROI',m.roi==null?'—':pct(m.roi),lcopy('1u per settled pick with an accepted quote','1u na každý vyhodnotený tip s platným kurzom','1u na každý vyhodnocený tip s platným kurzem')],
