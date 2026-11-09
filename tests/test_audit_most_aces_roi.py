@@ -67,3 +67,19 @@ def test_unissued_pending_void_do_not_inflate_roi():
         data = feed()
         data["results"][0]["market_publications"][0].update(updates)
         assert audit(data)["status"] == "INSUFFICIENT_SETTLED_EVIDENCE"
+
+def test_malformed_unrelated_archive_rows_never_crash_financial_readback():
+    data = {"results": [None, "legacy", {"market_publications": "malformed"},
+                        {"market_publications": [42, "legacy"]}]}
+    result = audit(data)
+    assert result["status"] == "INSUFFICIENT_SETTLED_EVIDENCE"
+    assert result["roi"] is None and result["settled_priced"] == 0
+
+
+def test_malformed_issued_most_aces_result_fails_closed():
+    data = feed()
+    data["results"][0]["market_publications"][0]["result"] = "not-a-ledger"
+    result = audit(data)
+    assert result["status"] == "FAIL"
+    assert result["errors"] == {"invalid_result_payload": 1}
+    assert result["roi"] is None
