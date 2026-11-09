@@ -29,8 +29,13 @@ def audit(feed: dict) -> dict:
     unique, accepted = {}, []
     profit = 0.0
     for row in feed.get("results") or []:
-        for p in row.get("market_publications") or []:
-            if p.get("market") != "most_aces":
+        if not isinstance(row, dict):
+            continue
+        publications = row.get("market_publications")
+        if not isinstance(publications, list):
+            continue
+        for p in publications:
+            if not isinstance(p, dict) or p.get("market") != "most_aces":
                 continue
             counts["observed_publications"] += 1
             if p.get("excluded_reason"):
@@ -55,12 +60,15 @@ def audit(feed: dict) -> dict:
                 issued = datetime.fromisoformat(p["issued_at"].replace("Z", "+00:00"))
                 start = datetime.fromisoformat(row["scheduled_at"].replace("Z", "+00:00"))
                 valid_time = issued.utcoffset() is not None and start.utcoffset() is not None and issued < start
-            except (KeyError, TypeError, ValueError):
+            except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
                 valid_time = False
             if not valid_time or p.get("price_contract") != "player_superiority" or p.get("section") != "ace_winner":
                 errors["invalid_issued_contract"] += 1
                 continue
             result = p.get("result") or {}
+            if not isinstance(result, dict):
+                errors["invalid_result_payload"] += 1
+                continue
             if result.get("void") is True or result.get("status") in {"void", "push"}:
                 counts["void"] += 1
                 continue
