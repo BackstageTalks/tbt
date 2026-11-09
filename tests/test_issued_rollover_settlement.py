@@ -150,3 +150,29 @@ def test_aces_missing_or_wrong_player_statistics_remain_pending_after_rollover()
         _day7(), None, {"rollover_issued_rows": capture},
         now=datetime(2026, 11, 11, 6, tzinfo=timezone.utc),
     ) == []
+
+def test_multi_day_issuance_above_legacy_180_is_never_dropped():
+    # A new 06:00 release can bring >180 valid exact market receipts
+    # across the existing 72-hour settlement window.
+    rows = []
+    for index in range(220):
+        row = deepcopy(_ace())
+        row["event_id"] = f"ace-match-{index}"
+        row["market_publications"][0]["publication_key"] = (
+            f"local-aces-ou-v1:ace-match-{index}:p1:over:5.5"
+        )
+        rows.append(row)
+    initial = {**_day6(rows[0]), "ace_picks": rows}
+    authority = {
+        "schema": 1, "confirmed_only": True, "betting_day": "2026-11-06",
+        "keys": [row_authority_key(row, "ace_picks") for row in rows],
+    }
+    captured = confirmed_rollover_rows(initial, authority, now=DAY6)
+    assert len(captured) == 220
+    assert len({entry["receipt_key"] for entry in captured}) == 220
+
+    retained = confirmed_rollover_rows(
+        _day7(), None, {"rollover_issued_rows": captured}, now=DAY7,
+    )
+    assert len(retained) == 220
+    assert {entry["receipt_key"] for entry in retained} == set(authority["keys"])
