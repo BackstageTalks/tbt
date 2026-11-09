@@ -340,8 +340,30 @@ def read_only_archive_category_counts(
             by_section[section] += 1
             if section in selected:
                 selected_rows += 1
+    # Reconcile the durable Azure archive, not just the daily private feed.
+    # Share EXACT issuance, prestart time, frozen price and P/L checks with
+    # the offline Most Aces audit. This is aggregate-only and read-only.
+    from .most_aces_roi_accounting import audit as audit_most_aces
+    accounting = audit_most_aces({"results": archived})
+    finance_verified = accounting["status"] == "VERIFIED_ACCOUNTING"
+    ace_winner_finance = {
+        "source": "durable_results_archive",
+        "status": accounting["status"],
+        "observed_publications": accounting["counts"].get("observed_publications", 0),
+        "settled_priced": accounting["settled_priced"],
+        "wins": accounting["counts"].get("wins", 0),
+        "losses": accounting["counts"].get("losses", 0),
+        "counts": accounting["counts"],
+        "errors": accounting["errors"],
+        # A FAIL or empty settled sample can never be advertised as ROI.
+        "roi": accounting["roi"] if finance_verified else None,
+        "profit_units": accounting["profit_units"] if finance_verified else None,
+        "member_render_verified": False,
+        "provider_requests": 0,
+    }
     return {
         "betting_day": current_day,
+        "ace_winner_finance": ace_winner_finance,
         "persisted_settled_all_time": sum(all_sections.values()),
         "persisted_by_category_all_time": dict(sorted(all_sections.items())),
         "persisted_settled_today": current_rows,
