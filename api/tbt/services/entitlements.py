@@ -218,6 +218,189 @@ def _filter_result_history(
 
 
 
+
+def _result_contract_identity(row: dict, publication: dict) -> str:
+    """Identify one issued contract; same match/selection can have distinct O/U lines."""
+    event = str(row.get("event_id") or row.get("match_id") or row.get("id") or "").strip().lower()
+    market = str(publication.get("market") or "match_winner").strip().lower()
+    selection = str(
+        publication.get("selection_id") or publication.get("winner_id")
+        or publication.get("pick_id") or publication.get("selection") or ""
+    ).strip().lower()
+    if not event or not selection:
+        return ""
+    contract = str(publication.get("price_contract") or "").strip().lower()
+    if contract == "player_total_ou":
+        line = str(publication.get("market_line") or "").strip()
+        side = str(publication.get("ou_side") or "").strip().lower()
+        if not line or side not in {"over", "under"}:
+            return ""
+        return "|".join((event, market, selection, contract, side, line))
+    return "|".join((event, market, selection))
+
+
+def filter_results_for_member_limits(
+    rows: list, manifest: dict, access: dict, *, authorized_feed: dict | None = None,
+) -> list:
+    """Apply current Admin category/position grants to Results for every member.
+
+    Do not mutate settlement or stored ledger. The per-account authorized current
+    offer is preferred over a reconstructed historical cohort. Older days can
+    only be evaluated as access *models* when no durable issued allocation exists:
+    never claim they are a record of an individual user's actual bets.
+    """
+    plan = str(manifest.get("plan") or "").lower()
+    if plan not in MEMBERSHIP_LEVELS:
+        return deepcopy(rows)  # Admin retains the complete audit ledger.
+    sections = manifest.get("sections") or {}
+    categories = set(manifest.get("result_categories") or [])
+    groups: dict[tuple[str, str], dict[str, dict]] = {}
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        scheduled = _result_timestamp(row)
+        for publication in _public_result_publications(row):
+            category = _result_publication_category(publication)
+            if category not in categories:
+                continue
+            # Display-only ESÁ -> VIAC ES leader hints were never issued picks.
+            if (category == "ace_winner" and
+                    (publication.get("ace_winner_issued") is False
+                     or str(publication.get("price_status") or "").lower() == "projection_only")):
+                continue
+            tab = "daily" if category == "top_daily" else category
+            ent = sections.get(tab) or {}
+            if not ent.get("enabled") or ent.get("display_state") != "active":
+                continue
+            contract = _result_contract_identity(row, publication)
+            stamp = scheduled or _parse_datetime(publication.get("issued_at"))
+            day = str(publication.get("betting_day") or "").strip()
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                day = blinq_access_day(stamp) if stamp is not None else ""
+            if not day or not contract:
+                continue  # Unknown issuance/identity must not grant a position.
+            raw_position = publication.get("offer_position")
+            try:
+                position = int(raw_position) if raw_position is not None else None
+            except (ValueError, TypeError):
+                position = None
+            if position is not None and position < 1:
+                position = None
+            # Duplicates from lifecycle/result overlays cannot consume two slots.
+            bucket = groups.setdefault((day, tab), {})
+            current = bucket.get(contract)
+            candidate = {
+                "contract": contract, "publication": publication, "position": position,
+                "issued": str(publication.get("issued_at") or ""),
+            }
+            if current is None or (current["position"] is None and position is not None):
+                bucket[contract] = candidate
+
+    # For the current betting day, actual per-account offer allocations win
+    # over any inferred historical order, including FREE/PRO stable_random.
+    today = blinq_access_day()
+    offered: dict[str, set[str]] = {}
+    if isinstance(authorized_feed, dict):
+        for tab in ("daily", "prime", "value", "doubles", "ace", "ace_winner",
+                    "double_faults", "games", "sets"):
+            feed_rows = _source_rows_for_section(authorized_feed, tab)
+            keys = set()
+            for row in feed_rows:
+                market = str(row.get("market") or
+                             ("aces" if tab == "ace" else
+                              "most_aces" if tab == "ace_winner" else
+                              "match_winner")).lower()
+                publications = row.get("market_publications") or []
+                if isinstance(publications, list) and publications:
+                    for pub in publications:
+                        if isinstance(pub, dict) and _result_publication_category(pub) in (
+                            {"top_daily"} if tab == "daily" else {tab}
+                        ):
+                            ident = _result_contract_identity(row, pub)
+                            if ident:
+                                keys.add(ident)
+                else:
+                    selection = (row.get("selection_id") or row.get("winner_id")
+                                 or row.get("pick_id") or
+                                 (row.get("betting") or {}).get("selection_id")
+                                 or row.get("pick") or row.get("selection"))
+                    as_publication = {"market": market, "selection_id": selection,
+                                      "price_contract": row.get("price_contract"),
+                                      "ou_side": row.get("ou_side"),
+                                      "market_line": row.get("market_line")}
+                    ident = _result_contract_identity(row, as_publication)
+                    if ident:
+                        keys.add(ident)
+            if feed_rows:
+                offered[tab] = keys
+
+    allowed: set[tuple[str, str, str]] = set()
+    for (day, tab), bucket in groups.items():
+        ent = sections.get(tab) or {}
+        visible = ent.get("visible_picks", 0)
+        all_visible = str(visible).upper() == "ALL"
+        try:
+            limit = max(0, int(visible)) if not all_visible else len(bucket)
+        except (ValueError, TypeError):
+            limit = 0
+        # Explicit published positions preserve the slots of unsettled picks.
+        # Without them, use deterministic pre-outcome issuance order.
+        ordered = sorted(bucket.values(), key=lambda item: (
+            item["position"] if item["position"] is not None else 10**9,
+            item["issued"], item["contract"],
+        ))
+        overrides = ent.get("row_overrides") or {}
+        if not isinstance(overrides, dict):
+            overrides = {}
+        random_slots: set[int] | None = None
+        if ent.get("selection_mode") == "stable_random" and not all_visible:
+            sample = ordered[:10]
+            seed = _access_identity(access) + "|" + day + "|" + tab
+            random_slots = {
+                item["position"] or index
+                for index, item in sorted(enumerate(sample, 1), key=lambda pair:
+                    hashlib.sha256(
+                        f"{seed}|{pair[1]['contract']}".encode("utf-8")
+                    ).hexdigest()
+                )[:limit]
+            }
+        for index, item in enumerate(ordered, 1):
+            position = item["position"] or index
+            override = str(overrides.get(str(position)) or "").lower()
+            if override in {"hidden", "blurred"}:
+                continue
+            if not (override == "active" or all_visible or
+                    (position in random_slots if random_slots is not None
+                     else position <= limit)):
+                continue
+            # An authenticated daily offer can be narrower than the tier
+            # cap, especially with persisted user-specific random picks.
+            if day == today and tab in offered and item["contract"] not in offered[tab]:
+                continue
+            allowed.add((day, tab, item["contract"]))
+
+    filtered = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        scheduled = _result_timestamp(row)
+        kept = []
+        for pub in _public_result_publications(row):
+            category = _result_publication_category(pub)
+            tab = "daily" if category == "top_daily" else category
+            stamp = scheduled or _parse_datetime(pub.get("issued_at"))
+            day = str(pub.get("betting_day") or "").strip()
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+                day = blinq_access_day(stamp) if stamp is not None else ""
+            if (day, tab, _result_contract_identity(row, pub)) in allowed:
+                kept.append(pub)
+        if kept:
+            copy = deepcopy(row)
+            copy["market_publications"] = kept
+            filtered.append(copy)
+    return filtered
+
+
 _NOV2_ISSUED_DAY = "2026-11-02"
 _NOV2_ISSUED_FILE = Path(__file__).resolve().parents[2] / "data/confirmed_daily_offer_20261102.json"
 
@@ -1396,6 +1579,11 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
                 if isinstance(player,dict): player.pop("probability",None)
             safe.append(copy)
         result["upcoming"]=safe
+    # Results apply exactly the Admin category, limit, per-row override and
+    # current per-account selection rules, not just the broad category gate.
+    result["results"] = filter_results_for_member_limits(
+        result["results"], manifest, access, authorized_feed=result,
+    )
     # Apply the exact issued-day Results gate only after all market arrays have
     # been redacted for this specific account and durable allocations loaded.
     result["results"] = filter_results_for_issued_day(
