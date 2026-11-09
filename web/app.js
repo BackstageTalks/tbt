@@ -3284,7 +3284,7 @@
       const ent=dailyHubEntitlement(tab),coming=dailyHubIsComingSoon(tab);
       let count='';
       if(coming)count='<em>COMING SOON</em>';
-      else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=Number.isFinite(total)?total:rows.length;count=n?`<b>${n}</b>`:'';}
+      else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=plan==='elite'&&!state.previewPlan?rows.length:(Number.isFinite(total)?total:rows.length);count=n?`<b>${n}</b>`:'';}
       const locked=!coming&&dailyHubAccessLocked(tab,ent,dailyHubRows(tab).length);
       const requiredPlan=locked?firstDailyHubUnlockPlan(tab,0,tab==='see_all'):'';
       const requiredLabel=requiredPlan?String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase():'';
@@ -3304,7 +3304,7 @@
     const sourceRows=dailyHubRows(tab),rows=dashboardFilteredRows(sourceRows),ent=dailyHubEntitlement(tab);
     const includedButUnavailable=dailyHubIncludedButUnavailable(tab,ent,sourceRows.length);
     const preview=Math.max(1,Number(cfg.preview_rows)||10);
-    const allCount=tab==='see_all'?Math.max(Number(ent.total)||0,rows.length):Math.max(Number(ent.total)||0,rows.length);
+    const allCount=plan==='elite'&&!state.previewPlan?rows.length:Math.max(Number(ent.total)||0,rows.length);
     const canExpand=ent.see_all===true&&allCount>preview;
     let limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;
     // Stable-random FREE rows stay at their ORIGINAL server slot (e.g. #8).
@@ -3317,7 +3317,11 @@
     const out=[];
     {
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
-      if(slotStates.length&&!includedButUnavailable){
+      if(plan==='elite'&&!state.previewPlan&&!includedButUnavailable){
+        // ELITE is a curated offer: render only the server-authorized rows,
+        // not global locked placeholders or original source positions.
+        rows.slice(0,limit).forEach((row,index)=>out.push(dailyHubRow(row,tab,false,index)));
+      }else if(slotStates.length&&!includedButUnavailable){
         // Server-authorized rows carry their original source slot. Search,
         // surface and tournament filters must never compact slot 7 into slot 2.
         const bySlot=new Map(),unmapped=[];
@@ -3336,8 +3340,10 @@
         });
       }else if(!includedButUnavailable)for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
-      if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
-      else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
+      if(plan!=='elite'||state.previewPlan){
+        if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
+        else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
+      }
     }
     body.innerHTML=out.join('');
     // r28: semantic cell labels let the same server-rendered table become a
@@ -3411,7 +3417,7 @@
     const host=$(hostId);if(!host)return;
     const sourceRows=marketRows(key),rows=key==='ace'?sourceRows.filter(aceHasApiLine):sourceRows,ent=dashboardPlanEntitlement(key);
     const serverTotal=Number(ent?.total);
-    const total=key==='ace'?rows.length:(Number.isFinite(serverTotal)?Math.max(rows.length,serverTotal):rows.length);
+    const total=accountPlan()==='elite'&&!state.previewPlan?rows.length:key==='ace'?rows.length:(Number.isFinite(serverTotal)?Math.max(rows.length,serverTotal):rows.length);
     const previewMax=dashboardPreviewLimit(key,total||1),previewCount=Math.min(total,previewMax);
     const perPage=dashboardCardsPerPanel(),pageCount=Math.max(1,Math.ceil(previewCount/perPage));
     state.marketPage[key]=Math.min(Number(state.marketPage[key]||0),pageCount-1);
@@ -3456,7 +3462,7 @@
 
   function renderDots(pageCount){ const host=$('carouselDots'); if(!host)return; host.innerHTML=''; if(pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show ACCA page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
   function renderPredictions(){
-    const allRows=rankedPredictions(),ent=dashboardPlanEntitlement('prime'),serverTotal=Number(ent?.total),total=Number.isFinite(serverTotal)?Math.max(allRows.length,serverTotal):allRows.length,limit=dashboardPreviewLimit('prime',total||1),previewCount=Math.min(total,limit),grid=$('predictionGrid'),size=dashboardCardsPerPanel();if(!grid)return;
+    const allRows=rankedPredictions(),ent=dashboardPlanEntitlement('prime'),serverTotal=Number(ent?.total),total=accountPlan()==='elite'&&!state.previewPlan?allRows.length:Number.isFinite(serverTotal)?Math.max(allRows.length,serverTotal):allRows.length,limit=dashboardPreviewLimit('prime',total||1),previewCount=Math.min(total,limit),grid=$('predictionGrid'),size=dashboardCardsPerPanel();if(!grid)return;
     $('matchCount').textContent=total;const primeSeeCount=$('primeSeeAllCardCount');if(primeSeeCount)primeSeeCount.textContent=publicText(`${total} published`);
     const pageCount=Math.max(1,Math.ceil(previewCount/size));state.page=Math.min(state.page,pageCount-1);const start=state.page*size,end=Math.min(previewCount,start+size);
     grid.classList.remove('show-all');grid.innerHTML='';
