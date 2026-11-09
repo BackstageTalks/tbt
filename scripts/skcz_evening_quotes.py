@@ -226,7 +226,11 @@ def attach_prices(ace_picks, most_picks, report, *, now=None, betting_day=None):
                         and _same_person(p.get("player"), row[f"player{slot+1}"]["name"])
                         and p.get("line") is not None
                         and float(p["line"]) == float(local["market_line"])
-                        and _valid_price(p.get("over")) and _valid_price(p.get("under"))):
+                        and _valid_price(p.get("over")) and _valid_price(p.get("under"))
+                        # Production's existing ESÁ/VIAC ES display requires >=1.50.
+                        # A too-short bookmaker price must leave the model's
+                        # original statistical fallback, never delete the pick.
+                        and float(p["over"]) >= 1.50):
                     matches.append((market, p))
         if len(matches) == 1:
             market, pair = matches[0]
@@ -275,7 +279,7 @@ def attach_prices(ace_picks, most_picks, report, *, now=None, betting_day=None):
                                for i in (0, 1)):
                         continue
                 target = [o for o in outcomes if _same_person(o["selection"], row[f"player{slot+1}"]["name"])]
-                if len(target) == 1:
+                if len(target) == 1 and float(target[0]["odds"]) >= 1.50:
                     matches.append((market, target[0]))
         if len(matches) == 1:
             market, choice = matches[0]
