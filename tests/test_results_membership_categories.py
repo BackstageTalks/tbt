@@ -409,3 +409,27 @@ def test_current_day_uses_each_accounts_durable_random_allocation_not_recomputed
         assert [r["event_id"] for r in data["daily_picks"]] == [f"top_daily-{slot}"]
         assert [r["event_id"] for r in data["results"]] == [f"top_daily-{slot}"]
         assert ent["sections"]["daily"]["visible_picks"] == 1
+        assert ent["member_daily_pick_count"] == 1
+
+
+@pytest.mark.parametrize("plan", ["rookie", "pro", "elite", "legend", "goat"])
+def test_member_offer_denominator_counts_only_unlocked_distinct_tips(plan):
+    payload = _payload()
+    payload["results"] = []
+    payload["top_daily_picks"] = [{
+        "event_id": f"bet-{i}", "winner_id": "p1", "selection_id": "p1",
+        "odds": 2.0, "scheduled_at": "2026-11-09T12:00:00+00:00",
+        "player1": {"id": "p1", "name": "A"},
+        "player2": {"id": "p2", "name": "B"},
+    } for i in range(1, 4)]
+    config = _config({(plan, "top_daily"): {
+        "visible_rows": 2, "display_state": "active",
+    }})
+    data, ent = _read(plan, config, payload)
+    assert len(data["daily_picks"]) == 2
+    assert ent["member_daily_pick_count"] == 2
+    assert ent["daily_pick_count"] == 3  # Global telemetry stays unchanged.
+    config["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"][plan]["visible_rows"] = 1
+    limited, next_ent = _read(plan, config, payload)
+    assert len(limited["daily_picks"]) == 1
+    assert next_ent["member_daily_pick_count"] == 1
