@@ -62,19 +62,30 @@ def verified_ace_odds(row: Mapping[str, Any]) -> float | None:
     if not isfinite(odds) or not 1.50 <= odds <= 100:
         return None
     # Until independently bettable Aces API quotes are reliable, treat the
-    # legacy exact-2.00 feed value as an unverified placeholder, regardless
-    # of its old "priced_projection" marker. This is a permanent fallback
-    # for future offers; preserve raw provider prices and immutable ledgers.
-    if odds == 2.0:
-        return None
+    # Legacy synthetic 2.00 is excluded; a fully witnessed exact Fortuna
+    # quote may legitimately equal 2.00 and must not be discarded.
     source = str(row.get("odds_source") or "").lower()
+    if odds == 2.0 and source != "fortuna_sk":
+        return None
     valid = ((source == "rapidapi" and provider == 1)
              or (source == "propline" and provider == 2
                  and bool(row.get("odds_bookmaker")))
              or (source == "moviodds" and provider == 3
-                 and row.get("odds_bookmaker") == "bet365"))
+                 and row.get("odds_bookmaker") == "bet365")
+             or (source == "fortuna_sk" and provider == 4
+                 and row.get("odds_bookmaker") == "Fortuna SK"
+                 and str(row.get("odds_provider_event_id") or "").startswith("ufo:mtch:")
+                 and row.get("price_contract") == "player_total_ou"))
     if not valid:
         return None
+    if source == "fortuna_sk":
+        try:
+            observed = datetime.fromisoformat(str(row["captured_at"]).replace("Z", "+00:00"))
+            start = datetime.fromisoformat(str(row["scheduled_at"]).replace("Z", "+00:00"))
+        except (TypeError, ValueError, KeyError):
+            return None
+        if observed.tzinfo is None or start.tzinfo is None or observed >= start:
+            return None
     if row.get("price_contract") == "player_total_ou":
         if str(row.get("ou_side") or "").lower() not in ("over", "under"):
             return None
