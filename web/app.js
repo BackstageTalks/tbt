@@ -1629,7 +1629,9 @@
     // A published bet may occur in both TOP / ACCA and again in SEE ALL.
     // Read the server's unique total from all eight actual markets, never
     // count SEE ALL as a ninth category and never use only visible TOP rows.
-    const suppliedTotal=Number(state.feed?.entitlements?.daily_pick_count);
+    const personalTotal=state.feed?.entitlements?.member_daily_pick_count;
+    const suppliedTotal=Number(!isAdminAccount()&&personalTotal!=null
+      ?personalTotal:state.feed?.entitlements?.daily_pick_count);
     const totalToday=Number.isSafeInteger(suppliedTotal)&&suppliedTotal>=0
       ?suppliedTotal
       :Math.max(dailyHubRows('see_all').length,
@@ -8611,7 +8613,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const host=$('resultsPreviewContent');if(!host)return;
     const filters={category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
     const allCategories=availableResultCategories().length===orderedResultCategories().length;
-    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=statsHaveExcludedMarkets()||!allCategories?null:todayPublishedPickCount();
+    const hasMemberTotal=!isAdminAccount()&&state.feed?.entitlements?.member_daily_pick_count!=null;
+    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),
+      total=statsHaveExcludedMarkets()||(!allCategories&&!hasMemberTotal)
+        ?null:todayPublishedPickCount();
     host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${m.wins}-${m.losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${m.hit==null?'—':pct(m.hit)}</strong></span><span><small>ROI</small><strong>${m.roi==null?'—':pct(m.roi)}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—'}</strong></span></div>`;
     const progress=total==null?`${m.sample}`:`${m.sample}/${total}`;
     const progressText=lcopy(`${progress} settled today`,`${progress} vyhodnotených dnes`,`${progress} vyhodnocených dnes`);
