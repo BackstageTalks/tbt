@@ -4046,9 +4046,6 @@
     // Settled rows only fill missing historical identities after the offer.
     [['daily_picks','top_daily'],['top_daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
       (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
-        // VIAC ES display-only leader bridges inherit the ESÁ issued timestamp.
-        // They are explicitly NOT separately issued Most Aces bets.
-        if(row?.ace_winner_issued===false||String(row?.price_status||'').toLowerCase()==='projection_only')return;
         const publications=Array.isArray(row?.market_publications)?row.market_publications:[];
         const pubs=publications.filter(p=>p&&typeof p==='object'
           &&String(p.publication_status||'published')==='published'
@@ -4058,6 +4055,10 @@
         // is not a published pick. It must not inflate the ELITE denominator.
         // Older flat issued rows are supported only with explicit issuance.
         if(publications.length)return;
+        // VIAC ES display-only leader bridges inherit the ESÁ issued timestamp
+        // but were never independently issued. A genuine issued publication
+        // above always takes precedence over stale row-level display hints.
+        if(row?.ace_winner_issued===false||String(row?.price_status||'').toLowerCase()==='projection_only')return;
         const issuedAt=row?.issued_at||row?.published_at||row?.betting?.issued_at;
         if(!issuedAt||String(row?.publication_status||'published')!=='published')return;
         const market=row.market||(section==='ace'?'aces':section==='sg'?'':'match_winner');
