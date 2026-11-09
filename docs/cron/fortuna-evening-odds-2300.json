@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "title": "BlinQ Fortuna SK prematch ESÁ + VIAC ES, 22:00 Europe/Bratislava",
+  "title": "BlinQ Fortuna SK prematch ESÁ + VIAC ES, 23:00 Europe/Bratislava",
   "enabled_in_external_scheduler": false,
   "schedule": {
-    "cron": "0 22 * * *",
+    "cron": "0 23 * * *",
     "timezone": "Europe/Bratislava",
     "dst_aware": true
   },
@@ -32,6 +32,7 @@
     "Template/configuration evidence only: must enable in EXISTING external scheduler; committing JSON does not activate it.",
     "Use existing cron GitHub repository_dispatch token in scheduler secret field; never commit credentials.",
     "Only exact event/players/start/market/ESÁ line qualifies as a Fortuna quote; otherwise retain BlinQ existing statistical fallback.",
-    "GitHub 204 indicates dispatch accepted, not completed data fetch/import; verify child workflow and private readback."
+    "GitHub 204 indicates dispatch accepted, not completed data fetch/import; verify child workflow and private readback.",
+    "23:00 Bratislava launch: if queued past local midnight, the workflow determines the current 06:00-based betting day, avoiding a skipped day."
   ]
 }
