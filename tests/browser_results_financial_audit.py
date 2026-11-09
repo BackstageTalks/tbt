@@ -99,6 +99,22 @@ def main():
                 # Same contract for a filtered match-winner sample: 1u per
                 # settled quoted pick regardless of legacy staked_units scale.
                 check_summary(page, ["3-0", "100.0%", "1.52", "52.0%", "+1.56u", "3"])
+                # Quoted prices are white on mobile and desktop, while
+                # positive Units retain their green result color.
+                quoted = page.evaluate("""() => {
+                  const odds=document.querySelector(
+                    '#routePanel .results-card-row td.result-odds.is-quoted');
+                  const gain=document.querySelector(
+                    '#routePanel .results-card-row td.result-units.correct');
+                  return {
+                    oddsText:odds?.textContent?.trim(),
+                    oddsColor:odds&&getComputedStyle(odds).color,
+                    gainColor:gain&&getComputedStyle(gain).color,
+                  };
+                }""")
+                assert quoted['oddsText'] in ('1.40','1.80','1.36'),quoted
+                assert quoted['oddsColor'] == 'rgb(238, 248, 244)', quoted
+                assert quoted['gainColor'] in ('rgb(66, 232, 151)', 'rgb(121, 214, 174)'), quoted
                 assert not errors, errors
                 page.close()
             print("Real-browser Results financial consistency and no data-depth: PASS")
