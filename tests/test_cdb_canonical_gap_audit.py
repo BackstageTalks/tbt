@@ -40,6 +40,13 @@ def test_aggregate_only_tracks_exact_missing_cells():
     assert wta["fields"]["aces"]["missing_cells"] == 3
     assert wta["fields"]["aces"]["both_missing_matches"] == 1
     assert len(wta["fields"]) == len(FIELDS)
+    aggregate = result["aggregate_2016_2026"]
+    assert aggregate["matches"] == 3
+    assert aggregate["core_complete_matches"] == 1
+    assert aggregate["core_fully_missing_matches"] == 1
+    assert aggregate["fields"]["aces"]["present_cells"] == 1
+    assert aggregate["fields"]["aces"]["missing_cells"] == 5
+    assert aggregate["fields"]["aces"]["coverage_pct"] == pytest.approx(16.6667)
     dump = json.dumps(result)
     for forbidden in ("secret-one", "secret-two", "private-atp", "0.8", "0.4"):
         assert forbidden not in dump
@@ -124,3 +131,29 @@ def test_readonly_census_rejects_disappeared_expected_quarantine(tmp_path, monke
     with pytest.raises(ValueError, match="disappeared"):
         run(tmp_path, path, expected_provider_quarantine=6)
     assert not path.exists()
+
+
+def test_strict_zero_quarantine_current_cdb_baseline(tmp_path, monkeypatch):
+    """A clean authoritative CDB needs no six-row historical exception."""
+    from scripts.cdb_canonical_gap_audit import run
+    import tbt.data.history_snapshot as snap
+    import tbt.data.history_safety as safety_module
+
+    rows = [_match("safe-atp", 2026, "atp", {}),
+            _match("safe-wta", 2025, "wta", {})]
+    monkeypatch.setattr(snap, "load_partitions", lambda _: rows)
+    monkeypatch.setattr(safety_module, "sanitize_history_identities",
+                        lambda _: (rows, {
+                            "input_rows": 2, "output_rows": 2,
+                            "quarantined_rows": 0, "changed": False,
+                            "duplicate_match_ids": [],
+                            "duplicate_provider_event_ids": [],
+                        }))
+    out = tmp_path / "coverage.json"
+    report = run(tmp_path, out, expected_provider_quarantine=0)
+    assert report["canonical_rows"] == report["canonical_raw_rows"] == 2
+    assert report["excluded_ambiguous_provider_rows"] == 0
+    assert report["aggregate_2016_2026"]["matches"] == 2
+    assert not report["production_mutated"]
+    assert report["api_requests"] == 0
+    assert out.exists()
