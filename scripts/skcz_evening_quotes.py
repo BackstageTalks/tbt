@@ -118,9 +118,10 @@ def validated_events(report, *, betting_day, now):
             continue
         if now - seen > timedelta(hours=24):
             continue
-        if scheduled.astimezone(TZ).date().isoformat() != betting_day:
-            # 06:00-next-day spillover remains part of the betting-day report,
-            # but not the *next calendar day* morning card matcher.
+        local_start = scheduled.astimezone(TZ)
+        scheduled_day = (local_start - timedelta(days=1) if local_start.hour < 6
+                         else local_start).date().isoformat()
+        if scheduled_day != betting_day:
             continue
         if not str(e.get("event_id") or "").startswith("ufo:mtch:"):
             continue
@@ -155,6 +156,11 @@ def load_evening_report(*, betting_day, now, repo=DATA_REPO, runner=None):
                 isinstance(report, dict) and report.get("events_in_target_window") == []
                 and report.get("status") == "no_exact_aces_market_available"
                 and report.get("target_betting_day") == betting_day
+                and report.get("source") == "public_fortuna_sk"
+                and report.get("cdb_writes") == 0
+                and report.get("published_picks_changed") == 0
+                and _stamp(report.get("captured_at")) is not None
+                and timedelta(0) <= now - _stamp(report.get("captured_at")) <= timedelta(hours=24)
             ):
                 return report, "loaded"
         return None, "no_valid_evening_snapshot"
