@@ -4264,7 +4264,9 @@
       const actualOdds=rawOdds;
       const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
-      const projectionMarket=['aces','double_faults','sets','games'].includes(market);
+      // Match backend Results ledger: Most Aces is also a priced_projection
+      // market. A legacy/non-frozen 'priced' row must never enter its ROI.
+      const projectionMarket=['aces','most_aces','double_faults','sets','games'].includes(market);
       const priced=projectionMarket?status==='priced_projection':['','priced','priced_projection'].includes(status);
       if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
       oddsTotal+=actualOdds;
