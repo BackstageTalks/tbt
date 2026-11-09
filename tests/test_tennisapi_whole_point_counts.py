@@ -161,3 +161,28 @@ def test_canonical_rate_conflict_keeps_whole_provider_response_out_of_cdb(
         assert enricher.conflict_diagnostics()["rejected_responses"] == 1
     finally:
         enricher.close()
+
+
+
+def test_conflicting_raw_and_display_count_or_malformed_optional_witness_veto_derivation():
+    payload = all_counts()
+    items = payload["statistics"][0]["groups"][0]["statisticsItems"]
+    items[0]["home"] = 31  # contradicts homeValue=30
+    assert parse_statistics(payload, home_is_player1=True) == {
+        "p1_aces": 6.0, "p2_aces": 4.0,
+    }
+    payload = all_counts()
+    payload["statistics"][0]["groups"][0]["statisticsItems"][2]["homeValue"] = True
+    assert parse_statistics(payload, home_is_player1=True) == {
+        "p1_aces": 6.0, "p2_aces": 4.0,
+    }
+
+
+def test_duplicate_consistent_point_count_fields_preserve_full_derived_sample():
+    payload = all_counts()
+    items = payload["statistics"][0]["groups"][0]["statisticsItems"]
+    items[0]["home"] = "30"
+    items[1]["away"] = 29.0
+    stats = parse_statistics(payload, home_is_player1=True)
+    assert stats["p1_service_points_won"] == pytest.approx(30 / 59)
+    assert stats["p2_return_points_total"] == 59
