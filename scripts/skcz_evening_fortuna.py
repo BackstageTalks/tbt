@@ -216,6 +216,54 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
     return report
 
 
+
+def collect_rendered(target_day, *, max_events=20):
+    """Render publicly available Fortuna match cards using a normal browser.
+
+    Fortuna's bare HTTP 200 is a client-side shell without match detail links;
+    pretending it was an empty betting offer produced false no-data reports.
+    A single isolated Chromium session loads public pages only, without login,
+    cookies from users, bypasses, or any betting interactions.
+    """
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as BrowserTimeout
+    except ImportError as exc:
+        raise RuntimeError("playwright_not_installed") from exc
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        try:
+            page = browser.new_page(locale="sk-SK", timezone_id="Europe/Bratislava")
+            page.set_default_timeout(16000)
+
+            def rendered(url):
+                parsed = urlsplit(url)
+                if parsed.scheme != "https" or parsed.hostname != "www.ifortuna.sk":
+                    raise ValueError("Source host not permitted")
+                response = page.goto(url, wait_until="domcontentloaded", timeout=25000)
+                if response is None or response.status != 200:
+                    raise RuntimeError("bookmaker_public_page_unavailable")
+                try:
+                    if url == INDEX:
+                        # An ATP/WTA category link alone is NOT a match offer.
+                        page.wait_for_function("""() => [...document.querySelectorAll('a[href]')].some(a =>
+                          a.href.startsWith('https://www.ifortuna.sk/stavkovanie/tenis/')
+                          && a.pathname.split('/').length >= 6)""", timeout=16000)
+                    else:
+                        page.wait_for_selector('[data-testing-selector="MatchDetailCard"]',
+                                               timeout=16000)
+                except BrowserTimeout as exc:
+                    raise RuntimeError("public_bookmaker_markets_not_rendered") from exc
+                html = page.content()
+                if len(html) > 5_000_000:
+                    raise RuntimeError("oversized rendered HTML")
+                return html
+
+            return collect(target_day, max_events=max_events, get=rendered)
+        finally:
+            browser.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--target-day', type=date.fromisoformat,
@@ -225,7 +273,7 @@ def main():
     args = parser.parse_args()
     if not 1 <= args.max_events <= 60:
         parser.error('max-events must be 1..60')
-    report = collect(args.target_day, max_events=args.max_events)
+    report = collect_rendered(args.target_day, max_events=args.max_events)
     dest = Path(args.out)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + '\n')
