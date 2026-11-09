@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,todayPublishedPickCount,wireResultsFilters,renderRoute,localResultMetrics,bratislavaBettingDayKey,resultPublicationMatchesWindow,currentBettingDayPublishedKeys,memberResultCohort,settledPublishedEntries,renderResults,aceLeaderHintHtml};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -577,6 +577,88 @@ def main():
             assert 'top5' not in current_admin["activeIds"],current_admin
             assert 'unissued-top' not in current_admin["activeIds"],current_admin
             print("ELITE current Admin category caps, hidden categories, duplicate and issuance scope: PASS")
+
+            # Strict dashboard parity with the verified durable 21-publication
+            # VIAC ES accounting shape: 13 wins, 6 losses, 2 void, 19 stakes,
+            # +1.80u, ROI 9.473684%. A legacy 'priced' projection is not a
+            # frozen priced_projection and must not become a 20th stake.
+            most_aces_kpi = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const savedFeed=s.feed,savedFilters=s.resultsFilters;
+                const make=(i)=>{
+                  const win=i<13,voided=i>=19&&i<21,invalid=i===21;
+                  const event='viac-parity-'+i;
+                  const pub={
+                    publication_key:'issued-'+event,section:'ace_winner',
+                    market:'most_aces',projection_scope:'player',
+                    projection_metric:'most_aces',selection_id:'p1',
+                    selection:'Player A',price_contract:'player_superiority',
+                    publication_status:'published',
+                    issued_at:'2026-11-09T05:00:00Z',
+                    betting_day:'2026-11-09',offer_position:i+1,
+                    price_status:invalid?'priced':'priced_projection',
+                    odds:1.60,
+                    result:{
+                      status:voided?'void':win?'hit':'miss',
+                      correct:voided?null:win,void:voided,
+                      staked_units:voided?0:1,
+                      profit_units:voided?0:win?.60:-1
+                    }
+                  };
+                  return {event_id:event,tour:'ATP',surface:'hard',
+                    scheduled_at:'2026-11-09T15:00:00Z',
+                    player1:{id:'p1',name:'Player A'},
+                    player2:{id:'p2',name:'Player B'},
+                    market_publications:[pub]};
+                };
+                const allRule=()=>({enabled:true,display_state:'active',
+                  visible_picks:'ALL',selection_mode:'first',row_overrides:{}});
+                const limited=()=>({enabled:true,display_state:'active',
+                  visible_picks:2,selection_mode:'first',row_overrides:{}});
+                s.feed={account:{is_admin:true,role:'admin',plan:'admin',
+                    status:'active'},
+                  entitlements:{result_categories:['ace_winner']},
+                  member_result_rules:{
+                    elite:{ace_winner:allRule()},
+                    pro:{ace_winner:limited()},
+                    legend:{ace_winner:allRule()},
+                    goat:{ace_winner:allRule()}},
+                  results:Array.from({length:22},(_,i)=>make(i)),
+                  ace_picks:[]};
+                s.resultsFilters={category:'ace_winner',tour:'',
+                  surface:'',window:'all',dateFrom:'',dateTo:'',
+                  bettingDay:true,membership:''};
+                const stats=membership=>{
+                  s.resultsFilters.membership=membership;
+                  const m=t.localResultMetrics(t.filteredResults(),
+                    'ace_winner',s.resultsFilters);
+                  return {stake:m.stake,profit:m.profit,roi:m.roi,
+                    oddsSample:m.oddsSample,voids:m.voids};
+                };
+                const all=stats('');
+                const elite=stats('elite');
+                const pro=stats('pro');
+                const legend=stats('legend');
+                const goat=stats('goat');
+                s.feed.member_result_rules.elite.ace_winner.display_state='hidden';
+                const hidden=stats('elite');
+                s.feed=savedFeed;s.resultsFilters=savedFilters;
+                return {all,elite,pro,legend,goat,hidden};
+            }""")
+            expected_roi = 1.8 / 19
+            for tier in ("all", "elite", "legend", "goat"):
+                result = most_aces_kpi[tier]
+                assert result["stake"] == 19, (tier, result)
+                assert result["oddsSample"] == 19, (tier, result)
+                assert result["voids"] == 2, (tier, result)
+                assert abs(result["profit"] - 1.8) < 1e-9, (tier, result)
+                assert abs(result["roi"] - expected_roi) < 1e-9, (tier, result)
+            assert most_aces_kpi["pro"]["stake"] == 2, most_aces_kpi
+            assert abs(most_aces_kpi["pro"]["roi"] - 0.6) < 1e-9, most_aces_kpi
+            assert most_aces_kpi["hidden"]["stake"] == 0, most_aces_kpi
+            assert most_aces_kpi["hidden"]["roi"] is None, most_aces_kpi
+            print("VIAC ES strict issued-price Results/KPI and tier parity: PASS")
+
 
             # Browser: Aces leader icon independent of its O/U contract.
             # A parent result row may have stale match-level hints; the issued
