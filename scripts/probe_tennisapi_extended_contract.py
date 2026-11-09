@@ -17,6 +17,7 @@ from typing import Any
 
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.tennisapi_extra import point_by_point_inventory
+from tbt.providers.tennisapi_bulk import normalize_daily_bulk_odds
 from tbt.providers.statistics import inventory_statistics_keys
 
 
@@ -167,7 +168,23 @@ def summarize(name: str, payload: Any, *, event_id: int) -> dict:
                 "verified_complete_match_winner_quotes": 0,
                 "pre_match_timestamp_eligible": False,
             }
+            # Parse every event/selection pair from this ALREADY-paid daily
+            # response. Only aggregate counts leave the research probe: the
+            # private candidates include IDs/price-like values, but are never
+            # uploaded or treated as verified historical odds.
+            try:
+                pair_intake = normalize_daily_bulk_odds({"odds": price_map})
+                bulk_intake_summary = pair_intake["summary"]
+            except ProviderError:
+                bulk_intake_summary = {
+                    "schema": 1,
+                    "scope": "research_only_event_index",
+                    "status": "unsupported_shape",
+                    "canonical_new_values": 0,
+                    "cdb_writes": 0,
+                }
             result["daily_odds_value_profile"] = {
+                "bulk_pair_intake": bulk_intake_summary,
                 "choice_shape": choice_shape,
                 "first_level_numeric_key_memberships": first_level_numeric_keys,
                 "first_level_known_fields": dict(sorted(first_level_names.items())),
