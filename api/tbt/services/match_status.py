@@ -69,7 +69,9 @@ ISSUED_ROLLOVER_SECTIONS = (
     "doubles_picks", "ace_picks", "sg_picks",
 )
 ISSUED_ROLLOVER_HOURS = 72
-ISSUED_ROLLOVER_LIMIT = 180
+# The 72h verified-issuance window may span several daily 06:00 releases.
+# Keep a bounded full set; never silently discard confirmed receipts on rollover.
+ISSUED_ROLLOVER_LIMIT = 600
 
 
 def confirmed_rollover_rows(
