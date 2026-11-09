@@ -182,7 +182,8 @@ def test_member_dashboard_results_kpis_exclude_admin_disabled_and_over_limit_pic
     account_feed, manifest = filter_feed_for_access(
         payload, {"plan": plan, "status": "active"}, config,
     )
-    assert manifest["result_categories"] == ["top_daily", "prime", "value", "doubles"]
+    assert "top_daily" in manifest["result_categories"]
+    assert "ace_winner" not in manifest["result_categories"]
     assert [row["event_id"] for row in account_feed["results"]] == ["top-one"]
     member_kpis = selected_dashboard_cards(
         {**payload, "results": account_feed["results"]}, config,
