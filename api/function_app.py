@@ -2495,8 +2495,10 @@ def internal_match_status_worker(req):
         return response({"error": "live_worker_not_configured"}, 503)
     if not _live_worker_token_ok(req):
         return response({"error": "forbidden"}, 403)
+    phase = "read_feed"
     try:
         feed_payload = _read_feed_with_confirmed_aces_ou()
+        phase = "load_snapshot"
         previous = load_match_status_snapshot() or {}
         # Capture only pre-start market commitments with durable exact-serving
         # authority. Preserve yesterday's already confirmed receipts across
@@ -2508,10 +2510,12 @@ def internal_match_status_worker(req):
         except AdminStorageUnavailable:
             logging.warning("Issued authority unavailable for rollover capture")
             confirmed_authority = None
+        phase = "capture_issued_rollover"
         issued_rollover = confirmed_rollover_rows(
             feed_payload, confirmed_authority, previous,
         )
         tracking_feed = feed_with_issued_rollover(feed_payload, issued_rollover)
+        phase = "initialize_provider"
         client = RapidTennisClient(
             settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
         )
@@ -2528,6 +2532,7 @@ def internal_match_status_worker(req):
         client.client.timeout = 4.0
         worker_started = time.monotonic()
         try:
+            phase = "scan_match_statuses"
             snapshot = scan_match_statuses(
                 tracking_feed,
                 client,
@@ -2546,6 +2551,7 @@ def internal_match_status_worker(req):
             # Only issued Aces/DF offers qualify for post-match statistics.
             # Reuse the same client/quota; never start an unbounded enrichment.
             from tbt.providers.statistics import parse_statistics
+            phase = "enrich_post_match_stats"
             stat_rows = published_ace_statistic_targets(tracking_feed)
             checked_stats = 0
             unavailable_stats = 0
@@ -2619,6 +2625,7 @@ def internal_match_status_worker(req):
         # Attach only persisted provider evidence collected by LIVE Radar.
         # This remains display metadata; settlement P/L still uses the immutable
         # publication odds from the issued pick.
+        phase = "attach_live_odds"
         settled_by_id={
             str(item.get("event_id") or "").strip():item
             for item in snapshot.get("settled_events") or []
@@ -2650,6 +2657,7 @@ def internal_match_status_worker(req):
                     if value not in (None,""):
                         settled[key]=value
         snapshot["rollover_issued_rows"] = issued_rollover
+        phase = "persist_match_status"
         saved = save_match_status_snapshot(snapshot)
         # Independent durable Azure read-back: a successful upsert alone is not
         # evidence that the provider-verified schedule overlay can be served.
@@ -2664,6 +2672,7 @@ def internal_match_status_worker(req):
         # Persist verified settled public offers before the 06:00 feed rollover.
         # Zero API calls: use only the provider-verified status snapshot and the
         # already deployed immutable offer. Readback is required to pass cron.
+        phase = "archive_settled_results"
         saved["results_archive"] = save_settled_results_archive(
             settled_archive_candidates(tracking_feed, saved.get("statuses") or {})
         )
@@ -2711,15 +2720,15 @@ def internal_match_status_worker(req):
     except AdminStorageUnavailable:
         return response({"error": "match_status_storage_unavailable"}, 503)
     except Exception as exc:
-        logging.exception("Hourly match status worker failed")
+        logging.exception("Hourly match status worker failed in phase=%s", phase)
         record_system_event(
             "warning",
             "match-status",
             "Hourly match status worker failed",
-            details={"error": exc.__class__.__name__},
+            details={"error": exc.__class__.__name__, "phase": phase},
         )
         return response(
-            {"error": "match_status_worker_failed", "detail": exc.__class__.__name__},
+            {"error": "match_status_worker_failed", "detail": exc.__class__.__name__, "phase": phase},
             503,
         )
 
