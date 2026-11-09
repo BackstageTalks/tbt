@@ -924,8 +924,12 @@ def save_match_status_snapshot(payload: object) -> dict:
     # customer-facing feed or invent wager lines from today's changed model.
     rollover = data.get("rollover_issued_rows")
     rollover = rollover if isinstance(rollover, list) else []
+    from .match_status import ISSUED_ROLLOVER_LIMIT
+    if len(rollover) > ISSUED_ROLLOVER_LIMIT:
+        # Never publish a partial snapshot missing confirmed issued bets.
+        raise AdminStorageUnavailable("Confirmed rollover exceeds safe storage capacity")
     safe["rollover_issued_rows"] = [
-        entry for entry in rollover[:180]
+        entry for entry in rollover
         if (isinstance(entry, dict)
             and entry.get("confirmed_only") is True
             and entry.get("section") in {
