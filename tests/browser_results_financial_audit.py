@@ -76,6 +76,24 @@ def main():
                 # profit_units is already normalized to the displayed 1u result.
                 # Filter ROI must stay 83%, not be diluted to 0.83%.
                 check_summary(page, ["5-0", "100.0%", "1.83", "83.0%", "+0.83u", "5"])
+                # Numeric odds are neutral white for genuine quotes and
+                # display-only prices on both desktop and mobile. Positive
+                # Units remain green; only the quote text color changes.
+                quoted = page.evaluate("""() => {
+                  const row=document.querySelector(
+                    '#routePanel .results-card-row td.result-odds.is-quoted');
+                  const unquoted=document.querySelector(
+                    '#routePanel .results-card-row td.result-odds:not(.is-quoted)');
+                  const gain=document.querySelector(
+                    '#routePanel .results-card-row td.result-units b.correct');
+                  return {
+                    quoted:row&&getComputedStyle(row).color,
+                    unquoted:unquoted&&getComputedStyle(unquoted).color,
+                    gain:gain&&getComputedStyle(gain).color,
+                  };
+                }""")
+                assert quoted['quoted'] == 'rgb(238, 248, 244)', quoted
+                assert quoted['gain'] == 'rgb(66, 232, 151)', quoted
                 # Existing illustrative units are deliberately retained in
                 # individual rows; unlike the real quoted ROI sample they are NOT stakes.
                 assert page.locator("#routePanel .results-units-depth b").count() == 5
