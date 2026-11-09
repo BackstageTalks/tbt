@@ -399,6 +399,26 @@ def filter_results_for_member_limits(
         for pub in _public_result_publications(row):
             category = _result_publication_category(pub)
             tab = "daily" if category == "top_daily" else category
+            ent = sections.get(tab) or {}
+            bridge_only = category == "ace_winner" and (
+                pub.get("ace_winner_issued") is False
+                or str(pub.get("price_status") or "").lower() == "projection_only"
+            )
+            if bridge_only:
+                continue
+            # FULL access must preserve historical issued publications even
+            # when a legacy receipt lacks an optional identity/position field.
+            # This is especially important for LEGEND and GOAT. A limited
+            # tier still requires a verifiable contract and authorized slot.
+            full_access = (
+                category in categories and ent.get("enabled") is True
+                and ent.get("display_state") == "active"
+                and str(ent.get("visible_picks")).upper() == "ALL"
+                and not ent.get("row_overrides")
+            )
+            if full_access:
+                kept.append(pub)
+                continue
             stamp = scheduled or _parse_datetime(pub.get("issued_at"))
             day = str(pub.get("betting_day") or "").strip()
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
