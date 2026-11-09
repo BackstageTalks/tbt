@@ -1556,9 +1556,9 @@ def feed(req):
             runtime_ui, _, _ = load_effective_ui_config()
             access_context = _access_context_with_daily_allocation(user, account_data, profile, source_feed, runtime_ui)
             data, entitlements = filter_feed_for_access(source_feed, access_context, runtime_ui)
-            # Global admin-selected KPI scalars only. Never return unrestricted
-            # raw performance windows to accounts with limited Results access.
-            data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)
+            # Safe fallback even if runtime settlement fails: initial KPI
+            # scalars can see only this account's already-authorized Results.
+            data["dashboard_kpi_cards"] = selected_dashboard_cards(data, runtime_ui)
             if is_admin(user, settings):
                 data["member_result_rules"] = {
                     plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
@@ -1618,22 +1618,21 @@ def feed(req):
             # Results-based dashboard scalars must observe exactly the same
             # category, position and per-account grants as the Results table.
             # ADMIN retains the unrestricted global operational KPI universe.
-            if runtime_ui is not None:
-                kpi_source = dict(source_feed)
-                if is_admin(user, settings):
-                    kpi_source["results"] = runtime_settled_results(
-                        source_feed, raw_statuses
-                    )
-                    kpi_source = apply_result_exclusions(
-                        kpi_source, excluded_result_ids
-                    )
-                else:
-                    kpi_source["results"] = data.get("results") or []
-                if not exclusions_available:
-                    kpi_source["results"] = []
-                data["dashboard_kpi_cards"] = selected_dashboard_cards(
-                    kpi_source, runtime_ui
+            kpi_source = dict(source_feed)
+            if is_admin(user, settings):
+                kpi_source["results"] = runtime_settled_results(
+                    source_feed, raw_statuses
                 )
+                kpi_source = apply_result_exclusions(
+                    kpi_source, excluded_result_ids
+                )
+            else:
+                kpi_source["results"] = data.get("results") or []
+            if not exclusions_available:
+                kpi_source["results"] = []
+            data["dashboard_kpi_cards"] = selected_dashboard_cards(
+                kpi_source, runtime_ui
+            )
             # Response-only schedule corrections for rows this member can already
             # see; the published feed/ledger and betting odds remain untouched.
             data = apply_verified_schedule_overlay(
