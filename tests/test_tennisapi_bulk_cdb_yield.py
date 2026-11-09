@@ -133,6 +133,8 @@ def test_10_call_live_plan_is_readonly_and_dedups_across_routes():
     assert report["source"]["validation_counts"]["same_event_across_routes"] >= 2
     assert report["endpoint"]["2026_daily_odds"]["raw_native_keys"] == 2
     assert report["endpoint"]["2026_daily_odds"]["native_keys_in_cdb"] == 1
+    assert report["endpoint"]["2026_daily_odds"]["bulk_pair_intake"][
+        "counts"]["native_events_with_parseable_pair"] == 0
     assert report["verified_net_new_cdb_matches"] == 0
     assert report["verified_net_new_cdb_statistic_values"] == 0
     assert report["verified_historical_prematch_odds"] == 0
@@ -146,3 +148,48 @@ def test_budget_bounds_and_bad_source_witness_stop_new_paid_calls():
     assert p.request_count == 4
     with pytest.raises(ValueError,match="1..12"):
         run(Stub(), [], max_requests=13)
+
+
+class BulkPairStub(Stub):
+    def _get(self, path, *, enrichment=False):
+        if path == "/api/tennis/events/odds/11/9/2026":
+            assert enrichment is True and self.retry_attempts == 1
+            self.request_count += 1
+            self.paths.append(path)
+            return {"odds": {
+                str(17449516 if i == 0 else 500000 + i): {
+                    "choices": [
+                        {"name": "1", "fractionalValue": "3/2"},
+                        {"name": "2", "fractionalValue": "2/3"},
+                    ],
+                } for i in range(994)
+            }}
+        return super()._get(path, enrichment=enrichment)
+
+
+def test_existing_10_call_cdb_overlap_audit_parses_all_994_without_extra_requests():
+    rows = [
+        match(100, "2023-01-18T12:00:00+00:00", mid="a"),
+        match(17449516, "2026-09-11T12:00:00+00:00",
+              home=33, away=44, winner=33, tour="wta", mid="b"),
+    ]
+    p = BulkPairStub()
+    report = run(p, rows, max_requests=12)
+    assert p.request_count == 10 == len(p.paths)
+    odds = report["endpoint"]["2026_daily_odds"]
+    assert odds["raw_native_keys"] == 994
+    assert odds["bulk_pair_intake"]["counts"]["parseable_two_sided_pairs"] == 994
+    assert odds["candidate_native_events_with_single_cdb_claim"] == 1
+    assert odds["candidate_native_events_without_cdb_claim"] == 993
+    assert odds["candidate_native_events_with_ambiguous_cdb_claim"] == 0
+    assert odds["candidate_identity_verified_against_cdb"] == 0
+    assert odds["validated_historical_quote_pairs"] == 0
+    assert odds["cdb_odds_writes"] == 0
+    assert odds["bulk_pair_intake"]["cdb_writes"] == 0
+    assert report["verified_historical_prematch_odds"] == report["cdb_writes"] == 0
+    import json
+    encoded = json.dumps(report, sort_keys=True)
+    assert '"source_event_id"' not in encoded
+    assert '"latest_decimal"' not in encoded
+    assert "3/2" not in encoded
+    assert '"500001"' not in encoded
