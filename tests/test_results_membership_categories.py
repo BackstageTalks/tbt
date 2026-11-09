@@ -370,3 +370,42 @@ def test_runtime_post_settlement_rechecks_position_caps_not_only_category():
     )
     assert app.count('data["results"] = filter_results_for_member_limits(') == 1
     assert "authorized_feed=data" in app
+
+
+def test_current_day_uses_each_accounts_durable_random_allocation_not_recomputed_sample():
+    from tbt.services.entitlements import blinq_access_day, _row_access_key
+    day = blinq_access_day()
+    payload = _payload()
+    source = _positioned_results(5)
+    payload["results"] = source
+    payload["top_daily_picks"] = [
+        {
+            "event_id": row["event_id"], "winner_id": "p1",
+            "selection_id": "p1", "odds": 2.0,
+            "scheduled_at": day + "T12:00:00+00:00",
+            "player1": {"id": "p1", "name": "A"},
+            "player2": {"id": "p2", "name": "B"},
+        }
+        for row in source
+    ]
+    for row in source:
+        row["scheduled_at"] = day + "T12:00:00+00:00"
+        row["market_publications"][0]["issued_at"] = day + "T08:00:00+00:00"
+        row["market_publications"][0]["betting_day"] = day
+    cfg = _config({
+        ("rookie", "top_daily"): {
+            "visible_rows": 1, "display_state": "active",
+            "selection_mode": "stable_random",
+        },
+    })
+    for slot in (2, 4):
+        account = {
+            "id": "member-" + str(slot), "plan": "rookie", "status": "active",
+            "_daily_allocations": {
+                "daily": [_row_access_key(payload["top_daily_picks"][slot - 1])]
+            },
+        }
+        data, ent = filter_feed_for_access(payload, account, cfg)
+        assert [r["event_id"] for r in data["daily_picks"]] == [f"top_daily-{slot}"]
+        assert [r["event_id"] for r in data["results"]] == [f"top_daily-{slot}"]
+        assert ent["sections"]["daily"]["visible_picks"] == 1
