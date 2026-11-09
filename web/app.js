@@ -4046,6 +4046,9 @@
     // Settled rows only fill missing historical identities after the offer.
     [['daily_picks','top_daily'],['top_daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg']].forEach(([feedKey,section])=>{
       (state.feed[feedKey]||[]).forEach((row,rowIndex)=>{
+        // VIAC ES display-only leader bridges inherit the ESÁ issued timestamp.
+        // They are explicitly NOT separately issued Most Aces bets.
+        if(row?.ace_winner_issued===false||String(row?.price_status||'').toLowerCase()==='projection_only')return;
         const publications=Array.isArray(row?.market_publications)?row.market_publications:[];
         const pubs=publications.filter(p=>p&&typeof p==='object'
           &&String(p.publication_status||'published')==='published'
@@ -7407,11 +7410,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       showStatus('Nastavenie bolo publikované na live web.');
       renderAllUiContent();
       rerenderAdmin();
-      if(state.adminTab==='dashboard'||state.adminTab==='layout'){
-        // After publishing, re-read only the three server-approved KPI scalars.
-        // Do not derive restricted historical metrics from the browser's feed.
-        await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové KPI ešte nenačítali.'));
-      }
+      // ELITE Results/KPI membership rules are server-generated from the
+      // published Admin config. Re-read them after EVERY successful publish,
+      // not just dashboard/layout edits, so changing any category applies
+      // without code changes or a manual page reload.
+      await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové pravidlá členstva ešte nenačítali.'));
       return true;
     }catch(error){
       const message=error?.status===503?'Admin storage nie je dostupný. Skontroluj Admin → Systém.':(error?.message||'Nastavenie sa nepodarilo publikovať.');
