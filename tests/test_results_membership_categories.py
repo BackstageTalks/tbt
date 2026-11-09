@@ -472,3 +472,27 @@ def test_elite_excludes_large_more_aces_offer_but_legend_and_goat_retain_all():
         assert "ace_winner" in entitlement["result_categories"]
         assert entitlement["sections"]["ace_winner"]["visible_picks"] == "ALL"
     assert payload == original
+
+
+def test_legend_and_goat_unlimited_rules_preserve_legacy_issued_results():
+    """ALL must not drop older genuine results solely for missing optional IDs."""
+    payload = _payload()
+    payload["results"] = [{
+        "event_id": "legacy-2026-10-28", "scheduled_at": "2026-10-28T13:00:00Z",
+        "market_publications": [{
+            "section": "top_daily", "market": "match_winner",
+            "issued_at": "2026-10-28T07:00:00Z",
+            "publication_status": "published",
+            "result": {"correct": True, "status": "settled"},
+        }],
+    }]
+    config = _config({
+        ("elite", "top_daily"): {"visible_rows": 5, "display_state": "active"},
+        ("legend", "top_daily"): {"visible_rows": "ALL", "display_state": "active"},
+        ("goat", "top_daily"): {"visible_rows": "ALL", "display_state": "active"},
+    })
+    elite, _ = _read("elite", config, payload)
+    assert elite["results"] == []  # Missing identity cannot consume a capped slot.
+    for plan in ("legend", "goat"):
+        full, _ = _read(plan, config, payload)
+        assert full["results"] == payload["results"]
