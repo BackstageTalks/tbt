@@ -139,3 +139,11 @@ def test_no_unsafe_bulk_overrides_from_unsupported_or_cross_event_envelopes():
     assert not bad_provider["candidates"]
     assert bad_provider["summary"]["counts"]["invalid_source_provider_id"] == 1
     assert bad_provider["summary"]["raw_events_accounted_for"] is True
+    conflicting_echoes = normalize_daily_bulk_odds(
+        {"odds": {"101": {**pair(), "eventId": "101", "event_id": "999"}}})
+    assert conflicting_echoes["candidates"] == []
+    assert conflicting_echoes["summary"]["counts"]["event_id_mismatch"] == 1
+    inconsistent_nested_provider = normalize_daily_bulk_odds(
+        {"odds": {"101": {"1": {**pair(), "providerId": "5"}}}})
+    assert inconsistent_nested_provider["candidates"] == []
+    assert inconsistent_nested_provider["summary"]["counts"]["rejected_provider_id_mismatch"] == 1
