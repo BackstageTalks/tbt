@@ -165,3 +165,43 @@ def test_verified_issued_rollover_entries_roundtrip_without_loss(monkeypatch):
     assert saved["rollover_issued_rows"] == [entry]
     assert observed["rollover_issued_rows"] == [entry]
     assert admin_storage.load_match_status_snapshot()["rollover_issued_rows"] == [entry]
+
+def test_220_confirmed_rollovers_are_persisted_without_old_180_truncation(monkeypatch):
+    table = ChunkTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    entries = [{
+        "confirmed_only": True,
+        "section": "ace_picks",
+        "betting_day": "2026-11-09",
+        "receipt_key": hashlib.sha256(f"receipt-{i}".encode()).hexdigest(),
+        "generated_at": "2026-11-09T05:20:00Z",
+        "row": {
+            "event_id": f"event-{i}",
+            "scheduled_at": "2026-11-09T14:00:00Z",
+            "market": "aces",
+            "selection_id": "p1",
+        },
+    } for i in range(220)]
+    saved = admin_storage.save_match_status_snapshot({
+        "rollover_issued_rows": entries, "statuses": {}, "pending": {},
+    })
+    loaded = admin_storage.load_match_status_snapshot()
+    assert len(saved["rollover_issued_rows"]) == 220
+    assert loaded["rollover_issued_rows"] == entries
+    assert len({e["receipt_key"] for e in loaded["rollover_issued_rows"]}) == 220
+
+
+def test_rollover_exceeding_capacity_fails_without_replacing_snapshot(monkeypatch):
+    table = ChunkTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    admin_storage.save_match_status_snapshot({"tracked": 1})
+    original = table.get_entity("runtime", "match-status-worker")
+    from tbt.services.match_status import ISSUED_ROLLOVER_LIMIT
+    import pytest
+    entry = {"confirmed_only": True, "section": "ace_picks",
+             "row": {"event_id": "safe"}}
+    with pytest.raises(admin_storage.AdminStorageUnavailable):
+        admin_storage.save_match_status_snapshot({
+            "rollover_issued_rows": [entry] * (ISSUED_ROLLOVER_LIMIT + 1),
+        })
+    assert table.get_entity("runtime", "match-status-worker") == original
