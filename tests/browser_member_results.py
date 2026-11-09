@@ -7,7 +7,7 @@ from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
 def route_request(route):
     if urlparse(route.request.url).path == "/app.js":
         source=(WEB/"app.js").read_text(encoding="utf-8")
-        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,wireResultsFilters};\n  boot();")
+        source=source.replace("  boot();", "  window.memberTest={state,memberResultCohort,settledPublishedEntries,localResultMetrics,renderResultsFilters,renderResults,resultsSummary,wireResultsFilters};\n  boot();")
         route.fulfill(content_type="application/javascript",body=source)
     else: static_route(route)
 
@@ -31,6 +31,8 @@ def main():
               const m=t.localResultMetrics(t.state.feed.results,'all',filters);
               const all=t.settledPublishedEntries(t.state.feed.results,'all',{window:'all'}).length;
               const html=t.renderResultsFilters();
+              // Simulate the explicit Results category entitlements returned by the API.
+              t.state.feed.entitlements={result_categories:['top_daily','prime']};
               t.state.feed.account={is_admin:false};
               const hidden=!t.renderResultsFilters().includes('resultsMembership');
               const regular=t.settledPublishedEntries(t.state.feed.results,'all',filters).length;
@@ -48,7 +50,41 @@ def main():
               return {count:multi.length,expected:top.length+prime.length,checkboxes:html.includes('data-result-category')};
             }""")
             assert combined['count']==combined['expected'] and combined['checkboxes'],combined
-            print("Admin membership cohort, pending slots, per-day limits and ROI: PASS")
+            # Regression: "All published" is a category, not ALL membership.
+            # A missing ELITE rules payload must never masquerade as 0-0.
+            diagnostics=page.evaluate("""() => {
+              const t=memberTest,s=t.state;
+              s.feed.account={is_admin:true,role:'admin',plan:'admin',status:'active'};
+              s.resultsFilters={category:'all',tour:'',surface:'',window:'all',
+                bettingDay:true,membership:'elite'};
+              const label=t.renderResultsFilters().match(/results-mobile-filter-current">([^<]*)</)?.[1]||'';
+              const baseline=t.settledPublishedEntries(s.feed.results,'all',
+                {...s.resultsFilters,membership:''}).length;
+              s.feed.member_result_rules={};
+              const missing=t.renderResults();
+              const record=t.resultsSummary();
+              s.feed.member_result_rules={elite:{
+                daily:{enabled:false,display_state:'hidden',visible_picks:0},
+                prime:{enabled:false,display_state:'hidden',visible_picks:0}}};
+              const ruledOut=t.renderResults();
+              const original=s.feed.results;
+              s.feed.results=[];
+              s.resultsFilters.window='today';
+              const unsettled=t.renderResults();
+              s.feed.results=original;
+              s.feed.results_archive_unavailable=true;
+              const unavailable=t.renderResults();
+              return {label,baseline,missing,record,ruledOut,unsettled,unavailable};
+            }""")
+            assert 'ELITE' in diagnostics['label'],diagnostics
+            assert diagnostics['baseline']==4,diagnostics
+            assert 'Pravidlá' in diagnostics['missing'],diagnostics
+            assert '>—<' in diagnostics['record'],diagnostics
+            assert '4 vyhodnotených' in diagnostics['ruledOut'],diagnostics
+            assert '06:00–06:00' in diagnostics['unsettled'],diagnostics
+            assert 'Archív' in diagnostics['unavailable'],diagnostics
+            assert not errors,errors
+            print("Admin membership cohort, pending slots, mobile scope and empty-state diagnostics: PASS")
         finally: browser.close()
 if __name__=="__main__":main()
 
