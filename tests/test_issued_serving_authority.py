@@ -258,17 +258,35 @@ def test_issued_authority_650_exact_keys_fit_azure_and_round_trip(monkeypatch):
 
 def test_issued_authority_remains_finitely_bounded(monkeypatch):
     from tbt.services import admin_storage
-    from tbt.services.issued_authority import MAX_KEYS, persist_authority
+    from tbt.services.issued_authority import MAX_DAILY_KEYS, persist_authority
 
     table = _Utf16LimitedAuthorityTable()
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
-    keys = sorted(hashlib.sha256(str(i).encode()).hexdigest() for i in range(MAX_KEYS + 1))
+    keys = sorted(hashlib.sha256(str(i).encode()).hexdigest() for i in range(MAX_DAILY_KEYS + 1))
     with pytest.raises(ValueError, match="bounded daily size"):
         persist_authority({
             "schema": 1, "confirmed_only": True,
             "betting_day": "2026-11-08", "keys": keys,
         })
     assert not table.rows
+
+
+def test_single_large_confirmed_generation_survives_build_validate_and_storage(monkeypatch):
+    from tbt.services import admin_storage
+    from tbt.services.issued_authority import load_authority, persist_authority
+    table = _Utf16LimitedAuthorityTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    rows = [pick(str(i)) for i in range(400)]
+    feed = {"generated_at": "2026-11-06T06:24:57+00:00",
+            "upcoming": rows, "top_daily_picks": rows}
+    receipt = build_confirmed_authority(feed, [ledger_entry(r) for r in rows], now=NOW)
+    assert len(receipt["keys"]) == 800
+    validate_authority(receipt, feed, now=NOW)
+    persist_authority(receipt)
+    assert load_authority(receipt["betting_day"])["keys"] == receipt["keys"]
+    # Invalid identities still cannot be inserted through the larger request.
+    with pytest.raises(ValueError, match="absent from exact"):
+        validate_authority({**receipt, "keys": [*receipt["keys"], "a" * 64]}, feed, now=NOW)
 
 
 def test_successive_generations_preserve_more_than_700_keys_atomically(monkeypatch):
