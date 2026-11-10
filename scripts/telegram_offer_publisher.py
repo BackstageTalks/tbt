@@ -245,7 +245,7 @@ def select_groups(x,c,now):
         raise RuntimeError("Wrong betting day")
     got={};seen=set()
     for k,key in SECTIONS.items():
-        if not (c.get("sections") or {}).get(k) and not (k=="top" and c.get("free_top_pick",True)):
+        if not (c.get("sections") or {}).get(k) and not (k in ("top","aces") and c.get("free_top_pick",True)):
             continue
         source=_daily_rows(x) if k=='top' else (x.get(key) or [])
         if not isinstance(source,list):raise ValueError("Invalid confirmed offer section")
@@ -345,7 +345,14 @@ def verify_prepared_site(confirmed, config_url, now):
     return verified_website_morning_parity(confirmed, json.loads(body), now)
 
 
-def messages(x,c,now,free_event_id=None):
+def _free_aces_identity(row):
+    """Freeze the exact O/U bet, not just a match that may carry two lines."""
+    return [str(row["event_id"]),str(row.get("selection_id") or ""),
+            str(row.get("ou_side") or ""),str(row.get("market_line") or "")]
+
+
+def messages(x,c,now,free_event_id=None,free_aces_identity=None,
+             include_free_aces=True,legacy_free_label=False):
     got=select_groups(x,c,now)
     if not got:return []
     today=day(now)
@@ -399,8 +406,29 @@ def messages(x,c,now,free_event_id=None):
         if not candidates: raise RuntimeError("Previously issued FREE TOP event is no longer in confirmed TOP; refusing changed FREE pick")
         winner=min(candidates,key=lambda r:hashlib.sha256(
             (today+"|"+str(r.get("event_id"))+"|"+str((r.get("betting") or {}).get("selection_id") or r.get("winner_id"))).encode("utf-8")).hexdigest())
-        free="\n".join([f"📅 {date}","",fmt(winner,"top",c,1,prefix_override="🆓 FREE")])
-        outbound.append({"audience":"free","text":"\n\n".join([HEADER,free,footer]),"free_event_id":str(winner.get("event_id"))})
+        free_ace=None
+        if include_free_aces:
+            candidates=got.get("aces",[])
+            if free_aces_identity is not None:
+                candidates=[r for r in candidates if _free_aces_identity(r)==free_aces_identity]
+                if not candidates:
+                    raise RuntimeError("Frozen FREE ACES O/U is no longer an eligible confirmed bet")
+            if candidates:
+                free_ace=min(candidates,key=lambda r:hashlib.sha256(
+                    (today+"|free-aces|"+json.dumps(_free_aces_identity(r))).encode("utf-8")).hexdigest())
+        # Never publish a partial or unpriced two-pick FREE preview.
+        # Legacy explicitly approved reposts keep their original one-TOP format.
+        if not include_free_aces or free_ace is not None:
+            prefix="🆓 FREE" if legacy_free_label else "🆓"
+            free_lines=[fmt(winner,"top",c,1,prefix_override=prefix)]
+            if free_ace is not None:
+                free_lines.append(fmt(free_ace,"aces",c,2,prefix_override="🆓"))
+            free="\n".join([f"📅 {date}",""]+free_lines)
+            item={"audience":"free","text":"\n\n".join([HEADER,free,footer]),
+                  "free_event_id":str(winner.get("event_id"))}
+            if free_ace is not None:
+                item["free_aces_identity"]=_free_aces_identity(free_ace)
+            outbound.append(item)
     if any(len(item["text"].encode("utf-16-le"))//2>4096 for item in outbound):
         raise RuntimeError("Telegram message exceeds 4096 UTF-16 units")
     return outbound
@@ -409,14 +437,15 @@ def messages(x,c,now,free_event_id=None):
 def result_reference(row,section):
     """Immutable compact reference to a sendable and subsequently gradable pick."""
     betting=row.get("betting") or {}
-    real_section={"top":"top_daily","value":"value","aces":"ace","free":"top_daily"}[section]
-    market="aces" if section=="aces" else "match_winner"
+    real_section={"top":"top_daily","value":"value","aces":"ace",
+                  "free":"top_daily","free_aces":"ace"}[section]
+    market="aces" if section in ("aces","free_aces") else "match_winner"
     selection=str(betting.get("selection_id") or row.get("selection_id") or row.get("winner_id") or "")
     pubs=[p for p in row.get("market_publications") or [] if isinstance(p,dict)
           and p.get("section")==real_section and str(p.get("market") or market)==market
           and str(p.get("selection_id") or p.get("winner_id") or "")==selection]
     pub=pubs[0] if len(pubs)==1 else {}
-    if section=="aces":
+    if market=="aces":
         odds, verified_provider = selected_ace_odds(row, selection_id=selection)
         if row.get("price_contract") == "player_total_ou":
             if _eligible_local_player_aces_ou(row):
@@ -439,7 +468,7 @@ def result_reference(row,section):
         odds=num(pub.get("odds") or betting.get("odds") or row.get("odds"))
         verified_provider=False
     return {"event_id":str(row["event_id"]), "section":real_section,
-            "channel":section, "market":market, "selection_id":selection,
+            "channel":"free" if section=="free_aces" else section, "market":market, "selection_id":selection,
             "publication_key":str(pub.get("publication_key") or ""),
             "market_line":pub.get("market_line"),
             "projection_direction":str(pub.get("ou_side") or pub.get("projection_direction") or ""),
@@ -600,6 +629,7 @@ def prepare(a):
         raise RuntimeError("No previously confirmed same-day Telegram delivery to reformat")
     out=Path(a.output)
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
+    sticky_aces=old.get("free_aces_picks") if isinstance(old.get("free_aces_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
     if getattr(a, "verify_site", False):
         # Validate THIS snapshot in the preparing job, not an earlier waiter snapshot.
@@ -613,7 +643,14 @@ def prepare(a):
     elif repost:
         confirmed=_original_offer_only(confirmed,previous,now,
             allow_aces_price_update=price_correction)
-    msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)))
+    # Reposts must not silently add a new FREE selection to historical receipts.
+    issued_free_aces=not repost or any(
+        r.get("channel")=="free" and r.get("market")=="aces"
+        for r in previous.get("rows",[]))
+    msg=messages(confirmed,v,now,free_event_id=sticky.get(day(now)),
+                 free_aces_identity=sticky_aces.get(day(now)),
+                 include_free_aces=issued_free_aces,
+                 legacy_free_label=repost and not issued_free_aces)
     if not msg:print('{"status":"skipped","reason":"no_eligible_rows"}');return
     if repost and not ace_ou_reissue and len(msg)!=len(previous["message_ids"]):
         raise RuntimeError("Reformatted message count does not match original receipts")
@@ -629,6 +666,12 @@ def prepare(a):
         top=next((row for row in groups.get("top",[]) if str(row.get("event_id"))==free["free_event_id"]),None)
         if top is None:raise RuntimeError("FREE pick missing from confirmed TOP")
         sent_rows.append(result_reference(top,"free"))
+        if free.get("free_aces_identity") is not None:
+            exact=[row for row in groups.get("aces",[])
+                   if _free_aces_identity(row)==free["free_aces_identity"]]
+            if len(exact)!=1:
+                raise RuntimeError("FREE ESÁ missing unique confirmed ATP/WTA O/U")
+            sent_rows.append(result_reference(exact[0],"free_aces"))
     if not sent_rows:raise RuntimeError("No exact Telegram rows to evaluate")
     if repost:
         original=previous["rows"]
@@ -659,10 +702,13 @@ def prepare(a):
     for item in msg:
         if item.get("audience")=="free" and item.get("free_event_id"):
             sticky[day(now)]=item["free_event_id"]
+            if item.get("free_aces_identity") is not None:
+                sticky_aces[day(now)]=item["free_aces_identity"]
     save(out/"state.json",{**old,"schema":1,
         "attempts":dict(list(attempts.items())[-100:]),
         "reposts":dict(list(reposts.items())[-30:]),
-        "free_picks":dict(list(sticky.items())[-30:])})
+        "free_picks":dict(list(sticky.items())[-30:]),
+        "free_aces_picks":dict(list(sticky_aces.items())[-30:])})
     (out/"ready").write_text(ident,encoding="utf-8")
     print(json.dumps({"status":"reserved","id":ident,"messages":len(msg)}))
 def send(a):
