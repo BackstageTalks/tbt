@@ -100,7 +100,7 @@ def test_conditional_admin_ui_publish_checks_revision_and_version(monkeypatch):
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     admin_storage.save_runtime_ui_config(payload, actor_id="admin")
     previous = admin_storage.load_runtime_ui_config()
-    revision = admin_storage.ui_config_revision(admin_storage.resolve_ui_access_config(previous))
+    revision = admin_storage.load_effective_ui_config_with_revision()[3]
     next_config = json.loads(json.dumps(previous))
     next_config["telegram_groups"] = {"schema": 1, "enabled": True, "groups": []}
     saved = admin_storage.save_runtime_ui_config(
@@ -135,7 +135,7 @@ def test_conditional_ui_publish_rejects_concurrent_storage_write(monkeypatch):
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     admin_storage.save_runtime_ui_config(payload)
-    revision = admin_storage.ui_config_revision(admin_storage.resolve_ui_access_config(payload))
+    revision = admin_storage.load_effective_ui_config_with_revision()[3]
     try:
         admin_storage.save_runtime_ui_config(
             payload, expected_revision=revision,
@@ -461,3 +461,100 @@ def test_info_result_history_is_independent_and_can_be_corrected(monkeypatch):
     removed=admin_storage.delete_info_result(first["id"],actor_id="admin")
     assert removed["deleted"] is True
     assert admin_storage.list_info_results()==[]
+
+
+def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(monkeypatch):
+    """81 existing VIAC ES offers must yield <=3 real ELITE rows on the server."""
+    from tbt.services.entitlements import filter_feed_for_access
+
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    legacy = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    legacy.pop("elite_ace_winner_access_revision", None)
+    winner = legacy["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]
+    winner["elite"].update({
+        "visible_rows": "ALL", "blur_remaining": False, "see_all": True,
+        "row_overrides": {"7": "active"},
+    })
+    old_ace = json.loads(json.dumps(legacy["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]))
+    old_legend = json.loads(json.dumps(winner["legend"]))
+    table.single = {
+        "PartitionKey": "runtime", "RowKey": "ui-config",
+        "payload": admin_storage._encode_runtime_ui_payload(legacy),
+    }
+    original_payload = table.single["payload"]
+    effective, configured, available, revision = admin_storage.load_effective_ui_config_with_revision()
+    assert configured and available
+    assert revision == admin_storage.ui_config_revision(legacy)
+    assert revision != admin_storage.ui_config_revision(effective)
+    assert table.single["payload"] == original_payload  # no Azure write from GET
+
+    rule = effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]
+    assert rule["visible_rows"] == 3
+    assert rule["blur_remaining"] is False
+    assert rule["see_all"] is False
+    assert rule["row_overrides"] == {}
+    assert effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"] == old_ace
+    assert effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["legend"] == old_legend
+
+    rows = [{
+        "event_id": f"most-aces-{i}", "market": "most_aces",
+        "scheduled_at": "2026-11-10T19:00:00Z", "pick": "Alpha",
+        "player1": {"id": f"alpha-{i}", "name": "Alpha", "probability": .75},
+        "player2": {"id": f"beta-{i}", "name": "Beta", "probability": .25},
+    } for i in range(81)]
+    feed, manifest = filter_feed_for_access(
+        {"ace_picks": rows, "top_daily_picks": [], "daily_picks": [],
+         "prime_picks": [], "value_picks": [], "sg_picks": [],
+         "doubles_picks": [], "results": [], "upcoming": []},
+        {"plan": "elite", "status": "active", "id": "elite-test"},
+        effective,
+    )
+    ent = manifest["sections"]["ace_winner"]
+    assert ent["total"] == 81
+    assert ent["visible_picks"] == 3
+    assert ent["returned"] == 3
+    assert ent["see_all"] is False
+    assert len([row for row in feed["ace_picks"] if row.get("market") == "most_aces"]) == 3
+
+
+def test_elite_ace_winner_admin_edit_survives_after_first_migration():
+    legacy = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    legacy.pop("elite_ace_winner_access_revision", None)
+    first = admin_storage.resolve_ui_access_config(legacy)
+    assert first["elite_ace_winner_access_revision"] == 1
+    rule = first["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]
+    rule["visible_rows"] = 2
+    again = admin_storage.resolve_ui_access_config(first)
+    assert again["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]["visible_rows"] == 2
+
+
+def test_cas_revision_ignores_release_migrations_and_remains_stale_safe(monkeypatch):
+    """GET/PUT share the stored revision while real writes still use ETags."""
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    old = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    old["access_contract_revision"] = 1
+    old.pop("elite_aces_access_revision", None)
+    old.pop("elite_ace_winner_access_revision", None)
+    old["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]["visible_rows"] = 5
+    table.single = {
+        "PartitionKey": "runtime", "RowKey": "ui-config",
+        "payload": admin_storage._encode_runtime_ui_payload(old),
+    }
+    effective, configured, available, revision = admin_storage.load_effective_ui_config_with_revision()
+    assert configured and available
+    assert revision == admin_storage.ui_config_revision(old)
+    assert revision != admin_storage.ui_config_revision(effective)
+
+    original_resolve = admin_storage.resolve_ui_access_config
+
+    def release_changed(runtime):
+        view = original_resolve(runtime)
+        view["new_release_only_default"] = "new"
+        return view
+
+    monkeypatch.setattr(admin_storage, "resolve_ui_access_config", release_changed)
+    different, _, _, identical_revision = admin_storage.load_effective_ui_config_with_revision()
+    assert different != effective
+    assert identical_revision == revision
