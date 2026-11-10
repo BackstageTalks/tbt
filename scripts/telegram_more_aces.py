@@ -94,6 +94,10 @@ def offered_rows(snapshot, now):
     selected = []
     identities = set()
     for row in rows:
+        # The auxiliary Most Aces message must not reintroduce excluded tours.
+        if not isinstance(row,dict) or str(row.get("tour") or "").strip().casefold() not in (
+                "atp","wta","atp tour","wta tour"):
+            continue
         player = ball_player(row)
         if player is None:
             continue
