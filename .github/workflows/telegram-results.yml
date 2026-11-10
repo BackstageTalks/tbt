@@ -80,14 +80,15 @@ jobs:
                 --api-url "$BLINQ_PRODUCTION_URL" \
                 --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" \
                 --state .private-telegram/ops/telegram-bot-state.json
-            elif jq -e '((.head_commit.modified // []) + (.head_commit.added // [])) |
-              index(".github/telegram-20261109-postponed-request.json") != null' "$GITHUB_EVENT_PATH" >/dev/null; then
+            elif git diff-tree --root --no-commit-id --name-only -r "$GITHUB_SHA" |
+              grep -Fxq '.github/telegram-20261109-postponed-request.json'; then
               # Operator-authorized one-day Results-only exception for a
               # FINISHED match with missing player Aces: no archive rewrite.
               test -s .github/telegram-20261109-postponed-request.json
               jq -e '.schema == 1 and .betting_day == "2026-11-09" and
                 .mode == "report_unverifiable_aces_as_postponed_once" and
                 .original_telegram_message_ids == [749,750] and
+                .delivery_trigger_revision == 2 and
                 .postponed_event_id == "17520979" and
                 .postponed_selection_id == "484870" and
                 .postponed_publication_key == "local-aces-ou-v1:17520979:484870:over:3.5" and
