@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "local_day": "2026-11-03",
-  "local_hour": 20,
-  "requested_utc": "2026-11-03T19:54:00Z",
-  "source": "operator-approved-evening-post-reset-statistics-test",
-  "smoke_run_id": 41707381765,
-  "purpose": "Dispatch existing fail-closed hourly API gapfill using fresh verified provider budget (113/15000 at smoke), shared CAS, 500 reserve, 6/s, writer lock, high-yield missing-field queue and independent CDB readback. No model release."
+  "local_day": "2026-11-10",
+  "local_hour": 18,
+  "requested_utc": "2026-11-10T17:14:52Z",
+  "source": "operator-approved-500-statistics-smoke",
+  "max_requests": 500,
+  "purpose": "One-time post-reset tennis statistics 500-request smoke after merged conflict quarantine and adaptive selection fixes. Existing hourly scheduler checks shared CAS 14500 global limit + 500 reserve, 6/s, CDB global lock, provider header and no writes for contradictory matches; independent CDB read-back required."
 }
