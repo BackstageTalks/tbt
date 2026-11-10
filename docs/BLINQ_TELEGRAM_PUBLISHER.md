@@ -8,9 +8,9 @@ Admin -> **Telegram bot** is independent of the existing **Telegram skupiny** pa
 
 - Publisher ON / OFF.
 - TOP, VALUE, ESÁ categories independently.
-- Free preview: one deterministic random confirmed TOP bet per BlinQ betting day (defaults ON).
+- FREE preview: one deterministic random confirmed TOP bet plus one independently selected verified ATP/WTA player ACES O/U bet, together in one Telegram post (defaults ON).
 - Scheduled dispatch time in **Europe/Bratislava**, weekdays, on/off.
-- **ALL** confirmed, eligible TOP → Value → Aces rows are sent in one sequential offer. Telegram publishing ignores the Admin `max_per_section` display setting (including legacy `7`), for scheduled, manual and 06:20 daily sends. Large offers are split at record boundaries to respect Telegram's 4096 UTF-16 limit without dropping picks. FREE is separately issued from one deterministic daily TOP pick.
+- **ALL** confirmed, eligible TOP → Value → Aces rows are sent in one sequential offer. Telegram publishing ignores the Admin `max_per_section` display setting (including legacy `7`), for scheduled, manual and 06:20 daily sends. Large offers are split at record boundaries to respect Telegram's 4096 UTF-16 limit without dropping picks. FREE is separately issued with exactly two consecutive 🆓 lines (TOP, then ATP/WTA ACES O/U) and no extra `FREE` word; it is omitted if no eligible O/U selection exists.
 
 Click **Publikovať** to store the configuration in the existing durable Azure Admin UI store. The default is OFF. Clicking **Zaradiť jednorazové odoslanie** saves the current draft along with a unique request ID; the existing externally scheduled hourly tick processes fresh requests, within 90 minutes. An external 10-minute repository dispatch can improve precision. The button does not mean that Telegram confirmed delivery.
 
@@ -36,7 +36,7 @@ Uses the **confirmed_only** `daily_offer_snapshot.json` from the existing privat
 - No tennis RapidAPI calls.
 - Never publishes shadow, pending, stale or unconfirmed predictions.
 - ESÁ projection-only offers never receive fabricated prices.
-- FREE chooses exactly one confirmed eligible TOP row; deterministic hashed rank. The chosen event ID is persisted so later runs for that day use the same event.
+- FREE chooses one confirmed eligible TOP row and one verified ATP/WTA player-aces O/U row; both choices use a deterministic daily hash and are persisted with exact immutable identities so reruns cannot swap bets.
 
 Historical style retained:
 ```
