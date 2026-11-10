@@ -81,8 +81,11 @@ def test_ui_publish_revision_uses_stored_payload_across_effective_release_change
     table = FakeTable()
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
-    # This old stored row needs a read-only migration in effective config.
+    # Force the legacy access migration to change the effective view only.
+    payload["access_contract_revision"] = 1
     payload.pop("elite_aces_access_revision", None)
+    elite = payload["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"]
+    elite.update({"visible_rows": 5, "blur_remaining": True, "see_all": False})
     admin_storage.save_runtime_ui_config(payload, actor_id="admin")
 
     effective, configured, available, revision = admin_storage.load_effective_ui_config_with_revision()
