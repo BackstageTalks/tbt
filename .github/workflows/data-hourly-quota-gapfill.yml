@@ -90,6 +90,15 @@ jobs:
           final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
           new_day_start = now.hour == 17 and 10 <= now.minute <= 13
           evening_limit = evening_cap(now, expected_reset)
+          tick_cap = operator_smoke_request_cap(
+              ".github/hourly-api-gapfill-tick.json",
+              enabled=os.getenv("TICK_500_SMOKE") == "true", now=now)
+          # Fresh one-off smoke can use the same *3,000 total-spend* new-day
+          # ceiling while the ordinary 17:10–17:13 slot is already past.
+          # It still cannot dispatch more than 500 requests or bypass CAS.
+          since_reset = (now - (expected_reset - timedelta(days=1))).total_seconds()
+          if tick_cap is not None and evening_limit is None and 0 <= since_reset < 45 * 60:
+              evening_limit = 3000
           reset_local = expected_reset.astimezone(ZONE)
           print(f"Bratislava time: {local.isoformat()}; next API reset: "
                 f"{reset_local.strftime('%Y-%m-%d %H:%M %Z')} "
@@ -180,9 +189,6 @@ jobs:
           # Never run extras in final closeout/reset.
           extras_slot = stage_hour in (14, 17) and not final_topup and not new_day_start
           proposed = min(5000, limit-spent, 14500-spent, remaining, history_remaining)
-          tick_cap = operator_smoke_request_cap(
-              ".github/hourly-api-gapfill-tick.json",
-              enabled=os.getenv("TICK_500_SMOKE") == "true", now=now)
           if tick_cap is not None:
               proposed = min(proposed, tick_cap)
           if extras_slot:
@@ -229,6 +235,12 @@ jobs:
               final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
               new_day_start = now.hour == 17 and 10 <= now.minute <= 13
               evening_limit = evening_cap(now, expected_reset)
+              tick_cap = operator_smoke_request_cap(
+                  ".github/hourly-api-gapfill-tick.json",
+                  enabled=os.getenv("TICK_500_SMOKE") == "true", now=now)
+              since_reset = (now - (expected_reset - timedelta(days=1))).total_seconds()
+              if tick_cap is not None and evening_limit is None and 0 <= since_reset < 45 * 60:
+                  evening_limit = 3000
               if (
                   local.date() != run_day
                   or (stage_hour not in caps and not final_topup and not new_day_start and evening_limit is None)
@@ -264,9 +276,6 @@ jobs:
                   limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])
               extras_slot = stage_hour in (14, 17) and not final_topup and not new_day_start
               proposed = min(5000, limit-spent, remaining, history_remaining)
-              tick_cap = operator_smoke_request_cap(
-                  ".github/hourly-api-gapfill-tick.json",
-                  enabled=os.getenv("TICK_500_SMOKE") == "true", now=now)
               if tick_cap is not None:
                   proposed = min(proposed, tick_cap)
               if extras_slot:
