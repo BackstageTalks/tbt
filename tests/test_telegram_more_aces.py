@@ -245,3 +245,14 @@ def test_more_aces_rejects_off_tour_balls_but_keeps_atp_wta():
     ]
     result=more.offered_rows(snapshot(rows),NOW)
     assert [r["event_id"] for r in result]==["atp","wta"]
+
+
+def test_more_aces_rejects_tour_mislabeled_challenger_or_125():
+    examples=[
+        row(event="atp")|{"tour":"ATP","tournament":"Main draw"},
+        row(event="wta")|{"tour":"WTA","tournament":"WTA Tour"},
+        row(event="challenger")|{"tour":"ATP","tournament":"Prague Challenger"},
+        row(event="wta125")|{"tour":"WTA","tournament":"WTA 125 Mumbai"},
+    ]
+    rows=more.offered_rows(snapshot(examples),NOW)
+    assert [r["event_id"] for r in rows]==["atp","wta"]
