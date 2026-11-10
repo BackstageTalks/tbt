@@ -61,7 +61,9 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = push ]; then
             # One-time operator-authorized exact receipt replay, not an ordinary tick.
             # Reject a stale ref before any ledger reservation or Telegram request.
-            git fetch origin main --depth=1
+            # Fetch an actual first parent. A depth-1 shallow checkout can
+            # otherwise make every tracked request look newly added.
+            git fetch origin main --deepen=2
             test "$GITHUB_SHA" = "$(git rev-parse origin/main)"
             if jq -e '((.head_commit.modified // []) + (.head_commit.added // [])) |
               index(".github/telegram-20261103-deliver-request.json") != null' "$GITHUB_EVENT_PATH" >/dev/null; then
@@ -80,7 +82,8 @@ jobs:
                 --api-url "$BLINQ_PRODUCTION_URL" \
                 --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" \
                 --state .private-telegram/ops/telegram-bot-state.json
-            elif git diff-tree --root --no-commit-id --name-only -r "$GITHUB_SHA" |
+            elif git cat-file -e "$GITHUB_SHA^" &&
+              git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA^" "$GITHUB_SHA" |
               grep -Fxq '.github/telegram-20261109-postponed-request.json'; then
               # Operator-authorized one-day Results-only exception for a
               # FINISHED match with missing player Aces: no archive rewrite.
