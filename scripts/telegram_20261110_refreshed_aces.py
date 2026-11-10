@@ -47,7 +47,7 @@ def checked_original(state):
     identities = [(str(r.get("event_id")), str(r.get("selection_id"))) for r in old_aces]
     if len(set(identities)) != 8:
         raise RuntimeError("Ambiguous original Aces identities")
-    if UPDATE_KEY in attempts:
+    if UPDATE_KEY in attempts or UPDATE_KEY in (state.get("reposts") or {}):
         return attempts, old, old_aces, False
     return attempts, old, old_aces, True
 
@@ -160,7 +160,10 @@ def prepare(args):
          str(row.get("projection_direction"))) not in oldrefs
         for row in references
     )
-    attempts[UPDATE_KEY] = {
+    slot = attempts if references else state.setdefault("reposts", {})
+    # Signal-only VIAC ES revisions must NOT masquerade as gradable O/U
+    # attempts: extract_sent rejects sent rows=[] for good reason.
+    slot[UPDATE_KEY] = {
         "status": "reserved", "reserved_at": now.isoformat(),
         "kind": "issued-same-day-atp-wta-aces-refresh-v1",
         "betting_day": DAY,
