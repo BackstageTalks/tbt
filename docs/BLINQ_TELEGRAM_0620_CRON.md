@@ -6,7 +6,7 @@ Cron **zatiaľ nie je aktivovaný**. Tento súbor je príprava pre operátora. P
 worker je [`telegram-daily-offer.yml`](../../.github/workflows/telegram-daily-offer.yml).
 Schválená spoločná správa = všetky oprávnené TOP → VALUE → ACES **bez nadpisov**
 a bez EV, predikcia/pick namiesto projekcie; samostatná FREE správa obsahuje
-jeden deterministicky vybraný TOP tip. Každý riadok má jednotné čiernobiele Unicode štvorčeky (`🅃 |`, `🅅 |`, `🄰 |`), ktoré používateľ schválil na obrazovke Telegramu; samostatný FREE tip zostáva `🆓 FREE |`. Číselné prefixy ani farebné obrázkové badge sa nepoužívajú. Vzhľad glyfov sa môže líšiť podľa fontu Telegram klienta.
+dva tipy v jednej FREE správe: jeden deterministicky vybraný TOP a jedno overené ATP/WTA ESÁ O/U. Oba tipy sú na samostatných bezprostredných riadkoch `🆓 |` bez nápisu FREE. Ak kvalifikovaný ESÁ tip chýba, neodosiela sa čiastočná FREE správa. Hlavná denná ponuka používa štvorčeky (`🅃 |`, `🅅 |`, `🄰 |`). Číselné prefixy ani farebné obrázkové badge sa nepoužívajú. Vzhľad glyfov sa môže líšiť podľa fontu Telegram klienta.
 Zachovaná je pätička a klikateľný odkaz na BlinQ Stat Engine.
 
 Údaje na nastavenie cronu sú aj v
@@ -88,6 +88,7 @@ Riadky sú mobilne kompaktné; presné zalomenie závisí od šírky klienta.
 - Evidencia príjmov: `BackstageTalks/tbt-data@telegram-bot-state:ops/telegram-bot-state.json`.
 - Existujúce GitHub Actions secrets: `TGB`, `TGCH`, voliteľne `TGCH_FREE`,
   `TBT_DATA_GH_TOKEN`; tieto sa **nikdy nevkladajú** do externého cronu.
+- Automatický tretí Telegram príspevok VIAC ES sa zo 06:20 workflowu nevyvoláva; existujúci `telegram-more-aces.yml` je manuálny, nie súčasť dvoch ranných správ.
 - Denné vyhodnotenie je samostatný workflow `telegram-results.yml`.
   Ak ho plánuješ externe, používa `07:00 Europe/Bratislava` a event
   `telegram-results-tick`. Toto nastavenie neaktivuje ani nemení ranné reporty.

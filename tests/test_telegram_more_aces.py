@@ -229,7 +229,8 @@ def test_workflow_wires_only_existing_telegram_sender_and_ledger():
     assert "telegram_offer_publisher.py send" in job
     assert "telegram_offer_publisher.py mark-sent" in job
     assert "telegram-bot-state" in job and "ls-remote" in job
-    assert "telegram-more-aces.yml" in daily
+    assert "telegram-more-aces.yml" not in daily
+    assert "repository_dispatch:" not in job  # manual only under the two-post policy
     assert "RAPIDAPI_KEY" not in job and "CDB" not in job
     assert 'group: blinq-telegram-ledger' in job
 

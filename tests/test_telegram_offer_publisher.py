@@ -197,7 +197,11 @@ def test_daily_queue_is_durable_idempotent_and_full_offer_override(tmp_path, mon
     assert "🆓" in msgs[1]["text"]
     result=tg.load(out/"state.json")
     assert result["attempts"][ident]["status"]=="reserved"
-    assert len(result["attempts"][ident]["rows"])==8
+    assert len(result["attempts"][ident]["rows"])==9
+    assert [r["channel"] for r in result["attempts"][ident]["rows"][-2:]]==["free","free"]
+    assert [r["market"] for r in result["attempts"][ident]["rows"][-2:]]==["match_winner","aces"]
+    assert result["attempts"][ident]["rows"][-1]["section"]=="ace"
+    assert result["free_aces_picks"][tg.day(NOW)]==msgs[1]["free_aces_identity"]
     tg.queue_daily(SimpleNamespace(now=NOW.isoformat(),state=str(out/"state.json")))
     assert tg.load(out/"state.json")["attempts"][ident]["status"]=="reserved"
 
@@ -330,8 +334,9 @@ def test_classic_format_and_deterministic_free_pick():
     assert all(" | " in row for row in premium.splitlines() if row.startswith(("🅃 |", "🅅 |", "🄰 |")))
     assert not any(number in premium for number in tg.NUMBER_EMOJIS)
     assert "EV" not in premium
-    assert "🆓 FREE | Surname" in first[1]["text"]
-    assert first[1]["text"].count("🆓") == 1
+    assert "🆓 | Surname" in first[1]["text"]
+    assert first[1]["text"].count("🆓") == 2
+    assert "FREE |" not in first[1]["text"]
     assert "O 7.5" in first[0]["text"]
     assert "aces 8.3" not in first[0]["text"]
     assert "esá" not in first[0]["text"]
@@ -339,12 +344,53 @@ def test_classic_format_and_deterministic_free_pick():
     # The user's mark removes ONLY the duplicate FREE heading, not the FREE pick
     # or the standard disclaimer/footer shared by both messages.
     assert "🎾 FREE | BlinQ" not in first[1]["text"]
-    assert first[1]["text"].count("🆓 FREE | ") == 1
+    free_rows=[line for line in first[1]["text"].splitlines() if line.startswith("🆓 | ")]
+    assert len(free_rows)==2
+    assert "Surname" in free_rows[0] and "Server" in free_rows[1]
+    assert "O 7.5" in free_rows[1] and "1.93" in free_rows[1]
+    assert "\n".join(free_rows) in first[1]["text"]  # no blank line between picks
+    assert first[1]["free_aces_identity"]==tg._free_aces_identity(offer()["ace_picks"][0])
     assert all("ℹ️ Analytical preview by BlinQ Stat Engine" in x["text"] for x in first)
     assert all(x["text"].endswith("by BlinQ Stat Engine") for x in first)
     assert all(tg.telegram_link_entities(x["text"]) for x in first)
     assert first[0]["text"].splitlines()[-1].startswith("ℹ️ Analytical preview")
     assert first[1]["text"].splitlines()[-1].startswith("ℹ️ Analytical preview")
+
+
+def test_free_aces_pinned_selection_and_atp_wta_quality_gate():
+    snap=offer()
+    candidate=priced_ou(row(101,"WTA Server","aces") | {"tour":"WTA"})
+    bad=priced_ou(row(102,"ITF Server","aces") | {"tour":"ITF"})
+    snap["ace_picks"]=[bad,candidate]
+    out=tg.messages(snap,settings(),NOW)
+    free=out[1]
+    assert free["free_aces_identity"]==tg._free_aces_identity(candidate)
+    assert "ITF Server" not in free["text"]
+    assert free["text"].count("🆓 | ")==2
+    assert tg.messages(snap,settings(),NOW,free_event_id=free["free_event_id"],
+                       free_aces_identity=free["free_aces_identity"])==out
+    try:
+        tg.messages(snap,settings(),NOW,free_aces_identity=tg._free_aces_identity(bad))
+    except RuntimeError as exc:
+        assert "Frozen FREE ACES" in str(exc)
+    else:
+        raise AssertionError("Excluded tour accepted as FREE ESÁ")
+
+
+def test_no_valid_aces_never_fabricates_or_sends_partial_free_message():
+    snap=offer()
+    snap["ace_picks"]=[priced_ou(row(300,"ITF","aces")|{"tour":"ITF"})]
+    out=tg.messages(snap,settings(),NOW)
+    assert len(out)==1 and out[0]["audience"]=="premium"
+    assert "🆓" not in out[0]["text"]
+
+
+def test_free_aces_reference_has_exact_market_contract_and_is_not_premium():
+    ref=tg.result_reference(offer()["ace_picks"][0],"free_aces")
+    assert ref["channel"]=="free"
+    assert ref["section"]=="ace" and ref["market"]=="aces"
+    assert ref["market_line"]==7.5 and ref["projection_direction"]=="over"
+    assert ref["publication_key"].startswith("ace:total:")
 
 
 def test_free_only_does_not_show_other_premium_rows():

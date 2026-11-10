@@ -43,6 +43,14 @@ def test_daily_workflow_waits_for_data_writers_and_verifies_telegram_receipts():
     assert "\nschedule:" not in text  # external cron is operator-owned
 
 
+def test_morning_workflow_has_no_third_automatic_more_aces_post():
+    text=WORKFLOW.read_text(encoding="utf-8")
+    assert "dispatch-more-aces:" not in text
+    assert "gh workflow run telegram-more-aces.yml" not in text
+    assert "FREE TOP + ESÁ" in text
+    assert "python scripts/telegram_offer_publisher.py mark-sent" in text
+
+
 def test_nov9_telegram_results_one_shot_triggers_only_on_changed_commit_request():
     workflow=(ROOT/".github/workflows/telegram-results.yml").read_text(encoding="utf-8")
     request=json.loads((ROOT/".github/telegram-20261109-postponed-request.json").read_text(encoding="utf-8"))
