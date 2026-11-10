@@ -530,6 +530,7 @@ def test_nov9_postponed_only_the_explicit_missing_original_aces_contract(tmp_pat
                     publication_key=f"local-aces-ou-v1:{event}:{selection}:{side}:{line:.1f}")
         return item
     wright=ace("17520979","484870","over",3.5,1.8)
+    wright["name"]="Michael Wright"
     gojo=ace("17520223","124916","over",7.5,1.62)
     mena=ace("17516100","38180","over",2.5,1.7)
     free=sent("free","17516947",1.719424)
