@@ -19,5 +19,6 @@
   "provider_requests": 0,
   "cdb_writes": false,
   "archive_writes": false,
-  "original_odds_changes": false
+  "original_odds_changes": false,
+  "delivery_trigger_revision": 2
 }
