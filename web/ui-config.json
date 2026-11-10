@@ -1792,7 +1792,7 @@
               "row_overrides": {}
             },
             "elite": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": true,
               "see_all": false,
@@ -2349,12 +2349,12 @@
               "row_overrides": {}
             },
             "elite": {
-              "visible_rows": "ALL",
-              "blur_remaining": false,
+              "visible_rows": 0,
+              "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": true,
+              "see_all": false,
               "selection_mode": "first",
-              "display_state": "active",
+              "display_state": "blurred",
               "row_overrides": {}
             },
             "legend": {

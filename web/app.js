@@ -2862,6 +2862,10 @@
   function renderDailyHubInsight(){
     const host=$('dailyHubInsightBoard'),main=$('dailyHubInsightMain');
     if(!host||!main) return;
+    if(state.dailyHubTab==='see_all'
+        && String(dailyHubEntitlement('see_all').display_state||'').toLowerCase()==='blurred'){
+      host.hidden=true;main.innerHTML='';return;
+    }
     const rows=dailyHubRows(state.dailyHubTab)||[];
     const selectedId=state.dailyHubSelected?.[state.dailyHubTab]||'';
     const row=rows.find(item=>eventKey(item)===selectedId)||rows[0]||null;
@@ -3286,6 +3290,7 @@
       if(coming)count='<em>COMING SOON</em>';
       else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=plan==='elite'&&!state.previewPlan?rows.length:(Number.isFinite(total)?total:rows.length);count=n?`<b>${n}</b>`:'';}
       const locked=!coming&&dailyHubAccessLocked(tab,ent,dailyHubRows(tab).length);
+      if(tab==='see_all'&&plan==='elite'&&locked)count='';
       const requiredPlan=locked?firstDailyHubUnlockPlan(tab,0,tab==='see_all'):'';
       const requiredLabel=requiredPlan?String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase():'';
       const accessAttrs=locked?` data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}" title="${escapeHtml(lcopy(`Available from ${requiredLabel}`,`Dostupné od ${requiredLabel}`,`Dostupné od ${requiredLabel}`))}"`:'';
@@ -3302,6 +3307,18 @@
     }
     if(tournamentSelect)tournamentSelect.parentElement.hidden=false;
     const sourceRows=dailyHubRows(tab),rows=dashboardFilteredRows(sourceRows),ent=dailyHubEntitlement(tab);
+    // An old selected SEE ALL tab must never bypass the new ELITE paywall.
+    // ELITE uses a special row-rendering branch below, so enforce the lock
+    // before either that branch or its match-intelligence detail can render.
+    if(tab==='see_all'&&String(ent.display_state||'').toLowerCase()==='blurred'){
+      head.innerHTML='';
+      body.innerHTML=dailyHubLockedRow('see_all',0,firstDailyHubUnlockPlan('see_all',0,true));
+      if(empty){empty.hidden=true;empty.textContent='';}
+      if(expand)expand.hidden=true;
+      if(tournamentSelect)tournamentSelect.parentElement.hidden=true;
+      const insight=$('dailyHubInsightBoard');if(insight)insight.hidden=true;
+      return;
+    }
     const includedButUnavailable=dailyHubIncludedButUnavailable(tab,ent,sourceRows.length);
     const preview=Math.max(1,Number(cfg.preview_rows)||10);
     const allCount=plan==='elite'&&!state.previewPlan?rows.length:Math.max(Number(ent.total)||0,rows.length);
@@ -5023,7 +5040,12 @@
       let bestLower=null;
       levels.forEach(plan=>{
         const rule=cfg.plans?.[plan]||{},state=stateOf(rule),count=unlocked(rule);
-        if(state==='active'&&count===0&&rule.blur_remaining===false){
+        // ELITE has an intentionally empty VIAC ES offer. Zero unlocked bets
+        // is the product rule, not a broken Admin configuration.
+        const deliberateNoMoreAces=tab==='ace_winner'&&plan==='elite'
+          &&String(rule.visible_rows??'').toUpperCase()==='0'
+          &&!Object.values(rule.row_overrides||{}).some(v=>String(v).toLowerCase()==='active');
+        if(state==='active'&&count===0&&rule.blur_remaining===false&&!deliberateNoMoreAces){
           issues.push({tab,plan,kind:'empty',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: panel ZOBRAZIŤ, ale 0 odomknutých riadkov bez zámku.`});
         }
         if(rule.see_all===true&&state!=='active'){
