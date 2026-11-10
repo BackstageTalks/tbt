@@ -252,6 +252,11 @@ def select_groups(x,c,now):
         for r in source:
             if not isinstance(r,dict) or not r.get("event_id") or (k=="aces" and r.get("market")!="aces"):
                 continue
+            # New Telegram ESÁ: main-tour ATP/WTA only; historical receipts
+            # remain immutable and are evaluated by the Results workflow.
+            if k=="aces" and str(r.get("tour") or "").strip().casefold() not in (
+                    "atp","wta","atp tour","wta tour"):
+                continue
             # Fresh ACE bets require an exact, independently verified player O/U.
             # Preserve previously issued legacy rows only for immutable reissues.
             if (k=="aces" and c.get("aces_ou_only",True)
