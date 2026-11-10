@@ -349,3 +349,67 @@ def test_adaptive_never_exploits_proven_low_yield_when_alternative_exists():
     assert report["baseline_choices"] >= 50
     assert report["observed_paid_requests"] == 200
     assert len({row.match_id for row in selected}) == 200
+
+
+def test_all_previously_empty_cohorts_use_baseline_to_prove_cross_tour_outage():
+    # A verified prior with zero new CDB cells used to keep ~75% of paid
+    # attempts in whichever empty cohort had the highest smoothed score.
+    # Cross-tour evidence must remain observable by the independent circuit.
+    from collections import Counter
+    from statistics_availability_circuit import StatisticsAvailabilityCircuit
+
+    cohorts = (("ATP", 2024), ("WTA", 2025), ("ATP", 2026))
+    rows = [
+        _match(f"{tour}-{year}-{i}", tour, year)
+        for i in range(300) for tour, year in cohorts
+    ]
+    prior = {
+        f"{tour.lower()}:{year}:serve_return": {
+            "api_requests": 64, "new_fields": 0,
+            "full_serve_return_rows": 0,
+        }
+        for tour, year in cohorts
+    }
+    queue = AdaptiveStatisticsQueue(rows, verified_prior=prior)
+    circuit = StatisticsAvailabilityCircuit()
+    visited = []
+    for match in queue:
+        match.provider_payload = {
+            "_tbt_statistics": {"reason": "empty_whole_match_statistics"}
+        }
+        visited.append((match.tour, match.scheduled_at.year))
+        queue.record(match, 1, _gain())
+        if circuit.observe(match, "unavailable", 1, _gain()):
+            break
+
+    assert circuit.tripped
+    assert len(visited) == 120
+    assert Counter(visited) == {key: 40 for key in cohorts}
+    summary = queue.summary()
+    assert summary["observed_paid_requests"] == 120
+    assert summary["adaptive_choices"] == 0
+    assert summary["baseline_choices"] == 120
+
+
+def test_a_paid_recovery_from_verified_zero_yield_reenables_adaptation():
+    cohorts = (("ATP", 2024), ("WTA", 2025), ("ATP", 2026))
+    rows = [
+        _match(f"{tour}-{year}-{i}", tour, year)
+        for i in range(100) for tour, year in cohorts
+    ]
+    prior = {
+        f"{tour.lower()}:{year}:serve_return": {
+            "api_requests": 64, "new_fields": 0,
+            "full_serve_return_rows": 0,
+        }
+        for tour, year in cohorts
+    }
+    queue = AdaptiveStatisticsQueue(rows, verified_prior=prior)
+    first = next(queue)
+    assert first.tour == "ATP" and first.scheduled_at.year == 2024
+    queue.record(first, 1, _gain(12, 1, 4))
+    second = next(queue)
+    assert second.tour == "ATP" and second.scheduled_at.year == 2024
+    queue.record(second, 1, _gain(12, 1, 4))
+    assert queue.summary()["adaptive_choices"] == 1
+    assert not queue._low_yield("atp:2024:serve_return")
