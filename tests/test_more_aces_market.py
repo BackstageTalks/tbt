@@ -90,7 +90,11 @@ def test_ui_config_includes_regular_most_aces_tab_and_stats_control():
     tabs = config["dashboard"]["daily_hub"]["tabs"]
     assert "ace_winner" in tabs
     assert tabs["ace_winner"]["enabled"] is True
-    assert tabs["ace_winner"]["plans"]["elite"]["visible_rows"] == 3
+    assert tabs["ace_winner"]["plans"]["elite"]["visible_rows"] == 0
+    assert tabs["ace_winner"]["plans"]["elite"]["display_state"] == "blurred"
+    assert tabs["see_all"]["plans"]["elite"]["visible_rows"] == 0
+    assert tabs["see_all"]["plans"]["elite"]["display_state"] == "blurred"
+    assert tabs["see_all"]["plans"]["legend"]["visible_rows"] == "ALL"
     assert tabs["ace_winner"]["plans"]["elite"]["see_all"] is False
     assert tabs["ace_winner"]["plans"]["legend"]["visible_rows"] == "ALL"
     assert tabs["ace_winner"]["plans"]["rookie"]["visible_rows"] == 0
