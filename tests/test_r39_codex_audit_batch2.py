@@ -34,7 +34,7 @@ def payload(times):
         "prime_picks": deepcopy(rows),
         "value_picks": deepcopy(rows),
         "doubles_picks": deepcopy(rows),
-        "ace_picks": [{**deepcopy(r), "market": "aces"} for r in rows],
+        "ace_picks": [{**deepcopy(r), "market": "aces", "tour": "ATP"} for r in rows],
         "sg_picks": [{**deepcopy(r), "market": "games"} for r in rows],
         "upcoming": deepcopy(rows),
         "results": [],
