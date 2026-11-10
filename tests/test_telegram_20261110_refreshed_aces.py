@@ -160,3 +160,31 @@ def test_explicit_one_shot_trigger_uses_private_ledger_and_production_readback()
     assert request["source_refresh_run_id"] == 42794628480
     assert request["provider_requests"] == 0
     assert request["preserve_original_issued_bets"] is True
+
+
+def test_signal_only_revision_does_not_poison_ordinary_results_ledger(tmp_path, monkeypatch):
+    original=state()
+    ledger=tmp_path/"ledger.json";tg.save(ledger,original)
+    monkeypatch.setattr(task.tg,"snapshot",lambda *_:snapshot())
+    monkeypatch.setattr(task.more,"site_readback",lambda *_:site())
+    monkeypatch.setattr(task,"row_authority_key",lambda row,*_:"h:"+row["event_id"])
+    monkeypatch.setattr(task.tg,"select_groups",lambda *_:{})
+    monkeypatch.setattr(task.more,"offered_rows",lambda *_:[
+        {"event_id":"new1","selection_id":"S",
+         "scheduled_at":"2026-11-10T16:00:00+00:00","name":"Ace Player"}])
+    monkeypatch.setattr(task.tg,"messages",lambda *_:[])
+    monkeypatch.setattr(task.more,"render_messages",lambda *_:[
+        {"audience":"premium","text":"VIAC ES test"}])
+    args=type("Args",(),dict(state=str(ledger),output=str(tmp_path/"out"),
+                             api_url="https://example.org",now=NOW))
+    task.prepare(args)
+    updated=tg.load(tmp_path/"out"/"state.json")
+    assert task.UPDATE_KEY not in updated["attempts"]
+    assert updated["reposts"][task.UPDATE_KEY]["rows"]==[]
+    updated["reposts"][task.UPDATE_KEY]["status"]="sent"
+    updated["reposts"][task.UPDATE_KEY]["message_ids"]=[789]
+    assert len(results.extract_sent(updated,task.DAY))==12
+    tg.save(ledger,updated)
+    (tmp_path/"out"/"ready").unlink()
+    task.prepare(args)
+    assert not (tmp_path/"out"/"ready").exists()
