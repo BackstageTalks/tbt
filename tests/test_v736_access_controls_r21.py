@@ -9,7 +9,10 @@ def test_see_all_is_configured_like_a_regular_access_rule():
     see=CFG['dashboard']['daily_hub']['tabs']['see_all']
     assert see['enabled'] is True
     assert see['plans']['rookie']['display_state']=='blurred'
-    assert see['plans']['elite']['display_state']=='active'
+    assert see['plans']['elite']['display_state']=='blurred'
+    assert see['plans']['elite']['visible_rows']==0
+    assert see['plans']['elite']['see_all'] is False
+    assert see['plans']['legend']['display_state']=='active'
     assert "if(tab==='see_all')return previewDailyHubEntitlement(tab);" in APP
     assert "tab==='see_all'&&!ent.see_all" not in APP
     assert "data-admin-hub-tab-card=\"${tab}\"" in APP
