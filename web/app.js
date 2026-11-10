@@ -490,7 +490,7 @@
   }
 
   const VERIFIED_RUNTIME_UI_KEY='blinq_last_verified_runtime_ui_v1';
-  async function loadUiConfig() {
+  async function loadUiConfig(deferInitialRender=false) {
     // Start optional CMS fetches alongside UI/runtime requests. Apply them only
     // after the authoritative runtime configuration has been merged.
     const presentationReady=fetchEditablePresentationConfig().catch(()=>null);
@@ -607,7 +607,9 @@
     applyV6514AdminCleanup();
     state.telegramPublishedOriginal=clone(state.ui.telegram_groups||{});
     state.dashboardVisibility=null;
-    renderAllUiContent();
+    // During boot, the authenticated feed will render the workspace once.
+    // Avoid the first expensive render of hidden, feed-less dashboard panels.
+    if(!deferInitialRender)renderAllUiContent();
   }
 
   function applyAccessContractV1(target=state.ui){
@@ -9601,7 +9603,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     // Authentication is a core subsystem. Editable UI/content configuration is
     // presentation state and must never be able to disable sign-in or delay the
     // login form behind an Azure storage/CMS cold start.
-    const uiReady=loadUiConfig()
+    const uiReady=loadUiConfig(true)
       .then(()=>{try{renderCookieConsent(false);}catch(error){console.warn('[BlinQ boot] cookie UI render failed.',error);}return true;})
       .catch(error=>{console.warn('[BlinQ boot] UI config failed; auth remains available.',error);return false;});
     const authReady=BlinqAuth.init()
@@ -9615,7 +9617,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
       // Logged-out users see an immediately usable form. The submit action uses
       // BlinqAuth.ensureReady(), so a still-running init cannot create a race.
-      if(!session)auth('login');
+      if(!session){
+        auth('login');
+        // Update public/login presentation after the optional config arrives.
+        uiReady.then(loaded=>{if(loaded&&$('appShell').hidden)renderAllUiContent();}).catch(()=>{});
+        finishBootSplash();
+      }
 
       // The backend validates the token. Prefetch its feed while independent
       // auth/config checks finish; do not render private data before they pass.
