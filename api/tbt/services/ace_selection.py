@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 import math
 from typing import Any
 
+from .feed import main_tour_aces
+
 
 def _main_tour_for_aces(row: dict[str, Any]) -> bool:
     """Main ATP/WTA tours only; never infer eligibility from player history.
@@ -21,9 +23,7 @@ def _main_tour_for_aces(row: dict[str, Any]) -> bool:
     player has ATP/WTA history. This applies to Aces and derived Most Aces,
     not Match Winner, Value, Double Faults or other market selection.
     """
-    return str(row.get("tour") or "").strip().casefold() in {
-        "atp", "wta", "atp tour", "wta tour",
-    }
+    return main_tour_aces(row)
 
 
 EXCLUDED_STATUSES = {
