@@ -77,6 +77,35 @@ def test_runtime_ui_config_round_trip(monkeypatch):
     assert table.single["updated_by"] == "admin"
 
 
+def test_ui_publish_revision_uses_stored_payload_across_effective_release_changes(monkeypatch):
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    # This old stored row needs a read-only migration in effective config.
+    payload.pop("elite_aces_access_revision", None)
+    admin_storage.save_runtime_ui_config(payload, actor_id="admin")
+
+    effective, configured, available, revision = admin_storage.load_effective_ui_config_with_revision()
+    assert configured and available
+    assert revision == admin_storage.ui_config_revision(payload)
+    assert revision != admin_storage.ui_config_revision(effective)
+
+    # Simulate GET hitting a worker from a newer rolling release. A different
+    # effective release default must not change the optimistic write token.
+    original_resolve = admin_storage.resolve_ui_access_config
+
+    def resolve_with_new_release_default(runtime):
+        view = original_resolve(runtime)
+        view["new_release_only_default"] = "changed"
+        return view
+
+    monkeypatch.setattr(admin_storage, "resolve_ui_access_config", resolve_with_new_release_default)
+    newer_effective, _, _, newer_revision = admin_storage.load_effective_ui_config_with_revision()
+    assert newer_effective != effective
+    assert newer_revision == revision
+    assert admin_storage.ui_config_revision(newer_effective) != revision
+
+
 def test_conditional_admin_ui_publish_checks_revision_and_version(monkeypatch):
     from azure.core import MatchConditions
 
@@ -100,7 +129,7 @@ def test_conditional_admin_ui_publish_checks_revision_and_version(monkeypatch):
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     admin_storage.save_runtime_ui_config(payload, actor_id="admin")
     previous = admin_storage.load_runtime_ui_config()
-    revision = admin_storage.ui_config_revision(admin_storage.resolve_ui_access_config(previous))
+    revision = admin_storage.load_effective_ui_config_with_revision()[3]
     next_config = json.loads(json.dumps(previous))
     next_config["telegram_groups"] = {"schema": 1, "enabled": True, "groups": []}
     saved = admin_storage.save_runtime_ui_config(
@@ -135,7 +164,7 @@ def test_conditional_ui_publish_rejects_concurrent_storage_write(monkeypatch):
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     admin_storage.save_runtime_ui_config(payload)
-    revision = admin_storage.ui_config_revision(admin_storage.resolve_ui_access_config(payload))
+    revision = admin_storage.load_effective_ui_config_with_revision()[3]
     try:
         admin_storage.save_runtime_ui_config(
             payload, expected_revision=revision,
