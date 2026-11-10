@@ -41,3 +41,20 @@ def test_daily_workflow_waits_for_data_writers_and_verifies_telegram_receipts():
     assert 'sleep 60' in text
     assert "gh workflow run telegram-daily-offer.yml" in text
     assert "\nschedule:" not in text  # external cron is operator-owned
+
+
+def test_nov9_telegram_results_one_shot_triggers_only_on_changed_commit_request():
+    workflow=(ROOT/".github/workflows/telegram-results.yml").read_text(encoding="utf-8")
+    request=json.loads((ROOT/".github/telegram-20261109-postponed-request.json").read_text(encoding="utf-8"))
+    assert request["delivery_trigger_revision"]==2
+    assert request["betting_day"]=="2026-11-09"
+    assert request["original_telegram_message_ids"]==[749,750]
+    assert request["provider_requests"]==0
+    assert request["archive_writes"] is False
+    assert "git fetch origin main --deepen=2" in workflow
+    assert 'git cat-file -e "$GITHUB_SHA^"' in workflow
+    assert 'git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA^" "$GITHUB_SHA"' in workflow
+    assert ".github/telegram-20261109-postponed-request.json" in workflow
+    assert "git diff-tree --root" not in workflow
+    assert "index(\".github/telegram-20261109-postponed-request.json\")" not in workflow
+    assert "--postpone-unverifiable-20261109" in workflow
