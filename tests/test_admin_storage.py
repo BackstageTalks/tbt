@@ -464,7 +464,7 @@ def test_info_result_history_is_independent_and_can_be_corrected(monkeypatch):
 
 
 def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(monkeypatch):
-    """81 existing VIAC ES offers must yield <=3 real ELITE rows on the server."""
+    """81 existing VIAC ES offers must yield zero ELITE bets on the server."""
     from tbt.services.entitlements import filter_feed_for_access
 
     table = FakeTable()
@@ -490,10 +490,11 @@ def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(mon
     assert table.single["payload"] == original_payload  # no Azure write from GET
 
     rule = effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]
-    assert rule["visible_rows"] == 3
+    assert rule["visible_rows"] == 0
     assert rule["blur_remaining"] is False
     assert rule["see_all"] is False
     assert rule["row_overrides"] == {}
+    assert effective["elite_ace_winner_access_revision"] == 2
     assert effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"] == old_ace
     assert effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["legend"] == old_legend
 
@@ -512,17 +513,18 @@ def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(mon
     )
     ent = manifest["sections"]["ace_winner"]
     assert ent["total"] == 81
-    assert ent["visible_picks"] == 3
-    assert ent["returned"] == 3
+    assert ent["visible_picks"] == 0
+    assert ent["returned"] == 0
     assert ent["see_all"] is False
-    assert len([row for row in feed["ace_picks"] if row.get("market") == "most_aces"]) == 3
+    assert "ace_winner" not in manifest["result_categories"]
+    assert not any(row.get("market") == "most_aces" for row in feed["ace_picks"])
 
 
 def test_elite_ace_winner_admin_edit_survives_after_first_migration():
     legacy = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     legacy.pop("elite_ace_winner_access_revision", None)
     first = admin_storage.resolve_ui_access_config(legacy)
-    assert first["elite_ace_winner_access_revision"] == 1
+    assert first["elite_ace_winner_access_revision"] == 2
     rule = first["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]
     rule["visible_rows"] = 2
     again = admin_storage.resolve_ui_access_config(first)
@@ -558,3 +560,92 @@ def test_cas_revision_ignores_release_migrations_and_remains_stale_safe(monkeypa
     different, _, _, identical_revision = admin_storage.load_effective_ui_config_with_revision()
     assert different != effective
     assert identical_revision == revision
+
+
+def test_elite_see_all_is_locked_by_one_time_access_migration_without_touching_other_tiers(monkeypatch):
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    legacy = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    legacy.pop("elite_see_all_access_revision", None)
+    see_all_plans = legacy["dashboard"]["daily_hub"]["tabs"]["see_all"]["plans"]
+    see_all_plans["elite"].update({
+        "visible_rows": "ALL", "blur_remaining": False, "see_all": True,
+        "display_state": "active", "row_overrides": {"20": "active"},
+    })
+    old_legend = json.loads(json.dumps(see_all_plans["legend"]))
+    old_elite_top = json.loads(json.dumps(
+        legacy["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]["elite"]
+    ))
+    table.single = {
+        "PartitionKey": "runtime", "RowKey": "ui-config",
+        "payload": admin_storage._encode_runtime_ui_payload(legacy),
+    }
+    old_blob = table.single["payload"]
+    effective, configured, available, revision = admin_storage.load_effective_ui_config_with_revision()
+    assert configured and available
+    assert table.single["payload"] == old_blob
+    assert revision == admin_storage.ui_config_revision(legacy)
+    assert effective["elite_see_all_access_revision"] == 1
+    lock = effective["dashboard"]["daily_hub"]["tabs"]["see_all"]["plans"]["elite"]
+    assert lock["visible_rows"] == 0
+    assert lock["blur_remaining"] is True
+    assert lock["see_all"] is False
+    assert lock["tab_enabled"] is True
+    assert lock["display_state"] == "blurred"
+    assert lock["row_overrides"] == {}
+    assert effective["dashboard"]["daily_hub"]["tabs"]["see_all"]["plans"]["legend"] == old_legend
+    assert effective["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]["elite"] == old_elite_top
+
+    # After first publish the marker preserves further deliberate Admin edits.
+    lock["display_state"] = "active"
+    lock["visible_rows"] = 1
+    repeat = admin_storage.resolve_ui_access_config(effective)
+    assert repeat["dashboard"]["daily_hub"]["tabs"]["see_all"]["plans"]["elite"]["visible_rows"] == 1
+
+
+def test_previous_three_viac_es_edition_is_upgraded_to_zero_and_other_plans_keep_bets():
+    from tbt.services.entitlements import filter_feed_for_access
+
+    runtime = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    runtime["elite_ace_winner_access_revision"] = 1
+    runtime["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"].update({
+        "visible_rows": 3, "see_all": False, "blur_remaining": False,
+        "row_overrides": {"11": "active"},
+    })
+    effective = admin_storage.resolve_ui_access_config(runtime)
+    assert effective["elite_ace_winner_access_revision"] == 2
+    assert effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]["visible_rows"] == 0
+    market_rows = [{
+        "market": "most_aces", "event_id": f"w{i}",
+        "surface": "hard", "scheduled_at": "2026-11-10T19:00:00Z",
+        "selection_id": f"alpha-{i}", "pick": "Alpha",
+    } for i in range(81)]
+    aces_rows = [{
+        "market": "aces", "event_id": f"a{i}",
+        "surface": "hard", "scheduled_at": "2026-11-10T19:00:00Z",
+        "selection_id": f"alpha-a{i}", "pick": "Alpha",
+    } for i in range(2)]
+    payload = {"ace_picks": market_rows + aces_rows, "results": []}
+    elite, elite_manifest = filter_feed_for_access(
+        payload, {"plan": "elite", "status": "active", "id": "elite"}, effective
+    )
+    legend, legend_manifest = filter_feed_for_access(
+        payload, {"plan": "legend", "status": "active", "id": "legend"}, effective
+    )
+    assert elite_manifest["sections"]["ace_winner"]["total"] == 81
+    assert elite_manifest["sections"]["ace_winner"]["returned"] == 0
+    assert elite_manifest["sections"]["ace_winner"]["visible_picks"] == 0
+    assert elite_manifest["member_daily_pick_count"] == 2
+    assert len(elite["ace_picks"]) == 2
+    assert {row["market"] for row in elite["ace_picks"]} == {"aces"}
+    assert "ace_winner" not in elite_manifest["result_categories"]
+    assert legend_manifest["sections"]["ace_winner"]["returned"] == 81
+    assert len([row for row in legend["ace_picks"] if row["market"] == "most_aces"]) == 81
+    assert effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["goat"]["visible_rows"] == "ALL"
+
+
+def test_blurred_elite_see_all_does_not_render_rows_or_insights_in_browser_code():
+    script = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "if(tab==='see_all'&&String(ent.display_state||'').toLowerCase()==='blurred')" in script
+    assert "body.innerHTML=dailyHubLockedRow('see_all',0,firstDailyHubUnlockPlan('see_all',0,true));" in script
+    assert "&& String(dailyHubEntitlement('see_all').display_state||'').toLowerCase()==='blurred'" in script
