@@ -289,10 +289,10 @@
               "row_overrides": {}
             },
             "elite": {
-              "visible_rows": "ALL",
+              "visible_rows": 3,
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true,
+              "see_all": false,
               "selection_mode": "first",
               "display_state": "active",
               "row_overrides": {}

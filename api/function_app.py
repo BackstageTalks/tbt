@@ -67,6 +67,7 @@ from tbt.services.admin_storage import (
     banner_analytics_summary,
     load_runtime_ui_config,
     load_effective_ui_config,
+    load_effective_ui_config_with_revision,
     list_runtime_ui_snapshots,
     load_runtime_ui_snapshot,
     record_banner_event,
@@ -1461,12 +1462,12 @@ def tournament_logo_proxy(req):
 
 @app.route(route="v1/ui-config", methods=["GET"])
 def runtime_ui_config(req):
-    config, runtime_configured, storage_available = load_effective_ui_config()
+    config, runtime_configured, storage_available, revision = load_effective_ui_config_with_revision()
     payload = {
         "configured": True,
         "runtime_configured": runtime_configured,
         "config": config,
-        "config_revision": ui_config_revision(config),
+        "config_revision": revision,
         "source": "runtime" if runtime_configured else "release_access_defaults",
     }
     if not storage_available:
