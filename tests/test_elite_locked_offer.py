@@ -78,7 +78,9 @@ def test_existing_azure_three_picks_and_unlocked_aggregate_migrate_once():
 def test_elite_gets_no_more_aces_payload_or_results_grant_but_keeps_aces():
     config = resolve_ui_access_config(BASE)
     original = _input()
+    frozen = copy.deepcopy(original)
     elite, ent = filter_feed_for_access(original, {"plan": "elite", "status": "active", "id": "elite-1"}, config)
+    assert original == frozen  # redaction never mutates immutable issuance source
     assert ent["sections"]["see_all"]["display_state"] == "blurred"
     assert ent["sections"]["see_all"]["visible_picks"] == 0
     assert ent["sections"]["ace_winner"]["total"] == 81
