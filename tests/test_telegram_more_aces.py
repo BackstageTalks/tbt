@@ -232,3 +232,16 @@ def test_workflow_wires_only_existing_telegram_sender_and_ledger():
     assert "telegram-more-aces.yml" in daily
     assert "RAPIDAPI_KEY" not in job and "CDB" not in job
     assert 'group: blinq-telegram-ledger' in job
+
+
+def test_more_aces_rejects_off_tour_balls_but_keeps_atp_wta():
+    rows=[
+        row(event="atp")|{"tour":"ATP"},
+        row(event="wta")|{"tour":"WTA"},
+        row(event="itf")|{"tour":"ITF"},
+        row(event="challenger")|{"tour":"Challenger"},
+        row(event="wta125")|{"tour":"WTA 125"},
+        row(event="unknown")|{"tour":None},
+    ]
+    result=more.offered_rows(snapshot(rows),NOW)
+    assert [r["event_id"] for r in result]==["atp","wta"]
