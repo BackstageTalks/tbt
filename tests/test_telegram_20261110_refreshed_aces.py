@@ -151,3 +151,12 @@ def test_explicit_one_shot_trigger_uses_private_ledger_and_production_readback()
     assert "scripts/telegram_20261110_refreshed_aces.py prepare" in wf
     assert "provider_requests == 0" in wf and "cdb_writes == false" in wf
     assert "git diff-tree" in wf and "scripts/telegram_offer_publisher.py mark-sent" in wf
+    assert 'workflows: ["Tennis data and predictions"]' in wf
+    assert "42794628480" in wf
+    assert "actions/runs/42794628480" in wf
+    import json
+    request=json.loads((Path(__file__).resolve().parents[1] /
+        ".github/telegram-20261110-refreshed-aces-request.json").read_text())
+    assert request["source_refresh_run_id"] == 42794628480
+    assert request["provider_requests"] == 0
+    assert request["preserve_original_issued_bets"] is True
