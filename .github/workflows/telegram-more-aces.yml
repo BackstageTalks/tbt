@@ -2,8 +2,6 @@ name: BlinQ Telegram VIAC ES from website ball
 # Separate one-time-per-day Most Aces message after confirmed regular offer.
 on:
   workflow_dispatch:
-  repository_dispatch:
-    types: [telegram-more-aces-tick]
 
 permissions:
   contents: read
