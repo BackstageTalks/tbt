@@ -40,6 +40,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       CDB_READ_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DRY_RUN: ${{ (github.event_name == 'push' && !contains(github.event.head_commit.message, '[api-autofill-tick]')) || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+      TICK_500_SMOKE: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[api-autofill-tick]') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Verify budget, reserve hourly capacity, and dispatch governed pipeline
@@ -55,7 +56,7 @@ jobs:
           from datetime import datetime, time, timedelta, timezone
           from time import sleep
           from zoneinfo import ZoneInfo
-          from scripts.api_hourly_evening import evening_cap
+          from scripts.api_hourly_evening import evening_cap, operator_smoke_request_cap
 
           REPO = os.environ["GITHUB_REPOSITORY"]
           TOKEN = os.getenv("GH_TOKEN", "")
@@ -179,6 +180,11 @@ jobs:
           # Never run extras in final closeout/reset.
           extras_slot = stage_hour in (14, 17) and not final_topup and not new_day_start
           proposed = min(5000, limit-spent, 14500-spent, remaining, history_remaining)
+          tick_cap = operator_smoke_request_cap(
+              ".github/hourly-api-gapfill-tick.json",
+              enabled=os.getenv("TICK_500_SMOKE") == "true", now=now)
+          if tick_cap is not None:
+              proposed = min(proposed, tick_cap)
           if extras_slot:
               proposed = min(proposed, 450)  # <= 150 events at 3 calls each
           print(f"API budget: {spent}/15000 used; hourly ceiling={limit}; "
@@ -258,6 +264,11 @@ jobs:
                   limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])
               extras_slot = stage_hour in (14, 17) and not final_topup and not new_day_start
               proposed = min(5000, limit-spent, remaining, history_remaining)
+              tick_cap = operator_smoke_request_cap(
+                  ".github/hourly-api-gapfill-tick.json",
+                  enabled=os.getenv("TICK_500_SMOKE") == "true", now=now)
+              if tick_cap is not None:
+                  proposed = min(proposed, tick_cap)
               if extras_slot:
                   proposed = min(proposed, 450)
               print(f"Post-wait API budget: {spent}/15000; staged ceiling={limit}; "
