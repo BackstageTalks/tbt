@@ -544,6 +544,25 @@ def _normalize_membership_invariants(payload: object) -> object:
                 "row_overrides": {},
             })
         payload["elite_ace_winner_access_revision"] = 1
+
+    # One-time ELITE "Celá ponuka" lock. Keep the SEE ALL tab present as
+    # a blurred paywall, while the server-authorized individual tabs stay intact.
+    # Future operator changes survive once the migration marker is published.
+    try:
+        see_all_revision = int(payload.get("elite_see_all_access_revision") or 0)
+    except (TypeError, ValueError):
+        see_all_revision = 0
+    if see_all_revision < 1:
+        see_all = tabs.get("see_all") if isinstance(tabs, dict) else None
+        see_all_plans = (see_all.get("plans") or {}) if isinstance(see_all, dict) else {}
+        elite_see_all = see_all_plans.get("elite")
+        if isinstance(elite_see_all, dict):
+            elite_see_all.update({
+                "visible_rows": 0, "blur_remaining": True, "see_all": False,
+                "tab_enabled": True, "display_state": "blurred",
+                "row_overrides": {},
+            })
+        payload["elite_see_all_access_revision"] = 1
     return payload
 
 
