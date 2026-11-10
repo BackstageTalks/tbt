@@ -2341,7 +2341,12 @@
       const total=Math.max(Number(server.total)||0,rows.length);
       return {...server,visible_picks:'ALL',blur_remaining:false,enabled:server.enabled!==false,see_all:true,total,returned:rows.length,locked_count:0,slot_states:[]};
     }
-    if(tab==='see_all')return previewDailyHubEntitlement(tab);
+    if(tab==='see_all'){
+      if(state.previewPlan&&isAdminAccount())return previewDailyHubEntitlement(tab);
+      // SEE ALL has a separate server entitlement. Never infer access from
+      // underlying category rows or a stale locally cached Admin config.
+      return state.feed?.entitlements?.sections?.see_all||previewDailyHubEntitlement(tab);
+    }
     if(state.previewPlan&&isAdminAccount())return previewDailyHubEntitlement(tab);
     const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':tab==='double_faults'?'double_faults':tab==='games'?'games':tab==='sets'?'sets':tab;
     return state.feed?.entitlements?.sections?.[key]||{visible_picks:'ALL',blur_remaining:false,enabled:true,total:0,returned:0};
@@ -2408,7 +2413,14 @@
     if(tab==='double_faults')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='double_faults');
     if(tab==='doubles')return marketRows('doubles').filter(offerSurfaceEligible);
     if(tab==='games'||tab==='sets')return marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab);
-    if(tab==='see_all')return leanSeeAllRows();
+    if(tab==='see_all'){
+      const rule=state.previewPlan&&isAdminAccount()
+        ?dailyHubRuleForPlan(tab,state.previewPlan)
+        :(accountPlan()==='admin'?null:state.feed?.entitlements?.sections?.see_all||dailyHubRuleForPlan(tab));
+      const display=String(rule?.display_state||'active').toLowerCase();
+      if(rule&&(rule.enabled===false||rule.tab_enabled===false||display!=='active'))return [];
+      return leanSeeAllRows();
+    }
     return [];
   }
 
@@ -3340,10 +3352,12 @@
         });
       }else if(!includedButUnavailable)for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
-      if(plan!=='elite'||state.previewPlan){
-        if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
-        else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
-      }
+      // The curated ELITE renderer must still show the locked paywall row
+      // for an explicitly locked panel (especially the aggregate SEE ALL).
+      if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))
+        out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,tab==='see_all')));
+      else if((plan!=='elite'||state.previewPlan)&&out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)
+        out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
     }
     body.innerHTML=out.join('');
     // r28: semantic cell labels let the same server-rendered table become a
