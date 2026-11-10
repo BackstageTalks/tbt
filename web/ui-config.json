@@ -1792,7 +1792,7 @@
               "row_overrides": {}
             },
             "elite": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": true,
               "see_all": false,
