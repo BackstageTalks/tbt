@@ -120,7 +120,9 @@ jobs:
           import telegram_more_aces as more
           import telegram_20261110_refreshed_aces as fix
           saved=json.loads(Path("/tmp/blinq-telegram/state.json").read_text())
-          exact=saved["attempts"][fix.UPDATE_KEY]["source_feed_generated_at"]
+          slot=saved.get("attempts",{}).get(fix.UPDATE_KEY) or saved.get("reposts",{}).get(fix.UPDATE_KEY)
+          assert isinstance(slot,dict) and slot["status"]=="reserved"
+          exact=slot["source_feed_generated_at"]
           fresh=more.site_readback(os.environ["BLINQ_PRODUCTION_URL"])
           assert fresh["ok"] is True and fresh["stale"] is False
           assert fresh["betting_day"] == fix.DAY and fresh["generated_at"] == exact
