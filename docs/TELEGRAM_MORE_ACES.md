@@ -2,8 +2,9 @@
 
 ## Contract
 
-The new message is a **separate daily Telegram feed** following the confirmed
-06:20 daily offer. It uses the same premium Telegram destination, existing
+The separate VIAC ES workflow is now **manual-only**. It is not dispatched
+by the 06:20 daily offer; the approved automatic morning delivery has exactly
+the complete offer and one two-row FREE post. It uses the same premium Telegram destination, existing
 bot credentials, branded header, date, compact per-player row and footer.
 It does not replace the regular TOP/VALUE/ACES daily feed.
 
