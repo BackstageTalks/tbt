@@ -525,25 +525,24 @@ def _normalize_membership_invariants(payload: object) -> object:
     if isinstance(order, list) and "ace_winner" not in order and "ace" in order:
         order.insert(order.index("ace") + 1, "ace_winner")
 
-    # One-time, narrowly scoped ELITE VIAC ES entitlement correction.
-    # Read-only migration works even when an old published Azure config still
-    # has ALL; the next CAS-protected Admin publish persists the marker.
-    # A subsequent explicit Admin edit is never reset on later reads.
+    # ELITE VIAC ES contract v2: no authorized most-aces bets for ELITE.
+    # Upgrade legacy ALL / 3-pick runtime rows exactly once; leave issued
+    # publication records and LEGEND / GOAT entitlements untouched.
     try:
         ace_winner_revision = int(payload.get("elite_ace_winner_access_revision") or 0)
     except (TypeError, ValueError):
         ace_winner_revision = 0
-    if ace_winner_revision < 1:
+    if ace_winner_revision < 2:
         winner = tabs.get("ace_winner") if isinstance(tabs, dict) else None
         winner_plans = (winner.get("plans") or {}) if isinstance(winner, dict) else {}
         elite = winner_plans.get("elite")
         if isinstance(elite, dict):
             elite.update({
-                "visible_rows": 3, "blur_remaining": False, "see_all": False,
+                "visible_rows": 0, "blur_remaining": False, "see_all": False,
                 "tab_enabled": True, "display_state": "active",
                 "row_overrides": {},
             })
-        payload["elite_ace_winner_access_revision"] = 1
+        payload["elite_ace_winner_access_revision"] = 2
 
     # One-time ELITE "Celá ponuka" lock. Keep the SEE ALL tab present as
     # a blurred paywall, while the server-authorized individual tabs stay intact.
