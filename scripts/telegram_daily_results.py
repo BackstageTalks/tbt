@@ -366,7 +366,8 @@ def combined_daily_report(rows, archive_rows, day_text, footer, *, postponed_key
         name=full if len(names[short.casefold()])>1 else short
         odds=tg.num(row.get("odds"))
         odds_text=f"{odds:.2f}" if odds is not None and odds>1 else "—"
-        result_text=(f"{outcome['units']:+.2f}u" if outcome["units"] is not None else
+        result_text=("—" if status=="postponed" else
+                     f"{outcome['units']:+.2f}u" if outcome["units"] is not None else
                      "+0.00u" if status=="void" else "—")
         # Match the issued offer: uniform monochrome square for the category.
         # Keep W/L at the end; a purple marker denotes confirmed VOID, while
@@ -541,7 +542,9 @@ def prepare(args):
     state["attempts"][key]={
         "status":"reserved","reserved_at":now.isoformat(),
         "betting_day":target_day,
-        "counts":{k:sum(p["counts"][k] for p in posts) for k in ("won","lost","void","pending")},
+        "counts":{k:sum(p["counts"][k] for p in posts) for k in
+                  (("won","lost","void","pending","postponed") if nov09_exception
+                   else ("won","lost","void","pending"))},
     }
     out=Path(args.output)
     tg.save(out/"messages.json",[{"audience":p["audience"],"text":p["text"]} for p in posts])
