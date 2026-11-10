@@ -5040,7 +5040,12 @@
       let bestLower=null;
       levels.forEach(plan=>{
         const rule=cfg.plans?.[plan]||{},state=stateOf(rule),count=unlocked(rule);
-        if(state==='active'&&count===0&&rule.blur_remaining===false){
+        // ELITE has an intentionally empty VIAC ES offer. Zero unlocked bets
+        // is the product rule, not a broken Admin configuration.
+        const deliberateNoMoreAces=tab==='ace_winner'&&plan==='elite'
+          &&String(rule.visible_rows??'').toUpperCase()==='0'
+          &&!Object.values(rule.row_overrides||{}).some(v=>String(v).toLowerCase()==='active');
+        if(state==='active'&&count===0&&rule.blur_remaining===false&&!deliberateNoMoreAces){
           issues.push({tab,plan,kind:'empty',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: panel ZOBRAZIŤ, ale 0 odomknutých riadkov bez zámku.`});
         }
         if(rule.see_all===true&&state!=='active'){
