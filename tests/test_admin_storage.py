@@ -464,7 +464,7 @@ def test_info_result_history_is_independent_and_can_be_corrected(monkeypatch):
 
 
 def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(monkeypatch):
-    """81 existing VIAC ES offers must yield <=3 real ELITE rows on the server."""
+    """81 existing VIAC ES offers must yield zero ELITE rows on the server."""
     from tbt.services.entitlements import filter_feed_for_access
 
     table = FakeTable()
@@ -490,8 +490,8 @@ def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(mon
     assert table.single["payload"] == original_payload  # no Azure write from GET
 
     rule = effective["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]
-    assert rule["visible_rows"] == 3
-    assert rule["blur_remaining"] is False
+    assert rule["visible_rows"] == 0
+    assert rule["blur_remaining"] is True
     assert rule["see_all"] is False
     assert rule["row_overrides"] == {}
     assert effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["elite"] == old_ace
@@ -512,17 +512,17 @@ def test_elite_ace_winner_legacy_all_migrates_without_overwriting_stored_row(mon
     )
     ent = manifest["sections"]["ace_winner"]
     assert ent["total"] == 81
-    assert ent["visible_picks"] == 3
-    assert ent["returned"] == 3
+    assert ent["visible_picks"] == 0
+    assert ent["returned"] == 0
     assert ent["see_all"] is False
-    assert len([row for row in feed["ace_picks"] if row.get("market") == "most_aces"]) == 3
+    assert len([row for row in feed["ace_picks"] if row.get("market") == "most_aces"]) == 0
 
 
 def test_elite_ace_winner_admin_edit_survives_after_first_migration():
     legacy = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     legacy.pop("elite_ace_winner_access_revision", None)
     first = admin_storage.resolve_ui_access_config(legacy)
-    assert first["elite_ace_winner_access_revision"] == 1
+    assert first["elite_ace_winner_access_revision"] == 2
     rule = first["dashboard"]["daily_hub"]["tabs"]["ace_winner"]["plans"]["elite"]
     rule["visible_rows"] = 2
     again = admin_storage.resolve_ui_access_config(first)
