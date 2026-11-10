@@ -88,3 +88,5 @@ def test_workflow_operator_smoke_cap_never_increases_proposed_allowance():
     assert workflow.count("tick_cap = operator_smoke_request_cap(") == 2
     assert workflow.count("proposed = min(proposed, tick_cap)") == 2
     assert "TICK_500_SMOKE:" in workflow
+    assert workflow.count("0 <= since_reset < 45 * 60") == 2
+    assert workflow.count("evening_limit = 3000") == 2
