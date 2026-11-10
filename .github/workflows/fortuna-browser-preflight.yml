@@ -1,0 +1,45 @@
+name: Fortuna Chromium runtime preflight (read-only)
+
+# CI only; the actual 23:00 collector remains on external cron.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/skcz-evening-odds.yml'
+      - '.github/workflows/fortuna-browser-preflight.yml'
+      - 'scripts/skcz_evening_fortuna.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install same pinned browser as overnight collector
+        run: |
+          set -euo pipefail
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium
+      - name: Independently launch real Chromium without visiting bookmakers
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from playwright.sync_api import sync_playwright
+          with sync_playwright() as p:
+              browser = p.chromium.launch(headless=True)
+              page = browser.new_page(locale='sk-SK', timezone_id='Europe/Bratislava')
+              page.set_content('<html><title>Fortuna browser preflight</title></html>')
+              assert page.title() == 'Fortuna browser preflight'
+              browser.close()
+          print('CHROMIUM_LAUNCH_VERIFIED_ON_UBUNTU_24_04')
+          PY
+      - name: Offline exact-aces and fallback regressions
+        run: python -m unittest discover -s tests -p 'test_skcz_evening_*.py' -v

@@ -27,7 +27,8 @@ concurrency:
 
 jobs:
   capture:
-    runs-on: ubuntu-latest
+    # Playwright 1.57 Chromium does not support ubuntu-26.04 runner image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -70,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install playwright==1.57.0
-          python -m playwright install chromium
+          python -m playwright install --with-deps chromium
       - name: Capture public bookmaker markets without paid APIs or CDB changes
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
