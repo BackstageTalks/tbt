@@ -452,3 +452,96 @@ def test_first_serve_accuracy_is_never_counted_as_first_serve_points_won():
         {"key": "firstServeAccuracy", "homeValue": 12, "homeTotal": 20}
     ]}]}]}
     assert parse_statistics(raw, home_is_player1=True) == {"p1_first_serve_in": .6}
+
+
+def test_provider_internal_rate_conflict_quarantines_one_event_not_entire_batch(
+        match_factory, tmp_path):
+    from tbt.providers.statistics import ConflictingStatisticsError
+
+    contradictory = {"statistics": [{"period": "ALL", "groups": [
+        {"statisticsItems": [
+            {"key": "aces", "homeValue": 11, "awayValue": 5},
+            {"key": "servicePointsWon", "awayValue": 3, "awayTotal": 5},
+            {"key": "firstServePointsAccuracy", "awayValue": 4, "awayTotal": 5},
+            {"key": "secondServePointsAccuracy", "awayValue": 3, "awayTotal": 5},
+        ]}
+    ]}]}
+    with pytest.raises(ConflictingStatisticsError) as exc:
+        parse_statistics(contradictory, home_is_player1=True)
+    assert exc.value.field == "p2_service_points_won"
+
+    valid = {"statistics": [{"period": "ALL", "groups": [
+        {"statisticsItems": [
+            {"key": "aces", "homeValue": 3, "awayValue": 7},
+        ]}
+    ]}]}
+
+    class Provider:
+        def __init__(self):
+            self.calls = []
+
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            return contradictory if path.endswith("/123/statistics") else valid
+
+    def match(event_id):
+        m = match_factory(f"match-{event_id}", "A", "B", "A")
+        m.stats = {"p1_aces": 9} if event_id == "123" else {}
+        m.provider_payload = {
+            "id": event_id,
+            "_tbt_event_identity": {
+                "event_id": event_id, "home": "A", "away": "B",
+                "status": "finished",
+            },
+        }
+        return m
+
+    provider = Provider()
+    enricher = StatisticsEnricher(provider, tmp_path / "provider-conflict.sqlite",
+                                  targeted=True)
+    bad = match("123")
+    good = match("124")
+    try:
+        original = dict(bad.stats)
+        assert enricher.enrich(bad) == "conflict"
+        assert bad.stats == original
+        marker = bad.provider_payload["_tbt_statistics"]
+        assert marker["status"] == "conflict"
+        assert marker["reason"] == "provider_internal_stat_conflict"
+        assert marker["source"] == "tennisapi1"
+        assert enricher.conflict_diagnostics()["by_conflicting_field"] == {
+            "p2_service_points_won": 1
+        }
+        assert enricher.enrich(bad) == "cached"
+        assert enricher.enrich(good) == "enriched"
+        assert good.stats["p1_aces"] == 3
+        assert good.stats["p2_aces"] == 7
+        assert provider.calls == [
+            "/api/tennis/event/123/statistics",
+            "/api/tennis/event/124/statistics",
+        ]
+    finally:
+        enricher.close()
+
+
+def test_malformed_statistics_envelope_remains_fatal(match_factory, tmp_path):
+    class Provider:
+        def _get(self, path, **kwargs):
+            return {"statistics": "unknown-provider-format"}
+
+    m = match_factory("malformed-event", "A", "B", "A")
+    m.provider_payload = {
+        "id": "123", "_tbt_event_identity": {
+            "event_id": "123", "home": "A", "away": "B",
+            "status": "finished",
+        },
+    }
+    enricher = StatisticsEnricher(Provider(), tmp_path / "malformed.sqlite",
+                                  targeted=True)
+    try:
+        with pytest.raises(ProviderError, match="Unsupported statistics envelope"):
+            enricher.enrich(m)
+        assert m.stats == {}
+        assert "_tbt_statistics" not in m.provider_payload
+    finally:
+        enricher.close()

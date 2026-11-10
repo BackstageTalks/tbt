@@ -8,7 +8,7 @@ import math
 from datetime import datetime, timezone
 
 from ..errors import ProviderError
-from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics, inventory_statistics_keys)
+from ..providers.statistics import (ConflictingStatisticsError, NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics, inventory_statistics_keys)
 from ..providers.tennisapi_extra import normalize_set_statistics_home_away
 from .statistics_gapfill import event_id as resolve_event_id, missing_fields, retry_due, recent_score_identity_conflict
 from .tennis_response_cache import RawResponseCache
@@ -270,13 +270,28 @@ class StatisticsEnricher:
                 "unsupported_keys": keys[:40],
             }}
             return "unavailable"
+        except ConflictingStatisticsError as exc:
+            # Contradictory supported ALL-period values invalidate this entire
+            # event response, not the surrounding canonical batch. Preserve
+            # every existing CDB cell, record a normal conflict cooldown and
+            # continue with independent eligible events. Unexpected provider
+            # failures and malformed envelopes remain fatal.
+            self.conflict_responses += 1
+            self.conflict_field_counts[exc.field] += 1
+            match.provider_payload = {**raw, "_tbt_statistics": {
+                "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id),
+                "source": "tennisapi1",
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "status": "conflict", "reason": "provider_internal_stat_conflict",
+            }}
+            return "conflict"
         except ProviderError as exc:
             # Some completed provider events expose only set-level statistics or
             # duplicate/non-canonical period labels and therefore have no single
             # trustworthy whole-match ALL block. That is an event-level coverage
             # miss, not a reason to abort a multi-thousand-match enrichment batch.
-            # Keep all other ProviderError cases fatal (identity, envelope,
-            # conflicting values) so the adapter remains fail-closed.
+            # Keep other ProviderError cases fatal (identity and malformed
+            # envelopes); event-level contradictions have a typed path above.
             if str(exc) != "Missing unambiguous ALL period in statistics":
                 raise
             periods = payload.get("statistics") if isinstance(payload, dict) else None

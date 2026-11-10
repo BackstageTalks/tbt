@@ -15,6 +15,14 @@ from ..errors import ProviderError
 class NoSupportedStatisticsError(ProviderError):
     """Valid statistics payload that contains none of the fields we consume."""
 
+
+class ConflictingStatisticsError(ProviderError):
+    """One event has contradictory ALL-period values; reject that event."""
+
+    def __init__(self, field: str):
+        self.field = field
+        super().__init__(f"Conflicting whole-match statistic: {field}")
+
 from ..utils import normalize_rate
 
 
@@ -292,7 +300,7 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                         continue
                     field = f"{prefix}_{count_name}"
                     if field in values and abs(values[field] - count) > 1e-6:
-                        raise ProviderError(f"Conflicting whole-match statistic: {field}")
+                        raise ConflictingStatisticsError(field)
                     values[field] = count
                     continue
 
@@ -306,14 +314,14 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                     continue
                 field = f"{prefix}_{rate_name}"
                 if field in values and abs(values[field] - value) > 1e-6:
-                    raise ProviderError(f"Conflicting whole-match statistic: {field}")
+                    raise ConflictingStatisticsError(field)
                 values[field] = value
                 if rate_name == "break_points_won":
                     # A converted break point is an observed return-side point.
                     # Retain the existing break_points_won model alias too.
                     bp_field = f"{prefix}_break_point_return_win"
                     if bp_field in values and abs(values[bp_field] - value) > 1e-6:
-                        raise ProviderError(f"Conflicting whole-match statistic: {bp_field}")
+                        raise ConflictingStatisticsError(bp_field)
                     values[bp_field] = value
                 if total is not None:
                     rate_counts[field] = (won, total)
@@ -358,7 +366,7 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             field = f"{prefix}_return_points_won"
             derived = (first[0] + second[0]) / (first[1] + second[1])
             if field in values and abs(values[field] - derived) > 1e-6:
-                raise ProviderError(f"Conflicting whole-match statistic: {field}")
+                raise ConflictingStatisticsError(field)
             values.setdefault(field, derived)
 
     for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
@@ -367,7 +375,7 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             service = (first[0] + second[0]) / (first[1] + second[1])
             service_field = f"{prefix}_service_points_won"
             if service_field in values and abs(values[service_field] - service) > 1e-6:
-                raise ProviderError(f"Conflicting whole-match statistic: {service_field}")
+                raise ConflictingStatisticsError(service_field)
             values.setdefault(service_field, service)
             values.setdefault(f"{opponent}_return_points_won", 1 - service)
 
@@ -444,7 +452,7 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                 current = values.get(field)
                 tol = 0.0 if field.endswith("_total") else 1e-6
                 if current is not None and abs(current - value) > tol:
-                    raise ProviderError(f"Conflicting whole-match statistic: {field}")
+                    raise ConflictingStatisticsError(field)
                 values.setdefault(field, value)
 
     if not values:
