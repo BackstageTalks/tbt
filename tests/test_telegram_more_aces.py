@@ -16,7 +16,7 @@ CONFIRMED_AT = "2026-11-08T06:20:00+00:00"
 
 
 def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", start=SCHEDULED):
-    return {"market":"aces","event_id":event,"scheduled_at":start,
+    return {"market":"aces","event_id":event,"scheduled_at":start,"tour":"ATP",
             "player1":{"id":"p1","name":"Alice Smith"},
             "player2":{"id":"p2","name":"Bob Jones"},
             "aces_superiority_hint":hint,"aces_superiority_player_id":hint_id,
