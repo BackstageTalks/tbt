@@ -570,17 +570,38 @@ def load_effective_ui_config() -> tuple[dict, bool, bool]:
     except AdminStorageUnavailable:
         return resolve_ui_access_config(None), False, False
 
-def load_runtime_ui_config() -> dict | None:
+def _load_runtime_ui_config_and_revision() -> tuple[dict | None, str]:
+    """Read the runtime payload and its stable, release-independent CAS revision.
+
+    The effective access config includes release defaults and migrations, which
+    can differ across rolling Azure workers despite identical stored data.
+    Version the *stored* document instead, while the Azure/Firestore ETag
+    continues to guard the actual conditional write.
+    """
     client = _table(UI_TABLE)
     try:
         entity = client.get_entity(partition_key="runtime", row_key="ui-config")
     except Exception as exc:
-        # Missing config is normal; transport/auth/storage failures are not.
         if _storage_not_found(exc):
-            return None
+            return None, ui_config_revision({})
         raise AdminStorageUnavailable("Unable to load runtime UI configuration") from exc
     decoded = _decode_runtime_ui_payload(entity.get("payload"))
-    return _normalize_membership_invariants(decoded) if decoded is not None else None
+    revision = ui_config_revision(decoded if decoded is not None else {})
+    normalized = _normalize_membership_invariants(decoded) if decoded is not None else None
+    return normalized, revision
+
+
+def load_runtime_ui_config() -> dict | None:
+    return _load_runtime_ui_config_and_revision()[0]
+
+
+def load_effective_ui_config_with_revision() -> tuple[dict, bool, bool, str]:
+    """One storage read supplies both public effective rules and raw CAS version."""
+    try:
+        runtime, revision = _load_runtime_ui_config_and_revision()
+        return resolve_ui_access_config(runtime), bool(runtime), True, revision
+    except AdminStorageUnavailable:
+        return resolve_ui_access_config(None), False, False, ui_config_revision({})
 
 
 
@@ -1634,12 +1655,10 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "",
                 raise
             previous = None
         if expected_revision is not None:
-            # The GET response contains the effective published configuration,
-            # not merely the raw row. Compare exactly that representation.
-            actual = resolve_ui_access_config(
-                _decode_runtime_ui_payload(previous.get("payload")) if previous else None
-            )
-            if ui_config_revision(actual) != expected_revision:
+            # Compare the stored payload, not release defaults/migrated views.
+            # This prevents false 409s when GET and PUT hit different workers.
+            stored = _decode_runtime_ui_payload(previous.get("payload")) if previous else None
+            if ui_config_revision(stored if stored is not None else {}) != expected_revision:
                 raise UIConfigVersionConflict("UI configuration changed; reload before publishing")
             etag = getattr(previous, "metadata", {}).get("etag") if previous else None
             if previous and not etag:
