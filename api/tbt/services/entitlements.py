@@ -1408,6 +1408,26 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         "min_surface_matches_each": BOARD_MIN_SURFACE_MATCHES,
         "official_prediction": False,
     }
+    # SEE ALL is an independently locked aggregate, not a server feed.
+    # Do not authorize the combined panel just because individual markets
+    # contain valid ELITE picks. The browser receives only authorized rows
+    # from the underlying markets, and must also honor this explicit lock.
+    aggregate_rule = _admin_hub_rule(ui_config, "see_all", plan)
+    aggregate_limit = aggregate_rule[0] if aggregate_rule else (0 if plan in {"rookie", "pro", "trial", "expired"} else "ALL")
+    aggregate_state = aggregate_rule[6] if aggregate_rule else ("blurred" if str(aggregate_limit) == "0" else "active")
+    if aggregate_state != "active":
+        aggregate_limit = 0
+    sections["see_all"] = {
+        "visible_picks": aggregate_limit,
+        "see_all": bool(aggregate_rule[2]) if aggregate_rule else aggregate_state == "active",
+        "blur_remaining": bool(aggregate_rule[1]) if aggregate_rule else aggregate_state != "active",
+        "enabled": bool(aggregate_rule[3]) if aggregate_rule else True,
+        "total": 0, "returned": 0, "locked_count": 0,
+        "selection_mode": aggregate_rule[4] if aggregate_rule else "first",
+        "display_state": aggregate_state, "slot_states": [],
+        "row_overrides": deepcopy(aggregate_rule[5]) if aggregate_rule else {},
+    }
+
     results_allowed = _results_access_allowed(ui_config, plan)
     history_hours = _results_history_hours(ui_config, plan) if results_allowed else 0
     result_categories = _allowed_result_categories({"plan": plan, "sections": sections}) if history_hours != 0 else []
