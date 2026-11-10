@@ -533,17 +533,19 @@ def _normalize_membership_invariants(payload: object) -> object:
         ace_winner_revision = int(payload.get("elite_ace_winner_access_revision") or 0)
     except (TypeError, ValueError):
         ace_winner_revision = 0
-    if ace_winner_revision < 1:
+    if ace_winner_revision < 2:
+        # v2 removes ELITE's last three VIAC ES positions without deleting
+        # any historical issued publication or affecting LEGEND/GOAT.
         winner = tabs.get("ace_winner") if isinstance(tabs, dict) else None
         winner_plans = (winner.get("plans") or {}) if isinstance(winner, dict) else {}
         elite = winner_plans.get("elite")
         if isinstance(elite, dict):
             elite.update({
-                "visible_rows": 3, "blur_remaining": False, "see_all": False,
-                "tab_enabled": True, "display_state": "active",
+                "visible_rows": 0, "blur_remaining": True, "see_all": False,
+                "tab_enabled": True, "display_state": "blurred",
                 "row_overrides": {},
             })
-        payload["elite_ace_winner_access_revision"] = 1
+        payload["elite_ace_winner_access_revision"] = 2
 
     # ELITE's aggregated See All is a separate paywall, not merely an
     # expansion control on the individual markets. Migrate old Azure rows once.
