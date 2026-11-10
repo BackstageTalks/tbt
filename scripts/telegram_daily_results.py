@@ -252,8 +252,12 @@ def match_result(sent, settled):
     return found[0] if found else None
 
 
-def evaluate(sent, archive_rows):
+def evaluate(sent, archive_rows, *, postponed=False):
     record=match_result(sent,archive_rows)
+    # A one-day operator-approved report exemption, never a settled archive
+    # result or a fabricated postponement of the actual finished fixture.
+    if postponed and record is None:
+        return {"status":"postponed","units":0.0,"stake":0,"odds":sent.get("odds")}
     result=(record or {}).get("result") or {}
     if record is None:
         return {"status":"pending","units":None,"stake":0,"odds":sent.get("odds")}
@@ -323,7 +327,7 @@ def _pct(numerator, denominator, signed=False):
     return (f"{numerator / denominator * 100:+.1f}%" if signed else f"{numerator / denominator * 100:.1f}%") if denominator else "—"
 
 
-def combined_daily_report(rows, archive_rows, day_text, footer):
+def combined_daily_report(rows, archive_rows, day_text, footer, *, postponed_keys=frozenset()):
     """One premium daily results scorecard for the entire confirmed sent offer.
 
     Free picks are a separate audience and must never inflate premium totals.
@@ -335,7 +339,8 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
              for row in rows if row.get("channel")==category]
     if not ordered:
         return []
-    stats={section:{"won":0,"lost":0,"void":0,"pending":0,"units":0.0,"priced":0}
+    statuses=("won","lost","void","pending") + (("postponed",) if postponed_keys else ())
+    stats={section:{**{status:0 for status in statuses},"units":0.0,"priced":0}
            for section in categories}
     names={}
     for _,row in ordered:
@@ -344,7 +349,10 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
         names.setdefault(short.casefold(),set()).add(full)
     lines=[]
     for index,(section,row) in enumerate(ordered,1):
-        outcome=evaluate(row,archive_rows)
+        frozen_identity=(str(row.get("event_id") or ""),
+                         str(row.get("selection_id") or ""),
+                         str(row.get("publication_key") or ""))
+        outcome=evaluate(row,archive_rows,postponed=frozen_identity in postponed_keys)
         status=outcome["status"]
         if status not in stats[section]:
             raise RuntimeError("Unexpected settlement status in verified report")
@@ -364,10 +372,11 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
         # Keep W/L at the end; a purple marker denotes confirmed VOID, while
         # hourglass is reserved for unresolved / postponed, never a loss.
         category=tg.OFFER_ICONS[section]
-        outcome_icon={"won":"✅","lost":"❌","void":"🟪 VOID","pending":"⏳"}[status]
+        outcome_icon={"won":"✅","lost":"❌","void":"🟪 VOID",
+                      "pending":"⏳","postponed":"🕓 POSTPONED"}[status]
         lines.append(f"{category} {name} | {odds_text} | {result_text} {outcome_icon}")
 
-    total={status:sum(stats[s][status] for s in categories) for status in ("won","lost","void","pending")}
+    total={status:sum(stats[s][status] for s in categories) for status in statuses}
     total_profit=sum(stats[s]["units"] for s in categories)
     total_staked=sum(stats[s]["priced"] for s in categories)
     decisions=total["won"]+total["lost"]
@@ -381,6 +390,10 @@ def combined_daily_report(rows, archive_rows, day_text, footer):
     ]
     if total["pending"]:
         summary_tail.append("⏳ Priebežné vyhodnotenie: neuzavreté zápasy sa počítajú ako Pending.")
+    if total.get("postponed"):
+        summary_tail.append(
+            f"🕓 POSTPONED {total['postponed']} | bez overených es – "
+            "nezapočítané do WIN/LOSS ani ROI. Zápas bol odohraný.")
     if decisions > total_staked:
         summary_tail.append("ℹ️ Projekcie bez potvrdeného kurzu sú mimo zisku a ROI.")
     day_label=datetime.fromisoformat(day_text).strftime("%d.%m.%Y")
@@ -446,16 +459,40 @@ def prepare(args):
     if not isinstance(state,dict) or not isinstance(state.get("attempts"),dict):
         raise RuntimeError("Invalid durable Telegram state")
     historical_day=getattr(args,"historical_day","")
+    nov09_exception=bool(getattr(args,"postpone_unverifiable_20261109",False))
     if historical_day and not getattr(args,"elite_auto",False):
         raise RuntimeError("Historical Telegram send requires explicit ELITE authorization")
     target_day=unreported_day(state,now)
-    if historical_day:
+    if nov09_exception:
+        if historical_day not in ("", "2026-11-09"):
+            raise RuntimeError("Postponed recovery approved only for 9 Nov")
+        target_day="2026-11-09"
+        morning=(state["attempts"].get("2026-11-09:daily:0620") or {})
+        if (morning.get("status")!="sent" or morning.get("message_ids")!=[749,750]
+                or morning.get("sha256")!="72c17bc8125a7b270351d81b5884f6a16af321acc941ef332a7c675435035b41"
+                or "results:2026-11-09" in state["attempts"]):
+            print(json.dumps({"status":"skipped","reason":"nov09_receipt_missing_or_already_reserved"}))
+            return
+    elif historical_day:
         target_day=approved_historical_results_day(state,historical_day)
     if not target_day:
         print(json.dumps({"status":"skipped","reason":"no_unreported_issued_day"}))
         return
     key="results:"+target_day
     sent=extract_sent(state,target_day)
+    nov09_wright=("17520979","484870","local-aces-ou-v1:17520979:484870:over:3.5")
+    postponed_keys=frozenset()
+    if nov09_exception:
+        frozen=[r for r in sent if (str(r.get("event_id") or ""),
+                str(r.get("selection_id") or ""),
+                str(r.get("publication_key") or ""))==nov09_wright]
+        if (len(sent)!=6 or len(frozen)!=1
+                or frozen[0].get("channel")!="aces"
+                or frozen[0].get("market_line")!=3.5
+                or frozen[0].get("projection_direction")!="over"
+                or sorted(r.get("channel") for r in sent)!=
+                   ["aces","aces","aces","free","top","value"]):
+            raise RuntimeError("Original Nov 9 issued offer contract changed")
     verified=archive(args.api_url,target_day)
     pending=[row for row in sent if evaluate(row,verified)["status"]=="pending"]
     if pending:
@@ -468,6 +505,15 @@ def prepare(args):
                           "exact_fallbacks":recovered,
                           "issued_references":len(sent)}))
         pending=[row for row in sent if evaluate(row,verified)["status"]=="pending"]
+    if nov09_exception:
+        pending_identities={(str(r.get("event_id") or ""),
+                             str(r.get("selection_id") or ""),
+                             str(r.get("publication_key") or "")) for r in pending}
+        if pending_identities=={nov09_wright}:
+            postponed_keys=frozenset({nov09_wright})
+            pending=[]
+        elif pending_identities:
+            raise RuntimeError("Nov 9 has additional unverified published bets")
     if pending:
         print(json.dumps({"status":"waiting","reason":"issued_picks_not_all_settled",
                           "day":target_day,"settled":len(sent)-len(pending),
@@ -476,13 +522,18 @@ def prepare(args):
     footer=tg.branded_footer(cfg.get("footer"))
     # Only a complete ELITE scorecard is delivered; the duplicate FREE
     # reference is used for completion checks but never inflates ROI.
-    posts=combined_daily_report(sent,verified,target_day,footer)
+    posts=combined_daily_report(sent,verified,target_day,footer,postponed_keys=postponed_keys)
     for post in posts:
         post["audience"]="elite"
     if not posts:
         print(json.dumps({"status":"skipped","reason":"no_results_to_report"}))
         return
-    if historical_day:
+    if nov09_exception:
+        counts={k:sum(p["counts"].get(k,0) for p in posts)
+                for k in ("won","lost","void","pending","postponed")}
+        if counts!={"won":3,"lost":1,"void":0,"pending":0,"postponed":1}:
+            raise RuntimeError("Nov 9 actual verified Results differ from frozen scorecard")
+    if historical_day and not nov09_exception:
         # Independently pinned by the original 13/13 archive readback.
         counts={k:sum(p["counts"][k] for p in posts) for k in ("won","lost","void","pending")}
         if counts != {"won":6,"lost":5,"void":1,"pending":0}:
@@ -511,6 +562,8 @@ if __name__=="__main__":
     parser.add_argument("--now",default="")
     parser.add_argument("--external-tick",action="store_true")
     parser.add_argument("--elite-auto",action="store_true",help="Operator-approved automatic ELITE settlement independent of old Admin switches")
-    parser.add_argument("--historical-day",default="",help="Only the guarded 2026-11-03 archived-results recovery")
+    parser.add_argument("--historical-day",default="",help="Guarded exact historical Results recovery")
+    parser.add_argument("--postpone-unverifiable-20261109",action="store_true",
+                        help="One-time 9 Nov Wright original O/U report; no Results archive mutation")
     args=parser.parse_args()
     prepare(args)
