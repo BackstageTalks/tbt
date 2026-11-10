@@ -1,0 +1,122 @@
+name: BlinQ Nov 10 refreshed ATP/WTA ESÁ and VIAC ES (one shot)
+# One operator-approved fresh intra-day offer, separately from the immutable 06:20 batch.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-20261110-refreshed-aces-request.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+
+jobs:
+  refreshed-offer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Guard one-off user authorization and production source
+        id: prepare
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -s .private-telegram/ops/telegram-bot-state.json
+          test -s .github/telegram-20261110-refreshed-aces-request.json
+          jq -e '.schema == 1 and .kind == "one-shot-atp-wta-website-telegram-refresh"
+            and .betting_day == "2026-11-10"
+            and .source == "deployed-confirmed-current-refresh"
+            and .original_daily_message_ids == [752,753]
+            and .original_more_aces_message_ids == [754]
+            and .provider_requests == 0 and .cdb_writes == false
+            and .preserve_original_issued_bets == true
+            and .no_started_bets == true' .github/telegram-20261110-refreshed-aces-request.json >/dev/null
+          if [[ "$GITHUB_EVENT_NAME" == push ]]; then
+            test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+            git cat-file -e 'HEAD^'
+            git diff-tree --no-commit-id --name-only -r HEAD^ HEAD |
+              grep -Fxq '.github/telegram-20261110-refreshed-aces-request.json'
+          fi
+          python scripts/telegram_20261110_refreshed_aces.py prepare \
+            --state .private-telegram/ops/telegram-bot-state.json \
+            --api-url "$BLINQ_PRODUCTION_URL"
+          if [[ -s /tmp/blinq-telegram/ready ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Reserve exact refreshed picks before any Telegram calls
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Reserve one-shot ATP WTA fresh offer [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Fresh offer reservation CAS read-back mismatch"; exit 1; }
+      - name: Reconfirm the exact live serving generation and send
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, sys
+          from pathlib import Path
+          sys.path.insert(0, str(Path.cwd()/"scripts"))
+          import telegram_more_aces as more
+          import telegram_20261110_refreshed_aces as fix
+          saved=json.loads(Path("/tmp/blinq-telegram/state.json").read_text())
+          exact=saved["attempts"][fix.UPDATE_KEY]["source_feed_generated_at"]
+          fresh=more.site_readback(os.environ["BLINQ_PRODUCTION_URL"])
+          assert fresh["ok"] is True and fresh["stale"] is False
+          assert fresh["betting_day"] == fix.DAY and fresh["generated_at"] == exact
+          print(json.dumps({"status":"verified_site_before_send","generation":exact}))
+          PY
+          python scripts/telegram_offer_publisher.py send
+      - name: Confirm receipt IDs and read back original private ledger
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Confirm refreshed Telegram message IDs [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Refreshed Telegram receipt read-back mismatch"; exit 1; }
