@@ -164,7 +164,7 @@ jobs:
           sparse-checkout: ops
           sparse-checkout-cone-mode: true
           persist-credentials: true
-      - name: Prepare entire confirmed daily TOP VALUE ACES and one FREE TOP
+      - name: Prepare entire confirmed daily TOP VALUE ACES and FREE TOP + ESÁ
         id: prepare
         shell: bash
         env:
@@ -195,7 +195,7 @@ jobs:
           expected="$(git -C .private-telegram rev-parse HEAD)"
           actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
           test "$expected" = "$actual" || { echo "::error::Reservation read-back failed"; exit 1; }
-      - name: Send ALL confirmed picks and separate FREE TOP
+      - name: Send confirmed offer and one two-pick FREE preview
         if: steps.prepare.outputs.ready == 'true'
         env:
           TGB: ${{ secrets.TGB }}
@@ -216,22 +216,3 @@ jobs:
           actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
           test "$expected" = "$actual" || { echo "::error::Telegram receipt read-back failed"; exit 1; }
 
-  dispatch-more-aces:
-    needs: deliver
-    if: needs.deliver.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: write
-      contents: read
-    steps:
-      - name: Dispatch separate website-ball VIAC ES after regular daily delivery
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # VIAC ES independently confirms the original daily receipt, exact
-          # current web generation, future fixture day and private ledger slot.
-          # No request data or bookmaker quote is passed via dispatch.
-          gh workflow run telegram-more-aces.yml --repo "$GITHUB_REPOSITORY" --ref main
