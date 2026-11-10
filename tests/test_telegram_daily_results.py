@@ -514,3 +514,56 @@ def test_site_fallback_prioritizes_archive_and_deduplicates_free_mirror():
     assert recovered==0 and len(merged)==1
     assert r.evaluate(top,merged)["status"]=="won"
     assert r.evaluate(free,merged)["status"]=="won"
+
+
+def test_nov9_postponed_only_the_explicit_missing_original_aces_contract(tmp_path,monkeypatch):
+    day="2026-11-09"
+    start="2026-11-09T12:00:00+00:00"
+    top=sent("top","17516947",1.719424)
+    top.update(selection_id="300293",publication_key="top_daily:match_winner:2026-11-09:17516947:300293",scheduled_at=start)
+    value=sent("value","17520307",1.819672)
+    value.update(selection_id="195414",publication_key="value:match_winner:2026-11-09:17520307:195414",scheduled_at=start)
+    def ace(event,selection,side,line,odds):
+        item=sent("aces",event,odds)
+        item.update(selection_id=selection,scheduled_at=start,market_line=line,
+                    projection_direction=side,
+                    publication_key=f"local-aces-ou-v1:{event}:{selection}:{side}:{line:.1f}")
+        return item
+    wright=ace("17520979","484870","over",3.5,1.8)
+    wright["name"]="Michael Wright"
+    gojo=ace("17520223","124916","over",7.5,1.62)
+    mena=ace("17516100","38180","over",2.5,1.7)
+    free=sent("free","17516947",1.719424)
+    free.update(selection_id="300293",publication_key=top["publication_key"],scheduled_at=start)
+    issued=[top,value,wright,gojo,mena,free]
+    state={"schema":1,"attempts":{day+":daily:0620":{
+        "status":"sent","message_ids":[749,750],
+        "sha256":"72c17bc8125a7b270351d81b5884f6a16af321acc941ef332a7c675435035b41",
+        "rows":issued}}}
+    path=tmp_path/"ledger.json";tg.save(path,state)
+    monkeypatch.setattr(tg,"config",lambda *_:{"enabled":False,"results_enabled":False})
+    archived=[settled(top,True),settled(value,False),
+              settled(gojo,True),settled(mena,True)]
+    monkeypatch.setattr(r,"archive",lambda *_:archived)
+    monkeypatch.setattr(r,"website_results",lambda *_:[])
+    args=SimpleNamespace(now="2026-11-10T08:00:00+00:00",
+                         config_url="none",api_url="none",
+                         state=str(path),output=str(tmp_path/"report"),
+                         elite_auto=True,historical_day="2026-11-09",
+                         postpone_unverifiable_20261109=True)
+    r.prepare(args)
+    posted=tg.load(tmp_path/"report"/"messages.json")
+    assert len(posted)==1 and posted[0]["audience"]=="elite"
+    message=posted[0]["text"]
+    assert "Wright" in message and "POSTPONED" in message
+    assert "WIN 3" in message and "LOSS 1" in message
+    assert "POSTPONED 1" in message and "PENDING 0" in message
+    reserved=tg.load(tmp_path/"report"/"state.json")["attempts"]["results:"+day]
+    assert reserved["status"]=="reserved"
+    assert reserved["counts"]=={"won":3,"lost":1,"void":0,"pending":0,"postponed":1}
+    assert tg.load(path)==state  # not a direct archive or ledger mutation
+    # A second run may never create a second send reservation.
+    tg.save(path,tg.load(tmp_path/"report"/"state.json"))
+    (tmp_path/"report"/"ready").unlink()
+    r.prepare(args)
+    assert not (tmp_path/"report"/"ready").exists()

@@ -16,7 +16,7 @@ CONFIRMED_AT = "2026-11-08T06:20:00+00:00"
 
 
 def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", start=SCHEDULED):
-    return {"market":"aces","event_id":event,"scheduled_at":start,
+    return {"market":"aces","event_id":event,"scheduled_at":start,"tour":"ATP",
             "player1":{"id":"p1","name":"Alice Smith"},
             "player2":{"id":"p2","name":"Bob Jones"},
             "aces_superiority_hint":hint,"aces_superiority_player_id":hint_id,
@@ -232,3 +232,16 @@ def test_workflow_wires_only_existing_telegram_sender_and_ledger():
     assert "telegram-more-aces.yml" in daily
     assert "RAPIDAPI_KEY" not in job and "CDB" not in job
     assert 'group: blinq-telegram-ledger' in job
+
+
+def test_more_aces_rejects_off_tour_balls_but_keeps_atp_wta():
+    rows=[
+        row(event="atp")|{"tour":"ATP"},
+        row(event="wta")|{"tour":"WTA"},
+        row(event="itf")|{"tour":"ITF"},
+        row(event="challenger")|{"tour":"Challenger"},
+        row(event="wta125")|{"tour":"WTA 125"},
+        row(event="unknown")|{"tour":None},
+    ]
+    result=more.offered_rows(snapshot(rows),NOW)
+    assert [r["event_id"] for r in result]==["atp","wta"]

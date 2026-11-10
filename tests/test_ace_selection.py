@@ -144,3 +144,23 @@ def test_local_aces_projection_bypasses_only_missing_bookmaker_market():
     assert {row["market"] for row in local} == {"aces"}
     assert local[0]["odds"] is None
     assert local[0]["price_status"] == "projection_only"
+
+
+def test_aces_and_derived_most_aces_only_main_atp_wta_tours():
+    from tbt.services.ace_selection import select_ace_winner_picks
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    history = []
+    for i in range(10):
+        when = now - timedelta(days=20 + i * 8)
+        history.append(historical(f"a{i}", when, "A", f"X{i}", 9, 3, 1, 2))
+        history.append(historical(f"b{i}", when, "B", f"Y{i}", 3, 8, 4, 2))
+    future = [
+        {**prediction(now + timedelta(hours=5)), "event_id":str(i), "tour":tour}
+        for i,tour in enumerate(["ATP","WTA","ITF","ATP Challenger","WTA 125","unknown",""],1)
+    ]
+    cards, _ = select_ace_picks(history, future, now=now,
+                                 per_market_limit=20,total_limit=40)
+    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA"}
+    assert any(row["tour"]=="ITF" and row["market"]=="double_faults" for row in cards)
+    more, _ = select_ace_winner_picks(history,future,now=now)
+    assert {row["tour"] for row in more} == {"ATP","WTA"}

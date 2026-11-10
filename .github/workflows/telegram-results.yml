@@ -9,6 +9,7 @@ on:
     paths:
       - '.github/telegram-20261104-verified-replay-request.json'
       - '.github/telegram-20261103-deliver-request.json'
+      - '.github/telegram-20261109-postponed-request.json'
 permissions:
   contents: read
 concurrency:
@@ -76,6 +77,26 @@ jobs:
                 .github/telegram-20261103-deliver-request.json >/dev/null
               python scripts/telegram_daily_results.py prepare --elite-auto \
                 --historical-day 2026-11-03 \
+                --api-url "$BLINQ_PRODUCTION_URL" \
+                --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" \
+                --state .private-telegram/ops/telegram-bot-state.json
+            elif jq -e '((.head_commit.modified // []) + (.head_commit.added // [])) |
+              index(".github/telegram-20261109-postponed-request.json") != null' "$GITHUB_EVENT_PATH" >/dev/null; then
+              # Operator-authorized one-day Results-only exception for a
+              # FINISHED match with missing player Aces: no archive rewrite.
+              test -s .github/telegram-20261109-postponed-request.json
+              jq -e '.schema == 1 and .betting_day == "2026-11-09" and
+                .mode == "report_unverifiable_aces_as_postponed_once" and
+                .original_telegram_message_ids == [749,750] and
+                .postponed_event_id == "17520979" and
+                .postponed_selection_id == "484870" and
+                .postponed_publication_key == "local-aces-ou-v1:17520979:484870:over:3.5" and
+                .expected_premium_counts == {"won":3,"lost":1,"void":0,"pending":0,"postponed":1} and
+                .provider_requests == 0 and .cdb_writes == false and
+                .archive_writes == false and .original_odds_changes == false' \
+                .github/telegram-20261109-postponed-request.json >/dev/null
+              python scripts/telegram_daily_results.py prepare --elite-auto \
+                --historical-day 2026-11-09 --postpone-unverifiable-20261109 \
                 --api-url "$BLINQ_PRODUCTION_URL" \
                 --config-url "$BLINQ_PRODUCTION_URL/api/v1/ui-config" \
                 --state .private-telegram/ops/telegram-bot-state.json

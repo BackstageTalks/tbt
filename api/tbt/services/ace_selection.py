@@ -14,6 +14,18 @@ import math
 from typing import Any
 
 
+def _main_tour_for_aces(row: dict[str, Any]) -> bool:
+    """Main ATP/WTA tours only; never infer eligibility from player history.
+
+    Challenger, ITF, WTA 125 and unknown tours fail closed even if the same
+    player has ATP/WTA history. This applies to Aces and derived Most Aces,
+    not Match Winner, Value, Double Faults or other market selection.
+    """
+    return str(row.get("tour") or "").strip().casefold() in {
+        "atp", "wta", "atp tour", "wta tour",
+    }
+
+
 EXCLUDED_STATUSES = {
     "retired", "walkover", "walk over", "cancelled", "canceled",
     "abandoned", "interrupted", "suspended", "postponed",
@@ -718,6 +730,8 @@ def select_ace_picks(
             best_of = None
 
         for market in ("aces", "double_faults"):
+            if market == "aces" and not _main_tour_for_aces(row):
+                continue
             if (available_markets_by_event is not None
                 and market not in available_markets_by_event.get(str(row.get("event_id") or ""), set())
                 and not (allow_local_aces_fallback and market == "aces")):

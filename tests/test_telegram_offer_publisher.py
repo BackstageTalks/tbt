@@ -18,7 +18,7 @@ NOW = datetime(2026, 10, 31, 7, 0, tzinfo=timezone.utc)  # 08:00 Bratislava
 
 def row(identifier, player="A", category="top"):
     start = (NOW + timedelta(hours=4)).isoformat()
-    data = dict(event_id=str(identifier), scheduled_at=start,
+    data = dict(event_id=str(identifier), scheduled_at=start, tour="ATP",
                 player1={"id": "p1", "name": player},
                 player2={"id": "p2", "name": "B"},
                 winner_id="p1", betting={"selection_id": "p1", "odds": 1.8,
@@ -629,3 +629,18 @@ def test_web_telegram_top_parity_same_cutoff():
     } == {"302"}
     # A started pick remains historical on the daily board, not a new TG bet.
     assert {item["event_id"] for item in website_full_day} == {"301", "302"}
+
+
+def test_telegram_aces_rejects_non_main_tours_even_if_frozen_feed_contains_them():
+    snapshot=offer()
+    snapshot["ace_picks"]=[
+        priced_ou(row(201,"ATP Player","aces")|{"tour":"ATP"}),
+        priced_ou(row(202,"WTA Player","aces")|{"tour":"WTA"}),
+        priced_ou(row(203,"ITF Player","aces")|{"tour":"ITF"}),
+        priced_ou(row(204,"Challenger Player","aces")|{"tour":"ATP Challenger"}),
+        priced_ou(row(205,"WTA125 Player","aces")|{"tour":"WTA 125"}),
+        priced_ou(row(206,"Unknown Player","aces")|{"tour":None}),
+    ]
+    chosen=tg.select_groups(snapshot,settings(),NOW)
+    assert [r["event_id"] for r in chosen["aces"]]==["201","202"]
+    assert len(chosen["top"])==5 and len(chosen["value"])==1
