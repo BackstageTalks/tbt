@@ -92,6 +92,8 @@ def test_receipt_changes_and_unverified_website_fail_closed(tmp_path, monkeypatc
     broken["attempts"][correction.DAILY]["sha256"] = "tampered"
     with pytest.raises(RuntimeError, match="receipt"):
         correction.confirmed_originals(broken)
+    monkeypatch.setattr(correction, "row_authority_key",
+                        lambda row, _: "approved" + row["event_id"])
     matching = [(row, source) for row, source in zip(
         original["attempts"][correction.DAILY]["rows"][1:], _snapshot()["ace_picks"])]
     with pytest.raises(RuntimeError, match="Live website"):
