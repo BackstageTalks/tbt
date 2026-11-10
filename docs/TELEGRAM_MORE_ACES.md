@@ -59,8 +59,8 @@ reprice historical Results or confirmed Telegram messages.
 ## Sending and identity
 
 - Workflow: `.github/workflows/telegram-more-aces.yml`.
-- Normal dispatch is a separate GitHub `workflow_dispatch` after successful
-  `telegram-daily-offer.yml` deliver.
+- Dispatch is manual-only (`workflow_dispatch`); it is no longer triggered
+  by `telegram-daily-offer.yml`, and no `repository_dispatch` is accepted.
 - No independent native cron, provider call, CDB write or model change.
 - Share the existing global `blinq-telegram-ledger` concurrency group and
   private `tbt-data@telegram-bot-state` ledger.
