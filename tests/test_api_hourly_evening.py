@@ -53,3 +53,40 @@ def test_workflow_preserves_existing_guards_and_uses_evening_in_both_paths():
     assert "or budget.get(\"reserved_provider_headroom\") != 500" in workflow
     assert workflow.count("proposed = min(5000,") == 2
     assert "Less than 15 minutes until provider cutoff" in workflow
+
+
+def test_operator_one_off_500_smoke_is_fresh_and_only_restrictive(tmp_path):
+    import json
+    from scripts.api_hourly_evening import operator_smoke_request_cap
+
+    now = datetime(2026, 11, 10, 17, 15, tzinfo=timezone.utc)
+    tick = tmp_path / "tick.json"
+    request = {
+        "schema": 1, "source": "operator-approved-500-statistics-smoke",
+        "max_requests": 500, "requested_utc": "2026-11-10T17:10:00Z",
+    }
+    tick.write_text(json.dumps(request))
+    assert operator_smoke_request_cap(tick, enabled=True, now=now) == 500
+    assert operator_smoke_request_cap(tick, enabled=False, now=now) is None
+    for invalid in [0, 501, True, "500"]:
+        tick.write_text(json.dumps({**request, "max_requests": invalid}))
+        with pytest.raises(ValueError, match="Invalid operator smoke request cap"):
+            operator_smoke_request_cap(tick, enabled=True, now=now)
+
+    tick.write_text(json.dumps(request))
+    with pytest.raises(ValueError, match="expired"):
+        operator_smoke_request_cap(tick, enabled=True,
+                                   now=now + timedelta(minutes=26))
+    tick.write_text(json.dumps({**request, "requested_utc": "2026-11-10T17:16:00Z"}))
+    with pytest.raises(ValueError, match="expired"):
+        operator_smoke_request_cap(tick, enabled=True, now=now)
+
+
+def test_workflow_operator_smoke_cap_never_increases_proposed_allowance():
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
+    assert workflow.count("tick_cap = operator_smoke_request_cap(") == 2
+    assert workflow.count("proposed = min(proposed, tick_cap)") == 2
+    assert "TICK_500_SMOKE:" in workflow
+    assert workflow.count("0 <= since_reset < 45 * 60") == 2
+    assert workflow.count("evening_limit = 3000") == 2
