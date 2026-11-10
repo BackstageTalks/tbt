@@ -82,6 +82,32 @@ def test_free_and_premium_channel_results_separate():
     assert r.report_rows([top,free],[settled(top,True)],"free",DAY,tg.FOOTER)["audience"]=="free"
     assert r.report_rows([top,free],[settled(top,True)],"top",DAY,tg.FOOTER)["audience"]=="premium"
 
+def test_free_aces_settlement_gates_results_but_never_inflates_elite_roi(tmp_path,monkeypatch,capsys):
+    top=sent("top","match-top")
+    free_top=sent("free","match-top")
+    free_aces=sent("aces","match-aces")
+    free_aces["channel"]="free"  # exact second FREE selection, still an ACE contract
+    state={"schema":1,"attempts":{DAY+":daily:0620":{
+        "status":"sent","message_ids":[701,702],"rows":[top,free_top,free_aces]}}}
+    path=tmp_path/"state.json";tg.save(path,state)
+    monkeypatch.setattr(tg,"config",lambda *_:{"enabled":True,"results_enabled":True})
+    monkeypatch.setattr(r,"website_results",lambda *_:[])
+    archival=[settled(top,True)]
+    monkeypatch.setattr(r,"archive",lambda *_:list(archival))
+    args=SimpleNamespace(now=NOW.isoformat(),config_url="unused",api_url="unused",
+                         state=str(path),output=str(tmp_path/"result"),external_tick=False)
+    assert len(r.extract_sent(state,DAY))==3
+    r.prepare(args)
+    assert "issued_picks_not_all_settled" in capsys.readouterr().out
+    assert not (tmp_path/"result"/"ready").exists()
+    archival.append(settled(free_aces,False))
+    r.prepare(args)
+    assert (tmp_path/"result"/"ready").exists()
+    out=tg.load(tmp_path/"result"/"messages.json")
+    assert len(out)==1 and out[0]["audience"]=="elite"
+    assert "ROI +80.0%" in out[0]["text"]  # count TOP once, exclude both FREE rows
+
+
 def test_ledger_requires_confirmed_receipts_and_dedup():
     item=sent()
     state={"attempts":{
