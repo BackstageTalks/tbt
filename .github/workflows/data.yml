@@ -131,7 +131,9 @@ jobs:
       START_DATE: ${{ inputs.start }}
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
-      MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
+      # One-off, operator-approved current-day rebuild; not a permanent cap on daily ingestion.
+      MAX_REQUESTS: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[aces-sync-20261110]') && '1200' || inputs.max_requests || 14500 }}
+      BLINQ_20261110_SYNC: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[aces-sync-20261110]') && 'true' || 'false' }}
       BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
       BLINQ_PROVIDER_REQUEST_RESERVE: '500'
       BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && inputs.mode == 'statistics' && 'true' || 'false' }}
@@ -160,6 +162,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${BLINQ_20261110_SYNC:-false}" == true ]]; then
+            # Only on the explicit dated approved push, via the existing
+            # current-refresh provider/lock/CAS workflow; no morning clock backdating.
+            test "$GITHUB_EVENT_NAME" = push
+            test "$MODE" = current-refresh
+            test "$MORNING_REFRESH" != true
+            test "$MAX_REQUESTS" = 1200
+            test "$(TZ=Europe/Bratislava date +%F)" = "2026-11-10"
+            jq -e '.schema == 1 and
+              .kind == "operator-approved-one-time-active-aces-atp-wta-parity" and
+              .betting_day == "2026-11-10" and
+              .mode == "current-refresh" and
+              .max_requests == 1200 and
+              .promote == false and
+              .cdb_history_writes == false and
+              .new_telegram_delivery == false and
+              .provider_budget_cas == true and
+              .provider_reserve == 500' .github/aces-sync-20261110.json >/dev/null
+            grep -Fqx '[refresh-now] [current-refresh] [aces-sync-20261110]' .github/refresh-now
+          fi
           if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 14500 )); then
             echo "::error::MAX_REQUESTS must be 1..14500; refusing provider run."
             exit 1
