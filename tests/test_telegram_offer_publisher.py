@@ -644,3 +644,18 @@ def test_telegram_aces_rejects_non_main_tours_even_if_frozen_feed_contains_them(
     chosen=tg.select_groups(snapshot,settings(),NOW)
     assert [r["event_id"] for r in chosen["aces"]]==["201","202"]
     assert len(chosen["top"])==5 and len(chosen["value"])==1
+
+
+def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
+    from tbt.services.feed import main_tour_aces
+    snapshot=offer()
+    rows=[
+        priced_ou(row(301,"ATP","aces")|{"tour":"ATP","tournament":"Main draw"}),
+        priced_ou(row(302,"WTA","aces")|{"tour":"WTA","tournament":"Tour event"}),
+        priced_ou(row(303,"Challenger","aces")|{"tour":"ATP","tournament":"Istanbul Challenger"}),
+        priced_ou(row(304,"WTA125","aces")|{"tour":"WTA","tournament":"WTA 125 Mumbai"}),
+    ]
+    snapshot["ace_picks"]=rows
+    chosen=tg.select_groups(snapshot,settings(),NOW)["aces"]
+    assert [x["event_id"] for x in chosen]==["301","302"]
+    assert [x["event_id"] for x in chosen]==[x["event_id"] for x in rows if main_tour_aces(x)]

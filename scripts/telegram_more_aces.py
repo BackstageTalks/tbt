@@ -18,6 +18,7 @@ import unicodedata
 import urllib.request
 
 import telegram_offer_publisher as tg
+from tbt.services.feed import main_tour_aces
 from tbt.services.most_aces_pricing import (
     statistical_most_aces_odds, verified_api_pro_most_aces_odds,
     verified_frozen_local_most_aces_odds, PRICE_BASIS,
@@ -95,8 +96,7 @@ def offered_rows(snapshot, now):
     identities = set()
     for row in rows:
         # The auxiliary Most Aces message must not reintroduce excluded tours.
-        if not isinstance(row,dict) or str(row.get("tour") or "").strip().casefold() not in (
-                "atp","wta","atp tour","wta tour"):
+        if not main_tour_aces(row):
             continue
         player = ball_player(row)
         if player is None:

@@ -11,6 +11,27 @@ from zoneinfo import ZoneInfo
 MAX_FEED_BYTES = 32 * 1024 * 1024  # Guarded headroom for verified 21,728,761-byte 2026-10-25 release
 
 
+def main_tour_aces(row):
+    """Shared ATP/WTA-only active Aces and Most Aces market eligibility.
+
+    Treat missing/ambiguous tours as ineligible. A generic ATP/WTA gender
+    label is insufficient when the tournament is explicitly Challenger,
+    ITF/Futures or WTA 125. Never rewrite historical Results/issued receipts.
+    """
+    if not isinstance(row, dict) or str(row.get("tour") or "").strip().casefold() not in {
+        "atp", "wta", "atp tour", "wta tour",
+    }:
+        return False
+    for field in ("tournament", "tournament_name", "tournament_type",
+                  "competition_type", "tour_level", "tournament_level", "category"):
+        label = str(row.get(field) or "").strip().casefold()
+        if any(tag in label for tag in (
+                "challenger", "itf", "futures", "wta 125", "wta125",
+                "wta-125", "atp challenger")):
+            return False
+    return True
+
+
 def _betting_day_key(moment, *, timezone_name="Europe/Bratislava", start_hour=6):
     if moment.tzinfo is None:
         raise ValueError("betting day requires timezone-aware datetime")
@@ -193,7 +214,13 @@ def visible_feed(payload, now=None):
         rows = payload.get(key, [])
         if not isinstance(rows, list):
             continue
-        result[key] = [row for row in rows if scheduled_for_public_offer_day(row)]
+        result[key] = [
+            row for row in rows
+            if scheduled_for_public_offer_day(row)
+            and (key != "ace_picks"
+                 or str(row.get("market") or "").strip().lower() not in {"aces", "most_aces"}
+                 or main_tour_aces(row))
+        ]
 
     stamp = payload.get("generated_at")
     if not stamp:
