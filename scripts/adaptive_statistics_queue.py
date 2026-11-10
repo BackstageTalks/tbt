@@ -188,6 +188,14 @@ class AdaptiveStatisticsQueue:
             viable = [group for group in eligible if not self._low_yield(group)]
             if viable:
                 eligible = viable
+            else:
+                # With every sampled cohort unproductive, the smoothed score
+                # would keep exploiting one empty provider route (often the
+                # newest year) while starving cross-tour recovery evidence.
+                # Use the original, diverse baseline order instead. The
+                # independent paid-statistics availability circuit can then
+                # decide whether to stop this run; no new API calls or quotas.
+                adaptive = False
         if adaptive:
             # sorted eligibility makes equal-score results deterministic.
             group = max(eligible, key=self._score)
