@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "day": "2026-11-10",
+  "kind": "one-shot-confirmed-tour-scope-correction",
+  "original_daily_message_ids": [
+    752,
+    753
+  ],
+  "original_more_aces_message_ids": [
+    754
+  ],
+  "paid_provider_requests": 0,
+  "cdb_writes": false,
+  "results_writes": false,
+  "reprice": false,
+  "new_bets": false,
+  "explanation": "Informational Telegram correction from exact original 8 ESÁ/VIAC ES receipts and independently verified active ATP/WTA website; no wager replacement."
+}
