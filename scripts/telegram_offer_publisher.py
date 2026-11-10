@@ -5,6 +5,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api"))
 from tbt.services.entitlements import _daily_rows
+from tbt.services.feed import main_tour_aces
 from ace_working_odds import PRICE_BASIS, working_ace_odds, selected_ace_odds, verified_ace_odds, eligible_local_ace_projection
 TZ=ZoneInfo("Europe/Bratislava")
 SECTIONS={"top":"top_daily_picks","value":"value_picks","aces":"ace_picks"}
@@ -254,8 +255,7 @@ def select_groups(x,c,now):
                 continue
             # New Telegram ESÁ: main-tour ATP/WTA only; historical receipts
             # remain immutable and are evaluated by the Results workflow.
-            if k=="aces" and str(r.get("tour") or "").strip().casefold() not in (
-                    "atp","wta","atp tour","wta tour"):
+            if k=="aces" and not main_tour_aces(r):
                 continue
             # Fresh ACE bets require an exact, independently verified player O/U.
             # Preserve previously issued legacy rows only for immutable reissues.
