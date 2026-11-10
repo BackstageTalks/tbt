@@ -130,3 +130,27 @@ def test_public_offer_winter_cet_boundary_has_exact_start():
     payload = {"upcoming": [], "results": [], "top_daily_picks": rows}
     visible = visible_feed(payload, now=datetime.fromisoformat("2026-12-02T05:00:00+00:00"))
     assert [row["event_id"] for row in visible["top_daily_picks"]] == ["new"]
+
+
+def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
+    now=datetime.fromisoformat("2026-11-10T09:00:00+00:00")
+    start="2026-11-10T14:00:00+00:00"
+    cards=[
+        {"event_id":"atp","tour":"ATP","market":"aces","scheduled_at":start},
+        {"event_id":"wta","tour":"WTA","market":"most_aces","scheduled_at":start},
+        {"event_id":"challenger","tour":"ATP","tournament":"Prague Challenger","market":"aces","scheduled_at":start},
+        {"event_id":"wta125","tour":"WTA","tournament":"WTA 125 Open","market":"most_aces","scheduled_at":start},
+        {"event_id":"itf","tour":"ITF","market":"aces","scheduled_at":start},
+        {"event_id":"atp_challenger","tour":"ATP Challenger","market":"most_aces","scheduled_at":start},
+        {"event_id":"unknown","market":"aces","scheduled_at":start},
+        {"event_id":"df","tour":"ITF","market":"double_faults","scheduled_at":start},
+    ]
+    original=[dict(row) for row in cards]
+    payload={"generated_at":"2026-11-10T05:05:00+00:00",
+             "upcoming":list(cards),"ace_picks":cards,
+             "results":[{"event_id":"historical-itf","market":"aces","tour":"ITF"}]}
+    visible=visible_feed(payload,now=now)
+    assert [x["event_id"] for x in visible["ace_picks"]]==["atp","wta","df"]
+    assert visible["results"]==payload["results"]
+    assert len(visible["upcoming"])==8  # Match Winner discovery remains unchanged.
+    assert payload["ace_picks"]==original  # Canonical published data is immutable.
