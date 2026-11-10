@@ -18,7 +18,7 @@ NOW = datetime(2026, 10, 31, 7, 0, tzinfo=timezone.utc)  # 08:00 Bratislava
 
 def row(identifier, player="A", category="top"):
     start = (NOW + timedelta(hours=4)).isoformat()
-    data = dict(event_id=str(identifier), scheduled_at=start,
+    data = dict(event_id=str(identifier), scheduled_at=start, tour="ATP",
                 player1={"id": "p1", "name": player},
                 player2={"id": "p2", "name": "B"},
                 winner_id="p1", betting={"selection_id": "p1", "odds": 1.8,
