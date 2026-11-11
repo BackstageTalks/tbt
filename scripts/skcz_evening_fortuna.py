@@ -258,6 +258,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
               'probed_urls': len(urls), 'events_in_target_window': [],
               'out_of_target_window_events': 0,
               'market_labels_observed_sample': [],
+              'prematch_aces_market_diagnostics': [],
               'errors': [],
               'cdb_writes': 0, 'published_picks_changed': 0, 'provider_paid_calls': 0}
     for idx, url in enumerate(urls):
@@ -273,6 +274,18 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
             for name in parsed['market_group_titles_sample']:
                 if name and name not in labels and len(labels) < 80:
                     labels.append(name)
+            if event_start > now and len(report['prematch_aces_market_diagnostics']) < 24:
+                for market in parsed['aces_markets']:
+                    if len(report['prematch_aces_market_diagnostics']) >= 24:
+                        break
+                    report['prematch_aces_market_diagnostics'].append({
+                        'players': parsed['players'],
+                        'scheduled_at': parsed['scheduled_at'],
+                        'market_name': market['market_name'],
+                        'kind': market['kind'],
+                        'outcomes_observed': market['outcomes_observed'],
+                        'verified_pairs': market['verified_pairs'][:3],
+                    })
             if start <= event_start < end:
                 report['events_in_target_window'].append(parsed)
             else:
