@@ -3,6 +3,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from threading import Lock
+from concurrent.futures import ThreadPoolExecutor
 import gzip
 import hashlib
 import ipaddress
@@ -1510,6 +1511,37 @@ def banner_events(req):
         return response({"error": "analytics_storage_unavailable"}, 503)
 
 
+def _feed_support_reads_parallel():
+    """Read independent member-feed overlays concurrently, without writes or caching.
+
+    Preserve each source's existing fail-open/fail-closed policy by returning
+    its exception for the normal feed handler to apply at the original boundary.
+    """
+    sources = {
+        "archive": load_settled_results_archive,
+        "statuses": load_match_status_snapshot,
+        "exclusions": load_result_exclusions,
+        "ui": load_effective_ui_config,
+    }
+
+    def read(source):
+        try:
+            return source(), None
+        except Exception as exc:
+            return None, exc
+
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="blinq-feed-read") as pool:
+        futures = {name: pool.submit(read, source) for name, source in sources.items()}
+        return {name: future.result() for name, future in futures.items()}
+
+
+def _feed_support_value(snapshot, name):
+    value, error = snapshot[name]
+    if error is not None:
+        raise error
+    return value
+
+
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
     try:
@@ -1525,8 +1557,9 @@ def feed(req):
         # Display their frozen pre-match ball signal without inventing an issuance.
         source_feed = with_issued_ace_leader_signals(source_feed)
         source_feed = annotate_most_aces_offer(source_feed)
+        support_reads = _feed_support_reads_parallel()
         try:
-            source_feed = merge_settled_results(source_feed, load_settled_results_archive())
+            source_feed = merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"))
         except AdminStorageUnavailable:
             # An archive outage cannot grant access or invent outcomes. The
             # immutable issued feed remains available, but health is explicit.
@@ -1534,7 +1567,7 @@ def feed(req):
             source_feed["results_archive_unavailable"] = True
         # Reuse the persisted worker snapshot for the Results overlay and KPI.
         try:
-            status_snapshot = load_match_status_snapshot() or {}
+            status_snapshot = _feed_support_value(support_reads, "statuses") or {}
         except AdminStorageUnavailable:
             logging.exception("Match status read unavailable; Results overlay unavailable")
             status_snapshot = {}
@@ -1542,7 +1575,7 @@ def feed(req):
         # and KPI evaluation. Never trust a browser-side-only filter.
         exclusions_available = True
         try:
-            excluded_result_ids = load_result_exclusions()
+            excluded_result_ids = _feed_support_value(support_reads, "exclusions")
         except AdminStorageUnavailable:
             # Keep predictions/accounts working, but fail CLOSED on public
             # Results when the authoritative exclusion policy is unavailable.
@@ -1554,7 +1587,7 @@ def feed(req):
             source_feed = {**source_feed, "results": [], "results_exclusions_unavailable": True}
         runtime_ui = None
         try:
-            runtime_ui, _, _ = load_effective_ui_config()
+            runtime_ui, _, _ = _feed_support_value(support_reads, "ui")
             access_context = _access_context_with_daily_allocation(user, account_data, profile, source_feed, runtime_ui)
             data, entitlements = filter_feed_for_access(source_feed, access_context, runtime_ui)
             # Safe fallback even if runtime settlement fails: initial KPI
