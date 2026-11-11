@@ -16,7 +16,7 @@ on:
         description: "Maximum public Fortuna tennis event pages (1-60)"
         required: false
         type: number
-        default: 20
+        default: 60
 
 permissions:
   contents: read
@@ -33,7 +33,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DATA_REPO: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      MAX_EVENTS: ${{ inputs.max_events || 20 }}
+      MAX_EVENTS: ${{ inputs.max_events || 60 }}
       INPUT_TARGET_DAY: ${{ inputs.target_day || '' }}
     steps:
       - uses: actions/checkout@v4

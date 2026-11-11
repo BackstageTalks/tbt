@@ -62,6 +62,18 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual(pairs[0]['settlement'], 'bookmaker_rules_not_yet_verified')
 
+    def test_real_fortuna_match_prefixed_player_aces_label(self):
+        result = self.detail(market='Zápas: Michelsen A. počet es')
+        self.assertEqual(result['aces_markets'][0]['kind'], 'player_aces_ou')
+        self.assertEqual(len(result['aces_markets'][0]['verified_pairs']), 1)
+
+    def test_three_way_more_aces_cannot_be_used_as_two_way_price(self):
+        draw = outcome('Remíza', 4.2, 'aces', 'draw')
+        result = self.detail(market='Zápas: viac es',
+                             a='Michelsen A.', b='Cerundolo J.M.', extra=draw)
+        self.assertEqual(result['aces_markets'][0]['kind'], 'most_aces_match')
+        self.assertEqual(result['aces_markets'][0]['verified_pairs'], [])
+
     def test_no_set_quote_used_for_full_match(self):
         result = self.detail(market='1. set: Viac es',
                              a='Michelsen A.', b='Cerundolo J.M.')
@@ -93,6 +105,70 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(result['status'], 'source_unavailable')
         self.assertEqual(result['candidate_urls'], 0)
         self.assertEqual(result['exact_aces_pairs'], 0)
+
+
+    def test_round_robin_tournaments_with_first_index_full_of_one_tournament(self):
+        a = f.ORIGIN + "/stavkovanie/tenis/atp/m-stockholm/one-two"
+        b = f.ORIGIN + "/stavkovanie/tenis/atp/m-stockholm/three-four"
+        w = f.ORIGIN + "/stavkovanie/tenis/wta/m-wta-finals/five-six"
+        self.assertEqual(f.select_diverse_urls([a, b, w], 2), [a, w])
+        self.assertEqual(f.select_diverse_urls([a, b, w], 3), [a, w, b])
+
+    def test_follow_publicly_linked_tournament_category_to_other_matches(self):
+        wta = f.ORIGIN + "/stavkovanie/tenis/wta/m-wta-finals"
+        atp = f.ORIGIN + "/stavkovanie/tenis/atp/m-atp-stockholm/one-two"
+        womens = f.ORIGIN + "/stavkovanie/tenis/wta/m-wta-finals/five-six"
+        index = (
+            '<a href="/stavkovanie/tenis/atp/m-atp-stockholm/one-two">ATP</a>'
+            '<a href="/stavkovanie/tenis/wta/m-wta-finals">WTA draw</a>'
+        )
+        def get(url):
+            if url == f.INDEX:
+                return index
+            if url == wta:
+                return '<a href="/stavkovanie/tenis/wta/m-wta-finals/five-six">WTA</a>'
+            if url in (atp, womens):
+                return page(market='Počet gemov v zápase')
+            raise AssertionError("Unexpected network request: " + url)
+        report = f.collect(date(2026, 11, 10), max_events=10, sleep_seconds=0,
+                           now=NOW, get=get)
+        self.assertEqual(report["candidate_urls"], 2)
+        self.assertEqual(report["probed_urls"], 2)
+        self.assertEqual(report["candidate_tournaments"], 2)
+        self.assertEqual(report["probed_tournaments"], 2)
+        self.assertEqual(report["catalog_pages_scanned"], 1)
+        self.assertEqual(report["exact_aces_pairs"], 0)
+
+    def test_audit_preserves_public_market_names_without_faking_aces(self):
+        row = self.detail(market='Počet gemov v zápase')
+        self.assertEqual(row['aces_markets'], [])
+        self.assertIn('Počet gemov v zápase', row['market_group_titles_sample'])
+        self.assertIn('Víťaz zápasu', row['market_group_titles_sample'])
+
+    def test_out_of_window_public_market_names_are_diagnostics_only(self):
+        def get(url):
+            return INDEX if url == f.INDEX else page(market='Počet gemov v zápase')
+        report = f.collect(date(2026, 11, 11), max_events=3,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(len(report['events_in_target_window']), 0)
+        self.assertEqual(report['out_of_target_window_events'], 1)
+        self.assertIn('Počet gemov v zápase',
+                      report['market_labels_observed_sample'])
+        self.assertEqual(report['prematch_aces_market_diagnostics'], [])
+        self.assertEqual(report['exact_aces_pairs'], 0)
+
+    def test_out_of_window_genuine_prematch_aces_are_diagnostic_not_imported(self):
+        def get(url):
+            return INDEX if url == f.INDEX else page()
+        report = f.collect(date(2026, 11, 11), max_events=3,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(report['exact_aces_pairs'], 0)
+        self.assertEqual(len(report['events_in_target_window']), 0)
+        groups = report['prematch_aces_market_diagnostics']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['kind'], 'player_aces_ou')
+        self.assertEqual(groups[0]['verified_pairs'][0]['line'], 6.5)
+        self.assertEqual(groups[0]['verified_pairs'][0]['over'], 1.8)
 
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):

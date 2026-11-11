@@ -43,3 +43,62 @@ jobs:
           PY
       - name: Offline exact-aces and fallback regressions
         run: python -m unittest discover -s tests -p 'test_skcz_evening_*.py' -v
+
+      - name: Sample current public Fortuna match markets (read-only, non-blocking)
+        continue-on-error: true
+        timeout-minutes: 7
+        run: |
+          set -euo pipefail
+          target="$(TZ=Europe/Bratislava date -d tomorrow +%F)"
+          python scripts/skcz_evening_fortuna.py --target-day "$target" \
+            --max-events 12 --out /tmp/fortuna-market-probe.json
+          python - <<'PY'
+          import json
+          with open('/tmp/fortuna-market-probe.json', encoding='utf-8') as handle:
+              report = json.load(handle)
+          print('FORTUNA_PUBLIC_MARKET_EVIDENCE=' + json.dumps({
+              'status': report['status'],
+              'catalog_pages_scanned': report['catalog_pages_scanned'],
+              'candidate_tournaments': report['candidate_tournaments'],
+              'probed_tournaments': report['probed_tournaments'],
+              'probed_urls': report['probed_urls'],
+              'exact_aces_pairs': report['exact_aces_pairs'],
+              'source_errors': len(report['errors']) + len(report['catalog_errors']),
+              'out_of_target_window_events': report['out_of_target_window_events'],
+              'sample_market_titles': report['market_labels_observed_sample'][:40],
+              'prematch_aces_market_diagnostics':
+                  report['prematch_aces_market_diagnostics'][:12],
+          }, sort_keys=True, ensure_ascii=False))
+          PY
+          # An anonymous, read-only HTML shape sample to diagnose why
+          # market headers exist but zero open priced selections are parsed.
+          python - <<'PY'
+          import json
+          from playwright.sync_api import sync_playwright
+          with open('/tmp/fortuna-market-probe.json', encoding='utf-8') as handle:
+              report = json.load(handle)
+          candidates = report.get('prematch_aces_market_diagnostics') or []
+          if candidates:
+              url = candidates[0]['source_url']
+              with sync_playwright() as p:
+                  browser = p.chromium.launch(headless=True)
+                  page = browser.new_page(locale='sk-SK', timezone_id='Europe/Bratislava')
+                  page.goto(url, wait_until='domcontentloaded', timeout=25000)
+                  page.wait_for_selector('[data-testing-selector="MatchDetailCard"]',
+                                         timeout=16000)
+                  result = page.evaluate("""() => [...document.querySelectorAll(
+                      '[data-testing-selector="MatchDetailCard"]')].filter(el =>
+                      /(?:\\bes\\b|esa|ace)/i.test(el.getAttribute('aria-label') || '')
+                      ).slice(0, 3).map(el => ({
+                        label: el.getAttribute('aria-label'),
+                        html_head: el.outerHTML.slice(0, 2700),
+                        buttons: [...el.querySelectorAll('button')].slice(0, 4).map(b => ({
+                           text: (b.innerText || '').slice(0, 90),
+                           expanded: b.getAttribute('aria-expanded'),
+                           selector: b.getAttribute('data-testing-selector')
+                        }))
+                      }))""")
+                  print('FORTUNA_ACE_CARD_DOM=' +
+                        json.dumps(result, ensure_ascii=False))
+                  browser.close()
+          PY
