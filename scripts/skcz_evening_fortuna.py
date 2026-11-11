@@ -255,7 +255,10 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
                   tuple(urlsplit(u).path.strip('/').split('/')[2:4])
                   for u in urls
               }),
-              'probed_urls': len(urls), 'events_in_target_window': [], 'errors': [],
+              'probed_urls': len(urls), 'events_in_target_window': [],
+              'out_of_target_window_events': 0,
+              'market_labels_observed_sample': [],
+              'errors': [],
               'cdb_writes': 0, 'published_picks_changed': 0, 'provider_paid_calls': 0}
     for idx, url in enumerate(urls):
         if idx and sleep_seconds:
@@ -263,8 +266,17 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
         try:
             parsed = parse_detail(get(url), url, datetime.now(timezone.utc))
             event_start = datetime.fromisoformat(parsed['scheduled_at'])
+            # Observe public market labels irrespective of target day. Only
+            # target-day events are eligible for the quote archive consumer.
+            # This makes a daytime dry-run useful without backdating quotes.
+            labels = report['market_labels_observed_sample']
+            for name in parsed['market_group_titles_sample']:
+                if name and name not in labels and len(labels) < 80:
+                    labels.append(name)
             if start <= event_start < end:
                 report['events_in_target_window'].append(parsed)
+            else:
+                report['out_of_target_window_events'] += 1
         except (OSError, ValueError, RuntimeError) as exc:
             report['errors'].append({'url': url, 'error': exc.__class__.__name__})
     report['exact_aces_pairs'] = sum(len(m['verified_pairs']) for e in report['events_in_target_window']
