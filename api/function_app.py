@@ -1542,6 +1542,18 @@ def _feed_support_value(snapshot, name):
     return value
 
 
+def _prefetch_independent_feed_reads(pool):
+    """Start read-only issued authority and independent Azure overlays together.
+
+    Called only after user/email verification. Preserve each read's original
+    exception and fail-closed policy: the handler awaits both futures at the
+    same authorization boundaries as before.
+    """
+    issued = pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou()))
+    overlays = pool.submit(_feed_support_reads_parallel)
+    return issued, overlays
+
+
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
     try:
@@ -1561,19 +1573,24 @@ def feed(req):
         if not bool(user.get("email_verified", False)):
             return response({"error": "email_not_verified"}, 403)
         trace_stage("auth_verified")
-        profile = _profile_for(user)
-        trace_stage("account_profile")
-        account_data = public_account(user, cfg=settings, profile=profile)
-        trace_stage("account_public")
-        source_feed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
-        trace_stage("issued_feed")
-        # The current issued ESÁ cards may predate the separate VIAC ES market.
-        # Display their frozen pre-match ball signal without inventing an issuance.
-        source_feed = with_issued_ace_leader_signals(source_feed)
-        source_feed = annotate_most_aces_offer(source_feed)
-        trace_stage("aces_projection")
-        support_reads = _feed_support_reads_parallel()
-        trace_stage("support_reads")
+        # Account/profile reads, issued-feed authority, and four Azure overlays
+        # are independent after auth. Overlap their I/O instead of waiting for
+        # three sequential storage phases on every authenticated reload.
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="blinq-feed-overlap") as pool:
+            issued_future, overlays_future = _prefetch_independent_feed_reads(pool)
+            profile = _profile_for(user)
+            trace_stage("account_profile")
+            account_data = public_account(user, cfg=settings, profile=profile)
+            trace_stage("account_public")
+            source_feed = issued_future.result()
+            trace_stage("issued_feed")
+            # The current issued ESÁ cards may predate the separate VIAC ES market.
+            # Display their frozen pre-match ball signal without inventing an issuance.
+            source_feed = with_issued_ace_leader_signals(source_feed)
+            source_feed = annotate_most_aces_offer(source_feed)
+            trace_stage("aces_projection")
+            support_reads = overlays_future.result()
+            trace_stage("support_reads")
         try:
             source_feed = merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"))
         except AdminStorageUnavailable:
