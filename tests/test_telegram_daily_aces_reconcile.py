@@ -148,3 +148,39 @@ def test_inconsistent_existing_archived_original_blocks_all_writes(scene):
     archived[0]["market_publications"][0]["result"]["correct"]=False
     with pytest.raises(ValueError,match="Conflicting"):
         bridge.reconcile(DAY,receipt,feed,snapshot,now=NOW)
+
+
+def test_confirmed_issued_rollover_supplies_source_after_daily_feed_rotates(scene):
+    receipt,feed,snapshot,archived=scene
+    original=deepcopy(feed["ace_picks"][0])
+    feed["ace_picks"]=[]
+    snapshot["rollover_issued_rows"]=[{
+        "confirmed_only":True,"betting_day":DAY,
+        "section":"ace_picks","row":original,
+    }]
+    planned=bridge.reconcile(DAY,receipt,feed,snapshot,now=NOW)
+    assert planned["net_new_aces"]==1
+    committed=bridge.reconcile(
+        DAY,receipt,feed,snapshot,dry_run=False,
+        expected_digest=planned["digest"],now=NOW)
+    assert committed["readback_new_aces"]==1
+    assert archived[0]["market_publications"][0]["result"]["correct"] is True
+
+
+@pytest.mark.parametrize("change", [
+    {"confirmed_only":False},
+    {"betting_day":"2026-11-06"},
+    {"section":"value_picks"},
+])
+def test_unverified_or_wrong_day_rollover_does_not_supply_source(scene,change):
+    receipt,feed,snapshot,archived=scene
+    original=deepcopy(feed["ace_picks"][0])
+    feed["ace_picks"]=[]
+    source={"confirmed_only":True,"betting_day":DAY,
+            "section":"ace_picks","row":original}
+    source.update(change)
+    snapshot["rollover_issued_rows"]=[source]
+    report=bridge.reconcile(DAY,receipt,feed,snapshot,now=NOW)
+    assert report["net_new_aces"]==0
+    assert report["pending_evidence"]==1
+    assert archived==[]
