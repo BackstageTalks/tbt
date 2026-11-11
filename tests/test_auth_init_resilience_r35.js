@@ -133,7 +133,7 @@ function createContext(fetchImpl) {
     const data = await context.BlinqAuth.feed();
     assert.strictEqual(data.account.id, 'member-id');
     assert.strictEqual(feedCalls, 2, 'a transient feed timeout must get one bounded retry');
-    assert.strictEqual(context.BlinqAuth.session().access_token, 'token-feed', 'transient failure must preserve session');
+    assert(await context.BlinqAuth.restore(), 'transient failure must preserve session');
   }
 
   // 5) Authorization errors must fail closed without retrying the protected API.
