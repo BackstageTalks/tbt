@@ -113,6 +113,17 @@ def external_clock_gapfill_decision(now: datetime, workflow_runs: list[dict]) ->
            for _, run in recent):
         return False, "orchestrator_already_active", target_slot
 
+    failures_in_slot = sum(
+        1 for created, run in recent
+        if slot(created) == target_slot
+        and run.get("status") == "completed"
+        and run.get("conclusion") in {"failure", "cancelled", "timed_out"}
+    )
+    if failures_in_slot >= 2:
+        # A third identical retry would obscure the original failure.
+        # The next staged hour can make a new attempt after investigation.
+        return False, "repeated_guard_failures_need_diagnosis", target_slot
+
     for created, run in recent:
         if slot(created) != target_slot:
             continue
