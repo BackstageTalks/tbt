@@ -199,7 +199,14 @@ def test_member_dashboard_results_kpis_exclude_admin_disabled_and_over_limit_pic
     # The serving endpoint must calculate result-derived cards AFTER
     # membership and position filtering (including runtime settlements).
     app = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
-    assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(data, runtime_ui)' in app
+    # Do not scan the same Results rows twice on a healthy feed request.
+    # A failed post-settlement overlay still uses the pre-settlement account-
+    # authorized Results snapshot, not unrestricted source_feed.
+    assert 'fallback_kpi_source = dict(data)' in app
+    assert 'if not kpi_finalized:' in app
+    assert 'kpi_finalized = True' in app
+    assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(\n                    fallback_kpi_source, runtime_ui' in app
+    assert app.count('data["dashboard_kpi_cards"] = selected_dashboard_cards(') == 2
     final = app.index('data["dashboard_kpi_cards"] = selected_dashboard_cards(\n                kpi_source, runtime_ui')
     scoped = app.index('data["results"] = filter_results_for_member_limits(')
-    assert scoped < final
+    assert app.index('fallback_kpi_source = dict(data)') < scoped < final

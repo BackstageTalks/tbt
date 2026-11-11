@@ -1606,9 +1606,12 @@ def feed(req):
             runtime_ui, _, _ = _feed_support_value(support_reads, "ui")
             access_context = _access_context_with_daily_allocation(user, account_data, profile, source_feed, runtime_ui)
             data, entitlements = filter_feed_for_access(source_feed, access_context, runtime_ui)
-            # Safe fallback even if runtime settlement fails: initial KPI
-            # scalars can see only this account's already-authorized Results.
-            data["dashboard_kpi_cards"] = selected_dashboard_cards(data, runtime_ui)
+            # Capture this account's authorized feed for the error path.
+            # Computing Results KPIs here is redundant on the healthy path:
+            # they are recomputed below after verified runtime settlement.
+            # A shallow dict snapshot is safe because runtime settlement
+            # returns new Results rows rather than mutating authorized rows.
+            fallback_kpi_source = dict(data)
             if is_admin(user, settings):
                 data["member_result_rules"] = {
                     plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
@@ -1630,6 +1633,7 @@ def feed(req):
         # Match outcomes are a tiny runtime overlay. They never mutate the
         # immutable prediction feed; only statuses for rows this account can
         # already see are returned.
+        kpi_finalized = False
         try:
             allowed_event_ids = event_ids_from_feed(data)
             # Do not expose stale terminal rows if the original provider state
@@ -1685,6 +1689,7 @@ def feed(req):
             data["dashboard_kpi_cards"] = selected_dashboard_cards(
                 kpi_source, runtime_ui
             )
+            kpi_finalized = True
             # Response-only schedule corrections for rows this member can already
             # see; the published feed/ledger and betting odds remain untouched.
             data = apply_verified_schedule_overlay(
@@ -1692,6 +1697,13 @@ def feed(req):
             )
             data["match_status_updated_at"] = status_snapshot.get("updated_at")
         except AdminStorageUnavailable:
+            # Preserve the exact pre-settlement, membership-filtered KPI source
+            # if a required Results overlay failed before final KPI computation.
+            # If the final cards were already computed, keep them unchanged.
+            if not kpi_finalized:
+                data["dashboard_kpi_cards"] = selected_dashboard_cards(
+                    fallback_kpi_source, runtime_ui
+                )
             data["match_statuses"] = {}
             data["match_status_updated_at"] = None
         trace_stage("results_kpis")

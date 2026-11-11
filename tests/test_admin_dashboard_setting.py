@@ -135,7 +135,13 @@ def test_public_markup_unchanged_and_admin_config_is_scoped():
     assert 'return attach_confirmed_aces_ou_sidecar(base, sidecar)' in api
     # Member KPI cards must derive from the already-authorized Results cohort;
     # ADMIN's explicit audit branch can still read the full serving ledger.
-    assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(data, runtime_ui)' in api
+    # On a Results-overlay outage, the fallback is still sourced from the
+    # member-authorized pre-settlement feed; on success calculate only once
+    # from the final authorized Results cohort.
+    assert 'fallback_kpi_source = dict(data)' in api
+    assert 'if not kpi_finalized:' in api
+    assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(\n                    fallback_kpi_source, runtime_ui' in api
+    assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(\n                kpi_source, runtime_ui' in api
     assert 'kpi_source["results"] = data.get("results") or []' in api
     assert 'if is_admin(user, settings):' in api
     assert 'kpi_source["results"] = runtime_settled_results(' in api
