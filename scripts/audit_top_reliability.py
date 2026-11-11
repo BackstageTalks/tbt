@@ -57,7 +57,7 @@ def itf_grade(row, publication=None):
     labels = " ".join(str(src.get(k) or "") for k in ("competition", "tournament_level", "tournament")).lower()
     if "itf" not in labels and "futures" not in labels:
         return competition(row)
-    match = re.search(r"(?<![a-z0-9])([mw])\\s*[- ]?\\s*(15|25|35|50|60|75|100|125)(?![a-z0-9])", labels)
+    match = re.search(r"(?<![a-z0-9])([mw])\s*[- ]?\s*(15|25|35|50|60|75|100|125)(?![a-z0-9])", labels)
     return f"ITF_{match.group(1).upper()}{match.group(2)}" if match else "ITF_unspecified"
 
 
