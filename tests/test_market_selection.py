@@ -161,7 +161,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'priority_tours_top_v19'
+    assert meta['selection_policy'] == 'priority_tours_top_v20'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
@@ -188,7 +188,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'priority_tours_top_v19'
+    assert meta['selection_policy'] == 'priority_tours_top_v20'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
@@ -207,9 +207,9 @@ def test_prime_and_value_floors_unchanged_while_top_ranks_full_slate():
     sections = select_market_sections(rows, prime_min_probability=.50,
                                      top_min_probability=.50, value_min_probability=.50)
     assert [x['event_id'] for x in sections['value_picks']] == ['v650']
-    assert {x['event_id'] for x in sections['top_daily_picks']} == set()
+    assert {x['event_id'] for x in sections['top_daily_picks']} == {'p650'}
     assert sections['prime_picks'] == []
-    assert sections['market_selection']['selection_counts']['top_daily_shortfall'] == 3
+    assert sections['market_selection']['selection_counts']['top_daily_shortfall'] == 2
     assert all(x['odds'] >= 1.50 for x in sections['top_daily_picks'])
 
 def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
@@ -362,7 +362,7 @@ def test_ranked_top_uses_only_real_pre_start_prices_and_target_three():
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
-    assert rule['probability_tiers'] == [.70]
+    assert rule['probability_tiers'] == [.70, .68, .65]
     assert rule['min_odds'] == 1.50
     assert rule['daily_preferred_count'] == 3
 
@@ -474,8 +474,8 @@ def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
     rows[2] = row("c69", .69, 1.60, 3.00, depth=1.0)
     rows[3] = row("d59", .59, 1.60, 3.00, depth=1.0)
     result = select_market_sections(rows)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ['a80','b78']
-    assert result['market_selection']['selection_counts']['top_daily_shortfall'] == 1
+    assert [x["event_id"] for x in result["top_daily_picks"]] == ['a80','b78','c69']
+    assert result['market_selection']['selection_counts']['top_daily_shortfall'] == 0
 
 
 def test_top_never_bypasses_150_price_and_safe_evidence_backup():
