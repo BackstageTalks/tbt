@@ -11,7 +11,7 @@
 
   const AUTH_RUNTIME = '736-r61';
   const AUTH_CONFIG_URL = '/api/v1/auth/config';
-  const AUTH_CONFIG_ATTEMPTS = 3;
+  const AUTH_CONFIG_ATTEMPTS = 1;
   const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
 
   const KEY = 'blinq_v4_session';
@@ -124,12 +124,17 @@
       headers['Content-Type'] = 'application/json';
     }
     let response;
+    // AbortSignal.timeout is missing on some mobile browsers: preserve the
+    // configured request deadline with AbortController as a safe fallback.
+    const nativeTimeout = fetchOptions.signal || safeTimeout(timeoutMs);
+    const controller = !nativeTimeout && typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
       response = await fetch(url, {
         ...fetchOptions,
         headers,
         cache: 'no-store',
-        signal: fetchOptions.signal || safeTimeout(timeoutMs),
+        signal: nativeTimeout || controller?.signal,
       });
     } catch (cause) {
       const timeout = cause?.name === 'TimeoutError' || cause?.name === 'AbortError';
@@ -138,6 +143,8 @@
       error.code = timeout ? 'AUTH_TIMEOUT' : 'AUTH_NETWORK_ERROR';
       error.cause = cause;
       throw error;
+    } finally {
+      if (timer !== null) clearTimeout(timer);
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -276,7 +283,7 @@
     let lastError = null;
     for (let attempt = 0; attempt < AUTH_CONFIG_ATTEMPTS; attempt += 1) {
       try {
-        return validateAuthConfig(await json(AUTH_CONFIG_URL, {timeoutMs: 6000}));
+        return validateAuthConfig(await json(AUTH_CONFIG_URL, {timeoutMs: 3000}));
       } catch (error) {
         lastError = error;
         if (isPermanentAuthConfigError(error) || !isTransientAuthError(error)) throw error;
@@ -284,7 +291,9 @@
       }
     }
     // Firebase web configuration is public and embedded in this bundle. A short
-    // Azure Functions cold start must not disable the login form. Protected API
+    // Azure Functions cold start must not disable the login form. A single
+    // bounded probe avoids holding the splash/login for three cold-starts.
+    // Protected API
     // calls remain authoritative and will still reject unusable sessions.
     console.warn('[BlinQ auth] auth config endpoint unavailable; continuing with trusted Firebase client configuration.', lastError);
     return degradedClientConfig();
