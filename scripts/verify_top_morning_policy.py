@@ -43,6 +43,16 @@ def verify():
         "surface_serve_return_known_both": True,
     }}
     assert "itf_top_requires_verified_w35plus" not in rejection_reasons(verified)
+    assert rule["itf_max_odds_inclusive"] == ui["itf_max_odds_inclusive"] == 1.70
+    assert rule["itf_min_probability_exclusive"] == ui["itf_min_probability_exclusive"] == .65
+    verified["odds"] = 1.70
+    assert "itf_odds_above_1_70" not in rejection_reasons(verified)
+    verified["odds"] = 1.700001
+    assert "itf_odds_above_1_70" in rejection_reasons(verified)
+    verified["odds"] = 1.60
+    assert "itf_probability_not_above_65" in rejection_reasons(verified)
+    verified["probability"] = .650001
+    assert "itf_probability_not_above_65" not in rejection_reasons(verified)
     return {"status": "PASS", "policy": rule["policy"], "provider_requests": 0}
 
 
