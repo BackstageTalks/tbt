@@ -1451,6 +1451,9 @@ def build_selection_candidate_snapshot(
                 betting.get("blinq_probability") if betting else _blinq_probability(source)
             ),
             "data_depth": _depth(source),
+            # Count depth does not certify that point-in-time performance
+            # statistics exist. Keep the original evidence for independent audits.
+            "feature_evidence": deepcopy(quality.get("feature_evidence")),
             "samples": {
                 "player1_matches": q1.get("matches"), "player2_matches": q2.get("matches"),
                 "player1_surface_matches": q1.get("surface_matches"),
