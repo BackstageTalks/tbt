@@ -76,7 +76,7 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     }
     rows = {item['event_id']: item for item in snap['rows']}
     assert rows['selected-top']['selected_section'] == 'top_daily'
-    assert rows['selected-top']['selection_tier'] == 'main_0.70'
+    assert rows['selected-top']['selection_tier'] == 'main_0.65'
     assert rows['unpriced']['priced'] is False
     assert rows['unpriced']['selected_section'] is None
     serialized = str(snap).lower()
@@ -461,7 +461,7 @@ def test_all_four_quality_qualified_selections_are_ordered_in_top():
             row("d75", .75, 1.60, 3.00, depth=1.0)]
     result = select_market_sections(rows)
     assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78']
-    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .70
+    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .65
 
 
 def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
