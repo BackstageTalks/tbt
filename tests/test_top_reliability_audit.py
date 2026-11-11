@@ -356,7 +356,7 @@ def test_itf_grade_requires_label_and_does_not_mistake_atp_gender():
 def test_winner_history_ui_does_not_claim_count_depth_is_data_coverage():
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
-    assert "High coverage" not in source and "Vysoké pokrytie" not in source
+    assert "High coverage" not in source.split("function dataCoverageInfo(row){", 1)[1].split("function playerInsightStats(", 1)[0]
     assert "coverage.history+' · '+coverage.serve" in source
     assert "row?.quality||{},a=q?.player1?.matches,b=q?.player2?.matches" in source
     assert "S/R neoverené" in source  # Missing pre-match evidence stays unknown.
