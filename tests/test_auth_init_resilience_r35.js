@@ -105,6 +105,56 @@ function createContext(fetchImpl) {
     assert.strictEqual(firebaseCalls, 0, 'permanent server configuration error must fail before Firebase client login');
   }
 
+  // 4) A transient authenticated feed timeout is retried once, retaining the
+  // Firebase session and its authorization header.
+  {
+    let feedCalls = 0;
+    const context = createContext(async (url, options = {}) => {
+      const target = String(url);
+      if (url === '/api/v1/auth/config')
+        return response(200, {enabled: true, provider: 'firebase', project_id: 'blinq-182', server_ready: true});
+      if (target.includes('accounts:signInWithPassword'))
+        return response(200, {idToken: 'token-feed', refreshToken: 'refresh-feed', expiresIn: '3600'});
+      if (target.includes('accounts:lookup'))
+        return response(200, {users: [{emailVerified: true}]});
+      if (url === '/api/v1/feed') {
+        feedCalls += 1;
+        assert.strictEqual(options.headers['X-Blinq-Access-Token'], 'token-feed');
+        if (feedCalls === 1) {
+          const error = new Error('gateway timed out');
+          error.name = 'TimeoutError';
+          throw error;
+        }
+        return response(200, {account: {id: 'member-id'}});
+      }
+      throw new Error('Unexpected fetch: ' + target);
+    });
+    await context.BlinqAuth.signIn('member@example.com', 'password123');
+    const data = await context.BlinqAuth.feed();
+    assert.strictEqual(data.account.id, 'member-id');
+    assert.strictEqual(feedCalls, 2, 'a transient feed timeout must get one bounded retry');
+    assert(await context.BlinqAuth.restore(), 'transient failure must preserve session');
+  }
+
+  // 5) Authorization errors must fail closed without retrying the protected API.
+  {
+    let feedCalls = 0;
+    const context = createContext(async (url) => {
+      const target = String(url);
+      if (url === '/api/v1/auth/config')
+        return response(200, {enabled: true, provider: 'firebase', project_id: 'blinq-182', server_ready: true});
+      if (target.includes('accounts:signInWithPassword'))
+        return response(200, {idToken: 'token-rejected', refreshToken: 'refresh-rejected', expiresIn: '3600'});
+      if (target.includes('accounts:lookup'))
+        return response(200, {users: [{emailVerified: true}]});
+      if (url === '/api/v1/feed') { feedCalls += 1; return response(401, {error: 'unauthorized'}); }
+      throw new Error('Unexpected fetch: ' + target);
+    });
+    await context.BlinqAuth.signIn('member@example.com', 'password123');
+    await assert.rejects(context.BlinqAuth.feed(), error => error.status === 401);
+    assert.strictEqual(feedCalls, 1, '401 must not be retried');
+  }
+
   console.log('auth init resilience r35: PASS');
 })().catch(error => {
   console.error(error);

@@ -276,7 +276,9 @@
     let lastError = null;
     for (let attempt = 0; attempt < AUTH_CONFIG_ATTEMPTS; attempt += 1) {
       try {
-        return validateAuthConfig(await json(AUTH_CONFIG_URL, {timeoutMs: 6000}));
+        // The endpoint can cold-start on Azure; fail over sooner to the trusted
+        // public Firebase client config, while protected APIs still enforce auth.
+        return validateAuthConfig(await json(AUTH_CONFIG_URL, {timeoutMs: 2500}));
       } catch (error) {
         lastError = error;
         if (isPermanentAuthConfigError(error) || !isTransientAuthError(error)) throw error;
@@ -497,7 +499,19 @@
   }
   async function feed() {
     const s = await restore();
-    return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
+    const request = () => json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
+    try {
+      return await request();
+    } catch (error) {
+      // A cold gateway or a brief mobile-network dropout should not send a
+      // still-authenticated user back to the login form after a single timeout.
+      // Retry only this idempotent GET; never retry permission/credential errors.
+      const retryable = [0, 408, 502, 503, 504].includes(Number(error?.status))
+        && (Number(error?.status) !== 0 || ['auth_timeout', 'auth_network_error'].includes(codeOf(error)));
+      if (!retryable) throw error;
+      await wait(300);
+      return request();
+    }
   }
   async function matchIntelligence(player1Id, player2Id, surface = '', customId = '', eventId = '') {
     const params = new URLSearchParams({
