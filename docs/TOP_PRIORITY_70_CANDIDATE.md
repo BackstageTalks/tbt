@@ -1,24 +1,28 @@
 # TOP production policy and morning runbook
 
-Active policy after next merged issuance: `priority_tours_top_v20` — ATP/WTA 70/68/65,
-then ITF and Challenger 70 only. Earlier v19 was the 70%-all-groups policy.
+Pending deployment policy: `priority_tours_top_v20` — ATP/WTA >=65%, then
+Challenger >=65%, and only ITF women W35+ with point-in-time paired S/R and
+surface S/R available >=65%; all male ITF and unknown-level ITF excluded.
+Earlier v19 was the 70%-all-groups policy.
 
 VERIFIED deployment: PR #1459, commit `f4e0eda72dd5c6a5065c0df93a3428250b8c5ed6`,
 [successful checks and deployment](https://github.com/BackstageTalks/tbt/actions/runs/42480094670).
 Independent production deployment.json and ui-config.json readback matched this commit and policy on 2026-11-08.
 
-Updated 2026-11-11 per owner: aim for three TOP selections while prioritizing
-ATP/WTA 70%, then 68%, then 65%, before ITF and Challenger at >=70%.
+Updated 2026-11-11 per owner: aim for three TOP selections with ATP/WTA >=65%
+first. Fallback to Challenger >=65%, then women ITF W35+ >=65% **only** when
+both players have verified pre-match overall and surface serve/return.
 This is a selection-tier policy, NOT new probability calibration. The existing
 three-slot output remains; there is no new TOP1/TOP3 product.
 
-- Within ATP/WTA, first fill from >=70%, then >=68%, then >=65%, up to three picks.
-  Sort each tier by probability, with model/market agreement breaking ties.
-- Only then take ITF at >=70%; next Challenger at >=70%. WTA 125, UTR,
-  unknown competitions and other levels do not enter TOP.
-  A generic male ATP tour label does not establish ATP competition level.
-- Existing M15/M25 TOP hold and severe ITF model/market outsider guard remain.
-- Never drop ATP/WTA below 65% or ITF/Challenger below 70%; maintain depth >=80%,
+- Within ATP/WTA, rank all candidates >=65% by probability; model/market
+  agreement only breaks ties, never certifies the public confidence.
+- If fewer than 3, next Challenger >=65%, then ITF women W35+ >=65% only
+  with point-in-time serve/return AND surface serve/return known for both.
+  All men's ITF (including M15/M25/M50/M100), W15/W25, ambiguous ITF,
+  WTA125, UTR, unknown and unsupported competitions do not enter TOP.
+- Existing M15/M25 and extreme ITF model/market outsider guards remain.
+- Never drop any approved competition below 65%; maintain depth >=80%,
   at least five prior surface matches per player, exact paired pre-match quotes
   and coherent probability evidence. No backup can bypass these gates.
 - Model/market agreement is a ranking heuristic, NOT a calibrated hit-rate claim.
@@ -59,13 +63,14 @@ start 06:00 Europe/Bratislava. `data.yml` checks out the dispatched main revisio
 No scheduler change or additional paid refresh is needed for this policy.
 
 Before refresh/current-refresh, `verify_top_morning_policy.py` checks active
-backend/UI v20, ATP/WTA tiers 70/68/65, ITF then Challenger >=70,
+backend/UI v20, ATP/WTA >=65%, Challenger >=65%, then verified W35+ >=65%,
 price/quality thresholds and target three without any provider call.
 A mismatch stops the job before data work.
 
 After the first new morning run, inspect child run, saved candidate snapshot,
 feed and publication receipts. Require policy `priority_tours_top_v20`, ATP/WTA
-tiers 70/68/65, ITF and Challenger >=70, three picks or explicit shortfall,
+>=65%, Challenger >=65%, and ITF W35+ >=65% only with verified S/R, three picks
+or explicit shortfall,
 unique events, category priority, probability ordering within each tier,
 VALUE exclusivity, and exact pre-start evidence.
 Check unchanged ACES/DF contracts. Do not rewrite already-issued picks to make
@@ -161,3 +166,27 @@ Deployment gate: run relevant tests plus main CI, then verify the first
 new morning `data.yml` run, generated candidate rejection counts,
 immutable issuance and live serving read-back. This change cannot be
 claimed deployed merely because a PR or merge succeeded.
+
+
+## 2026-11-11 — final conservative TOP fallback scope
+
+Owner requested ATP/WTA >=65% first with cautious lower-tier fallback, and
+raised an explicit concern that men's ITF M-level data cannot be independently
+validated. Decision implemented in PR #1564: Challenger >=65% second; only
+women's ITF W35/W50/W60/W75/W80/W100 >=65% last, requiring BOTH paired
+pre-match overall and surface serve/return evidence flags. Absence of a flag,
+false or ambiguous grade fails closed. All male ITF (not only M15/M25) and
+women ITF W15/W25 remain out of TOP; other products and issued results remain.
+
+This is an evidence *availability* gate, not empirical calibration. v7.2.1
+model probability is unchanged; count-only depth cannot establish real hit rate.
+Read-only exact-issued model audit of 2026-11-11 had 43 settled TOP bets,
+27 wins, 62.8% hit rate vs 76.6% mean declared probability; 51/51 historical
+issued TOP had unverified PIT S/R feature flags. See
+https://github.com/BackstageTalks/tbt/actions/runs/43093112425 .
+These historical data do not prove that the 65% policy is calibrated or
+profitable. Reassessment requires disjoint future point-in-time samples.
+
+Rollout gate: full CI including browser, merge, deploy + SHA read-back, then
+first actual next morning issuer ledger/serving comparison. Preserve external
+cron, old immutable picks and all other GitHub collaborators' commits.
