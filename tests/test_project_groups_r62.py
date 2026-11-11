@@ -293,3 +293,65 @@ def test_legacy_self_join_groups_map_to_open_mode(monkeypatch):
     )
     assert group["entry_mode"] == "open"
     assert group["can_join"] is True
+
+
+def test_feed_joined_only_project_group_reads_skip_unjoined_membership_scans(monkeypatch):
+    """Feed membership projection is identical, but reads only joined groups."""
+    class CountingTable(MultiTable):
+        def __init__(self):
+            super().__init__()
+            self.queries = []
+
+        def query_entities(self, query_filter=None):
+            self.queries.append(str(query_filter or ""))
+            return super().query_entities(query_filter=query_filter)
+
+    table = CountingTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    alpha = admin_storage.save_project_group({
+        "name": "Alpha", "capacity": 8, "active": True, "entry_mode": "open",
+    }, actor_id="admin")
+    beta = admin_storage.save_project_group({
+        "name": "Beta", "capacity": 8, "active": True, "entry_mode": "request",
+        "join_deadline": "2999-01-01T00:00:00+00:00",
+    }, actor_id="admin")
+    gamma = admin_storage.save_project_group({
+        "name": "Gamma", "capacity": 8, "active": True, "entry_mode": "open",
+    }, actor_id="admin")
+    admin_storage.join_project_group(alpha["id"], "member-1")
+    admin_storage.join_project_group(beta["id"], "member-1")  # requested, not joined
+    admin_storage.join_project_group(gamma["id"], "member-2")
+
+    # Full listing is authoritative for the standalone project-group screen.
+    expected = [
+        item for item in admin_storage.list_project_groups(user_id="member-1")["items"]
+        if item["joined"]
+    ]
+    assert [item["id"] for item in expected] == [alpha["id"]]
+
+    table.queries.clear()
+    actual = admin_storage.list_project_groups(
+        user_id="member-1", joined_only=True,
+    )["items"]
+    assert actual == expected
+    assert any(query == "PartitionKey eq 'groups'" for query in table.queries)
+    assert any(query == f"PartitionKey eq 'group:{alpha['id']}'" for query in table.queries)
+    assert not any(query == f"PartitionKey eq 'group:{beta['id']}'" for query in table.queries)
+    assert not any(query == f"PartitionKey eq 'group:{gamma['id']}'" for query in table.queries)
+
+    # The common non-member path needs just the membership-index query.
+    table.queries.clear()
+    assert admin_storage.list_project_groups(
+        user_id="not-in-any-group", joined_only=True,
+    ) == {"items": []}
+    assert len(table.queries) == 1
+    assert table.queries[0].startswith("PartitionKey eq 'user:")
+
+
+def test_feed_project_group_fastpath_preserves_full_listing_and_endpoint_scope():
+    """The full project-groups endpoint must retain pending/requested groups."""
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1] / "api" / "function_app.py").read_text(encoding="utf-8")
+    assert 'project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False, joined_only=True)' in source
+    assert 'payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False)' in source

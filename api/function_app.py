@@ -1601,7 +1601,7 @@ def feed(req):
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         try:
-            project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False)
+            project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False, joined_only=True)
             account_data["project_groups"] = [
                 item for item in project_payload.get("items", []) if bool(item.get("joined"))
             ]
