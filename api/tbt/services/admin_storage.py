@@ -2194,17 +2194,27 @@ def project_group_ids_for_user(user_id: object) -> set[str]:
 
 
 def list_project_groups(*, user_id: str = "", include_inactive: bool = False,
-                        include_members: bool = False) -> dict:
+                        include_members: bool = False, joined_only: bool = False) -> dict:
+    # The authenticated feed only exposes the member's joined groups. Resolve
+    # the indexed membership first, avoiding an all-groups scan (and N member
+    # partition queries) for the common case of no joined project groups.
+    if joined_only:
+        joined_ids = project_group_ids_for_user(user_id) if user_id else set()
+        if not joined_ids:
+            return {"items": []}
     try:
         rows = list(_table(PROJECT_GROUPS_TABLE).query_entities(query_filter="PartitionKey eq 'groups'"))
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to list project groups") from exc
-    joined_ids = project_group_ids_for_user(user_id) if user_id else set()
+    if not joined_only:
+        joined_ids = project_group_ids_for_user(user_id) if user_id else set()
     items = []
     for entity in rows:
         if not include_inactive and not bool(entity.get("active", True)):
             continue
         group_id = str(entity.get("RowKey") or "")
+        if joined_only and group_id not in joined_ids:
+            continue
         group_rows = _project_group_rows(group_id)
         members = [row for row in group_rows if str(row.get("status") or "joined") == "joined"]
         requests = [row for row in group_rows if str(row.get("status") or "") == "requested"]
