@@ -980,7 +980,7 @@
       ],
       "requires_odds": true,
       "objective": "competition_then_probability",
-      "min_probability": 0.7,
+      "min_probability": 0.65,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -993,12 +993,14 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "ATP/WTA first, then Challenger/WTA125, then ITF. Target 3 sorted by probability within each competition group, minimum 70%; never weaken depth 0.80 or 5 surface matches; real odds >=1.50, no upper limit; VALUE priority",
+      "cascade": "ATP/WTA 70%, then 68%, then 65% to target 3; only if needed ITF 70%, then Challenger 70%. M15/M25 and extreme ITF price conflicts remain held. No forced fill; depth >=0.80, surface >=5 per player and pre-start real odds >=1.50; VALUE priority",
       "confidence_tiers": [
-        0.7
+        0.7,
+        0.68,
+        0.65
       ],
       "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.7,
+      "fallback_min_probability": 0.65,
       "fallback_only_if_core_count_below": 3,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
@@ -1010,15 +1012,14 @@
           "WTA"
         ],
         [
-          "Challenger",
-          "WTA 125"
+          "ITF"
         ],
         [
-          "ITF"
+          "Challenger"
         ]
       ],
       "quality_fallback": false,
-      "policy": "priority_tours_top_v19"
+      "policy": "priority_tours_top_v20"
     },
     "value": {
       "label": "Value Predictions",
