@@ -980,7 +980,9 @@
       ],
       "requires_odds": true,
       "objective": "competition_then_probability",
-      "min_probability": 0.7,
+      "min_probability": 0.65,
+      "itf_min_probability_exclusive": 0.65,
+      "itf_max_odds_inclusive": 1.7,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -993,12 +995,12 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "ATP/WTA first, then Challenger/WTA125, then ITF. Target 3 sorted by probability within each competition group, minimum 70%; never weaken depth 0.80 or 5 surface matches; real odds >=1.50, no upper limit; VALUE priority",
+      "cascade": "ATP/WTA >=65% first; if below 3, Challenger >=65%; if still below 3, ITF strictly >65% and verified price 1.50–1.70 inclusive. Existing fail-closed women W35+ pre-match serve/return and surface S/R evidence gate applies; male/ambiguous ITF excluded. Keep quality checks, VALUE priority, and no forced fill.",
       "confidence_tiers": [
-        0.7
+        0.65
       ],
       "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.7,
+      "fallback_min_probability": 0.65,
       "fallback_only_if_core_count_below": 3,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
@@ -1010,15 +1012,14 @@
           "WTA"
         ],
         [
-          "Challenger",
-          "WTA 125"
+          "Challenger"
         ],
         [
           "ITF"
         ]
       ],
       "quality_fallback": false,
-      "policy": "priority_tours_top_v19"
+      "policy": "priority_tours_top_v20"
     },
     "value": {
       "label": "Value Predictions",

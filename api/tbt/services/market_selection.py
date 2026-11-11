@@ -35,7 +35,8 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME retains its own policy. TOP targets three with ATP/WTA priority and a 70% hard floor. VALUE keeps the existing 65% floor and 15% odds gap.
+# PRIME remains unchanged. TOP first considers ATP/WTA >=65%; remaining
+# slots use Challenger >=65%, then *verified* women ITF W35+ >=65%.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -46,7 +47,7 @@ PUBLICATION_MIN_PROBABILITY = 0.65
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
@@ -1006,43 +1007,54 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int = TOP_TARGET_COUNT,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Prefer ATP/WTA, then secondary tours, then ITF; never weaken evidence.
+    """Exhaust ATP/WTA >=65%, then Challenger, then verified ITF W35+ >=65%.
 
-    Within each competition group, rank by descending model probability.
-    ``backup`` is retained for call compatibility but cannot bypass core gates.
+    This is TOP-selection priority, not model recalibration. The ITF evidence
+    gate rejects all men's M-level events and unknown/unverified women ITF.
+    No fallback bypass of identity, depth, surface sample or price gates.
     """
     from .top_policy import competition_group
-    selected = []
-    seen = set()
-    applied = []
-    for label, groups in (("main", {"ATP", "WTA"}),
-                          ("secondary", {"Challenger", "WTA 125"}),
-                          ("itf", {"ITF"})):
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    applied: list[dict[str, Any]] = []
+    for step, (label, groups) in enumerate((
+        ("main", {"ATP", "WTA"}),
+        ("challenger", {"Challenger"}),
+        ("women_itf", {"ITF"}),
+    )):
         eligible = sorted(
-            [card for card in core if competition_group(card) in groups
-             and (_number(card.get("probability")) or 0) >= .70],
+            (card for card in core
+             if competition_group(card) in groups
+             and (_number(card.get("probability")) or 0) + 1e-12 >= .65
+             and str(card.get("event_id") or "") not in seen),
             key=lambda card: (float(_number(card.get("probability")) or 0),
-                              _top_quality_rank(card)), reverse=True)
+                              _top_quality_rank(card)), reverse=True,
+        )
+        added = 0
         for card in eligible:
             event = str(card.get("event_id") or "")
-            if event in seen or len(selected) >= target:
+            if not event or event in seen or len(selected) >= target:
                 continue
             item = deepcopy(card)
-            item["selection_tier"] = f"{label}_0.70"
+            item["selection_tier"] = f"{label}_0.65"
             selected.append(item)
             seen.add(event)
-        if eligible:
-            applied.append({"competition_tier": label, "min_probability": .70})
+            added += 1
+        if added:
+            applied.append({"competition_tier": label, "min_probability": .65,
+                            "selected": added, "step": step})
         if len(selected) >= target:
             break
-    return selected, 0, {
-        "step": 0, "min_probability": .70,
-        "min_odds": TOP_FALLBACK_MIN_ODDS, "target": target, "minimum": minimum,
-        "core_pool": len(core), "backup_pool": 0, "backup_selected": 0,
-        "shortfall": max(0, minimum-len(selected)), "applied_tiers": applied,
-        "rank": "competition_then_probability_then_model_market_consensus",
-    }
 
+    fallback_count = sum(row["selection_tier"] != "main_0.65" for row in selected)
+    return selected, fallback_count, {
+        "step": applied[-1]["step"] if applied else 0,
+        "min_probability": .65,
+        "min_odds": TOP_FALLBACK_MIN_ODDS, "target": target, "minimum": minimum,
+        "core_pool": len(core), "backup_pool": 0, "backup_selected": fallback_count,
+        "shortfall": max(0, minimum - len(selected)), "applied_tiers": applied,
+        "rank": "ATP_WTA_65_then_Challenger_65_then_verified_ITF_W35plus_65",
+    }
 
 def _fill_top_dynamic(
     core: list[dict[str, Any]],
@@ -1251,7 +1263,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "priority_tours_top_v19",
+            "selection_policy": "priority_tours_top_v20",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1295,7 +1307,9 @@ def select_market_sections(
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
-                "top_probability_tiers": [0.70],
+                "top_probability_tiers": [0.65],
+                "top_competition_order": ["ATP/WTA", "Challenger", "verified_W35plus_ITF"],
+                "secondary_competition_probability_floor": 0.65,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1326,13 +1340,19 @@ def select_market_sections(
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
                 "fallback_min_probability": top_fallback_floor,
-                "probability_tiers": [0.70],
+                "probability_tiers": [0.65],
+                "competition_tiers": [
+                    {"group": "ATP/WTA", "thresholds": [0.65]},
+                    {"group": "Challenger", "thresholds": [0.65]},
+                    {"group": "ITF W35+ verified serve/return", "min_probability_exclusive": 0.65, "max_odds_inclusive": 1.70},
+                ],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": False,
                 "no_forced_fill": True,
                 "observed_pick_count": len(top),
                 "fallback_only_if_core_count_below": TOP_MIN_COUNT,
                 "dynamic_fallback": False,
+                "tiered_priority_fallback": True,
                 "dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1343,13 +1363,15 @@ def select_market_sections(
                 "core_min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
                 "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
                 "min_odds": TOP_FALLBACK_MIN_ODDS,
+                "itf_min_probability_exclusive": 0.65,
+                "itf_max_odds_inclusive": 1.70,
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
                 "sort": "competition_then_probability_then_quality_consensus",
                 "ranked_full_slate": True,
-                "policy": "priority_tours_top_v19",
-                "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125"], ["ITF"]],
+                "policy": "priority_tours_top_v20",
+                "competition_priority": [["ATP", "WTA"], ["Challenger"], ["ITF"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
                 "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,

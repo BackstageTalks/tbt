@@ -9,9 +9,12 @@ from datetime import datetime, timezone
 import math
 import re
 
-POLICY = "priority_tours_top_v19"
-MIN_PROBABILITY = .70  # absolute floor authorized by owner
+POLICY = "priority_tours_top_v20"
+# Owner-authorized 65% floor applies to ATP/WTA first, then verified ITF/Challenger fallback.
+MIN_PROBABILITY = .65
+# TOP only: ITF fallback prices are capped, ATP/WTA and Challenger unchanged.
 MIN_ODDS = 1.50
+ITF_MAX_ODDS = 1.70
 # Temporary TOP-only evidence hold; not an odds ceiling or calibrated profitability claim.
 TOP_MARKET_OUTSIDER_CONFLICT_GAP = .25
 
@@ -71,6 +74,25 @@ def is_itf_m15_m25(row):
 
 
 
+
+def qualified_itf_w35plus_evidence(card):
+    """Fail-closed: ITF women W35+ with paired PIT stats on overall and surface.
+
+    A generic WTA tour/gender label is not grade evidence. M-level men's ITF,
+    unknown/wrong ITF grades and missing pre-match feature flags cannot enter TOP.
+    """
+    if competition_group(card) != "ITF":
+        return False
+    labels = " ".join(str(card.get(k) or "") for k in (
+        "competition", "tournament_level", "tournament")).lower()
+    if not re.search(r"(?<![a-z0-9])w[\s-]?(?:35|50|60|75|80|100)(?![a-z0-9])", labels):
+        return False
+    q = card.get("quality") if isinstance(card.get("quality"), dict) else {}
+    ev = q.get("feature_evidence") if isinstance(q.get("feature_evidence"), dict) else {}
+    return (ev.get("serve_return_known_both") is True
+            and ev.get("surface_serve_return_known_both") is True)
+
+
 def unverified_top_market_outsider(card):
     """Hold severe ITF TOP-only market/model favorite inversion for review.
 
@@ -91,16 +113,19 @@ def unverified_top_market_outsider(card):
                 and public - fair > TOP_MARKET_OUTSIDER_CONFLICT_GAP + 1e-12)
 
 
-def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5, min_odds=1.50):
+def rejection_reasons(card, *, min_probability=.65, min_depth=.80, min_surface=5, min_odds=1.50):
     from .price_integrity import extreme_winner_price_inversion, unsubstantiated_high_confidence_winner
 
     reasons = []
-    if competition_group(card) not in {"ATP", "WTA", "Challenger", "WTA 125", "ITF"}:
+    group = competition_group(card)
+    if group not in {"ATP", "WTA", "Challenger", "ITF"}:
         reasons.append("competition_not_approved")
     # Temporary TOP-only hold pending independently graded M15/M25 calibration.
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.
     if is_itf_m15_m25(card):
         reasons.append("itf_m15_m25_top_hold_pending_calibration")
+    if group == "ITF" and not qualified_itf_w35plus_evidence(card):
+        reasons.append("itf_top_requires_verified_w35plus")
     if unverified_top_market_outsider(card):
         reasons.append("top_unverified_market_outsider_conflict")
     if card.get("prediction_family") == "doubles":
@@ -124,8 +149,12 @@ def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5
              and abs(public - (.5 + (raw - .5) * depth)) <= .005)
     if not valid:
         reasons.append("inconsistent_probability_evidence")
+    # Same candidate floor across approved groups; selection priority is
+    # handled separately. Count-depth does NOT establish calibrated reliability.
     if public is None or public < max(MIN_PROBABILITY, min_probability):
         reasons.append("probability_below_fixed_floor")
+    if group == "ITF" and public is not None and public <= .65:
+        reasons.append("itf_probability_not_above_65")
     if depth is None or not min_depth <= depth <= 1:
         reasons.append("insufficient_data_depth")
     quality = card.get("quality") if isinstance(card.get("quality"), dict) else {}
@@ -135,6 +164,8 @@ def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5
         reasons.append("insufficient_surface_history")
     if odds is None or odds < max(MIN_ODDS, min_odds):
         reasons.append("missing_or_low_odds")
+    if group == "ITF" and odds is not None and odds > ITF_MAX_ODDS + 1e-12:
+        reasons.append("itf_odds_above_1_70")
     start, created, captured = (timestamp(card.get("scheduled_at")),
                                 timestamp(card.get("created_at")), timestamp(bet.get("captured_at")))
     if not start or not created or created >= start or not str(card.get("model_version") or "").strip():
