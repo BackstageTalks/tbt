@@ -49,3 +49,89 @@ def operator_smoke_request_cap(path, *, enabled: bool, now: datetime) -> int | N
     if not timedelta(0) <= age <= timedelta(minutes=25):
         raise ValueError("Operator smoke request expired or not yet valid; no dispatch")
     return 500
+
+
+def external_clock_gapfill_decision(now: datetime, workflow_runs: list[dict]) -> tuple[bool, str, str]:
+    """Attach the existing external match-status clock to the guarded gapfill.
+
+    This function *only* decides whether to dispatch the existing orchestrator.
+    The orchestrator itself rechecks the shared CAS quota, native CDB lock,
+    provider-header reserve, UTC reset and per-run budget before any API use.
+    """
+    from zoneinfo import ZoneInfo
+
+    if now.tzinfo is None:
+        raise ValueError("External API scheduler requires timezone-aware UTC")
+    now = now.astimezone(timezone.utc)
+    reset = now.replace(hour=17, minute=9, second=0, microsecond=0)
+    if now >= reset:
+        reset += timedelta(days=1)
+    until_reset = (reset - now).total_seconds()
+
+    # Cold CDB bootstrap needs ~10-15 min: do not trigger an already doomed
+    # provider run in the last 22 min before provider UTC reset.
+    if until_reset <= 22 * 60:
+        return False, "provider_cutoff_preflight", ""
+
+    local = now.astimezone(ZoneInfo("Europe/Bratislava"))
+    stage_hour = local.hour + (19 - reset.astimezone(ZoneInfo("Europe/Bratislava")).hour)
+    final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
+    permitted = (evening_cap(now, reset) is not None or
+                 stage_hour in {12, 13, 14, 15, 16, 17, 18} or
+                 final_topup)
+    if not permitted:
+        return False, "outside_existing_guarded_slots", ""
+
+    # The final closeout window can release another 1,000 calls even if
+    # the regular 16:00 UTC hourly staged allocation already dispatched.
+    def slot(instant: datetime) -> str:
+        remaining = (reset - instant).total_seconds()
+        closeout = 7 * 60 <= remaining <= 35 * 60 + 59
+        return instant.strftime("%Y-%m-%dT%H") + (
+            ":closeout" if closeout else ":hourly"
+        )
+
+    target_slot = slot(now)
+    recent = []
+    for item in workflow_runs:
+        if item.get("event") != "workflow_dispatch":
+            continue
+        raw = str(item.get("created_at") or "")
+        created = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if created.tzinfo is None:
+            raise ValueError("Ambiguous orchestrator run timestamp; fail closed")
+        created = created.astimezone(timezone.utc)
+        if created > now + timedelta(minutes=2):
+            raise ValueError("Future orchestrator run timestamp; fail closed")
+        if created < now - timedelta(hours=6):
+            continue
+        recent.append((created, item))
+
+    # Never queue competing orchestrators while one is active or pending.
+    if any(str(run.get("status")) in
+           {"requested", "queued", "pending", "waiting", "in_progress"}
+           for _, run in recent):
+        return False, "orchestrator_already_active", target_slot
+
+    failures_in_slot = sum(
+        1 for created, run in recent
+        if slot(created) == target_slot
+        and run.get("status") == "completed"
+        and run.get("conclusion") in {"failure", "cancelled", "timed_out"}
+    )
+    if failures_in_slot >= 2:
+        # A third identical retry would obscure the original failure.
+        # The next staged hour can make a new attempt after investigation.
+        return False, "repeated_guard_failures_need_diagnosis", target_slot
+
+    for created, run in recent:
+        if slot(created) != target_slot:
+            continue
+        if run.get("status") == "completed" and run.get("conclusion") == "success":
+            return False, "already_dispatched_this_slot", target_slot
+        # Allow an automatic retry on the next existing 15-minute tick
+        # after genuine guard failure, not duplicate runs immediately.
+        if now - created < timedelta(minutes=12):
+            return False, "retry_cooldown", target_slot
+
+    return True, "eligible_external_clock_tick", target_slot
