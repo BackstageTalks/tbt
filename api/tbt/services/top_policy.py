@@ -9,8 +9,9 @@ from datetime import datetime, timezone
 import math
 import re
 
-POLICY = "priority_tours_top_v19"
-MIN_PROBABILITY = .70  # absolute floor authorized by owner
+POLICY = "priority_tours_top_v20"
+# User-authorized 65% floor applies only to ATP/WTA. All later tiers stay 70%.
+MIN_PROBABILITY = .65
 MIN_ODDS = 1.50
 # Temporary TOP-only evidence hold; not an odds ceiling or calibrated profitability claim.
 TOP_MARKET_OUTSIDER_CONFLICT_GAP = .25
@@ -91,11 +92,12 @@ def unverified_top_market_outsider(card):
                 and public - fair > TOP_MARKET_OUTSIDER_CONFLICT_GAP + 1e-12)
 
 
-def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5, min_odds=1.50):
+def rejection_reasons(card, *, min_probability=.65, min_depth=.80, min_surface=5, min_odds=1.50):
     from .price_integrity import extreme_winner_price_inversion, unsubstantiated_high_confidence_winner
 
     reasons = []
-    if competition_group(card) not in {"ATP", "WTA", "Challenger", "WTA 125", "ITF"}:
+    group = competition_group(card)
+    if group not in {"ATP", "WTA", "Challenger", "ITF"}:
         reasons.append("competition_not_approved")
     # Temporary TOP-only hold pending independently graded M15/M25 calibration.
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.
@@ -124,7 +126,10 @@ def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5
              and abs(public - (.5 + (raw - .5) * depth)) <= .005)
     if not valid:
         reasons.append("inconsistent_probability_evidence")
-    if public is None or public < max(MIN_PROBABILITY, min_probability):
+    # Threshold step is NOT a reliability-calibration claim. Main tours may
+    # enter the 68/65 fallback; ITF and Challenger never below 70.
+    competition_floor = MIN_PROBABILITY if group in {"ATP", "WTA"} else .70
+    if public is None or public < max(competition_floor, min_probability):
         reasons.append("probability_below_fixed_floor")
     if depth is None or not min_depth <= depth <= 1:
         reasons.append("insufficient_data_depth")
