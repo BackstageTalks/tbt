@@ -362,7 +362,7 @@ def test_ranked_top_uses_only_real_pre_start_prices_and_target_three():
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
-    assert rule['probability_tiers'] == [.70, .68, .65]
+    assert rule['probability_tiers'] == [.65]
     assert rule['min_odds'] == 1.50
     assert rule['daily_preferred_count'] == 3
 
