@@ -9442,13 +9442,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     try{
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
-      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};if(generation!==feedGeneration)return;
+      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');if(generation!==feedGeneration)return;
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
       // only if this session generation is still current when news arrives.
       loadNewsPool().then(()=>{if(generation===feedGeneration&&state.route==='predictions')renderHeroBanner();}).catch(()=>{});
-      loadAdminDraft(); renderAllUiContent(); populateFilters();
+      loadAdminDraft(); renderAllUiContent(); populateFilters(); markBootTiming('Dashboard vykreslený');
       const a=feed.account||{};
       $('profileName').textContent=a.name||a.email||publicText('BlinQ User');
       const resolvedPlan=accountPlan();
@@ -9473,7 +9473,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(tooltipRemaining){const status=String(a.status||'active').toLowerCase();tooltipRemaining.textContent=status==='lifetime'?publicText('Lifetime'):a.expires_at?remainingLabel(a.expires_at):(status==='active'?publicText('Managed manually'):status.toUpperCase());}
       $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday();
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
-      const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
+      const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; markBootTiming('Dashboard odkrytý'); if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
@@ -9595,8 +9595,30 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     window.addEventListener('hashchange',()=>{const route=location.hash.slice(1)||'predictions';if(!$('appShell').hidden&&route!==state.route)setRoute(route,false);});
   }
 
+  // Read-only, opt-in startup timing. Never runs on ordinary BlinQ URLs.
+  // The diagnostic displays timing labels only; it never sends tokens or data.
+  const bootTimingProbe=(() => {
+    let enabled=false;
+    try{enabled=new URLSearchParams(location.search).get('blinq_boot_trace')==='1';}catch{}
+    if(!enabled)return null;
+    const marks=[];
+    return {
+      mark(label){marks.push([label,Math.round(performance.now())]);},
+      report(){
+        const navigation=performance.getEntriesByType('navigation')[0];
+        const phases=marks.map(([label,ms])=>`${label}: ${ms} ms`);
+        if(navigation)phases.unshift(`DOM pripravený: ${Math.round(navigation.domContentLoadedEventEnd)} ms`);
+        const message='BlinQ – čas štartu od otvorenia stránky\\n\\n'+phases.join('\\n')+'\\n\\nPošli snímku tejto diagnostiky.';
+        console.info('[BlinQ boot timing]\\n'+phases.join('\\n'));
+        setTimeout(()=>window.alert(message),450);
+      }
+    };
+  })();
+  function markBootTiming(label){bootTimingProbe?.mark(label);}
+
   function finishBootSplash(){const splash=$('bootSplash');if(!splash)return;splash.classList.add('is-done');setTimeout(()=>splash.remove(),220);}
   async function boot(){
+    markBootTiming('Spustenie JS');
     setupEvents();window.BlinqUI.init();setupLiveRefresh();
     const hash=location.hash.replace(/^#/,'');if(routeMeta[hash])state.route=hash;
 
@@ -9604,16 +9626,17 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     // presentation state and must never be able to disable sign-in or delay the
     // login form behind an Azure storage/CMS cold start.
     const uiReady=loadUiConfig(true)
-      .then(()=>{try{renderCookieConsent(false);}catch(error){console.warn('[BlinQ boot] cookie UI render failed.',error);}return true;})
-      .catch(error=>{console.warn('[BlinQ boot] UI config failed; auth remains available.',error);return false;});
+      .then(()=>{markBootTiming('UI konfigurácia pripravená');try{renderCookieConsent(false);}catch(error){console.warn('[BlinQ boot] cookie UI render failed.',error);}return true;})
+      .catch(error=>{markBootTiming('UI konfigurácia chyba');console.warn('[BlinQ boot] UI config failed; auth remains available.',error);return false;});
     const authReady=BlinqAuth.init()
-      .then(cfg=>({cfg,error:null}))
-      .catch(error=>({cfg:null,error}));
+      .then(cfg=>{markBootTiming('Autentifikácia pripravená');return {cfg,error:null};})
+      .catch(error=>{markBootTiming('Autentifikácia chyba');return {cfg:null,error};});
 
     try{
       let session=null;
       try{session=await BlinqAuth.restore();}
       catch(error){console.warn('[BlinQ boot] session restore failed; showing sign-in without destroying auth.',error);}
+      markBootTiming('Obnovenie relácie dokončené');
 
       // Logged-out users see an immediately usable form. The submit action uses
       // BlinqAuth.ensureReady(), so a still-running init cannot create a race.
@@ -9628,6 +9651,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // auth/config checks finish; do not render private data before they pass.
       const prefetchedFeed=session?BlinqAuth.feed():null;
       if(prefetchedFeed)prefetchedFeed.catch(()=>{}); // handle early rejection until loadFeed awaits it
+      if(prefetchedFeed&&bootTimingProbe)prefetchedFeed.then(()=>markBootTiming('Feed API odpoveď'),()=>markBootTiming('Feed API chyba'));
 
       const {cfg,error:authError}=await authReady;
       if(cfg){
@@ -9653,7 +9677,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     }catch(error){
       showStatus(error?.message||'The BlinQ workspace could not be opened. Please try again.');
       if($('appShell').hidden)auth('login');
-    }finally{finishBootSplash();}
+    }finally{finishBootSplash();markBootTiming('Loader ukončený');bootTimingProbe?.report();}
   }
   boot();
 })();
