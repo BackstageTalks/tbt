@@ -261,3 +261,12 @@ def test_nonapproved_wta125_and_utr_do_not_fill_top():
     assert ids(result) == []
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
     assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 2
+
+
+def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
+    # This same fail-closed script runs before the paid morning data refresh.
+    from verify_top_morning_policy import verify
+    assert verify() == {
+        "status": "PASS", "policy": "priority_tours_top_v20",
+        "provider_requests": 0,
+    }
