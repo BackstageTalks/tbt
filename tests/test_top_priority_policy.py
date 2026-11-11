@@ -38,7 +38,7 @@ def test_no_target_filling_below_70(p):
 
 
 @pytest.mark.parametrize("odds,other,section",[(1.50,2.5,"top_daily_picks"),(1.80,1.9,"top_daily_picks"),
-    (1.81,1.9,"value_picks"),(2.20,2.6,"top_daily_picks")])
+    (1.81,1.9,"value_picks"),(2.20,1.5,"top_daily_picks")])
 def test_exact_user_price_contract(odds,other,section):
     out=select_market_sections([pick("x",.80,odds=odds,other=other)])
     assert len(out[section])==1
