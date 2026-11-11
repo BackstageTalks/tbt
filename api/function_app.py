@@ -1545,19 +1545,35 @@ def _feed_support_value(snapshot, name):
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
     try:
+        # Explicit authenticated diagnostics only: relative durations, no account
+        # fields, IDs, prices, or private payloads. Ordinary feed stays identical.
+        trace_requested = str((getattr(req, "params", None) or {}).get("blinq_feed_trace") or "") == "1"
+        trace_started = time.perf_counter() if trace_requested else None
+        trace_marks = []
+
+        def trace_stage(name):
+            if trace_started is not None:
+                trace_marks.append([name, round((time.perf_counter() - trace_started) * 1000)])
+
         user = _verified_user(req)
         if not user:
             return response({"error": "unauthorized"}, 401)
         if not bool(user.get("email_verified", False)):
             return response({"error": "email_not_verified"}, 403)
+        trace_stage("auth_verified")
         profile = _profile_for(user)
+        trace_stage("account_profile")
         account_data = public_account(user, cfg=settings, profile=profile)
+        trace_stage("account_public")
         source_feed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())
+        trace_stage("issued_feed")
         # The current issued ESÁ cards may predate the separate VIAC ES market.
         # Display their frozen pre-match ball signal without inventing an issuance.
         source_feed = with_issued_ace_leader_signals(source_feed)
         source_feed = annotate_most_aces_offer(source_feed)
+        trace_stage("aces_projection")
         support_reads = _feed_support_reads_parallel()
+        trace_stage("support_reads")
         try:
             source_feed = merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"))
         except AdminStorageUnavailable:
@@ -1600,6 +1616,7 @@ def feed(req):
                 }
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
+        trace_stage("access_filter")
         try:
             project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False, joined_only=True)
             account_data["project_groups"] = [
@@ -1607,6 +1624,7 @@ def feed(req):
             ]
         except AdminStorageUnavailable:
             account_data["project_groups"] = []
+        trace_stage("project_groups")
         data["account"] = account_data
         data["entitlements"] = entitlements
         # Match outcomes are a tiny runtime overlay. They never mutate the
@@ -1676,6 +1694,7 @@ def feed(req):
         except AdminStorageUnavailable:
             data["match_statuses"] = {}
             data["match_status_updated_at"] = None
+        trace_stage("results_kpis")
         # Presentation-only history is joined AFTER entitlement filtering. Never
         # mutate the immutable publication or expand the member's visible picks.
         try:
@@ -1683,6 +1702,9 @@ def feed(req):
         except AdminStorageUnavailable:
             logging.exception("CLV historical odds overlay unavailable")
             data["clv_history_unavailable"] = True
+        trace_stage("clv_complete")
+        if trace_started is not None:
+            data["__blinq_feed_stage_ms"] = trace_marks
         return response(data)
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
