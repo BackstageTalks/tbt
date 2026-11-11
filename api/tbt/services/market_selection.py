@@ -1344,7 +1344,7 @@ def select_market_sections(
                 "competition_tiers": [
                     {"group": "ATP/WTA", "thresholds": [0.65]},
                     {"group": "Challenger", "thresholds": [0.65]},
-                    {"group": "ITF W35+ verified serve/return", "thresholds": [0.65]},
+                    {"group": "ITF W35+ verified serve/return", "min_probability_exclusive": 0.65, "max_odds_inclusive": 1.70},
                 ],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": False,
@@ -1363,6 +1363,8 @@ def select_market_sections(
                 "core_min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
                 "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
                 "min_odds": TOP_FALLBACK_MIN_ODDS,
+                "itf_min_probability_exclusive": 0.65,
+                "itf_max_odds_inclusive": 1.70,
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
