@@ -12,7 +12,9 @@ import re
 POLICY = "priority_tours_top_v20"
 # Owner-authorized 65% floor applies to ATP/WTA first, then verified ITF/Challenger fallback.
 MIN_PROBABILITY = .65
+# TOP only: ITF fallback prices are capped, ATP/WTA and Challenger unchanged.
 MIN_ODDS = 1.50
+ITF_MAX_ODDS = 1.70
 # Temporary TOP-only evidence hold; not an odds ceiling or calibrated profitability claim.
 TOP_MARKET_OUTSIDER_CONFLICT_GAP = .25
 
@@ -151,6 +153,8 @@ def rejection_reasons(card, *, min_probability=.65, min_depth=.80, min_surface=5
     # handled separately. Count-depth does NOT establish calibrated reliability.
     if public is None or public < max(MIN_PROBABILITY, min_probability):
         reasons.append("probability_below_fixed_floor")
+    if group == "ITF" and public is not None and public <= .65:
+        reasons.append("itf_probability_not_above_65")
     if depth is None or not min_depth <= depth <= 1:
         reasons.append("insufficient_data_depth")
     quality = card.get("quality") if isinstance(card.get("quality"), dict) else {}
@@ -160,6 +164,8 @@ def rejection_reasons(card, *, min_probability=.65, min_depth=.80, min_surface=5
         reasons.append("insufficient_surface_history")
     if odds is None or odds < max(MIN_ODDS, min_odds):
         reasons.append("missing_or_low_odds")
+    if group == "ITF" and odds is not None and odds > ITF_MAX_ODDS + 1e-12:
+        reasons.append("itf_odds_above_1_70")
     start, created, captured = (timestamp(card.get("scheduled_at")),
                                 timestamp(card.get("created_at")), timestamp(bet.get("captured_at")))
     if not start or not created or created >= start or not str(card.get("model_version") or "").strip():
