@@ -155,3 +155,37 @@ Deployment gate: run relevant tests plus main CI, then verify the first
 new morning `data.yml` run, generated candidate rejection counts,
 immutable issuance and live serving read-back. This change cannot be
 claimed deployed merely because a PR or merge succeeded.
+
+
+## 2026-11-11 — match-count semantics and exact-issuance audit completion
+
+Evidence: `data_depth` is a capped historical match-count factor, not
+a quality-completeness or observed success probability. Existing public
+winner detail calls high match counts "High data coverage" despite possibly
+missing paired serve/return. This patch does **not** change the champion,
+its probability, the TOP >=70% threshold, issued tip identities or CDB.
+It relabels that existing display slot to actual historical match counts
+and presents paired serve/return status only if feature evidence is
+explicitly saved. Unknown legacy snapshots remain **unverified**.
+
+Read-only issued TOP/VALUE audit now reports separately:
+- genuine ITF M15/M25/W35/etc grade vs main tours (no male ATP alias);
+- pre-match paired serve/return existence, with a separate unverified cohort;
+- a >25-percentage-point model-market outsider difference using the exact
+  confirmed two-way pre-issuance bookmaker quote;
+- published 70–75% confidence cohort for the currently serving model.
+
+Audit outputs are subgroup aggregates; no per-person/selection leakage.
+A model-version-only matched issued audit is **not** model recalibration:
+low cohort sizes, old archived rows without provenance, censoring and
+the new-day forward check still limit conclusions. The production model
+must not be retrained, re-calibrated or promoted from historic summary alone.
+
+Pre-existing M15/M25 TOP hold and ITF extreme market disagreement guard
+stay active. Next gate: first 2026-11-12 normal morning release,
+candidate read-back and actual issued/success cohort including point-in-time
+serve/return coverage. Only then revisit a further quality gate based on
+measured capacity; never backfill published records.
+
+Rollback: revert only descriptive display and read-only audit code, not
+ongoing external data runs or historical offer decisions.
