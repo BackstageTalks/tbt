@@ -383,6 +383,16 @@ def predict(
             provider_custom_id = str(match.provider_payload.get("customId") or match.provider_payload.get("custom_id") or "").strip()
             marker = match.provider_payload.get("_tbt_match_format")
             match_format = marker if isinstance(marker, dict) else {}
+        evidence = coverage(builder, match)
+        # Descriptive PRE-MATCH feature availability, separate from count-based
+        # data_depth. Never reinterpret this as calibrated model confidence.
+        evidence["feature_evidence"] = {
+            "historical_count_depth": float(f["data_depth"]),
+            "serve_return_known_both": bool(f["stats_known_both"]),
+            "surface_serve_return_known_both": bool(f["surface_stats_known_both"]),
+            "rank_values_known_both": bool(f["rank_known_both"]),
+            "meaning": "pre_match_feature_availability_not_calibrated_confidence",
+        }
         rows.append({"id": match.match_id, "event_id": event_id(match), "custom_id": provider_custom_id, "tour": match.tour.upper(),
             "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
             "tournament_id": str(match.tournament_id or ""),
@@ -403,7 +413,7 @@ def predict(
             "surface": match.surface, "round": match.round_name,
             "best_of": match.best_of,
             "best_of_source": str(match_format.get("source") or ""),
-            "competition": match.tournament_level or "unknown", "quality": coverage(builder, match),
+            "competition": match.tournament_level or "unknown", "quality": evidence,
             "player1": {
                 "id": match.player1_id, "name": match.player1_name,
                 "probability": p, "rank": match.player1_rank,
