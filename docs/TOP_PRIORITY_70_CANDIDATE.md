@@ -111,3 +111,47 @@ pre-match field coverage and held-out reliability by probability band
 Reassess re-entry only with enough independent settled observations.
 Check relevant CI then first fresh real morning TOP snapshot and
 publication read-back; a code merge is not deployment proof.
+
+
+## 2026-11-11 — severe market-outsider TOP safeguard (follow-up)
+
+The same-day immutable 2026-11-11 issued TOP contained ITF M15/M25
+long-shot selections (e.g. 71.8% public BlinQ vs decimal 2.50/2.70).
+The earlier M15/M25 TOP-only hold was merged after the morning publication;
+do not rewrite that publication or its Results.
+
+This incremental **ITF TOP-only** precaution holds a *new* selection when
+the bookmaker's verified two-way, no-vig implied probability for that player
+is < 50%, while the displayed model probability is over 25 percentage
+points higher. This is an explicitly provisional review threshold,
+**not** independently calibrated, an automatic loser prediction, an
+odds ceiling, or a revision of public model probabilities. An odds-2.20
+pick remains eligible if the opposing price indicates the same player is
+the bookmaker favorite. For example, 71.8% vs a no-vig 37–40% is held;
+71.8% vs a no-vig 62% is not.
+
+ATP/WTA, Challenger/WTA 125 market-selection eligibility is unchanged by this
+ITF-specific hold. The full original ATP/WTA high-priced TOP contract remains.
+
+No change to absolute TOP floor (70%), 3-pick target (unfilled slots
+are permitted), tier priority, VALUE assignment, PRIME, ACES, CDB,
+trained champion, historical ledger, published forecasts, or pricing.
+The existing reason/audit system records the rejection reason
+`top_unverified_market_outsider_conflict`. Reconsider this hold only after
+an independent forward/held-out, point-in-time, price-banded calibration
+with meaningful sample sizes; a single day's outcomes are insufficient.
+
+Independent replay run
+https://github.com/BackstageTalks/tbt/actions/runs/43080096941
+reported **historical frozen selector simulations** for an older/newer
+model: original snapshot TOP hit rates 25/56 (44.64%) and 22/46
+(47.83%), respectively, on settled matched candidates. These are
+**not current-v19 issued bets**, are not an outcome-matched post-change
+counterfactual, and do not establish a 25pp cutoff's effectiveness.
+The same replay states pre-match serve/return/rank freshness was not
+available in older frozen snapshot schema.
+
+Deployment gate: run relevant tests plus main CI, then verify the first
+new morning `data.yml` run, generated candidate rejection counts,
+immutable issuance and live serving read-back. This change cannot be
+claimed deployed merely because a PR or merge succeeded.
