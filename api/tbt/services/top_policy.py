@@ -65,7 +65,7 @@ def is_itf_m15_m25(row):
     labels = " ".join(str(row.get(key) or "") for key in (
         "competition", "tournament_level", "tournament"
     )).lower()
-    return bool(re.search(r"(?<![a-z0-9])m[\\s-]?(?:15|25)(?![a-z0-9])", labels))
+    return bool(re.search(r"(?<![a-z0-9])m[\s-]?(?:15|25)(?![a-z0-9])", labels))
 
 
 def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5, min_odds=1.50):
