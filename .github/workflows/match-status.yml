@@ -282,3 +282,59 @@ jobs:
           gh workflow run moviodds-drive-archive.yml --repo "$GITHUB_REPOSITORY" \
             --ref main -f date="$yesterday"
           echo 'MOVIODDS_DRIVE_ARCHIVE_DISPATCH_ONLY_VERIFY_WORKFLOW_READBACK'
+
+      - name: Dispatch guarded CDB API gapfill from existing external clock
+        # The external match-status clock already runs every 15 minutes.
+        # Native GitHub cron stays DISABLED. Only the pre-existing API
+        # orchestrator may decide whether provider/CDB writes are safe.
+        # This step does not fetch paid data or touch the private CDB.
+        # A failure is visible as a failed run instead of a false green tick.
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          start="$(date -u -d '6 hours ago' +%Y-%m-%dT%H:%M:%SZ)"
+          end="$(date -u -d '2 minutes' +%Y-%m-%dT%H:%M:%SZ)"
+          gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/data-hourly-quota-gapfill.yml/runs" \
+            -f event=workflow_dispatch -f per_page=100 -f created="$start..$end" \
+            > "$RUNNER_TEMP/api-gapfill-before.json"
+          # Never make a dispatch decision from a truncated run listing.
+          jq -e '.total_count <= 100 and (.workflow_runs | type == "array")' \
+            "$RUNNER_TEMP/api-gapfill-before.json" >/dev/null
+          decision="$(python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from scripts.api_hourly_evening import external_clock_gapfill_decision
+
+          with open(__import__("os").environ["RUNNER_TEMP"] +
+                    "/api-gapfill-before.json", encoding="utf-8") as fh:
+              runs = json.load(fh)["workflow_runs"]
+          allowed, reason, slot = external_clock_gapfill_decision(
+              datetime.now(timezone.utc), runs)
+          print(json.dumps({"dispatch": allowed, "reason": reason, "slot": slot}))
+          PY
+          )"
+          echo "CDB_API_EXTERNAL_CLOCK_GATE $decision"
+          if [[ "$(jq -r '.dispatch' <<< "$decision")" != true ]]; then
+            exit 0
+          fi
+          gh workflow run data-hourly-quota-gapfill.yml \
+            --repo "$GITHUB_REPOSITORY" --ref main -f dry_run=false
+          # Workflow-dispatch submission is not proof of execution. Require
+          # an independently visible new orchestrator run (not CDB success).
+          for i in $(seq 1 8); do
+            sleep 2
+            gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/data-hourly-quota-gapfill.yml/runs" \
+              -f event=workflow_dispatch -f per_page=100 -f created="$start..$end" \
+              > "$RUNNER_TEMP/api-gapfill-after.json"
+            if jq -e --slurpfile before "$RUNNER_TEMP/api-gapfill-before.json" \
+              '([.workflow_runs[].id] - [$before[0].workflow_runs[].id]) | length > 0' \
+              "$RUNNER_TEMP/api-gapfill-after.json" >/dev/null; then
+              echo 'CDB_API_GAPFILL_ORCHESTRATOR_DISPATCH_VERIFIED; CDB read-back pending'
+              exit 0
+            fi
+          done
+          echo '::error::API gapfill dispatched but no new orchestrator run was independently visible'
+          exit 1
