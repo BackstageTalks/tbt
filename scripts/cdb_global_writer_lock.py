@@ -22,6 +22,10 @@ DEFAULT_REPOSITORY = "BackstageTalks/tbt-data"
 DEFAULT_STATE = ".cdb-global-writer-lock.json"
 
 
+class LockRefNotVisible(RuntimeError):
+    """A newly created lock ref has not become readable yet; never imply ownership."""
+
+
 def _api(repository: str, endpoint: str, *, method: str = "GET", data: dict | None = None) -> dict:
     if not os.environ.get("GH_TOKEN"):
         raise RuntimeError("GH_TOKEN required for cross-repository CDB lock")
@@ -63,7 +67,9 @@ def _assert_ownership(repository: str, state: dict) -> None:
     if state.get("repository") != repository or state.get("owner") != _owner():
         raise RuntimeError("CDB lock state belongs to a different repository/run")
     remote = _remote_lock(repository)
-    sha = (remote or {}).get("object", {}).get("sha")
+    if remote is None:
+        raise LockRefNotVisible("CDB lock ref not visible after creation")
+    sha = remote.get("object", {}).get("sha")
     if not sha or sha != state.get("tag_sha"):
         raise RuntimeError("CDB lock missing or owned by a different writer")
     tag = _api(repository, f"git/tags/{sha}")
@@ -110,7 +116,18 @@ def acquire(repository: str, state_file: Path, *, wait_seconds: int = 1800,
         state_file.write_text(json.dumps(state, indent=2), encoding="utf-8")
         # Verification failure after acquisition is fatal, not a reason to
         # retry creation against our own lock.
-        _assert_ownership(repository, state)
+        # GitHub can briefly return 404 immediately after an atomic ref create.
+        # Only a truly absent ref may be re-read; a different/corrupt owner or
+        # an API authorization error MUST fail closed without any retry.
+        for attempt in range(4):
+            try:
+                _assert_ownership(repository, state)
+            except LockRefNotVisible:
+                if attempt == 3:
+                    raise
+                time.sleep(1)
+            else:
+                break
         print(f"CDB global lock acquired: {owner}", flush=True)
         return state
 
