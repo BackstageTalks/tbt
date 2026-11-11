@@ -9442,7 +9442,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     try{
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
-      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');if(generation!==feedGeneration)return;
+      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);if(generation!==feedGeneration)return;
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
@@ -9601,15 +9601,26 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     let enabled=false;
     try{enabled=new URLSearchParams(location.search).get('blinq_boot_trace')==='1';}catch{}
     if(!enabled)return null;
-    const marks=[];
+    const marks=[],backend=[];
     return {
       mark(label){marks.push([label,Math.round(performance.now())]);},
+      addBackendStages(stages){
+        if(!Array.isArray(stages))return;
+        stages.slice(0,16).forEach(item=>{
+          if(!Array.isArray(item)||item.length!==2)return;
+          const [name,value]=item;
+          if(typeof name==='string'&&/^[a-z_]{2,32}$/.test(name)&&Number.isFinite(value)&&value>=0){
+            backend.push(`${name}: ${Math.round(value)} ms`);
+          }
+        });
+      },
       report(){
         const navigation=performance.getEntriesByType('navigation')[0];
         const phases=marks.map(([label,ms])=>`${label}: ${ms} ms`);
         if(navigation)phases.unshift(`DOM pripravený: ${Math.round(navigation.domContentLoadedEventEnd)} ms`);
-        const message='BlinQ – čas štartu od otvorenia stránky\n\n'+phases.join('\n')+'\n\nPošli snímku tejto diagnostiky.';
-        console.info('[BlinQ boot timing]\n'+phases.join('\n'));
+        const server=backend.length?'\n\nSERVER FEED (čas od prijatia požiadavky):\n'+backend.join('\n'):'';
+        const message='BlinQ – čas štartu od otvorenia stránky\n\n'+phases.join('\n')+server+'\n\nPošli snímku tejto diagnostiky.';
+        console.info('[BlinQ boot timing]\n'+phases.join('\n')+server);
         setTimeout(()=>window.alert(message),450);
       }
     };
