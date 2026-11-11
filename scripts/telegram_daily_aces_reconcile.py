@@ -45,40 +45,98 @@ def _post(base, day, receipt, mode, digest=""):
     return data
 
 
-def _attempt_for_day(state,day):
-    reposts=[batch for key,batch in (state.get("reposts") or {}).items()
-             if key.startswith(day+":repost:") and isinstance(batch,dict)
-             and batch.get("status")=="sent"
-             and batch.get("supersedes_daily") is True]
-    if len(reposts)>1:
+def _aces_key(row):
+    """Match exact issued O/U contracts, not only their event or player."""
+    return tuple(str(row.get(key) or "") for key in (
+        "channel", "section", "market", "event_id", "selection_id",
+        "publication_key", "market_line", "projection_direction",
+    ))
+
+
+def _receipts_for_day(state, day):
+    """Original daily receipt plus genuinely new ACES in sent daily refreshes.
+
+    Never resubmit a refreshed copy of an original contract: the native CAS
+    writer correctly rejects its later `sent_at` as an issuance-time conflict.
+    Keep all private ledger objects unchanged and use the existing native writer.
+    """
+    reposts = [batch for key, batch in (state.get("reposts") or {}).items()
+               if key.startswith(day + ":repost:") and isinstance(batch, dict)
+               and batch.get("status") == "sent"
+               and batch.get("supersedes_daily") is True]
+    if len(reposts) > 1:
         raise RuntimeError("Ambiguous superseding Telegram receipt")
     if reposts:
-        return reposts[0]
-    return (state.get("attempts") or {}).get(day+":daily:0620")
+        return reposts
+
+    attempts = state.get("attempts") or {}
+    original_key = day + ":daily:0620"
+    original = attempts.get(original_key)
+    if not isinstance(original, dict) or original.get("status") != "sent":
+        return []
+
+    seen = {}
+    for row in original.get("rows") or []:
+        if isinstance(row, dict) and row.get("channel") == "aces":
+            key = _aces_key(row)
+            if key in seen:
+                raise RuntimeError("Duplicated original Telegram ACES contract")
+            seen[key] = row
+
+    receipts = [original]
+    for key, batch in sorted(attempts.items()):
+        if (not key.startswith(day + ":daily:refresh-")
+                or not isinstance(batch, dict) or batch.get("status") != "sent"):
+            continue
+        added = []
+        for row in batch.get("rows") or []:
+            if not isinstance(row, dict) or row.get("channel") != "aces":
+                continue
+            identity = _aces_key(row)
+            previous = seen.get(identity)
+            if previous is not None:
+                if previous != row:
+                    raise RuntimeError("Conflicting duplicate refreshed ACES contract")
+                continue
+            seen[identity] = row
+            added.append(row)
+        if added:
+            # Exact subset of a confirmed issuance, with original message IDs,
+            # send timestamp and contract fields. Do not mutate the ledger.
+            isolated = dict(batch)
+            isolated["rows"] = added
+            receipts.append(isolated)
+    return receipts
 
 
 def reconcile(state, base, *, now=None, sender=_post):
-    now=now or datetime.now(timezone.utc)
-    day=results.unreported_day(state,now)
+    now = now or datetime.now(timezone.utc)
+    day = results.unreported_day(state, now)
     if not day:
-        return {"status":"skipped","reason":"no_unreported_issued_day"}
-    receipt=_attempt_for_day(state,day)
-    if not receipt:
-        return {"status":"skipped","reason":"not_a_daily_telegram_issue"}
-    prepared=sender(base,day,receipt,"dry-run")
-    if prepared["net_new_aces"]<1:
-        return {"status":"read_only","day":day,
-                "already_verified":prepared["already_verified"],
-                "pending_evidence":prepared["pending_evidence"],
-                "net_new_aces":0}
-    committed=sender(base,day,receipt,"commit",prepared["digest"])
-    if (committed.get("digest")!=prepared["digest"]
-            or committed.get("readback_new_aces")!=prepared["net_new_aces"]):
-        raise RuntimeError("Daily ACE exact Results read-back mismatch")
-    return {"status":"verified","day":day,
-            "net_new_aces":committed["readback_new_aces"],
-            "already_verified":committed["already_verified"],
-            "pending_evidence":committed["pending_evidence"]}
+        return {"status": "skipped", "reason": "no_unreported_issued_day"}
+    receipts = _receipts_for_day(state, day)
+    if not receipts:
+        return {"status": "skipped", "reason": "not_a_daily_telegram_issue"}
+
+    totals = {"already_verified": 0, "pending_evidence": 0, "net_new_aces": 0}
+    for receipt in receipts:
+        prepared = sender(base, day, receipt, "dry-run")
+        if any(type(prepared.get(key)) is not int or prepared[key] < 0
+               for key in totals):
+            raise RuntimeError("Invalid daily ACES dry-run counts")
+        totals["already_verified"] += prepared["already_verified"]
+        totals["pending_evidence"] += prepared["pending_evidence"]
+        if prepared["net_new_aces"] < 1:
+            continue
+
+        committed = sender(base, day, receipt, "commit", prepared["digest"])
+        if (committed.get("digest") != prepared["digest"]
+                or committed.get("readback_new_aces") != prepared["net_new_aces"]):
+            raise RuntimeError("Daily ACE exact Results read-back mismatch")
+        totals["net_new_aces"] += committed["readback_new_aces"]
+
+    return {"status": "verified" if totals["net_new_aces"] else "read_only",
+            "day": day, **totals}
 
 
 def main():
