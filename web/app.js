@@ -1427,7 +1427,8 @@
     const value=raw==null?NaN:Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;
   }
   function surfaceSampleLabel(row){const q=row?.quality||{},s1=Number(q?.player1?.surface_matches),s2=Number(q?.player2?.surface_matches);return Number.isFinite(s1)&&Number.isFinite(s2)?`${Math.min(s1,s2)}+`:'—';}
-  function dataDepthMetric(row){
+  function dataDepthMetric(row,historyOnly=true){
+    if(!historyOnly){const depth=Number(row?.data_depth);return Number.isFinite(depth)?`${Math.round(Math.max(0,Math.min(1,depth))*100)}%`:'—';}
     // Count-only depth is not actual serve/return coverage.
     const q=row?.quality||{},a=q?.player1?.matches,b=q?.player2?.matches;
     const valid=v=>v!=null&&Number.isFinite(Number(v))&&Number(v)>=0;
@@ -3436,7 +3437,7 @@
       const selectionId=String(row?.betting?.selection_id||row?.selection_id||'');
       if(key==='prime'||key==='top_daily'){metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('History','História','Historie'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)],[lcopy('Form','Forma','Forma'),publicFormLabel(row,selectionId)]];}
       else if(key==='value'){metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('History','História','Historie'),dataDepthMetric(row)],[lcopy('Market','Trh','Trh'),closeMarketLabel(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
-      else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
+      else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row,false)],[publicText('Surface'),surfaceSampleLabel(row)]];}
       badge=probability==null?publicText('MODEL'):confidenceLabel(confidenceBand(probability));mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
     const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(player,side)=>sideAvatarHtml(row,player,side,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
