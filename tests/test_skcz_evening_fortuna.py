@@ -94,6 +94,45 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(result['candidate_urls'], 0)
         self.assertEqual(result['exact_aces_pairs'], 0)
 
+
+    def test_round_robin_tournaments_with_first_index_full_of_one_tournament(self):
+        a = f.ORIGIN + "/stavkovanie/tenis/atp/m-stockholm/one-two"
+        b = f.ORIGIN + "/stavkovanie/tenis/atp/m-stockholm/three-four"
+        w = f.ORIGIN + "/stavkovanie/tenis/wta/m-wta-finals/five-six"
+        self.assertEqual(f.select_diverse_urls([a, b, w], 2), [a, w])
+        self.assertEqual(f.select_diverse_urls([a, b, w], 3), [a, w, b])
+
+    def test_follow_publicly_linked_tournament_category_to_other_matches(self):
+        wta = f.ORIGIN + "/stavkovanie/tenis/wta/m-wta-finals"
+        atp = f.ORIGIN + "/stavkovanie/tenis/atp/m-atp-stockholm/one-two"
+        womens = f.ORIGIN + "/stavkovanie/tenis/wta/m-wta-finals/five-six"
+        index = (
+            '<a href="/stavkovanie/tenis/atp/m-atp-stockholm/one-two">ATP</a>'
+            '<a href="/stavkovanie/tenis/wta/m-wta-finals">WTA draw</a>'
+        )
+        def get(url):
+            if url == f.INDEX:
+                return index
+            if url == wta:
+                return '<a href="/stavkovanie/tenis/wta/m-wta-finals/five-six">WTA</a>'
+            if url in (atp, womens):
+                return page(market='Počet gemov v zápase')
+            raise AssertionError("Unexpected network request: " + url)
+        report = f.collect(date(2026, 11, 10), max_events=10, sleep_seconds=0,
+                           now=NOW, get=get)
+        self.assertEqual(report["candidate_urls"], 2)
+        self.assertEqual(report["probed_urls"], 2)
+        self.assertEqual(report["candidate_tournaments"], 2)
+        self.assertEqual(report["probed_tournaments"], 2)
+        self.assertEqual(report["catalog_pages_scanned"], 1)
+        self.assertEqual(report["exact_aces_pairs"], 0)
+
+    def test_audit_preserves_public_market_names_without_faking_aces(self):
+        row = self.detail(market='Počet gemov v zápase')
+        self.assertEqual(row['aces_markets'], [])
+        self.assertIn('Počet gemov v zápase', row['market_group_titles_sample'])
+        self.assertIn('Víťaz zápasu', row['market_group_titles_sample'])
+
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):
             f.collect(date(2026, 11, 8), now=NOW, get=lambda _: INDEX)
