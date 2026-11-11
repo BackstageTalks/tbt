@@ -311,3 +311,52 @@ def test_value_exact_issued_scope_is_independent_of_top_and_old_versions():
     import pytest
     with pytest.raises(ValueError, match="TOP and VALUE"):
         analyze(rows, now=NOW, section="prime")
+
+
+def test_issued_itf_market_disagreement_and_70_75_cohort_are_point_in_time():
+    row = _with_confirmed_model_quote(fixture(
+        "itf-risk", adjusted=.718, raw=.75, odds=2.70, level="ITF"
+    ))
+    row["tournament"] = "ITF M25 Montreal"
+    pub = row["market_publications"][0]
+    for key in ("issued_snapshot", "prepared_snapshot"):
+        pub[key]["quality"] = {
+            "feature_evidence": {"serve_return_known_both": False},
+        }
+        pub[key]["two_way_match_winner"]["player2_odds"] = 1.50
+    original = deepcopy(row)
+    report = analyze([row], now=NOW, model_version="v7.2.1-test")
+    assert report["overall"]["settled"] == 1
+    assert report["subgroups"]["itf_grade"]["ITF_M25"]["published"] == 1
+    assert report["subgroups"]["market_disagreement"]["outsider_gap_over_25pp"]["published"] == 1
+    assert report["subgroups"]["serve_return_evidence"]["one_or_both_missing"]["published"] == 1
+    assert report["subgroups"]["confidence_70_75"]["70_to_75"]["published"] == 1
+    assert row == original
+
+
+def test_issued_favorite_and_unverified_coverage_not_invented():
+    row = _with_confirmed_model_quote(fixture(
+        "w35", adjusted=.718, raw=.75, odds=1.52, level="ITF"
+    ))
+    row["tournament"] = "ITF W35 Heraklion"
+    report = analyze([row], now=NOW, model_version="v7.2.1-test")
+    assert report["subgroups"]["itf_grade"]["ITF_W35"]["published"] == 1
+    assert report["subgroups"]["market_disagreement"]["market_favorite_or_even"]["published"] == 1
+    assert report["subgroups"]["serve_return_evidence"]["unverified"]["published"] == 1
+
+
+def test_itf_grade_requires_label_and_does_not_mistake_atp_gender():
+    from audit_top_reliability import itf_grade
+    assert itf_grade({"tour": "ATP", "competition": "ATP", "tournament": "Test"}) == "ATP"
+    assert itf_grade({"tour": "ATP", "competition": "ITF Men", "tournament": "M 15 Test"}) == "ITF_M15"
+    assert itf_grade({"tour": "ATP", "competition": "ITF Men", "tournament": "M-25 Test"}) == "ITF_M25"
+    assert itf_grade({"tour": "ATP", "competition": "ITF Men", "tournament": "M150"}) == "ITF_unspecified"
+
+
+def test_winner_history_ui_does_not_claim_count_depth_is_data_coverage():
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1] / "web" / "app.js").read_text(encoding="utf-8")
+    assert "High coverage" not in source and "Vysoké pokrytie" not in source
+    assert "coverage.history+' · '+coverage.serve" in source
+    assert "row?.quality||{},a=q?.player1?.matches,b=q?.player2?.matches" in source
+    assert "S/R neoverené" in source  # Missing pre-match evidence stays unknown.
