@@ -9,7 +9,7 @@ ROUTES = json.loads((ROOT / "web" / "staticwebapp.config.json").read_text(encodi
 
 
 def test_presentation_requests_start_before_runtime_config_wait():
-    start = APP.index("async function loadUiConfig()")
+    start = APP.index("async function loadUiConfig(deferInitialRender=false)")
     end = APP.index("async function ", start + 10)
     body = APP[start:end]
     assert "const presentationReady=fetchEditablePresentationConfig().catch(()=>null);" in body
@@ -21,6 +21,7 @@ def test_presentation_requests_start_before_runtime_config_wait():
 
 def test_authenticated_feed_prefetch_overlaps_auth_and_ui_but_not_render():
     boot = APP[APP.index("async function boot(){"):]
+    assert "const uiReady=loadUiConfig(true)" in boot
     assert "const prefetchedFeed=session?BlinqAuth.feed():null;" in boot
     assert "if(prefetchedFeed)prefetchedFeed.catch(()=>{});" in boot
     assert boot.index("const prefetchedFeed=") < boot.index("await authReady")
@@ -40,3 +41,15 @@ def test_static_resources_can_reuse_browser_cache_but_runtime_config_cannot():
         assert "no-store" in routes[path]
     assert "cache:'no-store'" in APP  # live config remains uncached
     assert "fast-boot=20261101-1" in HTML
+
+def test_boot_defers_hidden_dashboard_render_but_preserves_public_login():
+    config = APP[APP.index("async function loadUiConfig(deferInitialRender=false)"):APP.index("function applyAccessContractV1")]
+    boot = APP[APP.index("async function boot(){"):]
+    feed = APP[APP.index("async function loadFeed(showLoading=true){"):APP.index("async function refreshWorkspace(showLoading=false){")]
+    assert "if(!deferInitialRender)renderAllUiContent();" in config
+    assert "const uiReady=loadUiConfig(true)" in boot
+    assert "uiReady.then(loaded=>{if(loaded&&$('appShell').hidden)renderAllUiContent();})" in boot
+    assert "if(!session){" in boot
+    assert "finishBootSplash();" in boot
+    assert feed.index("const feed=(await (pendingFeed||BlinqAuth.feed()))||{};") < feed.index("renderAllUiContent();")
+    assert feed.index("renderAllUiContent();") < feed.index("$('appShell').hidden=false")
