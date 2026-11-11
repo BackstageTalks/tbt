@@ -981,6 +981,8 @@
       "requires_odds": true,
       "objective": "competition_then_probability",
       "min_probability": 0.65,
+      "itf_min_probability_exclusive": 0.65,
+      "itf_max_odds_inclusive": 1.7,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -993,7 +995,7 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "ATP/WTA >=65% first. If below 3, Challenger >=65%, then ITF women W35+ >=65% ONLY with verified pre-match paired serve/return and surface statistics. All men ITF and unknown ITF levels excluded from TOP. Price and depth guards, VALUE priority and no forced fill remain.",
+      "cascade": "ATP/WTA >=65% first; if below 3, Challenger >=65%; if still below 3, ITF strictly >65% and verified price 1.50–1.70 inclusive. Existing fail-closed women W35+ pre-match serve/return and surface S/R evidence gate applies; male/ambiguous ITF excluded. Keep quality checks, VALUE priority, and no forced fill.",
       "confidence_tiers": [
         0.65
       ],
