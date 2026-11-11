@@ -58,12 +58,26 @@ def competition_group(row):
     return "unknown"
 
 
+def is_itf_m15_m25(row):
+    """Exact ITF M15/M25 label guard; a generic ATP gender tag is insufficient."""
+    if competition_group(row) != "ITF":
+        return False
+    labels = " ".join(str(row.get(key) or "") for key in (
+        "competition", "tournament_level", "tournament"
+    )).lower()
+    return bool(re.search(r"(?<![a-z0-9])m[\s-]?(?:15|25)(?![a-z0-9])", labels))
+
+
 def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5, min_odds=1.50):
     from .price_integrity import extreme_winner_price_inversion, unsubstantiated_high_confidence_winner
 
     reasons = []
     if competition_group(card) not in {"ATP", "WTA", "Challenger", "WTA 125", "ITF"}:
         reasons.append("competition_not_approved")
+    # Temporary TOP-only hold pending independently graded M15/M25 calibration.
+    # This changes neither issued selections nor VALUE/PRIME or model probabilities.
+    if is_itf_m15_m25(card):
+        reasons.append("itf_m15_m25_top_hold_pending_calibration")
     if card.get("prediction_family") == "doubles":
         reasons.append("not_singles")
     bet = card.get("betting") if isinstance(card.get("betting"), dict) else {}

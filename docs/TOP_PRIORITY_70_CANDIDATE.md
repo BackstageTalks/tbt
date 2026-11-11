@@ -79,3 +79,35 @@ serving model bytes and isolated restored predictions matched (difference zero).
 No training, model promotion, CDB mutation, extra backups or provider calls were
 performed for this policy rollout. A code rollback must preserve newer unrelated
 changes and must not retroactively alter published betting contracts.
+
+
+## 2026-11-11 — M15/M25 TOP evidence incident and scoped hold
+
+Observed concern: published ITF M15/M25 Match Winner picks showed about 71%
+BlinQ-adjusted probability despite long bookmaker odds. A single lost bet
+is not evidence of model miscalibration; the active `data_depth` definition
+was independently inspected and is **only** `min(player1.matches,
+player2.matches, 50) / 50`. At 50 matches per player it becomes 100%,
+even when pre-match serve/return, surface serve/return and rank information
+is unavailable. It must not be described as broad data completeness
+or empirically calibrated reliability.
+
+Safety action for *future* selection only: ITF M15 and M25 tournaments
+are held out of new TOP Match Winner issuance pending independent
+point-in-time and settled-outcome calibration. Other ITF levels,
+ATP/WTA, Challenger/WTA125 and the existing VALUE/PRIME/ACES
+contracts are unchanged. TOP may contain fewer than three picks;
+no replacement is fabricated and no original issued selection or result
+is rewritten. The model, public probability formula and frozen trained
+feature semantics stay unchanged.
+
+Observability action: snapshot pre-match availability of paired serve/return,
+surface serve/return, rank values and the historical match-count depth as
+distinct fields, without claiming a new calibrated aggregate score.
+
+**Remaining gate**: measure M15/M25 and ATP/WTA source availability,
+pre-match field coverage and held-out reliability by probability band
+(including 70–75%) against original quoted bookmaker implied probabilities.
+Reassess re-entry only with enough independent settled observations.
+Check relevant CI then first fresh real morning TOP snapshot and
+publication read-back; a code merge is not deployment proof.

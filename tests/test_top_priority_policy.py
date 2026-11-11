@@ -88,3 +88,58 @@ def test_secondary_probability_order_and_itf_only_fill_remaining_slots():
     rows = [pick("itf", .95, "ITF Men"), pick("secondary-low", .71, "Challenger"),
             pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
     assert ids(select_market_sections(rows)) == ["main", "secondary-high", "secondary-low"]
+
+
+@pytest.mark.parametrize("tournament", [
+    "ITF M15 Monastir", "ITF M25 Antalya", "ITF M 15 Futures",
+])
+def test_m15_m25_top_hold_pending_calibration(tournament):
+    card = pick("itf-risk", .71, "ITF Men", odds=2.70, other=1.50)
+    card["tournament"] = tournament
+    before = deepcopy(card)
+    selected = select_market_sections([card])
+    assert ids(selected) == []
+    assert selected["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
+    assert selected["market_selection"]["top_rejection_counts"][
+        "itf_m15_m25_top_hold_pending_calibration"
+    ] == 1
+    assert card == before  # preserve source and existing issued records
+    snap = build_selection_candidate_snapshot(
+        [card], generated_at=datetime(2026, 11, 11, 6, tzinfo=timezone.utc)
+    )
+    assert "itf_m15_m25_top_hold_pending_calibration" in snap["rows"][0]["top_rejection_reasons"]
+    assert snap["rows"][0]["selected_section"] is None
+
+
+def test_m15_m25_hold_does_not_change_value_or_generic_itf_top():
+    m15 = pick("value-m15", .71, "ITF Men", odds=1.91, other=1.95)
+    m15["tournament"] = "ITF M15"
+    normal_itf = pick("itf-other", .75, "ITF Women", odds=1.60)
+    out = select_market_sections([m15, normal_itf])
+    assert ids(out) == ["itf-other"]
+    assert [x["event_id"] for x in out["value_picks"]] == ["value-m15"]
+
+
+def test_m15_m25_hold_does_not_false_match_m150_or_main_tours():
+    m150 = pick("itf-150", .75, "ITF Men")
+    m150["tournament"] = "ITF M150"
+    atp = pick("atp", .72, "ATP")
+    out = select_market_sections([m150, atp])
+    assert ids(out) == ["atp", "itf-150"]
+
+
+def test_feature_availability_snapshot_is_not_a_calibration_claim():
+    card = pick("availability")
+    evidence = {
+        "historical_count_depth": 1.0,
+        "serve_return_known_both": False,
+        "surface_serve_return_known_both": False,
+        "rank_values_known_both": False,
+        "meaning": "pre_match_feature_availability_not_calibrated_confidence",
+    }
+    card["quality"]["feature_evidence"] = evidence
+    snap = build_selection_candidate_snapshot(
+        [card], generated_at=datetime(2026, 11, 11, 6, tzinfo=timezone.utc)
+    )
+    assert snap["rows"][0]["feature_evidence"] == evidence
+    assert snap["rows"][0]["data_depth"] == 1.0
