@@ -35,7 +35,8 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME retains its own policy. TOP targets three with ATP/WTA priority and a 70% hard floor. VALUE keeps the existing 65% floor and 15% odds gap.
+# PRIME retains its own policy. TOP targets three: ATP/WTA 70/68/65
+# tiers first, ITF then Challenger only at >=70. VALUE is unchanged.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -46,7 +47,7 @@ PUBLICATION_MIN_PROBABILITY = 0.65
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
@@ -1006,43 +1007,59 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int = TOP_TARGET_COUNT,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Prefer ATP/WTA, then secondary tours, then ITF; never weaken evidence.
+    """ATP/WTA 70 → 68 → 65 first; then ITF and Challenger at 70.
 
-    Within each competition group, rank by descending model probability.
-    ``backup`` is retained for call compatibility but cannot bypass core gates.
+    Distinct tiers are applied in order, with no lowered evidence/odds gates.
+    Existing M15/M25 and ITF market-inversion holds are enforced upstream.
+    Empty eligible tiers cannot manufacture the preferred three slots.
+    ``backup`` is retained for compatibility, never an evidence bypass.
     """
     from .top_policy import competition_group
-    selected = []
-    seen = set()
-    applied = []
-    for label, groups in (("main", {"ATP", "WTA"}),
-                          ("secondary", {"Challenger", "WTA 125"}),
-                          ("itf", {"ITF"})):
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    applied: list[dict[str, Any]] = []
+    tiers = (
+        ("main", {"ATP", "WTA"}, .70),
+        ("main", {"ATP", "WTA"}, .68),
+        ("main", {"ATP", "WTA"}, .65),
+        ("itf", {"ITF"}, .70),
+        ("challenger", {"Challenger"}, .70),
+    )
+    for step, (label, groups, floor) in enumerate(tiers):
         eligible = sorted(
-            [card for card in core if competition_group(card) in groups
-             and (_number(card.get("probability")) or 0) >= .70],
+            (card for card in core
+             if competition_group(card) in groups
+             and (_number(card.get("probability")) or 0) + 1e-12 >= floor
+             and str(card.get("event_id") or "") not in seen),
             key=lambda card: (float(_number(card.get("probability")) or 0),
-                              _top_quality_rank(card)), reverse=True)
+                              _top_quality_rank(card)), reverse=True,
+        )
+        added = 0
         for card in eligible:
             event = str(card.get("event_id") or "")
-            if event in seen or len(selected) >= target:
+            if not event or event in seen or len(selected) >= target:
                 continue
             item = deepcopy(card)
-            item["selection_tier"] = f"{label}_0.70"
+            item["selection_tier"] = f"{label}_{floor:.2f}"
             selected.append(item)
             seen.add(event)
-        if eligible:
-            applied.append({"competition_tier": label, "min_probability": .70})
+            added += 1
+        if added:
+            applied.append({"competition_tier": label, "min_probability": floor,
+                            "selected": added, "step": step})
         if len(selected) >= target:
             break
-    return selected, 0, {
-        "step": 0, "min_probability": .70,
-        "min_odds": TOP_FALLBACK_MIN_ODDS, "target": target, "minimum": minimum,
-        "core_pool": len(core), "backup_pool": 0, "backup_selected": 0,
-        "shortfall": max(0, minimum-len(selected)), "applied_tiers": applied,
-        "rank": "competition_then_probability_then_model_market_consensus",
-    }
 
+    fallback_count = sum(row["selection_tier"] != "main_0.70" for row in selected)
+    final_floor = applied[-1]["min_probability"] if applied else .70
+    return selected, fallback_count, {
+        "step": applied[-1]["step"] if applied else 0,
+        "min_probability": final_floor, "min_odds": TOP_FALLBACK_MIN_ODDS,
+        "target": target, "minimum": minimum,
+        "core_pool": len(core), "backup_pool": 0, "backup_selected": 0,
+        "shortfall": max(0, minimum - len(selected)), "applied_tiers": applied,
+        "rank": "main_70_68_65_then_ITF_70_then_Challenger_70",
+    }
 
 def _fill_top_dynamic(
     core: list[dict[str, Any]],
@@ -1251,7 +1268,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "priority_tours_top_v19",
+            "selection_policy": "priority_tours_top_v20",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1295,7 +1312,9 @@ def select_market_sections(
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
-                "top_probability_tiers": [0.70],
+                "top_probability_tiers": [0.70, 0.68, 0.65],
+                "top_competition_order": ["ATP/WTA", "ITF", "Challenger"],
+                "secondary_competition_probability_floor": 0.70,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
