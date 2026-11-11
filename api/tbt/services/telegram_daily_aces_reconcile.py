@@ -82,10 +82,22 @@ def _frozen_receipt(day, receipt):
     return sent_at, aces
 
 
-def _source_for(ref, feed, archived):
+def _source_for(ref, feed, archived, *, issued_rollover=None, day=""):
     event, selection, scheduled = (str(ref.get(k) or "")
                                     for k in ("event_id", "selection_id", "scheduled_at"))
     candidates = list(feed.get("ace_picks") or []) + list(archived)
+    # Once the 06:00 feed rotates, the immutable previous-day issuance is
+    # available in the independently persisted match-status rollover snapshot.
+    # It is eligible only as roster/source evidence, never as a result.
+    for issued in issued_rollover or []:
+        if (not isinstance(issued, dict)
+                or issued.get("confirmed_only") is not True
+                or issued.get("betting_day") != day
+                or issued.get("section") != "ace_picks"):
+            continue
+        original_row = issued.get("row")
+        if isinstance(original_row, dict):
+            candidates.append(original_row)
     found = []
     for row in candidates:
         if (not isinstance(row, dict)
@@ -183,7 +195,9 @@ def reconcile(day, receipt, feed, snapshot, *, dry_run=True,
             existing.setdefault(identity, []).append(pub)
     pending, candidates, already = 0, {}, 0
     for ref in refs:
-        source = _source_for(ref, feed, archived)
+        source = _source_for(
+            ref, feed, archived,
+            issued_rollover=snapshot.get("rollover_issued_rows"), day=day)
         if source is None:
             pending += 1
             continue
