@@ -124,12 +124,17 @@
       headers['Content-Type'] = 'application/json';
     }
     let response;
+    // Some older mobile browsers lack AbortSignal.timeout; preserve the
+    // deadline using AbortController without changing server auth semantics.
+    const nativeTimeout = fetchOptions.signal || safeTimeout(timeoutMs);
+    const controller = !nativeTimeout && typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller && timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
     try {
       response = await fetch(url, {
         ...fetchOptions,
         headers,
         cache: 'no-store',
-        signal: fetchOptions.signal || safeTimeout(timeoutMs),
+        signal: nativeTimeout || controller?.signal,
       });
     } catch (cause) {
       const timeout = cause?.name === 'TimeoutError' || cause?.name === 'AbortError';
@@ -138,6 +143,8 @@
       error.code = timeout ? 'AUTH_TIMEOUT' : 'AUTH_NETWORK_ERROR';
       error.cause = cause;
       throw error;
+    } finally {
+      if (timer !== null) clearTimeout(timer);
     }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
