@@ -72,7 +72,7 @@ def is_itf_m15_m25(row):
 
 
 def unverified_top_market_outsider(card):
-    """Hold severe TOP-only market/model favorite inversion for review.
+    """Hold severe ITF TOP-only market/model favorite inversion for review.
 
     Requires the original two-way, no-vig price evidence. A high-priced pick
     which the bookmaker still favors is not automatically rejected; nor do
@@ -80,7 +80,9 @@ def unverified_top_market_outsider(card):
     independent prospective calibration, not one favorable outcome.
     """
     bet = card.get("betting") if isinstance(card.get("betting"), dict) else {}
-    if bet.get("market") != "match_winner":
+    # Scope this temporary constraint to ITF. ATP/WTA/Challenger existing
+    # validated and explicitly authorized policies remain unchanged.
+    if competition_group(card) != "ITF" or bet.get("market") != "match_winner":
         return False
     public = number(card.get("probability"))
     fair = number(bet.get("fair_implied_probability"))
