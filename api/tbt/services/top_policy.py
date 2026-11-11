@@ -72,6 +72,25 @@ def is_itf_m15_m25(row):
 
 
 
+
+def qualified_itf_w35plus_evidence(card):
+    """Fail-closed: ITF women W35+ with paired PIT stats on overall and surface.
+
+    A generic WTA tour/gender label is not grade evidence. M-level men's ITF,
+    unknown/wrong ITF grades and missing pre-match feature flags cannot enter TOP.
+    """
+    if competition_group(card) != "ITF":
+        return False
+    labels = " ".join(str(card.get(k) or "") for k in (
+        "competition", "tournament_level", "tournament")).lower()
+    if not re.search(r"(?<![a-z0-9])w[\s-]?(?:35|50|60|75|80|100)(?![a-z0-9])", labels):
+        return False
+    q = card.get("quality") if isinstance(card.get("quality"), dict) else {}
+    ev = q.get("feature_evidence") if isinstance(q.get("feature_evidence"), dict) else {}
+    return (ev.get("serve_return_known_both") is True
+            and ev.get("surface_serve_return_known_both") is True)
+
+
 def unverified_top_market_outsider(card):
     """Hold severe ITF TOP-only market/model favorite inversion for review.
 
@@ -103,6 +122,8 @@ def rejection_reasons(card, *, min_probability=.65, min_depth=.80, min_surface=5
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.
     if is_itf_m15_m25(card):
         reasons.append("itf_m15_m25_top_hold_pending_calibration")
+    if group == "ITF" and not qualified_itf_w35plus_evidence(card):
+        reasons.append("itf_top_requires_verified_w35plus")
     if unverified_top_market_outsider(card):
         reasons.append("top_unverified_market_outsider_conflict")
     if card.get("prediction_family") == "doubles":
