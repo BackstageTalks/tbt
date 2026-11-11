@@ -1427,7 +1427,13 @@
     const value=raw==null?NaN:Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;
   }
   function surfaceSampleLabel(row){const q=row?.quality||{},s1=Number(q?.player1?.surface_matches),s2=Number(q?.player2?.surface_matches);return Number.isFinite(s1)&&Number.isFinite(s2)?`${Math.min(s1,s2)}+`:'—';}
-  function dataDepthMetric(row){const depth=Number(row?.data_depth);return Number.isFinite(depth)?`${Math.round(Math.max(0,Math.min(1,depth))*100)}%`:'—';}
+  function dataDepthMetric(row,historyOnly=true){
+    if(!historyOnly){const depth=Number(row?.data_depth);return Number.isFinite(depth)?`${Math.round(Math.max(0,Math.min(1,depth))*100)}%`:'—';}
+    // Count-only depth is not actual serve/return coverage.
+    const q=row?.quality||{},a=q?.player1?.matches,b=q?.player2?.matches;
+    const valid=v=>v!=null&&Number.isFinite(Number(v))&&Number(v)>=0;
+    return valid(a)&&valid(b)?`${Math.trunc(Number(a))} / ${Math.trunc(Number(b))}`:'—';
+  }
   function explicitTournamentCountry(row){
     const raw=row?.tournament_country_code||row?.tournament_country||row?.venue_country_code||row?.venue_country||row?.competition_country_code||row?.competition_country||row?.location?.country_code||row?.location?.country||'';
     return normalizeCountryCode(raw);
@@ -2748,10 +2754,15 @@
     return pctValue.toFixed(pctValue<10?1:0)+'%';
   }
   function dataCoverageInfo(row){
-    const depth=Number(row?.data_depth);
-    const pctValue=Number.isFinite(depth)?Math.round(Math.max(0,Math.min(1,depth))*100):null;
-    const label=pctValue==null?'—':pctValue>=85?lcopy('High coverage','Vysoké pokrytie','Vysoké pokrytí'):pctValue>=65?lcopy('Good coverage','Dobré pokrytie','Dobré pokrytí'):lcopy('Limited coverage','Obmedzené pokrytie','Omezené pokrytí');
-    return {pct:pctValue,label};
+    // Historical count is not broad data coverage and must not be described as such.
+    const q=row?.quality||{},a=q?.player1?.matches,b=q?.player2?.matches;
+    const valid=v=>v!=null&&Number.isFinite(Number(v))&&Number(v)>=0;
+    const history=valid(a)&&valid(b)?`${Math.trunc(Number(a))} / ${Math.trunc(Number(b))}`:'—';
+    const e=q?.feature_evidence;
+    const serve=e&&typeof e.serve_return_known_both==='boolean'
+      ?e.serve_return_known_both?lcopy('S/R available','S/R dostupné','S/R dostupné'):lcopy('S/R unavailable','S/R chýba','S/R chybí')
+      :lcopy('S/R unverified','S/R neoverené','S/R neověřené');
+    return {history,serve};
   }
   function playerInsightStats(row,side){
     const match=normalize(row);
@@ -2828,12 +2839,17 @@
     const match=normalize(row),stats1=playerInsightStats(row,1),stats2=playerInsightStats(row,2);const probability=marketProbability(row);const line=apiMarketLine(row),odds=Number(row?.odds??row?.betting?.odds),ev=Number(row?.expected_value??row?.betting?.expected_value);
     const lineValue=tab==='ace'||tab==='double_faults'||tab==='games'?(Number.isFinite(line)?line.toFixed(1):'—'):(Number.isFinite(odds)?odds.toFixed(2):'—');
     const marketLabel=tab==='value'?lcopy('Close market','Trh','Trh'):tab==='ace'?lcopy('Aces line','Hranica es','Hranica es'):tab==='double_faults'?lcopy('Double faults line','Hranica dvojchýb','Hranice dvojchyb'):tab==='games'?lcopy('Games line','Hranica gemov','Hranice gemů'):lcopy('Odds','Kurz','Kurz');
-    const coverage=dataCoverageInfo(row);
+    const winnerTab=['daily','top','prime','value'].includes(tab);
+    const coverage=winnerTab?dataCoverageInfo(row):null;
+    const oldDepth=Number(row?.data_depth);
+    const oldPct=Number.isFinite(oldDepth)?Math.round(Math.max(0,Math.min(1,oldDepth))*100):null;
+    const oldLabel=oldPct==null?'—':oldPct>=85?lcopy('High coverage','Vysoké pokrytie','Vysoké pokrytí'):oldPct>=65?lcopy('Good coverage','Dobré pokrytie','Dobré pokrytí'):lcopy('Limited coverage','Obmedzené pokrytie','Omezené pokrytí');
     const cards=[
       ['BlinQ pick',match.pick],
       ['BlinQ %',probability==null?'—':pct(probability)],
       [marketLabel,lineValue],
-      [lcopy('Data coverage','Pokrytie dát','Pokrytí dat'),coverage.pct==null?'—':coverage.pct+'% · '+coverage.label],
+      [winnerTab?lcopy('History / serve-return','História / servis-return','Historie / servis-return'):lcopy('Data coverage','Pokrytie dát','Pokrytí dat'),
+       winnerTab?coverage.history+' · '+coverage.serve:(oldPct==null?'—':oldPct+'% · '+oldLabel)],
       [lcopy('Rankings','Rebríček','Žebříček'),(Number.isFinite(Number(match.p1Rank))?'#'+Math.trunc(Number(match.p1Rank)):'—')+' vs '+(Number.isFinite(Number(match.p2Rank))?'#'+Math.trunc(Number(match.p2Rank)):'—')],
       [lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek'),(stats1.surfaceSample!=null?Math.round(stats1.surfaceSample):'—')+' vs '+(stats2.surfaceSample!=null?Math.round(stats2.surfaceSample):'—')]
     ];
@@ -3419,9 +3435,9 @@
       badge=lcopy('PREDICTION','PREDIKCIA','PREDIKCE');confidenceClass=Number.isFinite(projectionConfidence)?confidenceBand(projectionConfidence):'medium';note=[marketLabel,sampleText].filter(Boolean).join(' · ');
     }else{
       const selectionId=String(row?.betting?.selection_id||row?.selection_id||'');
-      if(key==='prime'||key==='top_daily'){metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)],[lcopy('Form','Forma','Forma'),publicFormLabel(row,selectionId)]];}
-      else if(key==='value'){metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[lcopy('Market','Trh','Trh'),closeMarketLabel(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
-      else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
+      if(key==='prime'||key==='top_daily'){metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('History','História','Historie'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)],[lcopy('Form','Forma','Forma'),publicFormLabel(row,selectionId)]];}
+      else if(key==='value'){metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('History','História','Historie'),dataDepthMetric(row)],[lcopy('Market','Trh','Trh'),closeMarketLabel(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
+      else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row,false)],[publicText('Surface'),surfaceSampleLabel(row)]];}
       badge=probability==null?publicText('MODEL'):confidenceLabel(confidenceBand(probability));mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
     const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(player,side)=>sideAvatarHtml(row,player,side,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
@@ -3471,7 +3487,7 @@
     const depth=card.querySelector('.data-depth-row');if(depth){const label=dataDepthLabel(m);depth.textContent=label;depth.hidden=!label;}
     card.querySelector('.pick-name').textContent=m.pick;card.querySelector('.probability').textContent=pct(m.probability);
     const conf=card.querySelector('.confidence');conf.textContent=confidenceLabel(m.confidence);conf.classList.add(m.confidence);
-    const bettingRow=card.querySelector('.betting-row');if(bettingRow){bettingRow.hidden=false;const oddsNode=card.querySelector('.betting-odds'),dataNode=card.querySelector('.betting-data'),surfaceNode=card.querySelector('.betting-surface'),formNode=card.querySelector('.betting-form');if(oddsNode)oddsNode.innerHTML=`<small>${escapeHtml(publicText('Odds'))}</small><strong>${Number.isFinite(m.odds)&&m.odds>1?m.odds.toFixed(2):'—'}</strong>`;if(dataNode)dataNode.innerHTML=`<small>${escapeHtml(lcopy('Data','Dáta','Data'))}</small><strong>${escapeHtml(dataDepthMetric(m.raw||m))}</strong>`;if(surfaceNode)surfaceNode.innerHTML=`<small>${escapeHtml(publicText('Surface'))}</small><strong>${escapeHtml(surfaceSampleLabel(m.raw||m))}</strong>`;if(formNode)formNode.innerHTML=`<small>${escapeHtml(lcopy('Form','Forma','Forma'))}</small><strong>${escapeHtml(publicFormLabel(m.raw||m,m.pickId))}</strong>`;}
+    const bettingRow=card.querySelector('.betting-row');if(bettingRow){bettingRow.hidden=false;const oddsNode=card.querySelector('.betting-odds'),dataNode=card.querySelector('.betting-data'),surfaceNode=card.querySelector('.betting-surface'),formNode=card.querySelector('.betting-form');if(oddsNode)oddsNode.innerHTML=`<small>${escapeHtml(publicText('Odds'))}</small><strong>${Number.isFinite(m.odds)&&m.odds>1?m.odds.toFixed(2):'—'}</strong>`;if(dataNode)dataNode.innerHTML=`<small>${escapeHtml(lcopy('History','História','Historie'))}</small><strong>${escapeHtml(dataDepthMetric(m.raw||m))}</strong>`;if(surfaceNode)surfaceNode.innerHTML=`<small>${escapeHtml(publicText('Surface'))}</small><strong>${escapeHtml(surfaceSampleLabel(m.raw||m))}</strong>`;if(formNode)formNode.innerHTML=`<small>${escapeHtml(lcopy('Form','Forma','Forma'))}</small><strong>${escapeHtml(publicFormLabel(m.raw||m,m.pickId))}</strong>`;}
     // Dashboard is intentionally a lightweight preview. Full section pages contain 3–5 picks.
     const signals=card.querySelector('.signals');if(signals){signals.hidden=true;signals.innerHTML='';}
     const analysis=card.querySelector('.analysis-link');if(analysis){analysis.hidden=false;analysis.dataset.route='prime';analysis.textContent=publicText('See more →');analysis.onclick=null;}
@@ -8723,7 +8739,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function primeDetailCard(m,index=0){
     const photo1=playerPhotoSource(m.raw||{},m.raw?.player1||{},'player1')||safePhotoUrl(m.p1Photo),photo2=playerPhotoSource(m.raw||{},m.raw?.player2||{},'player2')||safePhotoUrl(m.p2Photo);
     const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar');
-    const metrics=[[publicText('Odds'),Number.isFinite(m.odds)?m.odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(m.raw||{})],[publicText('Surface'),surfaceSampleLabel(m.raw||{})]];
+    const metrics=[[publicText('Odds'),Number.isFinite(m.odds)?m.odds.toFixed(2):'—'],[lcopy('History','História','Historie'),dataDepthMetric(m.raw||{})],[publicText('Surface'),surfaceSampleLabel(m.raw||{})]];
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value);const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${timeDateHtml(m.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
   }
