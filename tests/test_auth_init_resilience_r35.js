@@ -36,7 +36,7 @@ function createContext(fetchImpl) {
 }
 
 (async () => {
-  // 1) A transient auth-config 5xx is retried, and signIn is self-initializing.
+  // 1) A transient auth-config 5xx degrades after one bounded probe; signIn is self-initializing.
   {
     let configCalls = 0;
     let firebaseCalls = 0;
@@ -55,9 +55,9 @@ function createContext(fetchImpl) {
       throw new Error(`Unexpected fetch: ${target}`);
     });
     await context.BlinqAuth.signIn('member@example.com', 'password123');
-    assert.strictEqual(configCalls, 2, 'transient config failure must retry');
-    assert.strictEqual(firebaseCalls, 1, 'sign-in must continue after config retry');
-    assert.strictEqual(context.BlinqAuth.status().degraded, undefined);
+    assert.strictEqual(configCalls, 1, 'transient config failure must not create a second boot delay');
+    assert.strictEqual(firebaseCalls, 1, 'sign-in must continue after one bounded probe');
+    assert.strictEqual(context.BlinqAuth.status().degraded, true);
   }
 
   // 2) If Azure Functions/config is temporarily unreachable, Firebase client
@@ -79,7 +79,7 @@ function createContext(fetchImpl) {
       throw new Error(`Unexpected fetch: ${target}`);
     });
     await context.BlinqAuth.signIn('member@example.com', 'password123');
-    assert.strictEqual(configCalls, 3, 'unreachable config endpoint must use bounded retries');
+    assert.strictEqual(configCalls, 1, 'unreachable config endpoint must fall back after one bounded probe');
     assert.strictEqual(firebaseCalls, 1, 'Firebase client login must not be disabled by Azure cold start');
     assert.strictEqual(context.BlinqAuth.status().degraded, true);
     assert.strictEqual(context.BlinqAuth.status().enabled, true);
