@@ -3215,12 +3215,12 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     else:
         existing=_insight_from_entity(existing_entity)
         clean=normalize_insight(payload,existing=existing); now=datetime.now(timezone.utc).isoformat()
-        entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids"}},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":existing_entity.get("created_at") or now,"updated_at":now,"created_by":existing_entity.get("created_by") or str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":int(existing_entity.get("read_count") or 0)}
+        entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids","media_ids"}},"media_ids_json":json.dumps(clean["media_ids"],separators=(",",":")),"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":existing_entity.get("created_at") or now,"updated_at":now,"created_by":existing_entity.get("created_by") or str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":int(existing_entity.get("read_count") or 0)}
         try: client.upsert_entity(entity,mode="replace")
         except Exception as exc: raise AdminStorageUnavailable("Unable to refresh automated insight") from exc
         return _insight_from_entity(entity),False
     clean=normalize_insight(payload); now=datetime.now(timezone.utc).isoformat()
-    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids"}},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
+    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids","media_ids"}},"media_ids_json":json.dumps(clean["media_ids"],separators=(",",":")),"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
     try: client.create_entity(entity)
     except Exception as exc:
         try:return _insight_from_entity(client.get_entity(partition_key="insights",row_key=insight_id)),False
