@@ -155,6 +155,27 @@ function createContext(fetchImpl) {
     assert.strictEqual(feedCalls, 1, '401 must not be retried');
   }
 
+  // 6) Mobile browsers without AbortSignal.timeout still abort slow config
+  // requests. The fallback must keep the existing Firebase/server policy.
+  {
+    let attemptedWithSignal = false;
+    const context = createContext(async (url, options) => {
+      assert.strictEqual(url, '/api/v1/auth/config');
+      attemptedWithSignal = Boolean(options.signal?.aborted);
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    });
+    context.AbortController = class {
+      constructor() { this.signal = {aborted: false}; }
+      abort() { this.signal.aborted = true; }
+    };
+    context.clearTimeout = () => {};
+    const cfg = await context.BlinqAuth.init();
+    assert.strictEqual(attemptedWithSignal, true, 'fallback must abort on deadline');
+    assert.strictEqual(cfg.degraded, true, 'only transient config outage may degrade');
+  }
+
   console.log('auth init resilience r35: PASS');
 })().catch(error => {
   console.error(error);
