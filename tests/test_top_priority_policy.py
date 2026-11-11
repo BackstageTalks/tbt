@@ -300,6 +300,49 @@ def test_nonapproved_wta125_and_utr_do_not_fill_top():
     assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 2
 
 
+
+@pytest.mark.parametrize("odds,eligible", [
+    (1.50, True), (1.70, True), (1.700001, False),
+    (1.71, False), (1.80, False), (2.20, False),
+])
+def test_itf_top_price_cap_inclusive(odds, eligible):
+    w35 = verified_w35("w35-price", .75, odds=odds, other=2.50)
+    original = deepcopy(w35)
+    output = select_market_sections([w35])
+    assert (ids(output) == ["w35-price"]) is eligible
+    assert ("itf_odds_above_1_70" in output["market_selection"]["top_rejection_counts"]) is (not eligible)
+    assert w35 == original
+
+
+@pytest.mark.parametrize("p,eligible", [
+    (.649, False), (.65, False), (.650001, True), (.651, True),
+])
+def test_itf_top_probability_strictly_above_65(p, eligible):
+    w35 = verified_w35("w35-probability", p, odds=1.60, other=2.60)
+    output = select_market_sections([w35])
+    assert (ids(output) == ["w35-probability"]) is eligible
+    if p == .65:
+        assert output["market_selection"]["top_rejection_counts"]["itf_probability_not_above_65"] == 1
+
+
+def test_atp_wta_and_challenger_do_not_inherit_itf_cap_or_strict_65():
+    main = pick("atp65", .65, "ATP", odds=1.70, other=2.60)
+    challenger = pick("ch65", .65, "Challenger", odds=1.75, other=2.60)
+    output = select_market_sections([main, challenger])
+    assert ids(output) == ["atp65", "ch65"]
+    assert output["market_selection"]["selection_counts"]["top_daily_shortfall"] == 1
+
+
+def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
+    main = pick("atp65", .65, "ATP")
+    challenger = pick("ch65", .65, "Challenger")
+    over = verified_w35("over", .95, odds=1.7001)
+    qualifying = verified_w35("qualifying", .651, odds=1.70)
+    output = select_market_sections([over, qualifying, main, challenger])
+    assert ids(output) == ["atp65", "ch65", "qualifying"]
+    assert output["market_selection"]["top_rejection_counts"]["itf_odds_above_1_70"] == 1
+
+
 def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
