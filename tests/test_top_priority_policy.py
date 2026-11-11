@@ -166,7 +166,7 @@ def test_severe_market_outsider_conflict_held_from_new_top(competition, tourname
 
 
 def test_high_odds_not_a_ceiling_when_market_agrees():
-    card = pick("qualified-longer-price", .80, odds=2.20, other=2.60)
+    card = pick("qualified-longer-price", .80, "ITF Women", odds=2.20, other=2.60)
     output = select_market_sections([card])
     assert ids(output) == ["qualified-longer-price"]
     assert "top_unverified_market_outsider_conflict" not in output["market_selection"]["top_rejection_counts"]
@@ -175,13 +175,13 @@ def test_high_odds_not_a_ceiling_when_market_agrees():
 def test_small_outsider_difference_still_eligible():
     # Exactly 1.80 stays in TOP; >1.80 with nearly equal prices belongs
     # to VALUE by explicit product priority, not by market safety.
-    card = pick("small-difference", .71, odds=1.80, other=1.75)
+    card = pick("small-difference", .71, "ITF Women", odds=1.80, other=1.75)
     output = select_market_sections([card])
     assert ids(output) == ["small-difference"]
 
 
 def test_outsider_top_hold_does_not_modify_prime_value_or_aces():
-    outsider = pick("outsider", .718, odds=2.50, other=1.50)
+    outsider = pick("outsider", .718, "ITF Men", odds=2.50, other=1.50)
     value = pick("value", .71, odds=1.91, other=1.95)
     prime = pick("prime", .71, odds=1.30, other=3.50)
     aces = [{"event_id": "ace", "odds": 1.75}]
