@@ -35,8 +35,8 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME retains its own policy. TOP first considers all ATP/WTA >=65%;
-# only remaining slots can use ITF/Challenger >=65%. VALUE is unchanged.
+# PRIME remains unchanged. TOP first considers ATP/WTA >=65%; remaining
+# slots use Challenger >=65%, then *verified* women ITF W35+ >=65%.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -1007,11 +1007,11 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int = TOP_TARGET_COUNT,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Exhaust ATP/WTA >=65% first, then combined ITF+Challenger >=65%.
+    """Exhaust ATP/WTA >=65%, then Challenger, then verified ITF W35+ >=65%.
 
-    This is selection priority, not recalibration of the model. Preserve all
-    independent pre-match price, sample and ITF-specific safety gates upstream.
-    Backup is retained for compatibility and cannot circumvent core gates.
+    This is TOP-selection priority, not model recalibration. The ITF evidence
+    gate rejects all men's M-level events and unknown/unverified women ITF.
+    No fallback bypass of identity, depth, surface sample or price gates.
     """
     from .top_policy import competition_group
     selected: list[dict[str, Any]] = []
@@ -1019,7 +1019,8 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     applied: list[dict[str, Any]] = []
     for step, (label, groups) in enumerate((
         ("main", {"ATP", "WTA"}),
-        ("fallback", {"ITF", "Challenger"}),
+        ("challenger", {"Challenger"}),
+        ("women_itf", {"ITF"}),
     )):
         eligible = sorted(
             (card for card in core
@@ -1045,14 +1046,14 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
         if len(selected) >= target:
             break
 
-    fallback_count = sum(row["selection_tier"] == "fallback_0.65" for row in selected)
+    fallback_count = sum(row["selection_tier"] != "main_0.65" for row in selected)
     return selected, fallback_count, {
         "step": applied[-1]["step"] if applied else 0,
         "min_probability": .65,
         "min_odds": TOP_FALLBACK_MIN_ODDS, "target": target, "minimum": minimum,
         "core_pool": len(core), "backup_pool": 0, "backup_selected": fallback_count,
         "shortfall": max(0, minimum - len(selected)), "applied_tiers": applied,
-        "rank": "ATP_WTA_65_then_ITF_Challenger_65_by_probability",
+        "rank": "ATP_WTA_65_then_Challenger_65_then_verified_ITF_W35plus_65",
     }
 
 def _fill_top_dynamic(
@@ -1307,7 +1308,7 @@ def select_market_sections(
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
                 "top_probability_tiers": [0.65],
-                "top_competition_order": ["ATP/WTA", "ITF+Challenger"],
+                "top_competition_order": ["ATP/WTA", "Challenger", "verified_W35plus_ITF"],
                 "secondary_competition_probability_floor": 0.65,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
@@ -1342,7 +1343,8 @@ def select_market_sections(
                 "probability_tiers": [0.65],
                 "competition_tiers": [
                     {"group": "ATP/WTA", "thresholds": [0.65]},
-                    {"group": "ITF+Challenger", "thresholds": [0.65]},
+                    {"group": "Challenger", "thresholds": [0.65]},
+                    {"group": "ITF W35+ verified serve/return", "thresholds": [0.65]},
                 ],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": False,
@@ -1367,7 +1369,7 @@ def select_market_sections(
                 "sort": "competition_then_probability_then_quality_consensus",
                 "ranked_full_slate": True,
                 "policy": "priority_tours_top_v20",
-                "competition_priority": [["ATP", "WTA"], ["ITF", "Challenger"]],
+                "competition_priority": [["ATP", "WTA"], ["Challenger"], ["ITF"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
                 "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,
