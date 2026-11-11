@@ -21,31 +21,103 @@
     {
       "route": "/blinq-app.css",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, must-revalidate"
       }
     },
     {
       "route": "/auth.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, must-revalidate"
       }
     },
     {
       "route": "/app.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, must-revalidate"
       }
     },
     {
       "route": "/insight-media.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, must-revalidate"
       }
     },
     {
       "route": "/responsive.js",
       "headers": {
-        "Cache-Control": "no-store, max-age=0, must-revalidate"
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-mobile.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/telegram-admin.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-detail.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-daily-hub-mobile.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-mobile-visual.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-mobile-density.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-mobile-unified-cards.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-responsive-polish.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-hero-frame.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-mobile-court.css",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/blinq-mobile.js",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
+      }
+    },
+    {
+      "route": "/admin-csv-export.js",
+      "headers": {
+        "Cache-Control": "public, max-age=300, must-revalidate"
       }
     },
     {
