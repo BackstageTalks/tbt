@@ -178,17 +178,16 @@ def test_severe_market_outsider_conflict_held_from_new_top(competition, tourname
     assert card == before
 
 
-def test_high_odds_not_a_ceiling_when_market_agrees():
-    card = verified_w35("qualified-longer-price", .80, odds=2.20, other=2.60)
+def test_high_odds_atp_not_a_ceiling_when_market_agrees():
+    card = pick("qualified-longer-price", .80, "ATP", odds=2.20, other=2.60)
     output = select_market_sections([card])
     assert ids(output) == ["qualified-longer-price"]
-    assert "top_unverified_market_outsider_conflict" not in output["market_selection"]["top_rejection_counts"]
+    assert "itf_odds_above_1_70" not in output["market_selection"]["top_rejection_counts"]
 
 
 def test_small_outsider_difference_still_eligible():
-    # Exactly 1.80 stays in TOP; >1.80 with nearly equal prices belongs
-    # to VALUE by explicit product priority, not by market safety.
-    card = verified_w35("small-difference", .71, odds=1.80, other=1.75)
+    # ITF <=1.70 with bookmaker fair not strongly opposed.
+    card = verified_w35("small-difference", .71, odds=1.70, other=1.65)
     output = select_market_sections([card])
     assert ids(output) == ["small-difference"]
 
