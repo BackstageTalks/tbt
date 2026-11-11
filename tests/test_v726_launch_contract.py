@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_ranked_top_single_market_contract_present():
     src=(ROOT/'api/tbt/services/market_selection.py').read_text()
-    assert 'TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.70' in src
+    assert 'TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65' in src
     assert 'TOP_FALLBACK_MIN_ODDS = 1.50' in src
     assert 'TOP_MIN_COUNT = 3' in src
     assert 'TOP_DYNAMIC_FALLBACK_TIERS = ()' in src
