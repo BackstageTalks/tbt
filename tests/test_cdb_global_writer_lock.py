@@ -82,3 +82,73 @@ def test_release_if_held_noop(monkeypatch, tmp_path):
     lock.release(lock.DEFAULT_REPOSITORY, tmp_path / "missing.json", if_held=True)
     with pytest.raises(RuntimeError, match="not acquired"):
         lock.verify(lock.DEFAULT_REPOSITORY, tmp_path / "missing.json")
+
+
+def test_freshly_created_ref_can_become_visible_after_bounded_readback(monkeypatch, tmp_path):
+    state = configure(monkeypatch)
+    upstream_api = lock._api
+    ref_reads = []
+    sleeps = []
+
+    def eventually_visible(repo, endpoint, *, method="GET", data=None):
+        if endpoint == lock.LOCK_GET and method == "GET":
+            ref_reads.append(1)
+            if len(ref_reads) <= 2:
+                return None  # temporary GitHub 404 just after atomic create
+        return upstream_api(repo, endpoint, method=method, data=data)
+
+    monkeypatch.setattr(lock, "_api", eventually_visible)
+    monkeypatch.setattr(lock.time, "sleep", lambda seconds: sleeps.append(seconds))
+    path = tmp_path / "lock.json"
+    own = lock.acquire(lock.DEFAULT_REPOSITORY, path, wait_seconds=0)
+    assert len(ref_reads) == 3
+    assert sleeps == [1, 1]
+    assert state["creates"] == 1  # no second writer/lock acquisition
+    assert own["tag_sha"] == "b" * 40
+    assert lock.verify(lock.DEFAULT_REPOSITORY, path) == own
+    lock.release(lock.DEFAULT_REPOSITORY, path)
+    assert state["ref"] is None
+
+
+def test_initial_foreign_lock_sha_fails_without_retry_or_release(monkeypatch, tmp_path):
+    state = configure(monkeypatch)
+    upstream_api = lock._api
+    sleeps = []
+
+    def foreign_ref(repo, endpoint, *, method="GET", data=None):
+        if endpoint == lock.LOCK_GET and method == "GET":
+            return {"object": {"sha": "c" * 40}}
+        return upstream_api(repo, endpoint, method=method, data=data)
+
+    monkeypatch.setattr(lock, "_api", foreign_ref)
+    monkeypatch.setattr(lock.time, "sleep", lambda seconds: sleeps.append(seconds))
+    path = tmp_path / "lock.json"
+    with pytest.raises(RuntimeError, match="different writer"):
+        lock.acquire(lock.DEFAULT_REPOSITORY, path, wait_seconds=0)
+    assert sleeps == []
+    assert state["creates"] == 1
+    assert state["ref"] == "b" * 40  # cleanup requires proof of ownership
+    assert path.is_file()  # never discard evidence after uncertain ownership
+
+
+def test_missing_new_lock_ref_fails_closed_after_bounded_reads(monkeypatch, tmp_path):
+    state = configure(monkeypatch)
+    upstream_api = lock._api
+    sleeps = []
+    reads = []
+
+    def invisible_ref(repo, endpoint, *, method="GET", data=None):
+        if endpoint == lock.LOCK_GET and method == "GET":
+            reads.append(1)
+            return None
+        return upstream_api(repo, endpoint, method=method, data=data)
+
+    monkeypatch.setattr(lock, "_api", invisible_ref)
+    monkeypatch.setattr(lock.time, "sleep", lambda seconds: sleeps.append(seconds))
+    path = tmp_path / "lock.json"
+    with pytest.raises(lock.LockRefNotVisible, match="not visible"):
+        lock.acquire(lock.DEFAULT_REPOSITORY, path, wait_seconds=0)
+    assert len(reads) == 4
+    assert sleeps == [1, 1, 1]
+    assert state["creates"] == 1
+    assert path.is_file()  # retain local evidence; do not unlock blindly
