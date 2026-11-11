@@ -9610,7 +9610,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           if(!Array.isArray(item)||item.length!==2)return;
           const [name,value]=item;
           if(typeof name==='string'&&/^[a-z_]{2,32}$/.test(name)&&Number.isFinite(value)&&value>=0){
-            backend.push(`${name}: ${Math.round(value)} ms`);
+            backend.push([name,Math.round(value)]);
           }
         });
       },
@@ -9618,9 +9618,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         const navigation=performance.getEntriesByType('navigation')[0];
         const phases=marks.map(([label,ms])=>`${label}: ${ms} ms`);
         if(navigation)phases.unshift(`DOM pripravený: ${Math.round(navigation.domContentLoadedEventEnd)} ms`);
-        const server=backend.length?'\n\nSERVER FEED (čas od prijatia požiadavky):\n'+backend.join('\n'):'';
-        const message='BlinQ – čas štartu od otvorenia stránky\n\n'+phases.join('\n')+server+'\n\nPošli snímku tejto diagnostiky.';
-        console.info('[BlinQ boot timing]\n'+phases.join('\n')+server);
+        const steps=backend.map(([name,total],index)=>({
+          name,total,delta:total-(index?backend[index-1][1]:0)
+        })).sort((a,b)=>b.delta-a.delta).slice(0,6);
+        const server=backend.length?'SERVER FEED: '+backend[backend.length-1][1]+' ms\n'+
+          steps.map(x=>x.name+': +'+x.delta+' ms').join('\n')+'\n\n':'';
+        const message='BlinQ – diagnostika načítania\n\n'+server+phases.join('\n')+'\n\nPošli snímku tejto diagnostiky.';
+        console.info('[BlinQ boot timing]\n'+server+phases.join('\n'));
         setTimeout(()=>window.alert(message),450);
       }
     };
