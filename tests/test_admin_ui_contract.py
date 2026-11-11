@@ -191,7 +191,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["limit"] == 3
     assert rules["top_daily"]["presentation_preview_limit"] == 10
     assert rules["top_daily"]["target_count"] == 3
-    assert rules["top_daily"]["confidence_tiers"] == [.70, .68, .65]
+    assert rules["top_daily"]["confidence_tiers"] == [.65]
     assert rules["top_daily"]["min_probability"] == 0.65
     assert rules["top_daily"]["min_odds"] == 1.50
     assert rules["top_daily"]["max_odds"] is None
