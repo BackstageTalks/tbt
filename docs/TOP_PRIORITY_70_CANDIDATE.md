@@ -120,7 +120,7 @@ long-shot selections (e.g. 71.8% public BlinQ vs decimal 2.50/2.70).
 The earlier M15/M25 TOP-only hold was merged after the morning publication;
 do not rewrite that publication or its Results.
 
-This incremental **TOP-only** precaution holds a *new* selection when
+This incremental **ITF TOP-only** precaution holds a *new* selection when
 the bookmaker's verified two-way, no-vig implied probability for that player
 is < 50%, while the displayed model probability is over 25 percentage
 points higher. This is an explicitly provisional review threshold,
@@ -129,6 +129,9 @@ odds ceiling, or a revision of public model probabilities. An odds-2.20
 pick remains eligible if the opposing price indicates the same player is
 the bookmaker favorite. For example, 71.8% vs a no-vig 37–40% is held;
 71.8% vs a no-vig 62% is not.
+
+ATP/WTA, Challenger/WTA 125 market-selection eligibility is unchanged by this
+ITF-specific hold. The full original ATP/WTA high-priced TOP contract remains.
 
 No change to absolute TOP floor (70%), 3-pick target (unfilled slots
 are permitted), tier priority, VALUE assignment, PRIME, ACES, CDB,
