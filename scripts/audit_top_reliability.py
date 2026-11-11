@@ -48,6 +48,45 @@ def competition(row):
     return "unknown"
 
 
+
+def itf_grade(row, publication=None):
+    """Tournament grade only; never classify an ITF event from a gender tour."""
+    import re
+    snap = issued_snapshot(publication)
+    src = snap if isinstance(snap, dict) and any(snap.get(k) for k in ("competition", "tournament", "tournament_level")) else row
+    labels = " ".join(str(src.get(k) or "") for k in ("competition", "tournament_level", "tournament")).lower()
+    if "itf" not in labels and "futures" not in labels:
+        return competition(row)
+    match = re.search(r"(?<![a-z0-9])([mw])\s*[- ]?\s*(15|25|35|50|60|75|100|125)(?![a-z0-9])", labels)
+    return f"ITF_{match.group(1).upper()}{match.group(2)}" if match else "ITF_unspecified"
+
+
+def issued_serve_return_coverage(publication):
+    snap = issued_snapshot(publication)
+    q = snap.get("quality") if isinstance(snap, dict) and isinstance(snap.get("quality"), dict) else {}
+    e = q.get("feature_evidence") if isinstance(q.get("feature_evidence"), dict) else {}
+    flag = e.get("serve_return_known_both")
+    return "both_available" if flag is True else "one_or_both_missing" if flag is False else "unverified"
+
+
+def issued_market_disagreement(publication, selected_id, p):
+    snap = issued_snapshot(publication)
+    if not isinstance(snap, dict) or p is None:
+        return "unverified"
+    market, players = snap.get("two_way_match_winner"), snap.get("players")
+    if not isinstance(market, dict) or not isinstance(players, dict):
+        return "unverified"
+    ids = [str((players.get(k) or {}).get("id") or "") for k in ("player1", "player2")]
+    odds = [number(market.get(k)) for k in ("player1_odds", "player2_odds")]
+    if not selected_id or selected_id not in ids or ids[0] == ids[1] or any(o is None or o <= 1 for o in odds):
+        return "unverified"
+    inv = [1/o for o in odds]
+    fair = inv[ids.index(selected_id)]/sum(inv)
+    if fair >= .5:
+        return "market_favorite_or_even"
+    return "outsider_gap_over_25pp" if p-fair > .25+1e-12 else "outsider_gap_at_most_25pp"
+
+
 def issued_snapshot(publication):
     """Use only an immutable card snapshot captured at exact public issuance."""
     if not isinstance(publication, dict):
@@ -346,6 +385,10 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
             entries.append({
                 "correct": correct, "odds": odds, "probability": p,
                 "competition": competition(row),
+                "itf_grade": itf_grade(row, pub),
+                "serve_return_evidence": issued_serve_return_coverage(pub),
+                "market_disagreement": issued_market_disagreement(pub, selected_id, p),
+                "confidence_70_75": "unverified" if p is None else "70_to_75" if .70 <= p < .75 else "other",
                 "ranking": rank_band(row, selected_id, publication=pub),  # legacy 800-band report
                 "ranking_500": rank_band(row, selected_id, cutoff=500, publication=pub),
                 "ranking_1000": rank_band(row, selected_id, cutoff=1000, publication=pub),
@@ -376,7 +419,9 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
                   ),
                   "betting_day_counts": dict(sorted(daily_publications.items())),
               }}
-    for dimension in ("competition", "ranking", "ranking_500", "ranking_1000",
+    for dimension in ("competition", "itf_grade", "serve_return_evidence",
+                      "market_disagreement", "confidence_70_75",
+                      "ranking", "ranking_500", "ranking_1000",
                       "picked_rank", "stats", "rank_and_stats", "confidence_band",
                       "surface_evidence", "rank_and_surface"):
         groups = defaultdict(list)
