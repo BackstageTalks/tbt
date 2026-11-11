@@ -354,6 +354,29 @@ def collect_rendered(target_day, *, max_events=20):
                                u => u.startsWith('https://www.ifortuna.sk/stavkovanie/tenis/'))"""))
                         page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                         page.wait_for_timeout(250)
+                # Public ace markets are collapsed by default in Fortuna's
+                # MatchDetailCard. Only activate their keyboard-focusable
+                # header (never odds, selection buttons, or betslip controls).
+                # Other market groups stay untouched.
+                if len(segments) >= 5:
+                    cards = page.locator('[data-testing-selector="MatchDetailCard"]')
+                    for i in range(min(cards.count(), 150)):
+                        card = cards.nth(i)
+                        label = card.get_attribute('aria-label') or ''
+                        if market_kind(label) not in ('player_aces_ou', 'most_aces_match'):
+                            continue
+                        if card.get_attribute('aria-expanded') != 'false':
+                            continue
+                        header = card.locator('div.cursor-pointer[tabindex="0"]')
+                        if header.count() != 1:
+                            continue
+                        try:
+                            header.click(timeout=5000)
+                            page.wait_for_timeout(350)
+                        except BrowserTimeout:
+                            # Missing/unavailable public odds are not evidence
+                            # of valid prices; preserve the fallback.
+                            continue
                 html = page.content()
                 if seen:
                     from html import escape
