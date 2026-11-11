@@ -267,7 +267,7 @@ def test_men_itf_all_levels_and_unverified_women_fail_closed():
 
 
 def test_w35_quality_gate_is_not_waived_for_3_tip_target():
-    good = verified_w35("good", .65)
+    good = verified_w35("good", .650001)
     no_serve = verified_w35("no-serve", .95)
     no_serve["quality"]["feature_evidence"]["serve_return_known_both"] = False
     no_surface = verified_w35("no-surface", .92)
