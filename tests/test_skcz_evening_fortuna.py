@@ -62,6 +62,18 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(len(pairs), 1)
         self.assertEqual(pairs[0]['settlement'], 'bookmaker_rules_not_yet_verified')
 
+    def test_real_fortuna_match_prefixed_player_aces_label(self):
+        result = self.detail(market='Zápas: Michelsen A. počet es')
+        self.assertEqual(result['aces_markets'][0]['kind'], 'player_aces_ou')
+        self.assertEqual(len(result['aces_markets'][0]['verified_pairs']), 1)
+
+    def test_three_way_more_aces_cannot_be_used_as_two_way_price(self):
+        draw = outcome('Remíza', 4.2, 'aces', 'draw')
+        result = self.detail(market='Zápas: viac es',
+                             a='Michelsen A.', b='Cerundolo J.M.', extra=draw)
+        self.assertEqual(result['aces_markets'][0]['kind'], 'most_aces_match')
+        self.assertEqual(result['aces_markets'][0]['verified_pairs'], [])
+
     def test_no_set_quote_used_for_full_match(self):
         result = self.detail(market='1. set: Viac es',
                              a='Michelsen A.', b='Cerundolo J.M.')
