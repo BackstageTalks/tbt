@@ -16,8 +16,8 @@ def test_r34_independence_is_preserved_and_strengthened_by_r35():
 
 
 def test_r35_auth_config_has_bounded_retry_and_safe_degraded_mode():
-    assert "AUTH_CONFIG_ATTEMPTS = 3" in AUTH
-    assert "await json(AUTH_CONFIG_URL, {timeoutMs: 6000})" in AUTH
+    assert "AUTH_CONFIG_ATTEMPTS = 1" in AUTH
+    assert "await json(AUTH_CONFIG_URL, {timeoutMs: 3000})" in AUTH
     assert "degradedClientConfig" in AUTH
     assert "isPermanentAuthConfigError" in AUTH
     assert "async function ensureReady()" in AUTH
