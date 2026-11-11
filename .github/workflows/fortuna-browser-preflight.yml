@@ -66,5 +66,7 @@ jobs:
               'source_errors': len(report['errors']) + len(report['catalog_errors']),
               'out_of_target_window_events': report['out_of_target_window_events'],
               'sample_market_titles': report['market_labels_observed_sample'][:40],
+              'prematch_aces_market_diagnostics':
+                  report['prematch_aces_market_diagnostics'][:12],
           }, sort_keys=True, ensure_ascii=False))
           PY
