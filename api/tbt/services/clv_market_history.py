@@ -7,6 +7,7 @@ scheduled start; ambiguous matches fail closed.
 from __future__ import annotations
 
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone, timedelta
 import hashlib
 import json
@@ -250,30 +251,61 @@ def read_event_history(event_id, *, now=None):
     }
 
 
+def _has_verified_native_history(row):
+    """An existing verified two-point history outranks the PropLine fallback."""
+    previous = row.get("market_movement")
+    return (
+        isinstance(previous, dict)
+        and previous.get("verified") is True
+        and len(previous.get("history") or []) >= 2
+    )
+
+
 def attach_offer_clv(feed):
-    """Enrich only rows the entitlement filter already allowed into the response."""
+    """Enrich authorized TOP/VALUE rows without serial Azure reads.
+
+    Only entitlement-filtered event IDs are queried. Keep the existing
+    native-history precedence, per-response deduplication, and storage-error
+    contract. Never cache private data between requests or write to storage.
+    """
     if not isinstance(feed, dict):
         return feed
-    cache = {}
+
+    # Scan first: rows with verified native history need no fallback read.
+    # A separate row for the same event may still require enrichment.
+    pending = []
+    seen = set()
     for section in SECTIONS:
         rows = feed.get(section)
         if not isinstance(rows, list):
             continue
         for row in rows:
-            if not isinstance(row, dict):
+            if not isinstance(row, dict) or _has_verified_native_history(row):
                 continue
             eid = str(row.get("event_id") or "").strip()
             if not eid or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", eid):
                 continue
-            if eid not in cache:
-                cache[eid] = read_event_history(eid)
-            if cache[eid]:
-                previous = row.get("market_movement")
-                # Prefer an already verified native-source time-series. The
-                # independent PropLine fallback must never downgrade it.
-                if isinstance(previous, dict) and (
-                        previous.get("verified") is True
-                        and len(previous.get("history") or []) >= 2):
-                    continue
-                row["market_movement"] = cache[eid]
+            if eid not in seen:
+                seen.add(eid)
+                pending.append(eid)
+
+    if not pending:
+        return feed
+
+    # Azure Tables are independent per event; use a small, bounded pool to
+    # avoid N sequential network waits without unbounded storage fan-out.
+    with ThreadPoolExecutor(max_workers=min(3, len(pending)),
+                            thread_name_prefix="blinq-clv-read") as pool:
+        history = dict(zip(pending, pool.map(read_event_history, pending)))
+
+    for section in SECTIONS:
+        rows = feed.get(section)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict) or _has_verified_native_history(row):
+                continue
+            eid = str(row.get("event_id") or "").strip()
+            if history.get(eid):
+                row["market_movement"] = history[eid]
     return feed
