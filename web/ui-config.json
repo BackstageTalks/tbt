@@ -993,10 +993,8 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "ATP/WTA 70%, then 68%, then 65% to target 3; only if needed ITF 70%, then Challenger 70%. M15/M25 and extreme ITF price conflicts remain held. No forced fill; depth >=0.80, surface >=5 per player and pre-start real odds >=1.50; VALUE priority",
+      "cascade": "ATP/WTA >=65% first. If below 3, Challenger >=65%, then ITF women W35+ >=65% ONLY with verified pre-match paired serve/return and surface statistics. All men ITF and unknown ITF levels excluded from TOP. Price and depth guards, VALUE priority and no forced fill remain.",
       "confidence_tiers": [
-        0.7,
-        0.68,
         0.65
       ],
       "minimum_dashboard_count": 3,
@@ -1012,10 +1010,10 @@
           "WTA"
         ],
         [
-          "ITF"
+          "Challenger"
         ],
         [
-          "Challenger"
+          "ITF"
         ]
       ],
       "quality_fallback": false,
