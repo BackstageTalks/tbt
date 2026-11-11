@@ -146,7 +146,7 @@ def test_feature_availability_snapshot_is_not_a_calibration_claim():
 
 
 @pytest.mark.parametrize("competition,tournament,odds,other", [
-    ("ATP", "ATP 250 Test", 2.50, 1.50),
+    ("ITF Men", "ITF M50 Test", 2.50, 1.50),
     ("ITF Women", "ITF W35 Heraklion", 2.70, 1.52),
 ])
 def test_severe_market_outsider_conflict_held_from_new_top(competition, tournament, odds, other):
@@ -173,7 +173,9 @@ def test_high_odds_not_a_ceiling_when_market_agrees():
 
 
 def test_small_outsider_difference_still_eligible():
-    card = pick("small-difference", .71, odds=2.02, other=1.95)
+    # Exactly 1.80 stays in TOP; >1.80 with nearly equal prices belongs
+    # to VALUE by explicit product priority, not by market safety.
+    card = pick("small-difference", .71, odds=1.80, other=1.75)
     output = select_market_sections([card])
     assert ids(output) == ["small-difference"]
 
@@ -190,3 +192,15 @@ def test_outsider_top_hold_does_not_modify_prime_value_or_aces():
     assert [r["event_id"] for r in output["prime_picks"]] == ["prime"]
     assert output["ace_picks"] == aces
     assert [outsider, value, prime] == originals
+
+
+def test_high_odds_atp_selection_unchanged_by_itf_precaution():
+    atp = pick("atp-outsider", .718, "ATP", odds=2.50, other=1.50)
+    output = select_market_sections([atp])
+    assert ids(output) == ["atp-outsider"]
+
+
+def test_itf_favorite_not_removed_by_market_precaution():
+    itf = pick("itf-favorite", .718, "ITF Women", odds=1.52, other=2.50)
+    output = select_market_sections([itf])
+    assert ids(output) == ["itf-favorite"]
