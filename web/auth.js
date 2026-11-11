@@ -506,7 +506,12 @@
   }
   async function feed() {
     const s = await restore();
-    const request = () => json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
+    // Keep normal URLs byte-for-byte equivalent. Stage timings are requested
+    // only through the user-enabled, authenticated boot diagnostic link.
+    let traced = false;
+    try { traced = new URLSearchParams(location.search).get('blinq_boot_trace') === '1'; } catch {}
+    const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';
+    const request = () => json(url, {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
     try {
       return await request();
     } catch (error) {
