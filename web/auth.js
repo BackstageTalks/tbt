@@ -11,7 +11,7 @@
 
   const AUTH_RUNTIME = '736-r61';
   const AUTH_CONFIG_URL = '/api/v1/auth/config';
-  const AUTH_CONFIG_ATTEMPTS = 3;
+  const AUTH_CONFIG_ATTEMPTS = 1;
   const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
 
   const KEY = 'blinq_v4_session';
@@ -283,8 +283,8 @@
     let lastError = null;
     for (let attempt = 0; attempt < AUTH_CONFIG_ATTEMPTS; attempt += 1) {
       try {
-        // The endpoint can cold-start on Azure; fail over sooner to the trusted
-        // public Firebase client config, while protected APIs still enforce auth.
+        // Do not serialize retries of an optional Azure probe on every login.
+        // Fall back after one short check; protected API routes still enforce auth.
         return validateAuthConfig(await json(AUTH_CONFIG_URL, {timeoutMs: 2500}));
       } catch (error) {
         lastError = error;
