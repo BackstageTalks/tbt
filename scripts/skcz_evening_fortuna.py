@@ -45,6 +45,7 @@ class Links(HTMLParser):
     def __init__(self):
         super().__init__()
         self.urls = []
+        self.categories = []
 
     def handle_starttag(self, tag, attrs):
         if tag != 'a':
@@ -52,12 +53,43 @@ class Links(HTMLParser):
         href = dict(attrs).get('href') or ''
         full = urljoin(ORIGIN, href)
         p = urlsplit(full)
-        if (p.scheme == 'https' and p.hostname == 'www.ifortuna.sk'
-                and p.path.startswith('/stavkovanie/tenis/')
-                and len(p.path.split('/')) >= 6):
-            cleaned = ORIGIN + p.path.rstrip('/')
+        if p.scheme != 'https' or p.hostname != 'www.ifortuna.sk':
+            return
+        parts = p.path.strip('/').split('/')
+        if len(parts) < 3 or parts[:2] != ['stavkovanie', 'tenis']:
+            return
+        if parts[2] not in ('atp', 'wta'):
+            return
+        cleaned = ORIGIN + p.path.rstrip('/')
+        if len(parts) >= 5:
             if cleaned not in self.urls:
                 self.urls.append(cleaned)
+        elif len(parts) in (3, 4):
+            if cleaned not in self.categories:
+                self.categories.append(cleaned)
+
+
+
+def select_diverse_urls(urls, limit):
+    """Round-robin by tournament so one ATP event does not consume the whole scan."""
+    groups = {}
+    for url in urls:
+        segments = urlsplit(url).path.strip('/').split('/')
+        if len(segments) < 5 or segments[:2] != ['stavkovanie', 'tenis']:
+            continue
+        key = tuple(segments[2:4])
+        groups.setdefault(key, [])
+        if url not in groups[key]:
+            groups[key].append(url)
+    result = []
+    while groups and len(result) < limit:
+        for group in list(groups):
+            result.append(groups[group].pop(0))
+            if not groups[group]:
+                del groups[group]
+            if len(result) >= limit:
+                break
+    return result
 
 
 def parse_start(html):
@@ -147,6 +179,9 @@ def parse_detail(html, url, captured_at):
     start = parse_start(html)
     cards = list(CARD.finditer(html))
     relevant, markets_seen = [], len(cards)
+    # Preserve enough public market labels to diagnose empty ace results.
+    # No private cookies, raw page or user-specific data are persisted.
+    market_titles = [attr(item.group(0), 'aria-label')[:140] for item in cards]
     for i, item in enumerate(cards):
         label = attr(item.group(0), 'aria-label')
         kind = market_kind(label)
@@ -160,7 +195,9 @@ def parse_detail(html, url, captured_at):
         'provider': 'fortuna_sk', 'event_id': match.group(1), 'players': players,
         'scheduled_at': start.isoformat(), 'captured_at': captured_at.isoformat(),
         'source_url': url, 'source_sha256': hashlib.sha256(html.encode()).hexdigest(),
-        'market_groups_seen': markets_seen, 'aces_markets': relevant,
+        'market_groups_seen': markets_seen,
+        'market_group_titles_sample': market_titles[:80],
+        'aces_markets': relevant,
     }
 
 
@@ -189,11 +226,35 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
         raise ValueError('evening capture must occur before next betting day')
     directory = Links()
     directory.feed(get(INDEX))
-    urls = directory.urls[:max_events]
+    # The main tennis index may expose just one tournament, e.g. Stockholm.
+    # Follow publicly linked ATP/WTA category pages before sampling events.
+    catalog_errors = []
+    categories = directory.categories[:12]
+    for category in categories:
+        try:
+            sub = Links()
+            sub.feed(get(category))
+            for url in sub.urls:
+                if url not in directory.urls:
+                    directory.urls.append(url)
+        except (OSError, ValueError, RuntimeError) as exc:
+            catalog_errors.append({'url': category, 'error': exc.__class__.__name__})
+    urls = select_diverse_urls(directory.urls, max_events)
     report = {'schema': 1, 'status': 'audited', 'source': 'public_fortuna_sk',
               'mode': 'read_only_evening_aces', 'target_betting_day': target_day.isoformat(),
               'captured_at': now.isoformat(), 'target_start': start.isoformat(),
               'target_end': end.isoformat(), 'candidate_urls': len(directory.urls),
+              'catalog_pages_scanned': len(categories),
+              'catalog_errors': catalog_errors,
+              'coverage_truncated': len(directory.urls) > max_events,
+              'candidate_tournaments': len({
+                  tuple(urlsplit(u).path.strip('/').split('/')[2:4])
+                  for u in directory.urls
+              }),
+              'probed_tournaments': len({
+                  tuple(urlsplit(u).path.strip('/').split('/')[2:4])
+                  for u in urls
+              }),
               'probed_urls': len(urls), 'events_in_target_window': [], 'errors': [],
               'cdb_writes': 0, 'published_picks_changed': 0, 'provider_paid_calls': 0}
     for idx, url in enumerate(urls):
@@ -244,7 +305,9 @@ def collect_rendered(target_day, *, max_events=20):
                 if response is None or response.status != 200:
                     raise RuntimeError("bookmaker_public_page_unavailable")
                 try:
-                    if url == INDEX:
+                    segments = parsed.path.strip('/').split('/')
+                    if url == INDEX or (len(segments) in (3, 4)
+                                         and segments[:2] == ['stavkovanie', 'tenis']):
                         # An ATP/WTA category link alone is NOT a match offer.
                         page.wait_for_function("""() => [...document.querySelectorAll('a[href]')].some(a =>
                           a.href.startsWith('https://www.ifortuna.sk/stavkovanie/tenis/')
@@ -254,7 +317,22 @@ def collect_rendered(target_day, *, max_events=20):
                                                timeout=16000)
                 except BrowserTimeout as exc:
                     raise RuntimeError("public_bookmaker_markets_not_rendered") from exc
+                # Lazy lists can contain several tournament blocks. Preserve
+                # only genuine links actually observed in the browser.
+                seen = set()
+                if url == INDEX or (len(segments) in (3, 4)
+                                     and segments[:2] == ['stavkovanie', 'tenis']):
+                    for _ in range(5):
+                        seen.update(page.eval_on_selector_all(
+                            'a[href]', """nodes => nodes.map(a => a.href).filter(
+                               u => u.startsWith('https://www.ifortuna.sk/stavkovanie/tenis/'))"""))
+                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                        page.wait_for_timeout(250)
                 html = page.content()
+                if seen:
+                    from html import escape
+                    html += ''.join('<a href="' + escape(u, quote=True) + '"></a>'
+                                    for u in sorted(seen))
                 if len(html) > 5_000_000:
                     raise RuntimeError("oversized rendered HTML")
                 return html
@@ -268,7 +346,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--target-day', type=date.fromisoformat,
                         default=(datetime.now(TZ) + timedelta(days=1)).date())
-    parser.add_argument('--max-events', type=int, default=20)
+    parser.add_argument('--max-events', type=int, default=60)
     parser.add_argument('--out', default='reports/skcz-evening/fortuna.json')
     args = parser.parse_args()
     if not 1 <= args.max_events <= 60:
@@ -278,6 +356,7 @@ def main():
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + '\n')
     print(json.dumps({k: report[k] for k in ('status', 'target_betting_day', 'probed_urls',
+               'candidate_tournaments', 'probed_tournaments',
                'exact_aces_pairs', 'aces_market_groups', 'cdb_writes')}, sort_keys=True))
     if report['status'] == 'source_unavailable':
         raise SystemExit(2)
