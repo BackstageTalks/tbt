@@ -2,7 +2,8 @@
 
 Pending deployment policy: `priority_tours_top_v20` — ATP/WTA >=65%, then
 Challenger >=65%, and only ITF women W35+ with point-in-time paired S/R and
-surface S/R available >=65%; all male ITF and unknown-level ITF excluded.
+surface S/R available, model probability strictly >65%, and odds <=1.70;
+all male ITF and unknown-level ITF excluded.
 Earlier v19 was the 70%-all-groups policy.
 
 VERIFIED deployment: PR #1459, commit `f4e0eda72dd5c6a5065c0df93a3428250b8c5ed6`,
@@ -10,15 +11,17 @@ VERIFIED deployment: PR #1459, commit `f4e0eda72dd5c6a5065c0df93a3428250b8c5ed6`
 Independent production deployment.json and ui-config.json readback matched this commit and policy on 2026-11-08.
 
 Updated 2026-11-11 per owner: aim for three TOP selections with ATP/WTA >=65%
-first. Fallback to Challenger >=65%, then women ITF W35+ >=65% **only** when
-both players have verified pre-match overall and surface serve/return.
+first. Fallback to Challenger >=65%, then women ITF W35+ strictly >65%
+and decimal odds <=1.70 **only** when both players have verified pre-match
+overall and surface serve/return.
 This is a selection-tier policy, NOT new probability calibration. The existing
 three-slot output remains; there is no new TOP1/TOP3 product.
 
 - Within ATP/WTA, rank all candidates >=65% by probability; model/market
   agreement only breaks ties, never certifies the public confidence.
-- If fewer than 3, next Challenger >=65%, then ITF women W35+ >=65% only
-  with point-in-time serve/return AND surface serve/return known for both.
+- If fewer than 3, next Challenger >=65%, then ITF women W35+ strictly >65%
+  at verified odds <=1.70, with point-in-time serve/return AND surface
+  serve/return known for both.
   All men's ITF (including M15/M25/M50/M100), W15/W25, ambiguous ITF,
   WTA125, UTR, unknown and unsupported competitions do not enter TOP.
 - Existing M15/M25 and extreme ITF model/market outsider guards remain.
@@ -26,7 +29,8 @@ three-slot output remains; there is no new TOP1/TOP3 product.
   at least five prior surface matches per player, exact paired pre-match quotes
   and coherent probability evidence. No backup can bypass these gates.
 - Model/market agreement is a ranking heuristic, NOT a calibrated hit-rate claim.
-- TOP decimal odds >=1.50, with no upper price limit.
+- TOP decimal odds >=1.50 for ATP/WTA and Challenger, no new upper limit;
+  ITF TOP is restricted to inclusive decimal odds 1.50–1.70.
 - VALUE has priority at odds strictly >1.80 and symmetric gap <=15%, with its
   existing probability/data-quality gates. Exactly 1.80 belongs to TOP.
 - Require exact event/selection identity, model/quote pre-start timestamps and
@@ -63,13 +67,15 @@ start 06:00 Europe/Bratislava. `data.yml` checks out the dispatched main revisio
 No scheduler change or additional paid refresh is needed for this policy.
 
 Before refresh/current-refresh, `verify_top_morning_policy.py` checks active
-backend/UI v20, ATP/WTA >=65%, Challenger >=65%, then verified W35+ >=65%,
+backend/UI v20, ATP/WTA >=65%, Challenger >=65%, then verified W35+ >65%
+with decimal odds <=1.70,
 price/quality thresholds and target three without any provider call.
 A mismatch stops the job before data work.
 
 After the first new morning run, inspect child run, saved candidate snapshot,
 feed and publication receipts. Require policy `priority_tours_top_v20`, ATP/WTA
->=65%, Challenger >=65%, and ITF W35+ >=65% only with verified S/R, three picks
+>=65%, Challenger >=65%, and ITF W35+ >65% at odds <=1.70 only with
+verified S/R, three picks
 or explicit shortfall,
 unique events, category priority, probability ordering within each tier,
 VALUE exclusivity, and exact pre-start evidence.
@@ -173,7 +179,8 @@ claimed deployed merely because a PR or merge succeeded.
 Owner requested ATP/WTA >=65% first with cautious lower-tier fallback, and
 raised an explicit concern that men's ITF M-level data cannot be independently
 validated. Decision implemented in PR #1564: Challenger >=65% second; only
-women's ITF W35/W50/W60/W75/W80/W100 >=65% last, requiring BOTH paired
+women's ITF W35/W50/W60/W75/W80/W100 strictly >65% last, with
+verified decimal odds <=1.70, requiring BOTH paired
 pre-match overall and surface serve/return evidence flags. Absence of a flag,
 false or ambiguous grade fails closed. All male ITF (not only M15/M25) and
 women ITF W15/W25 remain out of TOP; other products and issued results remain.
@@ -224,3 +231,22 @@ measured capacity; never backfill published records.
 
 Rollback: revert only descriptive display and read-only audit code, not
 ongoing external data runs or historical offer decisions.
+
+
+## 2026-11-11 — final ITF price boundary clarification
+
+Owner clarified the **third and final fallback**, used only when ATP/WTA
+and then Challenger supply fewer than three qualifying TOP matches:
+ITF only with **verified decimal winner odds <=1.70 (inclusive)** and
+**published model probability strictly >65%**. The original ITF fail-closed
+pre-match evidence gates (only women W35+ with both serve/return feature
+flags), men's ITF exclusions, M15/M25 holds, price-integrity check,
+minimum overall odds 1.50, depth >=0.80 and 5 surface matches per player
+remain active. ATP/WTA and Challenger may still enter TOP at exactly 65%
+and retain their original upper-odds policy. No forced fill, no backdated
+Results/ledger updates and no CDB/champion/cron change. Current confidence
+is not automatically re-calibrated by this selection change.
+
+Regression tests explicitly cover ITF odds=1.70 eligible, >1.70 rejected,
+probability 65% excluded and >65% eligible, main-tour/Challenger unaffected,
+and the morning zero-paid-request preflight checks the same boundaries.
