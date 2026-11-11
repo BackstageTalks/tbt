@@ -38,7 +38,7 @@ def test_no_target_filling_below_70(p):
 
 
 @pytest.mark.parametrize("odds,other,section",[(1.50,2.5,"top_daily_picks"),(1.80,1.9,"top_daily_picks"),
-    (1.81,1.9,"value_picks"),(2.20,1.5,"top_daily_picks")])
+    (1.81,1.9,"value_picks"),(2.20,2.6,"top_daily_picks")])
 def test_exact_user_price_contract(odds,other,section):
     out=select_market_sections([pick("x",.80,odds=odds,other=other)])
     assert len(out[section])==1
@@ -143,3 +143,50 @@ def test_feature_availability_snapshot_is_not_a_calibration_claim():
     )
     assert snap["rows"][0]["feature_evidence"] == evidence
     assert snap["rows"][0]["data_depth"] == 1.0
+
+
+@pytest.mark.parametrize("competition,tournament,odds,other", [
+    ("ATP", "ATP 250 Test", 2.50, 1.50),
+    ("ITF Women", "ITF W35 Heraklion", 2.70, 1.52),
+])
+def test_severe_market_outsider_conflict_held_from_new_top(competition, tournament, odds, other):
+    card = pick("model-market-reversal", .718, competition, odds=odds, other=other)
+    card["tournament"] = tournament
+    before = deepcopy(card)
+    output = select_market_sections([card])
+    assert ids(output) == []
+    assert output["market_selection"]["top_rejection_counts"]["top_unverified_market_outsider_conflict"] == 1
+    assert output["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
+    audit = build_selection_candidate_snapshot(
+        [card], generated_at=datetime(2026, 11, 11, 8, tzinfo=timezone.utc)
+    )
+    assert "top_unverified_market_outsider_conflict" in audit["rows"][0]["top_rejection_reasons"]
+    assert audit["rows"][0]["selected_section"] is None
+    assert card == before
+
+
+def test_high_odds_not_a_ceiling_when_market_agrees():
+    card = pick("qualified-longer-price", .80, odds=2.20, other=2.60)
+    output = select_market_sections([card])
+    assert ids(output) == ["qualified-longer-price"]
+    assert "top_unverified_market_outsider_conflict" not in output["market_selection"]["top_rejection_counts"]
+
+
+def test_small_outsider_difference_still_eligible():
+    card = pick("small-difference", .71, odds=2.02, other=1.95)
+    output = select_market_sections([card])
+    assert ids(output) == ["small-difference"]
+
+
+def test_outsider_top_hold_does_not_modify_prime_value_or_aces():
+    outsider = pick("outsider", .718, odds=2.50, other=1.50)
+    value = pick("value", .71, odds=1.91, other=1.95)
+    prime = pick("prime", .71, odds=1.30, other=3.50)
+    aces = [{"event_id": "ace", "odds": 1.75}]
+    originals = deepcopy([outsider, value, prime])
+    output = select_market_sections([outsider, value, prime], ace_picks=aces)
+    assert ids(output) == []
+    assert [r["event_id"] for r in output["value_picks"]] == ["value"]
+    assert [r["event_id"] for r in output["prime_picks"]] == ["prime"]
+    assert output["ace_picks"] == aces
+    assert [outsider, value, prime] == originals
