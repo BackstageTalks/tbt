@@ -105,6 +105,26 @@ function createContext(fetchImpl) {
     assert.strictEqual(firebaseCalls, 0, 'permanent server configuration error must fail before Firebase client login');
   }
 
+  // 4) Older mobile browsers without AbortSignal.timeout still apply a deadline.
+  {
+    let attemptedWithSignal = false;
+    const context = createContext(async (url, options) => {
+      assert.strictEqual(url, '/api/v1/auth/config');
+      attemptedWithSignal = Boolean(options.signal?.aborted);
+      const error = new Error('aborted');
+      error.name = 'AbortError';
+      throw error;
+    });
+    context.AbortController = class {
+      constructor() { this.signal = {aborted: false}; }
+      abort() { this.signal.aborted = true; }
+    };
+    context.clearTimeout = () => {};
+    const result = await context.BlinqAuth.init();
+    assert.strictEqual(attemptedWithSignal, true, 'fallback must abort on deadline');
+    assert.strictEqual(result.degraded, true, 'network timeout may use public client configuration');
+  }
+
   console.log('auth init resilience r35: PASS');
 })().catch(error => {
   console.error(error);
