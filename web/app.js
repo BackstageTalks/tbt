@@ -9608,8 +9608,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         const navigation=performance.getEntriesByType('navigation')[0];
         const phases=marks.map(([label,ms])=>`${label}: ${ms} ms`);
         if(navigation)phases.unshift(`DOM pripravený: ${Math.round(navigation.domContentLoadedEventEnd)} ms`);
-        const message='BlinQ – čas štartu od otvorenia stránky\\n\\n'+phases.join('\\n')+'\\n\\nPošli snímku tejto diagnostiky.';
-        console.info('[BlinQ boot timing]\\n'+phases.join('\\n'));
+        const message='BlinQ – čas štartu od otvorenia stránky\n\n'+phases.join('\n')+'\n\nPošli snímku tejto diagnostiky.';
+        console.info('[BlinQ boot timing]\n'+phases.join('\n'));
         setTimeout(()=>window.alert(message),450);
       }
     };
