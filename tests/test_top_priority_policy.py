@@ -17,16 +17,26 @@ def ids(output):
     return [r["event_id"] for r in output["top_daily_picks"]]
 
 
+def verified_w35(event, p=.75, *, odds=1.60, other=2.60):
+    card = pick(event, p, "ITF Women", odds=odds, other=other)
+    card["tournament"] = "ITF W35 Heraklion"
+    card["quality"]["feature_evidence"] = {
+        "serve_return_known_both": True,
+        "surface_serve_return_known_both": True,
+    }
+    return card
+
+
 def test_main_tours_reach_70_before_using_itf_to_fill_target():
     rows=[pick("itf",.93,"ITF Men"),pick("wta",.70,"WTA"),
           pick("atp",.75),pick("challenger",.85,"Challenger")]
     out=select_market_sections(rows)
-    assert ids(out)==["atp","wta","itf"]
+    assert ids(out)==["atp","wta","challenger"]
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==0
 
 
 def test_itf_is_last_resort_not_entirely_removed():
-    out=select_market_sections([pick("a",.78),pick("b",.75,"WTA"),pick("i",.80,"ITF Women")])
+    out=select_market_sections([pick("a",.78),pick("b",.75,"WTA"),verified_w35("i",.80)])
     assert ids(out)==["a","b","i"]
 
 
@@ -84,11 +94,11 @@ def test_probability_wins_over_market_consensus_within_same_group():
     assert ids(select_market_sections(rows)) == ["higher", "middle", "lower"]
 
 
-def test_main_then_itf_then_challenger_with_wta125_excluded_from_top():
-    rows = [pick("itf", .95, "ITF Men"), pick("secondary-low", .71, "Challenger"),
+def test_main_then_challenger_then_verified_w35_with_wta125_excluded():
+    rows = [verified_w35("itf", .95), pick("secondary-low", .71, "Challenger"),
             pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
     result = select_market_sections(rows)
-    assert ids(result) == ["main", "itf", "secondary-low"]
+    assert ids(result) == ["main", "secondary-low", "itf"]
     assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
@@ -116,7 +126,7 @@ def test_m15_m25_top_hold_pending_calibration(tournament):
 def test_m15_m25_hold_does_not_change_value_or_generic_itf_top():
     m15 = pick("value-m15", .71, "ITF Men", odds=1.91, other=1.95)
     m15["tournament"] = "ITF M15"
-    normal_itf = pick("itf-other", .75, "ITF Women", odds=1.60)
+    normal_itf = verified_w35("itf-other", .75, odds=1.60)
     out = select_market_sections([m15, normal_itf])
     assert ids(out) == ["itf-other"]
     assert [x["event_id"] for x in out["value_picks"]] == ["value-m15"]
@@ -127,7 +137,8 @@ def test_m15_m25_hold_does_not_false_match_m150_or_main_tours():
     m150["tournament"] = "ITF M150"
     atp = pick("atp", .72, "ATP")
     out = select_market_sections([m150, atp])
-    assert ids(out) == ["atp", "itf-150"]
+    assert ids(out) == ["atp"]
+    assert out["market_selection"]["top_rejection_counts"]["itf_top_requires_verified_w35plus"] == 1
 
 
 def test_feature_availability_snapshot_is_not_a_calibration_claim():
@@ -168,7 +179,7 @@ def test_severe_market_outsider_conflict_held_from_new_top(competition, tourname
 
 
 def test_high_odds_not_a_ceiling_when_market_agrees():
-    card = pick("qualified-longer-price", .80, "ITF Women", odds=2.20, other=2.60)
+    card = verified_w35("qualified-longer-price", .80, odds=2.20, other=2.60)
     output = select_market_sections([card])
     assert ids(output) == ["qualified-longer-price"]
     assert "top_unverified_market_outsider_conflict" not in output["market_selection"]["top_rejection_counts"]
@@ -177,7 +188,7 @@ def test_high_odds_not_a_ceiling_when_market_agrees():
 def test_small_outsider_difference_still_eligible():
     # Exactly 1.80 stays in TOP; >1.80 with nearly equal prices belongs
     # to VALUE by explicit product priority, not by market safety.
-    card = pick("small-difference", .71, "ITF Women", odds=1.80, other=1.75)
+    card = verified_w35("small-difference", .71, odds=1.80, other=1.75)
     output = select_market_sections([card])
     assert ids(output) == ["small-difference"]
 
@@ -203,14 +214,14 @@ def test_high_odds_atp_selection_unchanged_by_itf_precaution():
 
 
 def test_itf_favorite_not_removed_by_market_precaution():
-    itf = pick("itf-favorite", .718, "ITF Women", odds=1.52, other=2.50)
+    itf = verified_w35("itf-favorite", .718, odds=1.52, other=2.50)
     output = select_market_sections([itf])
     assert ids(output) == ["itf-favorite"]
 
 
-def test_atp_wta_70_68_65_tiers_take_all_three_slots_before_itf():
+def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     rows = [
-        pick("itf", .97, "ITF Women", odds=1.60),
+        verified_w35("itf", .97, odds=1.60),
         pick("challenger", .95, "Challenger", odds=1.60),
         pick("atp70", .76, "ATP"),
         pick("wta68", .69, "WTA"),
@@ -220,25 +231,52 @@ def test_atp_wta_70_68_65_tiers_take_all_three_slots_before_itf():
     result = select_market_sections(rows)
     assert ids(result) == ["atp70", "wta68", "atp65"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "main_0.70", "main_0.68", "main_0.65"
+        "main_0.65", "main_0.65", "main_0.65"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
 
 
-def test_no_itf_or_challenger_below_70_even_if_atp_65_allowed():
+def test_65_floor_applies_to_challenger_and_proven_w35_only():
     atp = pick("atp", .65, "ATP")
-    itf = pick("itf-low", .699, "ITF Women")
-    challenger = pick("challenger-low", .69, "Challenger")
-    result = select_market_sections([atp, itf, challenger])
-    assert ids(result) == ["atp"]
-    assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
+    challenger = pick("challenger", .66, "Challenger")
+    w35 = verified_w35("w35", .655)
+    rejected = pick("under-floor", .649, "Challenger")
+    result = select_market_sections([atp, challenger, w35, rejected])
+    assert ids(result) == ["atp", "challenger", "w35"]
+    assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
+        "main_0.65", "challenger_0.65", "women_itf_0.65"
+    ]
     snap = build_selection_candidate_snapshot(
-        [atp, itf, challenger], generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
+        [atp, challenger, w35, rejected],
+        generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
     assert snap["selection_policy"] == "priority_tours_top_v20"
-    assert "probability_below_fixed_floor" in snap["rows"][1]["top_rejection_reasons"]
-    assert "probability_below_fixed_floor" in snap["rows"][2]["top_rejection_reasons"]
+    assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
+
+
+def test_men_itf_all_levels_and_unverified_women_fail_closed():
+    men = [pick(f"men{n}", .99, "ITF Men") for n in (15,25,50,100)]
+    for n,card in zip((15,25,50,100),men):
+        card["tournament"] = f"ITF M{n} Futures"
+    unknown = pick("unknown", .99, "ITF Women")
+    false_evidence = verified_w35("false", .99)
+    false_evidence["quality"]["feature_evidence"]["surface_serve_return_known_both"] = False
+    out = select_market_sections(men + [unknown,false_evidence])
+    assert ids(out) == []
+    assert out["market_selection"]["top_rejection_counts"]["itf_top_requires_verified_w35plus"] == 6
+
+
+def test_w35_quality_gate_is_not_waived_for_3_tip_target():
+    good = verified_w35("good", .65)
+    no_serve = verified_w35("no-serve", .95)
+    no_serve["quality"]["feature_evidence"]["serve_return_known_both"] = False
+    no_surface = verified_w35("no-surface", .92)
+    no_surface["quality"]["feature_evidence"]["surface_serve_return_known_both"] = None
+    out = select_market_sections([good, no_serve, no_surface])
+    assert ids(out) == ["good"]
+    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
+
 
 
 def test_old_itf_safeguards_survive_new_tier_order():
@@ -246,8 +284,8 @@ def test_old_itf_safeguards_survive_new_tier_order():
     m15["tournament"] = "ITF M15 Futures"
     m25 = pick("m25", .99, "ITF Men", odds=1.60)
     m25["tournament"] = "ITF M25 Futures"
-    risky_itf = pick("risky", .75, "ITF Women", odds=2.50, other=1.50)
-    safe_itf = pick("safe", .73, "ITF Women", odds=1.60)
+    risky_itf = verified_w35("risky", .75, odds=2.50, other=1.50)
+    safe_itf = verified_w35("safe", .73, odds=1.60)
     result = select_market_sections([m15, m25, risky_itf, safe_itf])
     assert ids(result) == ["safe"]
     assert result["market_selection"]["top_rejection_counts"]["itf_m15_m25_top_hold_pending_calibration"] == 2
