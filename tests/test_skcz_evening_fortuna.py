@@ -142,7 +142,21 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(report['out_of_target_window_events'], 1)
         self.assertIn('Počet gemov v zápase',
                       report['market_labels_observed_sample'])
+        self.assertEqual(report['prematch_aces_market_diagnostics'], [])
         self.assertEqual(report['exact_aces_pairs'], 0)
+
+    def test_out_of_window_genuine_prematch_aces_are_diagnostic_not_imported(self):
+        def get(url):
+            return INDEX if url == f.INDEX else page()
+        report = f.collect(date(2026, 11, 11), max_events=3,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(report['exact_aces_pairs'], 0)
+        self.assertEqual(len(report['events_in_target_window']), 0)
+        groups = report['prematch_aces_market_diagnostics']
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]['kind'], 'player_aces_ou')
+        self.assertEqual(groups[0]['verified_pairs'][0]['line'], 6.5)
+        self.assertEqual(groups[0]['verified_pairs'][0]['over'], 1.8)
 
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):
