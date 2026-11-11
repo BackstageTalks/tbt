@@ -131,6 +131,11 @@ def test_external_clock_prevents_duplicate_and_active_writer_orchestrator():
     assert external_clock_gapfill_decision(
         now, [run(now - timedelta(minutes=18), "completed", "failure")])[0] is True
     assert external_clock_gapfill_decision(
+        now, [run(now - timedelta(minutes=18), "completed", "failure"),
+              run(now - timedelta(minutes=28), "completed", "failure")])[1] == (
+                  "repeated_guard_failures_need_diagnosis"
+              )
+    assert external_clock_gapfill_decision(
         now, [run(now - timedelta(minutes=20), "completed", "success", event="schedule")])[0] is True
     assert external_clock_gapfill_decision(
         now, [run(now - timedelta(hours=7), "in_progress")])[0] is True
