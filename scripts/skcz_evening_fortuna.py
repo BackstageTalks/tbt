@@ -280,6 +280,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
                         break
                     report['prematch_aces_market_diagnostics'].append({
                         'players': parsed['players'],
+                        'source_url': parsed['source_url'],
                         'scheduled_at': parsed['scheduled_at'],
                         'market_name': market['market_name'],
                         'kind': market['kind'],
