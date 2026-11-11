@@ -12,6 +12,8 @@ import re
 POLICY = "priority_tours_top_v19"
 MIN_PROBABILITY = .70  # absolute floor authorized by owner
 MIN_ODDS = 1.50
+# Temporary TOP-only evidence hold; not an odds ceiling or calibrated profitability claim.
+TOP_MARKET_OUTSIDER_CONFLICT_GAP = .25
 
 
 def number(value):
@@ -68,6 +70,25 @@ def is_itf_m15_m25(row):
     return bool(re.search(r"(?<![a-z0-9])m[\s-]?(?:15|25)(?![a-z0-9])", labels))
 
 
+
+def unverified_top_market_outsider(card):
+    """Hold severe TOP-only market/model favorite inversion for review.
+
+    Requires the original two-way, no-vig price evidence. A high-priced pick
+    which the bookmaker still favors is not automatically rejected; nor do
+    we rewrite the model or previously issued selections. Re-entry requires
+    independent prospective calibration, not one favorable outcome.
+    """
+    bet = card.get("betting") if isinstance(card.get("betting"), dict) else {}
+    if bet.get("market") != "match_winner":
+        return False
+    public = number(card.get("probability"))
+    fair = number(bet.get("fair_implied_probability"))
+    return bool(public is not None and .5 <= public < 1
+                and fair is not None and 0 < fair < .5
+                and public - fair > TOP_MARKET_OUTSIDER_CONFLICT_GAP + 1e-12)
+
+
 def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5, min_odds=1.50):
     from .price_integrity import extreme_winner_price_inversion, unsubstantiated_high_confidence_winner
 
@@ -78,6 +99,8 @@ def rejection_reasons(card, *, min_probability=.70, min_depth=.80, min_surface=5
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.
     if is_itf_m15_m25(card):
         reasons.append("itf_m15_m25_top_hold_pending_calibration")
+    if unverified_top_market_outsider(card):
+        reasons.append("top_unverified_market_outsider_conflict")
     if card.get("prediction_family") == "doubles":
         reasons.append("not_singles")
     bet = card.get("betting") if isinstance(card.get("betting"), dict) else {}
