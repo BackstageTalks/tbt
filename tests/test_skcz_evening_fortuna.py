@@ -133,6 +133,17 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertIn('Počet gemov v zápase', row['market_group_titles_sample'])
         self.assertIn('Víťaz zápasu', row['market_group_titles_sample'])
 
+    def test_out_of_window_public_market_names_are_diagnostics_only(self):
+        def get(url):
+            return INDEX if url == f.INDEX else page(market='Počet gemov v zápase')
+        report = f.collect(date(2026, 11, 11), max_events=3,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(len(report['events_in_target_window']), 0)
+        self.assertEqual(report['out_of_target_window_events'], 1)
+        self.assertIn('Počet gemov v zápase',
+                      report['market_labels_observed_sample'])
+        self.assertEqual(report['exact_aces_pairs'], 0)
+
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):
             f.collect(date(2026, 11, 8), now=NOW, get=lambda _: INDEX)
