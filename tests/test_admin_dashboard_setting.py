@@ -130,7 +130,11 @@ def test_public_markup_unchanged_and_admin_config_is_scoped():
     assert "const cards=visibleSettings.map" in app
     assert 'host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"' in app
     assert "state.feed?.dashboard_kpi_cards" in app
-    assert "source_feed = _visible_issued_feed(_read_feed_with_confirmed_aces_ou())" in api
+    # The immutable issued authority must still run after verified auth and
+    # be consumed before any presentation projection or entitlement filter.
+    assert "pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou()))" in api
+    assert api.index('issued_future, overlays_future = _prefetch_independent_feed_reads(pool)') > api.index('trace_stage("auth_verified")')
+    assert api.index('source_feed = issued_future.result()') < api.index('source_feed = with_issued_ace_leader_signals(source_feed)')
     assert "return filter_unissued_offers(public, authority)" in api
     assert 'return attach_confirmed_aces_ou_sidecar(base, sidecar)' in api
     # Member KPI cards must derive from the already-authorized Results cohort;

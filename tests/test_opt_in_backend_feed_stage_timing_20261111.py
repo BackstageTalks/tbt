@@ -29,8 +29,9 @@ def test_existing_access_and_feed_workflows_remain_authoritative():
     required = (
         '_verified_user(req)', '_profile_for(user)',
         'public_account(user, cfg=settings, profile=profile)',
-        '_visible_issued_feed(_read_feed_with_confirmed_aces_ou())',
-        '_feed_support_reads_parallel()', 'apply_result_exclusions',
+        '_prefetch_independent_feed_reads(pool)',
+        'source_feed = issued_future.result()',
+        'support_reads = overlays_future.result()', 'apply_result_exclusions',
         'filter_feed_for_access(source_feed, access_context, runtime_ui)',
         'list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False, joined_only=True)',
         'runtime_settled_results', 'filter_results_for_categories',
@@ -40,6 +41,11 @@ def test_existing_access_and_feed_workflows_remain_authoritative():
     )
     for token in required:
         assert token in FEED, token
+    # The original publication-authority and support readers remain in use.
+    prefetch = API[API.index('def _prefetch_independent_feed_reads('):
+                   API.index('@app.route(route="v1/feed", methods=["GET"])')]
+    assert '_visible_issued_feed(_read_feed_with_confirmed_aces_ou())' in prefetch
+    assert 'pool.submit(_feed_support_reads_parallel)' in prefetch
     for stage in (
         "auth_verified", "account_profile", "account_public", "issued_feed",
         "aces_projection", "support_reads", "access_filter",
