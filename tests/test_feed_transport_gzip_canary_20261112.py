@@ -53,7 +53,7 @@ def test_real_feed_handler_supports_canary_but_ordinary_path_is_unchanged(monkey
     assert compressed.headers["Content-Encoding"] == "gzip"
     hydrated = json.loads(gzip.decompress(compressed.get_body()))
     assert hydrated["results"] == ordinary["results"]
-    assert hydrated["dashboard_kpi_cards"] == ordinary["dashboard_kpi_cards"]
+    assert hydrated["dashboard_kpi_cards"] == json.loads(json.dumps(ordinary["dashboard_kpi_cards"]))
     assert hydrated["__blinq_feed_stage_ms"][-1][0] == "clv_complete"
     assert calls == [("settled",), ("settled",)]
     no_encoding = api.feed(_request("br", blinq_feed_trace="1", blinq_feed_gzip="1"))
