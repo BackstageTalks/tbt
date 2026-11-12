@@ -6870,7 +6870,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-research-shadow" '+(canResearchShadow?'':'disabled')+'>Spustiť výskumný shadow (prospective only)</button>'+
       '<p role="status">'+escapeHtml(canResearchShadow?
         'Po potvrdení sa uloží jednorazová požiadavka. Worker znovu overí SHA kandidáta, aktuálny shadow, zálohu a produkciu.':
-        (d?.reason||'Aktivácia čaká na voľnú frontu a overené nemenné vydanie modelu.'))+'</p></article>'+
+        (d?.reason||'Aktivácia čaká na voľnú frontu a overené nemenné vydanie modelu.'))+'</p></article>';
     const championCard='<article class="admin-calibration-panel model-factory-champion" aria-label="Ručný výber championa">'+
       '<small>SAMOSTATNÉ SCHVÁLENIE</small><h3>Vybrať nového championa</h3>'+
       '<p>Najprv porovnaj kvalitu a prospektívne výsledky. Toto je <strong>výslovná výnimka kalibrácie</strong>, nie automatické GO. Bez kvalitných dôkazov kandidáta nenasadzuj.</p>'+
