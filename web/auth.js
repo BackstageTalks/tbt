@@ -521,7 +521,7 @@
     const requestWithSafeFallback = async () => {
       if (!useGzip) return request();
       try {
-        const compressed = await request(url + '&blinq_feed_gzip=1');
+        const compressed = await request(url + (url.includes('?') ? '&' : '?') + 'blinq_feed_gzip=1');
         if (compressed && Array.isArray(compressed.upcoming) && Array.isArray(compressed.results)
             && compressed.account && compressed.entitlements) return compressed;
       } catch (error) {
