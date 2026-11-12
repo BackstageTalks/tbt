@@ -1,4 +1,4 @@
-"""Diagnostic-only feed transport: safe by default and faithful JSON bytes."""
+"""Explicit opt-in gzip transport: identical JSON and a reversible web fallback."""
 import gzip
 import json
 from pathlib import Path
@@ -81,7 +81,7 @@ def test_diagnostics_are_opt_in_without_altering_normal_transport():
     assert 'return _gzip_feed_response(data)' in feed
     assert 'return response(data)' in feed
     assert "const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';" in auth
-    assert "gzipCanary = traced && new URLSearchParams(location.search).get('blinq_feed_gzip') === '1'" in auth
+    assert "useGzip = new URLSearchParams(location.search).get('blinq_feed_gzip') !== '0'" in auth
     assert "return request();" in auth
     assert "return requestWithSafeFallback();" in auth
     assert "performance.getEntriesByType('resource')" in app
