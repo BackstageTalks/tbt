@@ -50,11 +50,13 @@ def test_authenticated_web_uses_gzip_with_explicit_opt_out_and_original_fallback
                app.index('@app.route(route="v1/internal/clv-snapshot"')]
     assert "let useGzip = true;" in auth
     assert "get('blinq_feed_gzip') !== '0'" in auth
-    assert "request(url + '&blinq_feed_gzip=1')" in auth
+    assert "url + (url.includes('?') ? '&' : '?') + 'blinq_feed_gzip=1'" in auth
     assert "if (!useGzip) return request()" in auth
     assert "return request();" in auth
     assert "if ([401, 403].includes(Number(error?.status))) throw error" in auth
     assert 'if (compressed && Array.isArray(compressed.upcoming) && Array.isArray(compressed.results)' in auth
     assert 'data["__blinq_feed_stage_ms"] = trace_marks' in feed
+    # The default URL has no query string: it must not become /feed&...
+    assert "const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';" in auth
     assert '"blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req)' in feed
     assert 'return response(data)' in feed
