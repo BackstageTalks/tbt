@@ -62,6 +62,6 @@ def test_uniform_visible_results_labels_without_rewriting_settlement_data():
     assert "return 'VOID';" in APP
     assert "lcopy('WIN','VÝHRA','VÝHRA')" in APP
     assert "lcopy('LOSS','PREHRA','PREHRA')" in APP
-    assert "lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')" in APP
+    assert "lcopy('WIN - LOSS - VOID','VÝHRA - PREHRA - VOID','VÝHRA - PREHRA - VOID')" in APP
     assert 'voidLabel===\'SKREČ\'?\'retired\':\'void\'' in APP
     assert ".results-table .retired{color:#bf8cff" in CSS

@@ -8760,7 +8760,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         ?lcopy(`settled from ${todayTotal} ${memberName} picks published today`,`vyhodnotené z ${todayTotal} dnešných ${memberName} pickov`,`vyhodnocené z ${todayTotal} dnešních ${memberName} tipů`)
         :lcopy(`settled from ${todayTotal} published picks in the current betting day`,`vyhodnotené z ${todayTotal} dnešných publikovaných pickov`,`vyhodnocené z ${todayTotal} dnešních publikovaných tipů`);
     return metricCards([
-      [publicText('Record'),missingMemberRules?'—':`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
+      [publicText('Record'),missingMemberRules?'—':`${m.wins}-${m.losses}-${m.voids}`,lcopy('WIN - LOSS - VOID','VÝHRA - PREHRA - VOID','VÝHRA - PREHRA - VOID')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
       ['ROI',m.roi==null?'—':pct(m.roi),lcopy('1u per settled pick with an accepted quote','1u na každý vyhodnotený tip s platným kurzom','1u na každý vyhodnocený tip s platným kurzem')],
