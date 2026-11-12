@@ -112,6 +112,8 @@ def candidate_722_confidence_evidence_report(test, candidate_p, champion_p=None)
     if not np.isin(tours, ("ATP", "WTA")).all():
         raise ValueError("7.2.2 diagnostics require exact ATP/WTA tours")
     raw_surfaces = test["surface"].astype(str).str.lower().to_numpy()
+    # Match FeatureBuilder: indoor hard shares the hard statistical surface pool.
+    raw_surfaces = np.where(raw_surfaces == "indoor_hard", "hard", raw_surfaces)
     surfaces = np.where(np.isin(raw_surfaces, ("hard", "clay", "grass", "carpet")),
                         raw_surfaces, "unknown")
     anchor = np.maximum(champion, 1 - champion) if champion is not None else np.maximum(candidate, 1 - candidate)
