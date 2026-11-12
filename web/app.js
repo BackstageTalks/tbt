@@ -6863,6 +6863,14 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       (prospectiveReady?'Podľa načítaného reportu splnené':'Nesplnené alebo neoverené')+
       '</strong></p>'+(missingShadow.length?'<ul>'+missingShadow+'</ul>':'')+
       '<p>Výsledky z Admin snapshotu nenahrádzajú podpísaný same-event ledger a nezávislý produkčný read-back.</p>';
+    const researchShadowCard='<article class="admin-calibration-panel model-factory-research-shadow" aria-label="Spustiť výskumný shadow">'+
+      '<small>VÝSKUM · 7.2.2</small><h3>Výskumný shadow · bez produkčného nasadenia</h3>'+
+      '<p>Vyber uložený nemenný model. Aktivácia meria budúce zápasy, <strong>nepotvrdzuje kvalitu kandidáta</strong> a nemení championa ani TOP tipy. Pre existujúci 7.2.2 nepotrebuje nový tréning.</p>'+
+      '<label>Nemenný kandidát <select id="admin-model-lab-research-candidate" '+(canResearchShadow?'':'disabled')+'>'+researchOptions+'</select></label>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-research-shadow" '+(canResearchShadow?'':'disabled')+'>Spustiť výskumný shadow (prospective only)</button>'+
+      '<p role="status">'+escapeHtml(canResearchShadow?
+        'Po potvrdení sa uloží jednorazová požiadavka. Worker znovu overí SHA kandidáta, aktuálny shadow, zálohu a produkciu.':
+        (d?.reason||'Aktivácia čaká na voľnú frontu a overené nemenné vydanie modelu.'))+'</p></article>'+
     const championCard='<article class="admin-calibration-panel model-factory-champion" aria-label="Ručný výber championa">'+
       '<small>SAMOSTATNÉ SCHVÁLENIE</small><h3>Vybrať nového championa</h3>'+
       '<p>Najprv porovnaj kvalitu a prospektívne výsledky. Toto je <strong>výslovná výnimka kalibrácie</strong>, nie automatické GO. Bez kvalitných dôkazov kandidáta nenasadzuj.</p>'+
@@ -6874,7 +6882,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
-      productionSummary+guidedCard+championCard+
+      productionSummary+guidedCard+researchShadowCard+championCard+
       '<details class="admin-model-factory-controls"'+(state.adminModelFactoryControlsOpen===true?' open':'')+'><summary>Podrobnosti, história a pokročilé ovládanie</summary>'+
       '<article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
       '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
@@ -6901,13 +6909,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       (failedSteps.length?'<p role="alert"><strong>Tréning sa zastavil:</strong> '+escapeHtml(failedSteps.join(' · '))+'. Po uvoľnení dátového zámku a overení prípravy môžeš spustiť nový pokus. Nedokončený beh sa nevydáva za uložený model.</p>':'')+
       timeline+outcomeText+
       '<p role="status">'+escapeHtml(shadowText)+'</p>'+
-      '<div class="admin-model-research-shadow"><h4>Výskumný shadow · bez produkčného nasadenia</h4>'+
-      '<p>Vyber uložený nemenný model. Aktivácia meria budúce zápasy, <strong>nepotvrdzuje kvalitu kandidáta</strong> a nemení championa ani TOP tipy. Pre existujúci 7.2.2 nepotrebuje nový tréning.</p>'+
-      '<label>Nemenný kandidát <select id="admin-model-lab-research-candidate" '+(canResearchShadow?'':'disabled')+'>'+researchOptions+'</select></label>'+
-      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-research-shadow" '+(canResearchShadow?'':'disabled')+'>Spustiť výskumný shadow (prospective only)</button>'+
-      '<p role="status">'+escapeHtml(canResearchShadow?
-        'Po potvrdení sa uloží jednorazová požiadavka. Worker znovu overí SHA kandidáta, aktuálny shadow, zálohu a produkciu.':
-        (d?.reason||'Aktivácia čaká na voľnú frontu a overené nemenné vydanie modelu.'))+'</p></div></article>'+
+      '</article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
       '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+
       '<p>Výber championa a potvrdzovacie tlačidlo sú nad pokročilými operáciami, aby zostali vždy viditeľné.</p>'+
