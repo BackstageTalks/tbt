@@ -102,7 +102,7 @@ def test_runtime_settlement_same_rows_and_finance_before_and_after_fast_path():
     assert len(ordinary) == len(borrowed) == 2
     assert all(len(item["market_publications"]) == 1 for item in borrowed)
     assert borrowed[0]["market_publications"][0]["result"]["correct"] is True
-    assert borrowed[0]["market_publications"][0]["result"]["profit_units"] == 0.62
+    assert abs(borrowed[0]["market_publications"][0]["result"]["profit_units"] - 0.62) < 1e-12
 
     normal_final = access.filter_results_for_categories(ordinary, {"top_daily"})
     fast_final = access.filter_results_for_categories(borrowed, {"top_daily"})
