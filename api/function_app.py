@@ -1580,9 +1580,14 @@ def _gzip_feed_response(payload):
     Keep this separate from the normal response() path until a real mobile
     Azure-edge round trip confirms Content-Encoding interoperability.
     """
+    begin = time.perf_counter()
     raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    serialized_ms = (time.perf_counter() - begin) * 1000
+    begin = time.perf_counter()
+    compressed = gzip.compress(raw, compresslevel=1, mtime=0)
+    compressed_ms = (time.perf_counter() - begin) * 1000
     return func.HttpResponse(
-        body=gzip.compress(raw, compresslevel=1, mtime=0),
+        body=compressed,
         status_code=200,
         mimetype="application/json",
         headers={
@@ -1591,6 +1596,12 @@ def _gzip_feed_response(payload):
             "X-BlinQ-Release": RELEASE,
             "Content-Encoding": "gzip",
             "Vary": "Accept-Encoding",
+            # Standard same-origin diagnostics; no data, identity or token.
+            # This distinguishes response encoding from the Azure edge queue.
+            "Server-Timing": (
+                f"blinq_json;dur={serialized_ms:.1f}, "
+                f"blinq_gzip;dur={compressed_ms:.1f}"
+            ),
         },
     )
 
