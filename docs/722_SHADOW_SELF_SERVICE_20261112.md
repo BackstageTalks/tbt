@@ -66,3 +66,41 @@ znovu načíta a skontroluje; nesmú slúžiť ako pevne zakódované konštanty
   do nezávislej rekonciliácie. Znova ju nespúšťaj naslepo.
 - Bežná **Aktivovať iba shadow (manuálne)** zostáva naďalej zvlášť
   viazaná na overený offline holdout (pôvodný režim).
+
+
+## Overený stav po jednorazovom spustení (12. 11. 2026, UTC)
+
+- **IMPLEMENTOVANÉ / OTESTOVANÉ / MERGED / NASADENÉ (Admin tlačidlá):**
+  PR [#1573](https://github.com/BackstageTalks/tbt/pull/1573);
+  produkčný CI/deploy [#43193261050](https://github.com/BackstageTalks/tbt/actions/runs/43193261050).
+  Live `app.js` nezávisle obsahoval `model-lab-research-shadow` aj `prospective_only`.
+- **SHADOW AKTIVOVANÝ A OVERENÝ:** presný native
+  [workflow #43198370104](https://github.com/BackstageTalks/tbt/actions/runs/43198370104)
+  na [schválenom one-shot PR #1577](https://github.com/BackstageTalks/tbt/pull/1577);
+  result `VERIFIED_ACTIVE_SHADOW_CANDIDATE`, `remote_readback=VERIFIED`.
+- **SKUTOČNE zapísaný kandidát:** `tbt-model-candidate-v1` / `model.joblib`
+  SHA `131a4dd71994f082bf5c041c5f7a785d581421170a44ace39de9e27c61f1de3f`,
+  model `v7.2.2-v201-20261106T212948133645Z`;
+  porovnané nezávisle s immutable source release.
+- **PRODUKCIA ZACHOVANÁ:** `tbt-model-production-v1` stále model SHA
+  `c1e761ccc3e530c600abc8559031869071dddef99e9a5fffb78ed602cb933c91`,
+  model `v7.2.1-v201-20261022T134742452543Z`. Zero model promotion.
+- **METRIKY VYKONANIA:** `provider_requests=0`,
+  `production_mutated=false`, `captured=0`, `settled=0`,
+  `pending=0`, `remote_readback=VERIFIED`; 7 aktivátorových testov
+  prešlo; globálny lock `acquired` aj `released` v rovnakom native behu.
+  `UNVERIFIED_RESEARCH` = iba prospektívna kvalita; úspešnosť zatiaľ
+  **nemožno vypočítať**, nula zápasov nie je dôkaz lepšieho modelu.
+- **Admin porovnanie:** bezprostredný best-effort publish odmietol
+  readiness starší než 1 hodinu (`Readiness evidence is not current`).
+  Ide o PREDCHÁDZAJÚCE fail-closed pravidlo, nie chybné modelové SHA;
+  žiadne obídenie pravidla. Existujúci `model-calibration-monitor.yml`
+  po cleanup merge vykoná nový read-only kanonický scan a podpísaný
+  Azure Admin read-back. Dokončenie publikácie overiť v jeho samostatnom behu.
+- **Dočasná infraštruktúra:** jednorazový push override vypnúť/obnoviť
+  cez [cleanup PR #1580](https://github.com/BackstageTalks/tbt/pull/1580).
+  Trvalá aktivácia budúcich kandidátov používa iba Admin → Model Lab
+  a pôvodný `workflow_dispatch`.
+- **Ďalší krok:** zbierať pravé predštartové paired same-event shadow dáta,
+  vyhodnotiť ATP/WTA a konfidenčné pásma ≥65 %,
+  zdrojovú PIT provenienciu; nie je schválené prepnutie championa.
