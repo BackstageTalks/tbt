@@ -181,7 +181,8 @@ def test_second_pass_removes_unentitled_publication_from_runtime_mixed_market_ro
 def test_feed_route_rechecks_after_status_overlay_before_response():
     from pathlib import Path
     app = (Path(__file__).resolve().parents[1] / "api/function_app.py").read_text(encoding="utf-8")
-    assert 'data["results"] = runtime_settled_results(data, data["match_statuses"])' in app
+    assert 'data["results"] = runtime_settled_results(' in app
+    assert 'data["match_statuses"], already_detached=True' in app
     assert 'data["results"] = filter_results_for_categories(' in app
     assert 'entitlements.get("result_categories") or []' in app
 
