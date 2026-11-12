@@ -30,6 +30,7 @@ assert.match(html,/data-admin-action="model-factory-promote" disabled/);
 assert(html.indexOf('id="admin-production-candidate"')<html.indexOf('<details class="admin-model-factory-controls"'));
 assert.equal(html.split('id="admin-production-candidate"').length-1,1);
 assert.match(html,/data-model-lab-operation="activate_shadow" disabled/);
+assert.match(html,/data-admin-action="model-lab-research-shadow" disabled/);
 state.adminTraining={can_start:true,runs:[],candidates:[{tag:'blinq-candidate-frozen-123-1'}]};
 state.adminModelLab={can_start:true,reason:'Pripravené',active_sha256:'a'.repeat(64),champion_sha256:'c'.repeat(64),
   candidates:[{tag:'blinq-candidate-frozen-123-1',sha256:'b'.repeat(64)},
@@ -41,6 +42,11 @@ assert.doesNotMatch(html,/data-admin-action="model-factory-next" data-factory-ne
 assert.doesNotMatch(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.doesNotMatch(html,/data-model-lab-operation="refresh_champion_inputs" disabled/);
 assert.match(html,/Chýba overený SHA-256 posledného publikovaného feedu/);
+assert.match(html,/id="admin-model-lab-research-candidate"/);
+assert.doesNotMatch(html,/data-admin-action="model-lab-research-shadow" disabled/);
+assert.match(html,/Spustiť výskumný shadow \(prospective only\)/);
+assert.match(html,/<option value="">Vyber konkrétny nemenný release a over SHA<\/option>/);
+assert(!html.includes('bad&lt;script&gt;'));
 state.adminModelLab.feed_sha256='f'.repeat(64);
 state.adminModelLab.feed_updated_at=new Date().toISOString();
 html=ctx.renderAdminModelLab();
@@ -121,6 +127,8 @@ assert.match(html,/data-model-lab-operation="prepare_inputs" disabled/);
 assert.match(src,/Promise\.allSettled\(\[BlinqAuth\.adminModelLab\(\),BlinqAuth\.adminModelTraining\(\)\]\)/);
 assert.match(src,/Prepočet nebol odoslaný/);
 assert.match(src,/if\(action==='model-lab-start'\)/);
+assert.match(src,/if\(action==='model-lab-research-shadow'\)/);
+assert.match(src,/loadAdminModelLab\('activate_shadow',false,\{source_tag,prospective_only:true\}\)/);
 assert.match(src,/if\(action==='model-lab-acknowledge'\)/);
 assert.match(src,/state\.adminTraining=await BlinqAuth\.adminModelTraining\(\);/);
 assert.match(src,/loadAdminTraining\(true,profile\)/);

@@ -323,11 +323,13 @@ def status():
 
 
 def start(payload, actor):
-    if not isinstance(payload, dict) or set(payload) - {"action", "source_tag", "calibration_override", "reason", "confirmation"}:
+    if not isinstance(payload, dict) or set(payload) - {"action", "source_tag", "prospective_only", "calibration_override", "reason", "confirmation"}:
         raise ValueError("Nepodporovaná operácia.")
     action = payload.get("action")
     if action not in WORKFLOWS:
         raise ValueError("Nepovolená operácia.")
+    if "prospective_only" in payload and (action != "activate_shadow" or type(payload["prospective_only"]) is not bool):
+        raise ValueError("Prospektívny režim patrí iba overovanej aktivácii shadow.")
     if action not in {"activate_shadow", "promote_production"} and "source_tag" in payload:
         raise ValueError("Tag modelu sa pri tejto operácii nesmie zadávať.")
     if action == "promote_production":
@@ -364,6 +366,7 @@ def start(payload, actor):
         "id": secrets.token_hex(12), "action": action,
         "actor": str(actor)[:128], "created_at": _utcnow().isoformat(),
         "source_tag": tag, "source_sha256": digest,
+        "prospective_only": payload.get("prospective_only", False) if action == "activate_shadow" else False,
         "expected_candidate_sha256": current["active_sha256"],
         "expected_champion_sha256": current["champion_sha256"],
         "snapshot_at": current["observed_at"],

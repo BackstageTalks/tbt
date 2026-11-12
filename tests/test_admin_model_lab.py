@@ -254,6 +254,29 @@ class TestLab(unittest.TestCase):
         self.assertEqual(active["expected_champion_sha256"], "b" * 64)
         self.assertEqual(active["id"], queued["id"])
 
+    def test_prospective_shadow_is_explicit_and_always_pins_both_digests(self):
+        for payload in (
+            {"action": "refresh_tests", "prospective_only": True},
+            {"action": "promote_production", "prospective_only": False},
+            {"action": "activate_shadow", "source_tag": "blinq-candidate-frozen-123-1", "prospective_only": "true"},
+            {"action": "activate_shadow", "source_tag": "blinq-candidate-frozen-123-1", "prospective_only": 1},
+        ):
+            with self.subTest(payload=payload), self.assertRaises(ValueError):
+                m.start(payload, "admin")
+        result = m.start({"action": "activate_shadow",
+                          "source_tag": "blinq-candidate-frozen-123-1",
+                          "prospective_only": True}, "admin")
+        self.assertEqual(result["state"], "QUEUED")
+        active = m._json("active")
+        self.assertIs(active["prospective_only"], True)
+        self.assertEqual(active["source_sha256"], "c" * 64)
+        self.assertEqual(active["expected_candidate_sha256"], "a" * 64)
+        self.assertEqual(active["expected_champion_sha256"], "b" * 64)
+        with self.assertRaises(model_training.TrainingBlocked):
+            m.start({"action": "activate_shadow",
+                     "source_tag": "blinq-candidate-frozen-123-1",
+                     "prospective_only": True}, "admin")
+
     def test_busy_and_stale_snapshot_block(self):
         old = snapshot()
         old["observed_at"] = "2020-01-01T00:00:00+00:00"
@@ -513,6 +536,33 @@ class TestWorker(unittest.TestCase):
                 "promote": "false", "morning_refresh": "false",
             })
             self.assertEqual(kwargs["ref"], "main")
+
+    def test_prospective_shadow_worker_dispatches_exact_native_fields_only(self):
+        from admin_model_lab_worker import dispatch
+        pending = {"action": "activate_shadow", "id": "e" * 24,
+                   "source_tag": "blinq-candidate-frozen-123-1",
+                   "source_sha256": "c" * 64, "prospective_only": True,
+                   "expected_candidate_sha256": "a" * 64,
+                   "expected_champion_sha256": "b" * 64}
+        with patch("admin_model_lab_worker.collect_status", return_value=snapshot()), \
+             patch("admin_model_lab_worker.inspect", return_value={"can_start": True}), \
+             patch("admin_model_lab_worker.sync", return_value={"stored": True, "dispatch_ready": True}), \
+             patch("admin_model_lab_worker.github") as gh:
+            dispatch(pending)
+            url, arguments = gh.call_args.args
+            self.assertEqual(url, "BackstageTalks/tbt/actions/workflows/activate-shadow-candidate.yml/dispatches")
+            self.assertEqual(arguments, {"ref": "main", "inputs": {
+                "request_id": "e" * 24,
+                "source_tag": "blinq-candidate-frozen-123-1",
+                "expected_candidate_sha256": "a" * 64,
+                "prospective_only": "true",
+                "expected_source_sha256": "c" * 64,
+            }})
+            gh.reset_mock()
+            old = {**pending, "prospective_only": False}
+            dispatch(old)
+            self.assertNotIn("prospective_only", gh.call_args.args[1]["inputs"])
+            self.assertNotIn("expected_source_sha256", gh.call_args.args[1]["inputs"])
 
     def test_worker_refuses_candidate_change(self):
         from admin_model_lab_worker import dispatch

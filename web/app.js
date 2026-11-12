@@ -6724,6 +6724,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
     const releaseCandidates=(d?.candidates||[]).filter(c=>/^blinq-candidate-frozen-[0-9]+-[0-9]+$/.test(c.tag)&&
       /^[0-9a-f]{64}$/.test(c.sha256)&&c.sha256!==d?.champion_sha256);
+    // Research-only shadow reuses the existing immutable-release picker,
+    // but does NOT mislabel an available binary as quality-approved.
+    const researchCandidates=releaseCandidates.filter(c=>c.sha256!==d?.active_sha256);
+    const canResearchShadow=canBuild&&researchCandidates.length>0;
+    const researchOptions='<option value="">Vyber konkrétny nemenný release a over SHA</option>'+researchCandidates.slice(0,30).map(c=>
+      '<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+
+      ' · SHA '+escapeHtml(c.sha256.slice(0,12))+'</option>').join('');
     const canPromote=canBuild&&releaseCandidates.length>0;
     const releaseOptions=releaseCandidates.slice(0,30).map(c=>'<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+'</option>').join('');
     const stateLabels={EXPIRED_UNCLAIMED:'Príprava nebola odoslaná · požiadavka vypršala',EXPIRED_UNCLAIMED_CANCELLED:'Neodoslaná požiadavka zrušená',QUEUED:'Čaká na bezpečné spustenie',DISPATCH_UNCONFIRMED:'Spustenie nepotvrdené – nespúšťaj znova',RUNNING:'Prebieha',COMPLETED_PENDING_VERIFICATION:'Dokončené – čaká na kontrolu',WORKFLOW_VERIFIED:'Overené',NO_CHANGE_VERIFIED:'Overené · bez zmeny predikcií',FAILED_NEEDS_REVIEW:'Zlyhanie – vyžaduje kontrolu',VERIFICATION_FAILED:'Report sa nepodarilo overiť'};
@@ -6856,6 +6863,14 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       (prospectiveReady?'Podľa načítaného reportu splnené':'Nesplnené alebo neoverené')+
       '</strong></p>'+(missingShadow.length?'<ul>'+missingShadow+'</ul>':'')+
       '<p>Výsledky z Admin snapshotu nenahrádzajú podpísaný same-event ledger a nezávislý produkčný read-back.</p>';
+    const researchShadowCard='<article class="admin-calibration-panel model-factory-research-shadow" aria-label="Spustiť výskumný shadow">'+
+      '<small>VÝSKUM · KANDIDÁT</small><h3>Výskumný shadow · bez produkčného nasadenia</h3>'+
+      '<p>Vyber uložený nemenný model. Aktivácia meria budúce zápasy, <strong>nepotvrdzuje kvalitu kandidáta</strong> a nemení championa ani TOP tipy. Pre existujúci 7.2.2 nepotrebuje nový tréning.</p>'+
+      '<label>Nemenný kandidát <select id="admin-model-lab-research-candidate" '+(canResearchShadow?'':'disabled')+'>'+researchOptions+'</select></label>'+
+      '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-research-shadow" '+(canResearchShadow?'':'disabled')+'>Spustiť výskumný shadow (prospective only)</button>'+
+      '<p role="status">'+escapeHtml(canResearchShadow?
+        'Po potvrdení sa uloží jednorazová požiadavka. Worker znovu overí SHA kandidáta, aktuálny shadow, zálohu a produkciu.':
+        (d?.reason||'Aktivácia čaká na voľnú frontu a overené nemenné vydanie modelu.'))+'</p></article>';
     const championCard='<article class="admin-calibration-panel model-factory-champion" aria-label="Ručný výber championa">'+
       '<small>SAMOSTATNÉ SCHVÁLENIE</small><h3>Vybrať nového championa</h3>'+
       '<p>Najprv porovnaj kvalitu a prospektívne výsledky. Toto je <strong>výslovná výnimka kalibrácie</strong>, nie automatické GO. Bez kvalitných dôkazov kandidáta nenasadzuj.</p>'+
@@ -6867,7 +6882,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<div class="admin-ux-heading"><div><small>MODEL FACTORY · 3 FÁZY</small><h2>Od dát po produkčný model</h2>'+
       '<p>Jeden postup: príprava dát → tréning a shadow → schválené produkčné nasadenie. Champion zostáva nedotknutý až do samostatne schváleného prepnutia.</p></div>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="calibration-refresh" '+(busy?'disabled':'')+'>Obnoviť celý stav</button></div>'+
-      productionSummary+guidedCard+championCard+
+      productionSummary+guidedCard+researchShadowCard+championCard+
       '<details class="admin-model-factory-controls"'+(state.adminModelFactoryControlsOpen===true?' open':'')+'><summary>Podrobnosti, história a pokročilé ovládanie</summary>'+
       '<article class="admin-calibration-panel admin-model-input-refresh" aria-label="Obnova vstupov championa">'+
       '<small>CHAMPION · BEZ TRÉNINGU</small><h3>Aktualizácia nových dát</h3>'+
@@ -6893,7 +6908,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       (trainingStep?'<p role="status"><strong>Aktuálna fáza:</strong> '+escapeHtml(readableStep(training.active_steps[0]))+'</p>':'')+
       (failedSteps.length?'<p role="alert"><strong>Tréning sa zastavil:</strong> '+escapeHtml(failedSteps.join(' · '))+'. Po uvoľnení dátového zámku a overení prípravy môžeš spustiť nový pokus. Nedokončený beh sa nevydáva za uložený model.</p>':'')+
       timeline+outcomeText+
-      '<p role="status">'+escapeHtml(shadowText)+'</p></article>'+
+      '<p role="status">'+escapeHtml(shadowText)+'</p>'+
+      '</article>'+
       '<article class="admin-calibration-panel"><small>FÁZA 3 · SCHVÁLENIE</small><h3>3 · Nasadiť do produkcie</h3>'+
       '<p>Manuálny release je možný aj bez splnenej kalibrácie a shadow podmienok. Ide o vedomú výnimku, nie potvrdenie kvality. Overenie modelu, aktuálneho championa a existujúcej zálohy na návrat zostáva povinné.</p>'+
       '<p>Výber championa a potvrdzovacie tlačidlo sú nad pokročilými operáciami, aby zostali vždy viditeľné.</p>'+
@@ -6949,7 +6965,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(state.adminModelLabBusy)return;
     state.adminFactoryRevision=(state.adminFactoryRevision||0)+1;
     const generation=feedGeneration;
-    const tag=document.getElementById('admin-model-lab-candidate')?.value||'';
+    const tag=document.getElementById(releasePayload?.prospective_only===true?
+      'admin-model-lab-research-candidate':'admin-model-lab-candidate')?.value||'';
     state.adminModelLabBusy=true;state.adminModelLabMessage=startOperation?'Odosielam požiadavku a overujem bezpečnostné podmienky…':'Načítavam aktuálny stav Model Labu…';rerenderAdmin();
     try{
       let payload;
@@ -8087,6 +8104,21 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           loadAdminTraining(true,profile);return;
         }
         return;
+      }
+      if(action==='model-lab-research-shadow'){
+        const source_tag=document.getElementById('admin-model-lab-research-candidate')?.value||'';
+        const lab=state.adminModelLab, training=state.adminTraining;
+        const candidate=(lab?.candidates||[]).find(c=>c.tag===source_tag&&
+          /^[0-9a-f]{64}$/.test(String(c.sha256||''))&&
+          c.sha256!==lab.active_sha256&&c.sha256!==lab.champion_sha256);
+        if(!candidate||lab?.can_start!==true||training?.can_start!==true||
+           state.adminModelLabBusy||state.adminTrainingBusy){
+          showStatus('Výskumný shadow nie je pripravený. Obnov stav a vyber platný nemenný model.');return;
+        }
+        if(!await confirmAdminModelOperation(
+          'Spustiť výskumný prospective-only shadow kandidáta '+source_tag+
+          '? Offline kvalita nie je týmto schválená. Požiadavka použije presné SHA a existujúci globálny lock; champion a verejné tipy zostávajú nezmenené.'))return;
+        loadAdminModelLab('activate_shadow',false,{source_tag,prospective_only:true});return;
       }
       if(action==='model-lab-start'){
         const operation=String(actionNode.dataset.modelLabOperation||'');

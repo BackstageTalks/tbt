@@ -130,6 +130,42 @@ def main():
                 assert request['action']=='promote_production'
                 assert request['calibration_override'] is True
                 assert request['confirmation']=='RELEASE blinq-candidate-frozen-123-1'
+                # Real Chromium click path for the research-only shadow button,
+                # using mocked signed Admin API. No private model is mutated.
+                page.evaluate("""() => {
+                    const s=adminTestUi.state;
+                    s.adminModelLab.can_start=true;
+                    s.adminTraining.can_start=true;
+                    s.adminModelLab.candidates.push({
+                        tag:'blinq-candidate-frozen-42284691497-1',sha256:'d'.repeat(64)
+                    });
+                    document.getElementById('routePanel').innerHTML=adminTestUi.renderAdminRoute();
+                    adminTestUi.wireAdmin();
+                }""")
+                research=page.locator('[data-admin-action="model-lab-research-shadow"]')
+                select=page.locator('#admin-model-lab-research-candidate')
+                assert research.is_visible(), 'Research shadow must not be buried in advanced settings'
+                assert research.is_enabled()
+                assert select.input_value()=='', 'A frozen release must never be chosen silently'
+                count=page.evaluate('releaseCalls.length')
+                research.click()
+                assert page.evaluate('releaseCalls.length')==count, 'Blank source tag must not dispatch'
+                select.select_option('blinq-candidate-frozen-42284691497-1')
+                research.click()
+                page.get_by_role('button',name='Zrušiť',exact=True).click()
+                assert page.evaluate('releaseCalls.length')==count, 'Cancelled shadow must not dispatch'
+                research.click()
+                page.get_by_role('button',name='Potvrdiť a pokračovať',exact=True).click()
+                page.wait_for_function(
+                    'releaseCalls.length===2 && !adminTestUi.state.adminModelLabBusy'
+                )
+                research_request=page.evaluate('releaseCalls[1]')
+                assert research_request=={
+                    'action':'activate_shadow',
+                    'source_tag':'blinq-candidate-frozen-42284691497-1',
+                    'prospective_only':True,
+                }, research_request
+                assert page.evaluate('releaseCalls.length')==count+1
                 assert not errors, errors
                 context.close()
         finally:
