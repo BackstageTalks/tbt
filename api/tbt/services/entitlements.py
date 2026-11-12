@@ -138,7 +138,8 @@ PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "ace_
 PUBLIC_RESULT_MARKETS = {"aces", "most_aces", "double_faults"}
 
 
-def _public_result_publications(row: dict) -> list[dict]:
+def _public_result_publication_refs(row: dict) -> list[dict]:
+    """Borrow public publications from a Results row already detached by a gate."""
     out = []
     for publication in row.get("market_publications", []) or []:
         if not isinstance(publication, dict):
@@ -146,8 +147,13 @@ def _public_result_publications(row: dict) -> list[dict]:
         section = str(publication.get("section") or "").strip().lower()
         market = str(publication.get("market") or "").strip().lower()
         if section in PUBLIC_RESULT_SECTIONS or market in PUBLIC_RESULT_MARKETS:
-            out.append(deepcopy(publication))
+            out.append(publication)
     return out
+
+
+def _public_result_publications(row: dict) -> list[dict]:
+    # Preserve independent objects for all ordinary/direct callers.
+    return [deepcopy(publication) for publication in _public_result_publication_refs(row)]
 
 
 RESULT_CATEGORY_ORDER = ("top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games")
@@ -279,7 +285,12 @@ def filter_results_for_member_limits(
         if not isinstance(row, dict):
             continue
         scheduled = _result_timestamp(row)
-        for publication in _public_result_publications(row):
+        # Only the feed pipeline supplies already_detached=True, after
+        # _filter_result_history independently copies public Results rows.
+        # Direct helper callers retain the original defensive deep copies.
+        publications = (_public_result_publication_refs(row) if already_detached
+                        else _public_result_publications(row))
+        for publication in publications:
             category = _result_publication_category(publication)
             if category not in categories:
                 continue
@@ -406,7 +417,9 @@ def filter_results_for_member_limits(
             continue
         scheduled = _result_timestamp(row)
         kept = []
-        for pub in _public_result_publications(row):
+        publications = (_public_result_publication_refs(row) if already_detached
+                        else _public_result_publications(row))
+        for pub in publications:
             category = _result_publication_category(pub)
             tab = "daily" if category == "top_daily" else category
             ent = sections.get(tab) or {}
@@ -436,7 +449,9 @@ def filter_results_for_member_limits(
             if (day, tab, _result_contract_identity(row, pub)) in allowed:
                 kept.append(pub)
         if kept:
-            copy = deepcopy(row)
+            # The first Results gate already separated the entire row from
+            # the canonical issued ledger. Only rebuild its publication list.
+            copy = dict(row) if already_detached else deepcopy(row)
             copy["market_publications"] = kept
             filtered.append(copy)
     return filtered
@@ -567,7 +582,9 @@ def filter_results_for_issued_day(
                 or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat()
                     != _NOV2_ISSUED_DAY
                 or blinq_access_day(scheduled) != _NOV2_ISSUED_DAY):
-            out.append(deepcopy(row))
+            # Non-2-Nov rows are unchanged; do not clone an already
+            # detached row a fourth time during this final entitlement gate.
+            out.append(row if already_detached else deepcopy(row))
             continue
         event = str(row.get("event_id") or row.get("id") or "").strip().lower()
         kept = []
@@ -631,9 +648,9 @@ def filter_results_for_issued_day(
                             continue
                     except (ValueError, TypeError):
                         continue
-            kept.append(deepcopy(publication))
+            kept.append(publication if already_detached else deepcopy(publication))
         if kept:
-            copy = deepcopy(row)
+            copy = dict(row) if already_detached else deepcopy(row)
             copy["market_publications"] = kept
             out.append(copy)
     return out
