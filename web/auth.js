@@ -511,9 +511,25 @@
     let traced = false;
     try { traced = new URLSearchParams(location.search).get('blinq_boot_trace') === '1'; } catch {}
     const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';
-    const request = () => json(url, {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
+    // Explicit diagnostic canary only. Ordinary members use the original URL.
+    // If a SWA edge does not preserve gzip correctly, retry the unchanged JSON
+    // endpoint without showing partial/malformed member data.
+    let gzipCanary = false;
+    try { gzipCanary = traced && new URLSearchParams(location.search).get('blinq_feed_gzip') === '1'; } catch {}
+    const request = (target = url) => json(target, {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
+    const requestWithSafeFallback = async () => {
+      if (!gzipCanary) return request();
+      try {
+        const compressed = await request(url + '&blinq_feed_gzip=1');
+        if (compressed && Array.isArray(compressed.upcoming) && Array.isArray(compressed.results)
+            && compressed.account && compressed.entitlements) return compressed;
+      } catch (error) {
+        if ([401, 403].includes(Number(error?.status))) throw error;
+      }
+      return request();
+    };
     try {
-      return await request();
+      return await requestWithSafeFallback();
     } catch (error) {
       // A cold gateway or a brief mobile-network dropout should not send a
       // still-authenticated user back to the login form after a single timeout.
@@ -522,7 +538,7 @@
         && (Number(error?.status) !== 0 || ['auth_timeout', 'auth_network_error'].includes(codeOf(error)));
       if (!retryable) throw error;
       await wait(300);
-      return request();
+      return requestWithSafeFallback();
     }
   }
   async function matchIntelligence(player1Id, player2Id, surface = '', customId = '', eventId = '') {
