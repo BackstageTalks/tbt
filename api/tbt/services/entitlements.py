@@ -567,7 +567,10 @@ def filter_results_for_issued_day(
                 or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat()
                     != _NOV2_ISSUED_DAY
                 or blinq_access_day(scheduled) != _NOV2_ISSUED_DAY):
-            out.append(deepcopy(row))
+            # This is a pure historical pass-through. Authenticated feed
+            # callers already deep-copied and category-filtered these rows.
+            # Keep the default detached copy for independent/public callers.
+            out.append(row if already_detached else deepcopy(row))
             continue
         event = str(row.get("event_id") or row.get("id") or "").strip().lower()
         kept = []
