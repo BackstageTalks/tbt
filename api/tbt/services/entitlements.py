@@ -1510,7 +1510,12 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     if not isinstance(payload, dict): raise ValueError("Invalid serving feed root")
     manifest=entitlement_manifest(access,payload,ui_config)
     if manifest["plan"]=="suspended": raise PermissionError("account_suspended")
-    result=deepcopy(payload)
+    # Avoid a second deep copy of the entire serving snapshot on every reload.
+    # Results and selected picks are independently copied by the access gates
+    # below; keep the unfiltered upcoming list detached for full-access tiers.
+    result=dict(payload)
+    if manifest["plan"] in {"elite", "legend", "goat", "admin"}:
+        result["upcoming"] = deepcopy(payload.get("upcoming", []))
 
     # Results are a separate entitlement boundary. Low tiers never receive the
     # full historical array and therefore cannot recover it from the browser.
