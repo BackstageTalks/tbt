@@ -6728,7 +6728,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     // but does NOT mislabel an available binary as quality-approved.
     const researchCandidates=releaseCandidates.filter(c=>c.sha256!==d?.active_sha256);
     const canResearchShadow=canBuild&&researchCandidates.length>0;
-    const researchOptions=researchCandidates.slice(0,30).map(c=>
+    const researchOptions='<option value="">Vyber konkrétny nemenný release a over SHA</option>'+researchCandidates.slice(0,30).map(c=>
       '<option value="'+escapeHtml(c.tag)+'">'+escapeHtml(c.tag)+
       ' · SHA '+escapeHtml(c.sha256.slice(0,12))+'</option>').join('');
     const canPromote=canBuild&&releaseCandidates.length>0;
@@ -6864,7 +6864,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '</strong></p>'+(missingShadow.length?'<ul>'+missingShadow+'</ul>':'')+
       '<p>Výsledky z Admin snapshotu nenahrádzajú podpísaný same-event ledger a nezávislý produkčný read-back.</p>';
     const researchShadowCard='<article class="admin-calibration-panel model-factory-research-shadow" aria-label="Spustiť výskumný shadow">'+
-      '<small>VÝSKUM · 7.2.2</small><h3>Výskumný shadow · bez produkčného nasadenia</h3>'+
+      '<small>VÝSKUM · KANDIDÁT</small><h3>Výskumný shadow · bez produkčného nasadenia</h3>'+
       '<p>Vyber uložený nemenný model. Aktivácia meria budúce zápasy, <strong>nepotvrdzuje kvalitu kandidáta</strong> a nemení championa ani TOP tipy. Pre existujúci 7.2.2 nepotrebuje nový tréning.</p>'+
       '<label>Nemenný kandidát <select id="admin-model-lab-research-candidate" '+(canResearchShadow?'':'disabled')+'>'+researchOptions+'</select></label>'+
       '<button type="button" class="btn btn-ghost" data-admin-action="model-lab-research-shadow" '+(canResearchShadow?'':'disabled')+'>Spustiť výskumný shadow (prospective only)</button>'+
