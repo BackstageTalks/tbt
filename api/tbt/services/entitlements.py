@@ -203,17 +203,24 @@ def _filter_result_history(
             ts = _result_timestamp(row)
             if ts is None or not (cutoff <= ts <= now + timedelta(hours=6)):
                 continue
-        publications = _public_result_publications(row)
-        if allowed_categories is not None:
-            publications = [
-                publication for publication in publications
-                if _result_publication_category(publication) in allowed_categories
-            ]
+        # Select public, authorized publications before copying the row.
+        # The previous path deep-copied every publication, then deep-copied
+        # the full row (including private publications) a second time.
+        publications = [
+            publication for publication in (row.get("market_publications") or [])
+            if isinstance(publication, dict)
+            and (
+                str(publication.get("section") or "").strip().lower() in PUBLIC_RESULT_SECTIONS
+                or str(publication.get("market") or "").strip().lower() in PUBLIC_RESULT_MARKETS
+            )
+            and (
+                allowed_categories is None
+                or _result_publication_category(publication) in allowed_categories
+            )
+        ]
         if not publications:
             continue
-        copy = deepcopy(row)
-        copy["market_publications"] = publications
-        out.append(copy)
+        out.append(deepcopy({**row, "market_publications": publications}))
     return out
 
 
@@ -251,6 +258,7 @@ def _result_contract_identity(row: dict, publication: dict) -> str:
 
 def filter_results_for_member_limits(
     rows: list, manifest: dict, access: dict, *, authorized_feed: dict | None = None,
+    already_detached: bool = False,
 ) -> list:
     """Apply current Admin category/position grants to Results for every member.
 
@@ -261,7 +269,9 @@ def filter_results_for_member_limits(
     """
     plan = str(manifest.get("plan") or "").lower()
     if plan not in MEMBERSHIP_LEVELS:
-        return deepcopy(rows)  # Admin retains the complete audit ledger.
+        # A feed handler may pass a freshly detached Results list. Avoid
+        # cloning the complete audit ledger again without changing access.
+        return rows if already_detached else deepcopy(rows)
     sections = manifest.get("sections") or {}
     categories = set(manifest.get("result_categories") or [])
     groups: dict[tuple[str, str], dict[str, dict]] = {}
@@ -518,7 +528,10 @@ def _authorized_nov2_bets(feed: dict) -> set[tuple[str, str, str, str]]:
     return allowed
 
 
-def filter_results_for_issued_day(rows: list, manifest: dict, *, authorized_feed: dict | None = None) -> list:
+def filter_results_for_issued_day(
+    rows: list, manifest: dict, *, authorized_feed: dict | None = None,
+    already_detached: bool = False,
+) -> list:
     """For 2 Nov only, return the exact sent offer, never merely category matches.
 
     LEGEND / GOAT / admin retain their full Results universe. Lower tiers can
@@ -528,7 +541,9 @@ def filter_results_for_issued_day(rows: list, manifest: dict, *, authorized_feed
     """
     plan = str((manifest or {}).get("plan") or "").lower()
     if plan not in {"rookie", "pro", "elite"}:
-        return deepcopy(rows)
+        # Full-history tiers do not undergo this date-specific narrowing.
+        # Only trusted callers with independently copied rows may opt out.
+        return rows if already_detached else deepcopy(rows)
     issued = _nov2_issued_contracts()
     categories = set((manifest or {}).get("result_categories") or [])
     sections = (manifest or {}).get("sections") or {}
@@ -1649,11 +1664,13 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     # current per-account selection rules, not just the broad category gate.
     result["results"] = filter_results_for_member_limits(
         result["results"], manifest, access, authorized_feed=result,
+        already_detached=True,
     )
     manifest["member_daily_pick_count"] = _member_visible_daily_pick_count(result)
     # Apply the exact issued-day Results gate only after all market arrays have
     # been redacted for this specific account and durable allocations loaded.
     result["results"] = filter_results_for_issued_day(
-        result["results"], manifest, authorized_feed=result
+        result["results"], manifest, authorized_feed=result,
+        already_detached=True,
     )
     return result,manifest
