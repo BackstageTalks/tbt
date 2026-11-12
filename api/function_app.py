@@ -1554,6 +1554,47 @@ def _prefetch_independent_feed_reads(pool):
 
 
 
+
+def _feed_gzip_acceptable(req):
+    """Accept only an explicitly advertised gzip encoding, not a wildcard."""
+    headers = (getattr(req, "headers", None) or {})
+    offered = str(headers.get("Accept-Encoding") or headers.get("accept-encoding") or "").lower()
+    for entry in offered.split(","):
+        name, *parameters = entry.strip().split(";")
+        if name != "gzip":
+            continue
+        for item in parameters:
+            key, sep, value = item.strip().partition("=")
+            if sep and key.strip() == "q":
+                try:
+                    return float(value.strip()) > 0
+                except ValueError:
+                    return False
+        return True
+    return False
+
+
+def _gzip_feed_response(payload):
+    """Byte-identical JSON semantics, compressed only for an authenticated canary.
+
+    Keep this separate from the normal response() path until a real mobile
+    Azure-edge round trip confirms Content-Encoding interoperability.
+    """
+    raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return func.HttpResponse(
+        body=gzip.compress(raw, compresslevel=1, mtime=0),
+        status_code=200,
+        mimetype="application/json",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "X-BlinQ-Release": RELEASE,
+            "Content-Encoding": "gzip",
+            "Vary": "Accept-Encoding",
+        },
+    )
+
+
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
     try:
@@ -1736,6 +1777,10 @@ def feed(req):
         trace_stage("clv_complete")
         if trace_started is not None:
             data["__blinq_feed_stage_ms"] = trace_marks
+            # Compression is a diagnostic-only experiment until verified in
+            # the real Azure SWA API proxy. Normal users are never switched.
+            if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
+                return _gzip_feed_response(data)
         return response(data)
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
