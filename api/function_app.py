@@ -1575,10 +1575,10 @@ def _feed_gzip_acceptable(req):
 
 
 def _gzip_feed_response(payload):
-    """Byte-identical JSON semantics, compressed only for an authenticated canary.
+    """The same authorized JSON, compressed only when a client explicitly asks.
 
-    Keep this separate from the normal response() path until a real mobile
-    Azure-edge round trip confirms Content-Encoding interoperability.
+    The normal API endpoint and clients without Accept-Encoding:gzip retain the
+    original response; browser fallback can recover from incompatible edges.
     """
     begin = time.perf_counter()
     raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
@@ -1788,10 +1788,12 @@ def feed(req):
         trace_stage("clv_complete")
         if trace_started is not None:
             data["__blinq_feed_stage_ms"] = trace_marks
-            # Compression is a diagnostic-only experiment until verified in
-            # the real Azure SWA API proxy. Normal users are never switched.
-            if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
-                return _gzip_feed_response(data)
+        # Real mobile diagnostics established that Azure SWA and browsers can
+        # safely decode this already tested JSON-equivalent gzip response.
+        # Keep gzip *explicitly requested* by the web client: other API
+        # consumers and the uncompressed rollback URL remain unchanged.
+        if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
+            return _gzip_feed_response(data)
         return response(data)
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
