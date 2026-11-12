@@ -67,6 +67,12 @@ def dispatch(pending):
             "source_tag": pending["source_tag"],
             "expected_candidate_sha256": pending["expected_candidate_sha256"],
         })
+        if pending.get("prospective_only") is True:
+            # Candidate-only research: exact immutable source digest is mandatory.
+            # Existing workflow verifies backup provenance, writer lock and
+            # unchanged champion before any shadow release publication.
+            inputs.update({"prospective_only": "true",
+                           "expected_source_sha256": pending["source_sha256"]})
     elif operation == "promote_production":
         if not any(c["tag"] == pending["source_tag"] and c["sha256"] == pending["source_sha256"]
                    for c in current["candidates"]):
