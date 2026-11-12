@@ -9682,6 +9682,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
             (afterTransfer!==null?', JSON '+Math.round(afterTransfer)+' ms':'')+
             ', veľkosť '+encoded+' / '+decoded+
             (feedRequests.length>1?', pokusy '+feedRequests.length:''));
+          const encode=Array.isArray(network.serverTiming)?network.serverTiming.filter(item=>
+            ['blinq_json','blinq_gzip'].includes(item.name)):[];
+          if(encode.length){
+            phases.unshift('Server kódovanie: '+encode.map(item=>
+              (item.name==='blinq_json'?'JSON':'gzip')+' '+Math.round(item.duration)+' ms').join(', '));
+          }
         }
         const steps=backend.map(([name,total],index)=>({
           name,total,delta:total-(index?backend[index-1][1]:0)
