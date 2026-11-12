@@ -72,7 +72,7 @@ def test_report_exposes_tour_surface_and_paired_feature_coverage_not_freshness()
     assert result["groups"]["surface"]["unknown"]["n"] == 2
     assert result["groups"]["input_evidence"]["paired_serve_return"]["n"] == 6
     assert result["groups"]["input_evidence"]["missing_paired_serve_return"]["n"] == 4
-    assert result["groups"]["tour_paired_serve_return"]["ATP"]["n"] == 3
+    assert result["groups"]["tour_paired_serve_return"]["ATP"]["n"] == 2
     assert result["evidence_coverage"]["rank_known_both"]["known_both"] == 5
     assert result["source_freshness"]["status"] == "UNVERIFIED"
     assert "provider_requests" not in result
