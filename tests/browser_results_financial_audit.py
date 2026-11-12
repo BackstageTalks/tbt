@@ -75,10 +75,23 @@ def main():
                 # Legacy rows may carry a 100-sized stake scale while
                 # profit_units is already normalized to the displayed 1u result.
                 # Filter ROI must stay 83%, not be diluted to 0.83%.
-                check_summary(page, ["5-0", "100.0%", "1.83", "83.0%", "+0.83u", "5"])
+                check_summary(page, ["5-0-0", "100.0%", "1.83", "83.0%", "+0.83u", "5"])
                 # Existing illustrative units are deliberately retained in
                 # individual rows; unlike the real quoted ROI sample they are NOT stakes.
                 assert page.locator("#routePanel .results-units-depth b").count() == 5
+                # VOID stays visible in the record but must not alter settled
+                # win/loss, hit rate, ROI, units or the graded sample.
+                page.evaluate("""() => {
+                  const s=resultsFinancialAudit.state;
+                  const voidRow=JSON.parse(JSON.stringify(s.feed.results[0]));
+                  voidRow.event_id='games-void';
+                  voidRow.market_publications[0].selection_id='games:over:void';
+                  voidRow.market_publications[0].result={
+                    status:'void',void:true,reason:'retired',correct:null
+                  };
+                  s.feed.results.push(voidRow);
+                }""")
+                check_summary(page, ["5-0-1", "100.0%", "1.83", "83.0%", "+0.83u", "5"])
                 page.evaluate("""() => {
                   const s=resultsFinancialAudit.state;
                   s.resultsFilters.category='doubles';
@@ -98,7 +111,7 @@ def main():
                 }""")
                 # Same contract for a filtered match-winner sample: 1u per
                 # settled quoted pick regardless of legacy staked_units scale.
-                check_summary(page, ["3-0", "100.0%", "1.52", "52.0%", "+1.56u", "3"])
+                check_summary(page, ["3-0-0", "100.0%", "1.52", "52.0%", "+1.56u", "3"])
                 # Quoted prices are white on mobile and desktop, while
                 # positive Units retain their green result color.
                 quoted = page.evaluate("""() => {
