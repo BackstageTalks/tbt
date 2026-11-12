@@ -26,7 +26,9 @@ def test_results_are_filtered_to_real_blinq_public_categories_client_and_server(
     assert "const pubs=publicResultPublications(row);" in APP
     assert 'PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "ace_winner", "double_faults", "sets", "games"}' in ENTITLEMENTS
     assert "def _public_result_publications(row: dict)" in ENTITLEMENTS
-    assert 'copy["market_publications"] = publications' in ENTITLEMENTS
+    # Copy the already-selected authorized publications once, instead of copying
+    # the original row (which still contains private publication payloads).
+    assert 'deepcopy({**row, "market_publications": publications})' in ENTITLEMENTS
 
 
 def test_results_player_photo_has_repo_fallback_under_real_photo():

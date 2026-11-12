@@ -1661,12 +1661,14 @@ def feed(req):
                 # Recheck the exact tier category/position grants after
                 # response-time settlement; this must not expand access.
                 data["results"] = filter_results_for_member_limits(
-                    data["results"], entitlements, access_context, authorized_feed=data
+                    data["results"], entitlements, access_context, authorized_feed=data,
+                    already_detached=True,
                 )
                 # The post-settlement pass must also honor the exact issued
                 # 2 Nov offer, not just its broad TOP / VALUE / Aces category.
                 data["results"] = filter_results_for_issued_day(
-                    data["results"], entitlements, authorized_feed=data
+                    data["results"], entitlements, authorized_feed=data,
+                    already_detached=True,
                 )
                 if not exclusions_available:
                     data["results"] = []
