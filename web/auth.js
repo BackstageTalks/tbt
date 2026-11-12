@@ -506,19 +506,20 @@
   }
   async function feed() {
     const s = await restore();
-    // Keep normal URLs byte-for-byte equivalent. Stage timings are requested
-    // only through the user-enabled, authenticated boot diagnostic link.
+    // Keep normal non-browser API clients unchanged. Server stage timings
+    // remain opt-in through the authenticated boot diagnostic link.
     let traced = false;
     try { traced = new URLSearchParams(location.search).get('blinq_boot_trace') === '1'; } catch {}
     const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';
-    // Explicit diagnostic canary only. Ordinary members use the original URL.
-    // If a SWA edge does not preserve gzip correctly, retry the unchanged JSON
-    // endpoint without showing partial/malformed member data.
-    let gzipCanary = false;
-    try { gzipCanary = traced && new URLSearchParams(location.search).get('blinq_feed_gzip') === '1'; } catch {}
+    // Mobile canary confirmed gzip decoding through the live Azure SWA proxy.
+    // Prefer the smaller payload for the authenticated web; an explicit ?blinq_feed_gzip=0
+    // disables it instantly (reversible comparison without any server change).
+    // Preserve the original endpoint as a safe fallback for malformed gzip.
+    let useGzip = true;
+    try { useGzip = new URLSearchParams(location.search).get('blinq_feed_gzip') !== '0'; } catch {}
     const request = (target = url) => json(target, {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
     const requestWithSafeFallback = async () => {
-      if (!gzipCanary) return request();
+      if (!useGzip) return request();
       try {
         const compressed = await request(url + '&blinq_feed_gzip=1');
         if (compressed && Array.isArray(compressed.upcoming) && Array.isArray(compressed.results)
