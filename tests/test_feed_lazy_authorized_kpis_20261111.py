@@ -39,7 +39,7 @@ def _stub_authenticated_feed(monkeypatch, *, fail_at=None):
     monkeypatch.setattr(api, "event_ids_from_feed", lambda _feed: set())
     monkeypatch.setattr(api, "verified_terminal_statuses", lambda _statuses: {})
     monkeypatch.setattr(api, "runtime_settled_results",
-                        lambda _feed, _statuses: [settled])
+                        lambda _feed, _statuses, **_kwargs: [settled])
     monkeypatch.setattr(api, "filter_results_for_categories",
                         lambda results, _categories: results)
     monkeypatch.setattr(api, "filter_results_for_member_limits",
