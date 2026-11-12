@@ -7,8 +7,9 @@
 1. **Obnoviť celý stav:** musí byť dostupný aktuálny pracovník Model Lab,
    aktuálny SHA produkčného championa, aktívneho kandidáta a súpis
    nemenných kandidátskych releasov.
-2. V časti **2 · Natrénovať a aktivovať kandidáta** nájdi
-   **Výskumný shadow · bez produkčného nasadenia**.
+2. Na hlavnej obrazovke **Model Factory** otvor priamo viditeľnú kartu
+   **Výskumný shadow · bez produkčného nasadenia** (netreba rozbaliť
+   pokročilé ovládanie).
 3. V poli **Nemenný kandidát** vyber presný
    `blinq-candidate-frozen-<run_id>-<attempt>`. V ponuke sa
    zobrazuje skrátené SHA; originál sa overuje na serveri.
