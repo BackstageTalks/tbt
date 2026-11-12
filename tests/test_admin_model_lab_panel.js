@@ -45,6 +45,7 @@ assert.match(html,/Chýba overený SHA-256 posledného publikovaného feedu/);
 assert.match(html,/id="admin-model-lab-research-candidate"/);
 assert.doesNotMatch(html,/data-admin-action="model-lab-research-shadow" disabled/);
 assert.match(html,/Spustiť výskumný shadow \(prospective only\)/);
+assert.match(html,/<option value="">Vyber konkrétny nemenný release a over SHA<\/option>/);
 assert(!html.includes('bad&lt;script&gt;'));
 state.adminModelLab.feed_sha256='f'.repeat(64);
 state.adminModelLab.feed_updated_at=new Date().toISOString();
