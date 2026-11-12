@@ -953,7 +953,8 @@ def _grade_runtime_projection(
 
 
 def runtime_settled_results(
-    feed: dict[str, Any], statuses: dict[str, Any] | None
+    feed: dict[str, Any], statuses: dict[str, Any] | None,
+    *, already_detached: bool = False,
 ) -> list[dict[str, Any]]:
     """Overlay verified match-winner settlements onto an already-authorized feed.
 
@@ -963,8 +964,13 @@ def runtime_settled_results(
     Projection markets (ACES/DF/Games/Sets) are intentionally never settled from
     a match-winner outcome.
     """
+    # The authenticated feed already separated authorized Results from the
+    # immutable source. Only its internal caller can borrow those rows: this
+    # helper never modifies them, and the final category gate re-copies them.
+    # Direct callers retain independent defensive copies by default.
     existing_results = [
-        deepcopy(row) for row in (feed.get("results") or []) if isinstance(row, dict)
+        row if already_detached else deepcopy(row)
+        for row in (feed.get("results") or []) if isinstance(row, dict)
     ]
     statuses = verified_terminal_statuses(statuses)
     if not statuses:
