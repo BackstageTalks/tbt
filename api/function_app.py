@@ -1720,7 +1720,11 @@ def feed(req):
             # deployed feed/ledger stays immutable and projection markets are
             # never inferred from the match-winner status.
             if bool(entitlements.get("results")):
-                data["results"] = runtime_settled_results(data, data["match_statuses"])
+                # Results are already detached by filter_feed_for_access;
+                # final category recheck still creates an independent copy.
+                data["results"] = runtime_settled_results(
+                    data, data["match_statuses"], already_detached=True,
+                )
                 data = apply_result_exclusions(data, excluded_result_ids)
                 # Security boundary after response-time settlements. Already
                 # authorized market rows may embed other category publications.

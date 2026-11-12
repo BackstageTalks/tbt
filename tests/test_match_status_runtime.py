@@ -1075,7 +1075,8 @@ def test_feed_wires_runtime_status_only_after_results_entitlement():
     source = (Path(__file__).resolve().parents[1] / "api" / "function_app.py").read_text()
     block = source.split('def feed(req):', 1)[1].split('def _membership_allowed', 1)[0]
     assert 'if bool(entitlements.get("results")):' in block
-    assert 'runtime_settled_results(data, data["match_statuses"])' in block
+    assert 'data["results"] = runtime_settled_results(' in block
+    assert 'data["match_statuses"], already_detached=True' in block
 
 
 def test_large_backlog_prioritizes_current_betting_day_without_more_requests():

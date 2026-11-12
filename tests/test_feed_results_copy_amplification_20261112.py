@@ -91,4 +91,4 @@ def test_feed_callers_only_opt_out_after_detaching_results():
     assert 'result["results"] = filter_results_for_member_limits(' in ent
     assert ent.count("already_detached=True,") >= 2
     assert 'data["results"] = filter_results_for_categories(' in api
-    assert api.count("already_detached=True,") == 2
+    assert api.count("already_detached=True,") == 3
