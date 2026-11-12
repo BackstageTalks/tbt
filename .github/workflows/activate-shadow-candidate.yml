@@ -1,8 +1,8 @@
 name: Activate verified frozen shadow candidate
 run-name: "Model Lab activate shadow ${{ inputs.request_id || github.run_id }}"
 on:
-  # One-shot explicitly authorized research-only 7.2.2 activation.
-  # The exact merge title and frozen digests guard this push; future edits do not activate.
+  # One-shot bootstrap on the exact reviewed merge commit only.
+  # Subsequent workflow edits do not activate models automatically.
   push:
     branches: [main]
     paths: [".github/workflows/activate-shadow-candidate.yml"]
@@ -42,17 +42,17 @@ jobs:
       github.ref == 'refs/heads/main' &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'push' &&
-        startsWith(github.event.head_commit.message, 'chore(722): one-shot verified prospective shadow activation 20261112-run-42284691497')))
+        startsWith(github.event.head_commit.message, 'chore(721): one-shot verified shadow activation')))
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONPATH: api:scripts
       PYTHONUNBUFFERED: '1'
-      SOURCE_TAG: ${{ github.event_name == 'push' && 'blinq-candidate-frozen-42284691497-1' || inputs.source_tag || 'blinq-candidate-frozen-39368300257-1' }}
-      EXPECTED_SHA: ${{ github.event_name == 'push' && 'aa0f0ab10f08ef76f1bb793e431e460448ff7c645fb8528ba452957700215da8' || inputs.expected_candidate_sha256 || '7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141' }}
-      PROSPECTIVE_ONLY: ${{ github.event_name == 'push' && 'true' || inputs.prospective_only || false }}
-      SOURCE_SHA: ${{ github.event_name == 'push' && '131a4dd71994f082bf5c041c5f7a785d581421170a44ace39de9e27c61f1de3f' || inputs.expected_source_sha256 }}
+      SOURCE_TAG: ${{ inputs.source_tag || 'blinq-candidate-frozen-39368300257-1' }}
+      EXPECTED_SHA: ${{ inputs.expected_candidate_sha256 || '7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141' }}
+      PROSPECTIVE_ONLY: ${{ inputs.prospective_only || false }}
+      SOURCE_SHA: ${{ inputs.expected_source_sha256 }}
     steps:
       - uses: actions/checkout@v4
         with:
