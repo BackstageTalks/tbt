@@ -118,7 +118,7 @@ def test_unverified_or_anonymous_requests_do_not_start_storage_prefetch(monkeypa
 
 def test_real_handler_overlaps_profile_and_both_independent_read_paths(monkeypatch):
     """Serial reads deadlock here; no Azure/network calls or behavior shortcuts."""
-    from tests.test_feed_lazy_authorized_kpis_20261111 import _stub_authenticated_feed
+    from test_feed_lazy_authorized_kpis_20261111 import _stub_authenticated_feed
     # The existing stub preserves the full feed handler's settlement, KPIs,
     # account and authentication flow; replace only the three reader entrypoints.
     calls = _stub_authenticated_feed(monkeypatch)
