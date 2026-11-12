@@ -104,3 +104,20 @@ znovu načíta a skontroluje; nesmú slúžiť ako pevne zakódované konštanty
 - **Ďalší krok:** zbierať pravé predštartové paired same-event shadow dáta,
   vyhodnotiť ATP/WTA a konfidenčné pásma ≥65 %,
   zdrojovú PIT provenienciu; nie je schválené prepnutie championa.
+
+
+- **ADMIN SYNC OVERENÝ (následné nezávislé čítanie):** existujúci
+  [kalibračný monitor #43200497455](https://github.com/BackstageTalks/tbt/actions/runs/43200497455)
+  skončil úspešne 12. 11. 2026. Čerstvý readiness report
+  `generated_at_utc=2026-11-12T10:30:45.190067+00:00`;
+  publish `stored=true`, `production_version=v7.2.1-v201-20261022T134742452543Z`,
+  `candidate_version=v7.2.2-v201-20261106T212948133645Z`,
+  `shadow_settled=0`, `provider_requests=0`, `model_promoted=false`.
+  Publisher vykonal nezávislý Azure GET read-back s kontrolou podpisového
+  fingerprintu, modelových verzií a cohort počtov. Scanner zaznamenal
+  `new_unseen_rows=6336` ako existujúce dokončené kanonické zápasy pre
+  ďalšie posúdenie, **nie** 6336 nových shadow tipov.
+- **Záverečná bezpečnostná kontrola:** po monitori
+  `tbt-model-candidate-v1` stále SHA `131a4dd7...f1de3f`,
+  `tbt-model-production-v1` stále SHA `c1e761cc...d99e9`;
+  globálny CDB writer lock nie je obsadený.
