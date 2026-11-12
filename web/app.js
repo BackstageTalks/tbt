@@ -9634,6 +9634,23 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         const navigation=performance.getEntriesByType('navigation')[0];
         const phases=marks.map(([label,ms])=>`${label}: ${ms} ms`);
         if(navigation)phases.unshift(`DOM pripravený: ${Math.round(navigation.domContentLoadedEventEnd)} ms`);
+        // Resource Timing is same-origin, read-only, and omits tokens/account
+        // data. It distinguishes gateway/TTFB, body transfer and JSON parse.
+        const feedRequests=performance.getEntriesByType('resource').filter(x=>
+          typeof x.name==='string'&&x.name.includes('/api/v1/feed'));
+        const network=feedRequests[feedRequests.length-1];
+        if(network&&network.responseEnd>network.startTime){
+          const firstByte=Math.max(0,network.responseStart-network.startTime);
+          const transfer=Math.max(0,network.responseEnd-network.responseStart);
+          const done=marks.find(item=>item[0]==='Feed API odpoveď');
+          const afterTransfer=done?Math.max(0,done[1]-network.responseEnd):null;
+          const decoded=network.decodedBodySize>0?(network.decodedBodySize/1048576).toFixed(1)+' MB JSON':'nezistené';
+          const encoded=network.encodedBodySize>0?(network.encodedBodySize/1048576).toFixed(1)+' MB':'nezistené';
+          phases.unshift('Feed sieť: TTFB '+Math.round(firstByte)+' ms, prenos '+Math.round(transfer)+' ms'+
+            (afterTransfer!==null?', JSON '+Math.round(afterTransfer)+' ms':'')+
+            ', veľkosť '+encoded+' / '+decoded+
+            (feedRequests.length>1?', pokusy '+feedRequests.length:''));
+        }
         const steps=backend.map(([name,total],index)=>({
           name,total,delta:total-(index?backend[index-1][1]:0)
         })).sort((a,b)=>b.delta-a.delta).slice(0,6);
