@@ -244,4 +244,4 @@ def test_main_collector_reuses_verified_prior_only_in_hourly_mode():
     from pathlib import Path
     source = (Path(__file__).resolve().parents[1] /
               "scripts/download_tennis_history.py").read_text()
-    assert "statistics_coverage_circuit = StatisticsAvailabilityCircuit(\\n                    verified_prior=prior)" in source
+    assert "statistics_coverage_circuit = StatisticsAvailabilityCircuit(\n                    verified_prior=prior)" in source
