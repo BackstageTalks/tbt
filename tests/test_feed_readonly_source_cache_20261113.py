@@ -152,3 +152,15 @@ def test_dynamic_ace_issuance_sidecar_is_reloaded_even_when_base_is_cached(monke
     assert first["receipt_revision"] == 1
     assert second["receipt_revision"] == 2
     assert second["results"] is first["results"]  # Only validated base is cached.
+
+
+
+def test_internal_worker_and_readback_loader_keep_fresh_object_per_call(monkeypatch, tmp_path):
+    path = _file(tmp_path)
+    monkeypatch.setattr(api, "FEED", path)
+    monkeypatch.setattr(api, "CONFIRMED_ACE_OU", tmp_path / "absent.json")
+    first = api._read_feed_with_confirmed_aces_ou()
+    second = api._read_feed_with_confirmed_aces_ou()
+    assert first == second
+    assert first is not second, "Internal workers must not receive a shared mutable source"
+    assert serving._validated_serving_source.cache_info().currsize == 0
