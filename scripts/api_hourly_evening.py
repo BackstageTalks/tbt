@@ -82,7 +82,7 @@ def operator_smoke_request_cap(path, *, enabled: bool, now: datetime) -> int | N
 
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if payload.get("source") != SMOKE_SOURCE:
-        return None
+        raise ValueError("Invalid operator smoke request source; no dispatch")
     if (payload.get("schema") != 1 or type(payload.get("max_requests")) is not int
             or not 1 <= payload["max_requests"] <= 500):
         raise ValueError("Invalid operator smoke request cap; no dispatch")
