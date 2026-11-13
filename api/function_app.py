@@ -118,7 +118,7 @@ from tbt.services.push_notifications import (
     delete_subscription, push_storage_diagnostics, save_subscription, sync_push_access, webpush_config,
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
-from tbt.services.feed import read_feed, visible_feed, serving_artifact_readback, _row_betting_day
+from tbt.services.feed import read_feed, read_serving_source_cached, visible_feed, serving_artifact_readback, _row_betting_day
 from tbt.services.ace_winner_bridge import with_issued_ace_leader_signals
 from tbt.services.most_aces_pricing import annotate_most_aces_offer
 from tbt.services.issued_authority import (
@@ -201,9 +201,14 @@ API_VERSION = "3.10.0"
 CONFIRMED_ACE_OU = Path(__file__).parent / "data/confirmed_aces_ou.json"
 
 
-def _read_feed_with_confirmed_aces_ou():
-    """Load canonical feed with a read-only exact sent-issuance overlay."""
-    base = read_feed(FEED)
+def _read_feed_with_confirmed_aces_ou(*, reuse_source=False):
+    """Load a validated source and apply fresh sent-issuance evidence.
+
+    Source reuse is ONLY for the authenticated member feed, whose downstream
+    authorization/Results stages are copy-on-write. Workers, reconciliation and
+    serving read-back retain a fresh independently parsed source.
+    """
+    base = read_serving_source_cached(FEED) if reuse_source else read_feed(FEED)
     if not CONFIRMED_ACE_OU.is_file():
         return base
     try:
@@ -1548,7 +1553,7 @@ def _prefetch_independent_feed_reads(pool):
     Await the original source futures before applying publication, exclusion,
     result-access or KPI gates; no new cache, fallback or authorization shortcut.
     """
-    issued = pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou()))
+    issued = pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou(reuse_source=True)))
     overlays = pool.submit(_feed_support_reads_parallel)
     return issued, overlays
 

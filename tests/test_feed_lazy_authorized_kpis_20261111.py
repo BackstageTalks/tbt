@@ -18,7 +18,7 @@ def _stub_authenticated_feed(monkeypatch, *, fail_at=None):
     monkeypatch.setattr(api, "_verified_user", lambda _req: {"id": "user-1", "email_verified": True})
     monkeypatch.setattr(api, "_profile_for", lambda _user: {})
     monkeypatch.setattr(api, "public_account", lambda _user, **_kw: {"plan": "rookie"})
-    monkeypatch.setattr(api, "_read_feed_with_confirmed_aces_ou", lambda: raw)
+    monkeypatch.setattr(api, "_read_feed_with_confirmed_aces_ou", lambda **_kw: raw)
     monkeypatch.setattr(api, "_visible_issued_feed", lambda feed: feed)
     monkeypatch.setattr(api, "with_issued_ace_leader_signals", lambda feed: feed)
     monkeypatch.setattr(api, "annotate_most_aces_offer", lambda feed: feed)

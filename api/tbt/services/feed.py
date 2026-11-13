@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from functools import lru_cache
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -150,6 +151,38 @@ def read_feed(path):
         _validate_prediction_row(row, require_result=True)
 
     return payload
+
+
+@lru_cache(maxsize=1)
+def _validated_serving_source(path: Path, revision: tuple[int, ...]) -> dict:
+    """Memoize only the immutable, validated on-disk serving publication.
+
+    Never cache the per-account response, active issued authority, Results
+    exclusions, match statuses or runtime UI configuration. The caller must
+    use copy-on-write filters and never mutate this shared source object.
+    """
+    return read_feed(path)
+
+
+def read_serving_source_cached(path: Path) -> dict:
+    """Reuse validated release bytes while rejecting changed or broken files.
+
+    The metadata key catches in-place rewrites and atomic replacements; a
+    missing, unreadable or oversized file takes the normal fail-safe path.
+    This intentionally returns the SAME read-only source reference, avoiding
+    a full 20+ MB deepcopy that benchmarks slower than JSON parsing.
+    """
+    target = Path(path)
+    try:
+        stat = target.stat()
+    except FileNotFoundError:
+        return read_feed(target)
+    if not target.is_file() or stat.st_size > MAX_FEED_BYTES:
+        return read_feed(target)
+    revision = (
+        stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns,
+    )
+    return _validated_serving_source(target, revision)
 
 
 def visible_feed(payload, now=None):
