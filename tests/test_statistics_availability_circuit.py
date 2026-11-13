@@ -148,3 +148,129 @@ def test_cross_tour_evidence_survives_skewed_adaptive_recent_window():
     assert stopped
     assert gate.summary()["trigger"]["sampled_tours"] == 2
     assert gate.summary()["paid_matches_observed"] == 120
+
+
+def _verified_no_gain_prior():
+    # A real-like prior: 120 paid matches, 40 in each tour/year, zero
+    # independently CDB-read-back new fields. Each record was validated
+    # by adaptive_verified_prior before reaching this circuit.
+    return {
+        f"{tour}:{year}:serve_return": {
+            "api_requests": 40,
+            "new_fields": 0,
+            "full_serve_return_rows": 0,
+        }
+        for tour, year in (("wta", 2026), ("atp", 2026), ("atp", 2025))
+    }
+
+
+def _current_candidate_cohorts():
+    return {("wta", 2026), ("atp", 2026), ("atp", 2025)}
+
+
+def test_prior_verified_repeat_empty_route_uses_24_new_paid_matches():
+    from pathlib import Path
+    original = _verified_no_gain_prior()
+    gate = StatisticsAvailabilityCircuit(verified_prior=original,
+                                        eligible_cohorts=_current_candidate_cohorts())
+    assert gate.summary()["prior_zero_gain_recheck_eligible"] is True
+    rows = (row("wta", 2026), row("atp", 2026), row("atp", 2025))
+    before = [dict(m.stats) for m in rows]
+    for index in range(23):
+        assert not gate.observe(rows[index % 3], "unavailable", 1,
+                                {"new_statistic_values": 0})
+    assert gate.observe(rows[23 % 3], "unavailable", 1,
+                        {"new_statistic_values": 0})
+    result = gate.summary()
+    assert result["paid_attempts_observed"] == 24
+    assert result["trigger"]["reason"] == (
+        "verified_prior_zero_gain_cross_tour_recheck")
+    assert result["trigger"]["sampled_tours"] == 2
+    assert result["trigger"]["sampled_cohorts"] == 3
+    assert result["trigger"]["recent_unavailable_matches"] == 24
+    assert [dict(m.stats) for m in rows] == before
+    assert original == _verified_no_gain_prior()
+
+
+def test_prior_without_cross_tour_independent_zero_evidence_keeps_full_guard():
+    prior = _verified_no_gain_prior()
+    prior["atp:2025:serve_return"]["new_fields"] = 1
+    gate = StatisticsAvailabilityCircuit(verified_prior=prior,
+                                        eligible_cohorts=_current_candidate_cohorts())
+    assert not gate.summary()["prior_zero_gain_recheck_eligible"]
+    sampled(gate, 119)
+    assert not gate.tripped
+    assert gate.observe(row("atp", 2024), "unavailable", 1,
+                        {"new_statistic_values": 0})
+    assert gate.summary()["paid_attempts_observed"] == 120
+
+
+def test_fresh_new_cdb_field_disables_short_recheck_for_current_run():
+    gate = StatisticsAvailabilityCircuit(verified_prior=_verified_no_gain_prior(),
+                                        eligible_cohorts=_current_candidate_cohorts())
+    rows = (row("wta", 2026), row("atp", 2026), row("atp", 2025))
+    for index in range(120):
+        match = rows[index % 3]
+        new = 1 if index == 1 else 0
+        state = "enriched" if new else "unavailable"
+        assert not gate.observe(match, state, 1,
+                                {"new_statistic_values": new})
+    assert not gate.tripped
+    assert gate.summary()["paid_matches_observed"] == 120
+
+
+def test_prior_recovery_requires_fresh_empty_bodies_and_three_cohorts():
+    prior = _verified_no_gain_prior()
+    gate = StatisticsAvailabilityCircuit(verified_prior=prior,
+                                        eligible_cohorts=_current_candidate_cohorts())
+    # Other returned status and narrower new sample do not prove an
+    # unchanged empty route. Leave the full independent circuit intact.
+    for index in range(40):
+        match = row("wta" if index % 2 == 0 else "atp", 2026,
+                    "provider_event_not_finished" if index == 0
+                    else "empty_whole_match_statistics")
+        assert not gate.observe(match, "unavailable", 1,
+                                {"new_statistic_values": 0})
+    assert not gate.tripped
+    assert gate.summary()["paid_matches_observed"] == 40
+
+
+def test_cache_only_rows_never_shorten_paid_recheck():
+    gate = StatisticsAvailabilityCircuit(verified_prior=_verified_no_gain_prior(),
+                                        eligible_cohorts=_current_candidate_cohorts())
+    matches = (row("wta", 2026), row("atp", 2026), row("atp", 2025))
+    for index in range(100):
+        assert not gate.observe(matches[index % 3], "unavailable", 0,
+                                {"new_statistic_values": 0})
+    for index in range(24):
+        result = gate.observe(matches[index % 3], "unavailable", 1,
+                              {"new_statistic_values": 0})
+    assert result is True
+    assert gate.summary()["paid_attempts_observed"] == 24
+
+
+def test_main_collector_reuses_verified_prior_only_in_hourly_mode():
+    from pathlib import Path
+    source = (Path(__file__).resolve().parents[1] /
+              "scripts/download_tennis_history.py").read_text()
+    assert "eligible_cohorts = {" in source
+    assert "verified_prior=prior, eligible_cohorts=eligible_cohorts)" in source
+
+
+def test_new_eligible_productive_season_cannot_be_suppressed_by_old_prior():
+    prior = _verified_no_gain_prior()
+    current = _current_candidate_cohorts() | {("atp", 2024)}
+    gate = StatisticsAvailabilityCircuit(
+        verified_prior=prior, eligible_cohorts=current)
+    assert gate.summary()["prior_zero_gain_recheck_eligible"] is False
+    rows = (row("wta", 2026), row("atp", 2026), row("atp", 2025))
+    for index in range(24):
+        assert not gate.observe(rows[index % 3], "unavailable", 1,
+                                {"new_statistic_values": 0})
+    assert not gate.tripped
+
+
+def test_missing_current_candidate_inventory_disables_fast_recheck():
+    gate = StatisticsAvailabilityCircuit(
+        verified_prior=_verified_no_gain_prior())
+    assert gate.summary()["prior_zero_gain_recheck_eligible"] is False

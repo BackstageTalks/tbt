@@ -88,10 +88,17 @@ def test_operator_one_off_500_smoke_is_fresh_and_only_restrictive(tmp_path):
     tick.write_text(json.dumps(request))
     assert operator_smoke_request_cap(tick, enabled=True, now=now) == 500
     assert operator_smoke_request_cap(tick, enabled=False, now=now) is None
-    for invalid in [0, 501, True, "500"]:
+    for smaller in [300, 100, 1]:
+        tick.write_text(json.dumps({**request, "max_requests": smaller}))
+        assert operator_smoke_request_cap(tick, enabled=True, now=now) == smaller
+    for invalid in [0, 501, -1, True, 300.0, "300", "500"]:
         tick.write_text(json.dumps({**request, "max_requests": invalid}))
         with pytest.raises(ValueError, match="Invalid operator smoke request cap"):
             operator_smoke_request_cap(tick, enabled=True, now=now)
+
+    tick.write_text(json.dumps({**request, "source": "untrusted-test-source"}))
+    with pytest.raises(ValueError, match="Invalid operator smoke request source"):
+        operator_smoke_request_cap(tick, enabled=True, now=now)
 
     tick.write_text(json.dumps(request))
     with pytest.raises(ValueError, match="expired"):

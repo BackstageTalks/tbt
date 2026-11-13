@@ -849,7 +849,16 @@ def main():
                     statistics_candidates, statistics_plan["bucket_coverage"],
                     verified_prior=prior)
                 statistics_plan["online_adaptive_priority"] = True
-                statistics_coverage_circuit = StatisticsAvailabilityCircuit()
+                # Previous independently verified CDB no-gain cohorts allow
+                # a smaller cross-tour recovery probe. The circuit falls back
+                # to the ordinary 120-match evidence window on any gain or
+                # when the prior is missing, incompatible or insufficient.
+                eligible_cohorts = {
+                    (str(match.tour or "unknown").lower(), int(match.scheduled_at.year))
+                    for match in statistics_candidates
+                }
+                statistics_coverage_circuit = StatisticsAvailabilityCircuit(
+                    verified_prior=prior, eligible_cohorts=eligible_cohorts)
             print(json.dumps({"statistics_gap_plan": statistics_plan}, ensure_ascii=False), flush=True)
             processed = 0
             for match in (statistics_adaptive_queue if statistics_adaptive_queue is not None
