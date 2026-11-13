@@ -68,7 +68,7 @@ SMOKE_SOURCE = "operator-approved-500-statistics-smoke"
 
 
 def operator_smoke_request_cap(path, *, enabled: bool, now: datetime) -> int | None:
-    """Apply a fresh operator's *restrictive* 500-call cap to one tick only.
+    """Apply a fresh operator's *restrictive* <=500-call cap to one tick only.
 
     Only a non-dry-run, marker-approved push of the existing hourly tick can
     use this override. The existing shared CAS ledger, provider-header and
@@ -83,7 +83,8 @@ def operator_smoke_request_cap(path, *, enabled: bool, now: datetime) -> int | N
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     if payload.get("source") != SMOKE_SOURCE:
         return None
-    if payload.get("schema") != 1 or type(payload.get("max_requests")) is not int or payload["max_requests"] != 500:
+    if (payload.get("schema") != 1 or type(payload.get("max_requests")) is not int
+            or not 1 <= payload["max_requests"] <= 500):
         raise ValueError("Invalid operator smoke request cap; no dispatch")
 
     requested = datetime.fromisoformat(str(payload.get("requested_utc", "")).replace("Z", "+00:00"))
@@ -92,7 +93,7 @@ def operator_smoke_request_cap(path, *, enabled: bool, now: datetime) -> int | N
     age = now.astimezone(timezone.utc) - requested.astimezone(timezone.utc)
     if not timedelta(0) <= age <= timedelta(minutes=25):
         raise ValueError("Operator smoke request expired or not yet valid; no dispatch")
-    return 500
+    return payload["max_requests"]
 
 
 def external_clock_gapfill_decision(now: datetime, workflow_runs: list[dict]) -> tuple[bool, str, str]:
