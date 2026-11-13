@@ -121,3 +121,39 @@ znovu načíta a skontroluje; nesmú slúžiť ako pevne zakódované konštanty
   `tbt-model-candidate-v1` stále SHA `131a4dd7...f1de3f`,
   `tbt-model-production-v1` stále SHA `c1e761cc...d99e9`;
   globálny CDB writer lock nie je obsadený.
+
+
+## Prospektívny stav k 13. 11. 2026
+
+**Overené (UTC 09:21):** Ranný externý clock spustil
+[supervisor #43364306931](https://github.com/BackstageTalks/tbt/actions/runs/43364306931)
+a chránený skutočný
+[refresh #43364326140](https://github.com/BackstageTalks/tbt/actions/runs/43364326140).
+Jeho `pipeline` job #131685037823 publikoval presný pár
+`v7.2.1-v201-20261022T134742452543Z` vs.
+`v7.2.2-v201-20261106T212948133645Z` a hlásenie
+`shadow_evaluation: captured=215, settled=0,
+minimum_for_review=200, ready_for_promotion_review=false`.
+Súkromný shadow release `tbt-model-shadow-v1` dostal nový manifest
+13. 11. 2026 o 04:47:27 UTC (SHA-256 ledgeru
+`7a8ecb8f561d6c6acdf67d4bcb2518bc52a742c616d999665fb5fb061fcdda51`);
+modelové releasy sa nezmenili. Aktuálny
+[Model Lab monitor #43377523359](https://github.com/BackstageTalks/tbt/actions/runs/43377523359)
+úspešne zapísal správny modelový pár do Azure Admin (`stored=true`,
+`shadow_settled=0`, `provider_requests=0`, `model_promoted=false`).
+
+**Neuzavreté:** Žiadny výsledok z aktuálneho páru nie je nezávisle
+vyhodnotený; `captured` ≠ `settled`. Na rozhodnutie treba minimálne
+200 jednoznačne kanonicky vyhodnotených zápasov z minimálne 3 UTC dní,
+paired pre-match identitu, Brier/log-loss/accuracy vs championa vrátane
+ATP/WTA a 65%+ skupín, nezávislý rollback/promotion gate a nový
+explicitný súhlas na produkčný switch. Nie je prípustné nahradiť túto
+vzorku historickými `unseen` zápasmi (napr. 6684 riadkov readiness
+nepredstavuje shadow výsledky).
+
+**Kontinuálne overenie:** Zriadená separátna denná podmienená kontrola
+`BlinQ 7.2.2 shadow výsledky` v ChatGPT automations
+(od 14. 11. 2026, 10:30 Europe/Bratislava). Monitoruje reálne ranné
+`shadow_evaluation` výsledky, stabilné SHA, správnosť Admin sync,
+prípadnú stagnáciu a prah 200 settled / 3 dni; bez provider requestov,
+bez zmeny cronu, CDB alebo produkčného modelu.
