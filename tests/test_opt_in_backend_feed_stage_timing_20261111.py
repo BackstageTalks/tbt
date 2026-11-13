@@ -44,7 +44,7 @@ def test_existing_access_and_feed_workflows_remain_authoritative():
     # The original publication-authority and support readers remain in use.
     prefetch = API[API.index('def _prefetch_independent_feed_reads('):
                    API.index('@app.route(route="v1/feed", methods=["GET"])')]
-    assert '_visible_issued_feed(_read_feed_with_confirmed_aces_ou())' in prefetch
+    assert '_visible_issued_feed(_read_feed_with_confirmed_aces_ou(reuse_source=True))' in prefetch
     assert 'pool.submit(_feed_support_reads_parallel)' in prefetch
     for stage in (
         "auth_verified", "account_profile", "account_public", "issued_feed",
