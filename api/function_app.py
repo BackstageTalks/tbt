@@ -1721,7 +1721,7 @@ def feed(req):
             # never inferred from the match-winner status.
             if bool(entitlements.get("results")):
                 # Results are already detached by filter_feed_for_access;
-                # final category recheck still creates an independent copy.
+                # the final category gate rebuilds rows without another nested copy.
                 data["results"] = runtime_settled_results(
                     data, data["match_statuses"], already_detached=True,
                 )
