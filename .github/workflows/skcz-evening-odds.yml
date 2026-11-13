@@ -98,6 +98,34 @@ jobs:
           assert report["exact_aces_pairs"] == sum(
               len(m["verified_pairs"]) for e in report["events_in_target_window"]
               for m in e["aces_markets"])
+          # Independently verify the complete priced pre-start research ledger.
+          # It may contain quotes for other betting days, but the morning
+          # publisher still reads only events_in_target_window.
+          from datetime import datetime, timedelta
+          from zoneinfo import ZoneInfo
+          observed = report["observed_prematch_priced_events"]
+          assert isinstance(observed, list) and len(observed) <= report["probed_urls"] <= 60
+          total = outside = 0
+          for event in observed:
+              captured = datetime.fromisoformat(event["captured_at"])
+              scheduled = datetime.fromisoformat(event["scheduled_at"])
+              assert captured.tzinfo and scheduled.tzinfo and captured < scheduled
+              assert event["provider"] == "fortuna_sk"
+              assert str(event["event_id"]).startswith("ufo:mtch:")
+              assert str(event["source_url"]).startswith("https://www.ifortuna.sk/stavkovanie/tenis/")
+              assert len(event["source_sha256"]) == 64
+              local = scheduled.astimezone(ZoneInfo("Europe/Bratislava"))
+              betting = (local - timedelta(days=1) if local.hour < 6 else local).date()
+              assert event["event_betting_day"] == betting.isoformat()
+              prices = sum(len(m["verified_pairs"]) for m in event["aces_markets"])
+              assert prices > 0
+              assert all(m["kind"] in ("player_aces_ou", "most_aces_match")
+                         for m in event["aces_markets"])
+              total += prices
+              if event["event_betting_day"] != report["target_betting_day"]:
+                  outside += prices
+          assert report["observed_prematch_priced_pairs"] == total
+          assert report["observed_priced_pairs_outside_target"] == outside
           repo = os.environ["DATA_REPO"]
           if repo != "BackstageTalks/tbt-data":
               raise SystemExit("Unexpected target repo; refuse research write")
@@ -118,6 +146,8 @@ jobs:
                             "private_path": path,
                             "exact_aces_pairs": report["exact_aces_pairs"],
                             "aces_market_groups": report["aces_market_groups"],
+                            "archived_verified_prematch_pairs": total,
+                            "archived_verified_outside_target": outside,
                             "source_errors": len(report["errors"]),
                             "cdb_writes": 0}, sort_keys=True))
           PY
