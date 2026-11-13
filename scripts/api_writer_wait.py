@@ -19,8 +19,9 @@ def wait_for_writer(
     clock: Callable[[], datetime] | None = None,
     pause: Callable[[float], None] = sleep,
     poll_seconds: int = 45,
+    ready: Callable[[datetime], bool] | None = None,
 ) -> bool:
-    """Return whether we waited; fail closed if the window closes while busy.
+    """Return whether we waited; fail closed if the bounded wait expires.
 
     A transient occupied writer is not a successful no-op. Never retry API
     requests themselves here: this only polls the read-only GitHub writer state.
@@ -41,9 +42,12 @@ def wait_for_writer(
                 "Canonical writer retry window expired; no API dispatch. "
                 "A later scheduled tick must retry."
             )
-        if not active:
+        if not active and (ready is None or ready(current)):
             return waited
-        print("Canonical writer busy; retrying after 45s: " + "; ".join(active), flush=True)
+        if active:
+            print("Canonical writer busy; retrying after 45s: " + "; ".join(active), flush=True)
+        else:
+            print("CDB writer free; waiting for next safe provider dispatch window", flush=True)
         pause(min(poll_seconds, max(1.0, (deadline_utc - current).total_seconds())))
         waited = True
 
