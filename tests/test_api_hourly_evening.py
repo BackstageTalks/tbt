@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.api_hourly_evening import evening_cap
+from scripts.api_hourly_evening import evening_cap, hourly_wait_window_open
 
 
 def reset_window(day):
@@ -38,6 +38,26 @@ def test_fail_closed_on_naive_timestamps():
         evening_cap(before.replace(tzinfo=None), after)
     with pytest.raises(ValueError, match="timezone-aware"):
         evening_cap(before, after.replace(tzinfo=None))
+
+
+@pytest.mark.parametrize("date", ["2026-01-13", "2026-07-13"])
+def test_queued_gapfill_waits_for_safe_dispatch_slot_across_utc_reset(date):
+    def at(hhmm):
+        return datetime.fromisoformat(date + "T" + hhmm + ":00+00:00")
+
+    assert hourly_wait_window_open(at("16:51")) is True
+    assert hourly_wait_window_open(at("16:52")) is False
+    assert hourly_wait_window_open(at("17:08")) is False
+    assert hourly_wait_window_open(at("17:10")) is True
+    assert hourly_wait_window_open(at("17:13")) is True
+    assert hourly_wait_window_open(at("17:14")) is False
+    assert hourly_wait_window_open(at("17:54")) is True
+    assert hourly_wait_window_open(at("23:09")) is False
+
+
+def test_wait_window_rejects_unknown_timezone():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        hourly_wait_window_open(datetime(2026, 11, 13, 16, 51))
 
 
 def test_workflow_preserves_existing_guards_and_uses_evening_in_both_paths():

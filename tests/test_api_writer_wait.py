@@ -6,6 +6,7 @@ from urllib.error import HTTPError
 import pytest
 
 from scripts.api_writer_wait import wait_for_writer, read_cdb_writer_lock
+from scripts.api_hourly_evening import hourly_wait_window_open
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,10 +79,12 @@ def test_hourly_workflow_rechecks_budget_and_keeps_quota_and_writer_guards():
     importer = WORKFLOW.index("from scripts.api_writer_wait import wait_for_writer")
     assert checkout < importer
     assert "timeout-minutes: 350" in WORKFLOW
-    assert "wait_for_writer(check_writers, retry_deadline)" in WORKFLOW
+    assert "wait_for_writer(check_writers, retry_deadline," in WORKFLOW
+    assert "ready=hourly_wait_window_open" in WORKFLOW
     assert "now + timedelta(hours=5, minutes=40)" in WORKFLOW
-    assert "expected_reset - timedelta(minutes=7)" in WORKFLOW
+    assert "retry_deadline = now + timedelta(hours=5, minutes=40)" in WORKFLOW
     assert "if waited:" in WORKFLOW
+    assert "if not hourly_wait_window_open(now):" in WORKFLOW
     delayed = WORKFLOW.split("          if waited:", 1)[1]
     assert "budget_response = get_json(BUDGET_URL, WORKER, worker=True)" in delayed
     assert 'budget.get("provider_plan_limit") != 15000' in delayed
@@ -96,6 +99,43 @@ def test_hourly_workflow_rechecks_budget_and_keeps_quota_and_writer_guards():
     # Lock acquisition remains with the existing governed data.yml pipeline.
     assert "git/refs" not in delayed
     assert "git/tags" not in delayed
+
+
+def test_busy_writer_waits_across_reset_until_both_writer_and_window_are_safe():
+    # Previously this final closeout expired at 17:02 UTC and discarded a
+    # queued run. A free writer at 16:55 is still too late for cold bootstrap;
+    # the orchestrator must wait for the fresh provider-day 17:10 UTC window.
+    now = [datetime(2026, 11, 13, 16, 51, tzinfo=timezone.utc)]
+    checks = []
+    release = datetime(2026, 11, 13, 16, 55, tzinfo=timezone.utc)
+
+    def check():
+        checks.append(now[0])
+        return ["data.yml run=1 status=in_progress"] if now[0] < release else []
+
+    def pause(seconds):
+        now[0] += timedelta(seconds=seconds)
+
+    waited = wait_for_writer(
+        check, now[0] + timedelta(hours=1),
+        clock=lambda: now[0], pause=pause, poll_seconds=60,
+        ready=hourly_wait_window_open,
+    )
+    assert waited is True
+    assert now[0] == datetime(2026, 11, 13, 17, 10, tzinfo=timezone.utc)
+    assert any(instant >= release for instant in checks)
+
+
+def test_unlocked_writer_cannot_dispatch_outside_allowed_provider_window():
+    now = [datetime(2026, 11, 13, 16, 53, tzinfo=timezone.utc)]
+    with pytest.raises(TimeoutError, match="retry window expired"):
+        wait_for_writer(
+            lambda: [], now[0] + timedelta(minutes=2),
+            clock=lambda: now[0],
+            pause=lambda seconds: now.__setitem__(0, now[0] + timedelta(seconds=seconds)),
+            poll_seconds=30, ready=hourly_wait_window_open,
+        )
+    assert now[0] == datetime(2026, 11, 13, 16, 55, tzinfo=timezone.utc)
 
 
 def _private_cdb_responses(*, locked=False, bad_tag=False):
@@ -190,4 +230,5 @@ def test_hourly_workflow_consults_private_global_lock_before_dispatch():
     assert WORKFLOW.index("active = read_cdb_writer_lock(") < WORKFLOW.index(
         'for status in ("queued", "pending", "in_progress", "waiting", "requested")'
     )
-    assert "wait_for_writer(check_writers, retry_deadline)" in WORKFLOW
+    assert "wait_for_writer(check_writers, retry_deadline," in WORKFLOW
+    assert "ready=hourly_wait_window_open" in WORKFLOW

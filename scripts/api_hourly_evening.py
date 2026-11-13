@@ -8,6 +8,7 @@ leaving at least 6,000 calls below the 14,500 ceiling until daytime work.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 
 def evening_cap(now: datetime, next_reset: datetime) -> int | None:
@@ -19,6 +20,35 @@ def evening_cap(now: datetime, next_reset: datetime) -> int | None:
     if 45 * 60 <= elapsed < 6 * 3600:
         return min(8500, 3000 + 1200 * int(elapsed // 3600))
     return None
+
+def hourly_wait_window_open(now: datetime) -> bool:
+    """Only resume queued gapfill inside a viable, currently permitted slot.
+
+    Waiting may cross the fixed UTC provider reset. This is a time preflight,
+    not a quota reservation: the caller MUST read the new shared ledger again.
+    """
+    if now.tzinfo is None:
+        raise ValueError("Provider dispatch timestamp must be timezone-aware")
+    now = now.astimezone(timezone.utc)
+    reset = now.replace(hour=17, minute=9, second=0, microsecond=0)
+    if now >= reset:
+        reset += timedelta(days=1)
+    # Real data.yml cold bootstrap takes up to ~15 minutes. Never start
+    # when fewer than 17 minutes remain before the provider's guarded cutoff.
+    if now >= reset - timedelta(minutes=17):
+        return False
+
+    local = now.astimezone(ZoneInfo("Europe/Bratislava"))
+    reset_local = reset.astimezone(ZoneInfo("Europe/Bratislava"))
+    stage_hour = local.hour + (19 - reset_local.hour)
+    until_reset = (reset - now).total_seconds()
+    return (
+        stage_hour in {12, 13, 14, 15, 16, 17, 18}
+        or 7 * 60 <= until_reset <= 35 * 60 + 59
+        or (now.hour == 17 and 10 <= now.minute <= 13)
+        or evening_cap(now, reset) is not None
+    )
+
 
 SMOKE_SOURCE = "operator-approved-500-statistics-smoke"
 

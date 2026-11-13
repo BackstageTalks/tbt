@@ -175,7 +175,8 @@ def test_hourly_closeout_starts_early_and_keeps_authoritative_limits():
     assert "min(5000, limit-spent" in workflow
     assert 'budget.get("global_limit") != 14500' in workflow
     assert 'budget.get("reserved_provider_headroom") != 500' in workflow
-    assert "wait_for_writer(check_writers, retry_deadline)" in workflow
+    assert "wait_for_writer(check_writers, retry_deadline," in workflow
+    assert "ready=hourly_wait_window_open" in workflow
     assert '"mode": "statistics"' in workflow
 
 

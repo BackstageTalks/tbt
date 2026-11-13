@@ -56,7 +56,8 @@ jobs:
           from datetime import datetime, time, timedelta, timezone
           from time import sleep
           from zoneinfo import ZoneInfo
-          from scripts.api_hourly_evening import evening_cap, operator_smoke_request_cap
+          from scripts.api_hourly_evening import (evening_cap, operator_smoke_request_cap,
+                                                  hourly_wait_window_open)
 
           REPO = os.environ["GITHUB_REPOSITORY"]
           TOKEN = os.getenv("GH_TOKEN", "")
@@ -201,16 +202,11 @@ jobs:
               sys.exit(0)
 
 
-          # A busy canonical writer *or its authoritative private tag* is
-          # deferred, not silently skipped. An unobservable tag fails closed.
-          # Leave the Git tag lock untouched while waiting. Keep the
-          # window bounded below the 6-hour GitHub Actions job maximum.
-          run_day = local.date()
-          window_end_utc = (expected_reset - timedelta(days=1) + timedelta(hours=6)
-                            if evening_limit is not None else
-                            expected_reset - timedelta(days=1) + timedelta(minutes=5)
-                            if new_day_start else expected_reset - timedelta(minutes=7))
-          retry_deadline = min(now + timedelta(hours=5, minutes=40), window_end_utc)
+          # Wait for both an available canonical writer and a safe time window.
+          # An occupied writer close to reset must NOT consume the previous
+          # day's stale budget or expire before the next permitted window.
+          # The bounded runner wait never steals/releases the CDB lock.
+          retry_deadline = now + timedelta(hours=5, minutes=40)
           if DRY_RUN:
               active = check_writers()
               if active:
@@ -220,7 +216,8 @@ jobs:
           else:
               from scripts.api_writer_wait import wait_for_writer
               try:
-                  waited = wait_for_writer(check_writers, retry_deadline)
+                  waited = wait_for_writer(check_writers, retry_deadline,
+                                             ready=hourly_wait_window_open)
               except TimeoutError as exc:
                   raise SystemExit(str(exc)) from exc
 
@@ -241,11 +238,8 @@ jobs:
               since_reset = (now - (expected_reset - timedelta(days=1))).total_seconds()
               if tick_cap is not None and evening_limit is None and 0 <= since_reset < 45 * 60:
                   evening_limit = 3000
-              if (
-                  local.date() != run_day
-                  or (stage_hour not in caps and not final_topup and not new_day_start and evening_limit is None)
-              ):
-                  raise SystemExit("Canonical writer released outside a permitted dispatch window")
+              if not hourly_wait_window_open(now):
+                  raise SystemExit("CDB writer released outside a safe dispatch window; no dispatch")
 
               budget_response = get_json(BUDGET_URL, WORKER, worker=True)
               if budget_response.get("ok") is not True:
