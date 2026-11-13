@@ -11786,7 +11786,7 @@ body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
     content:"W/L/V";font-size:11px;line-height:1.25
   }
   body#blinqPremium.blinq-admin .monthly-focused-table thead th:nth-child(4)::after{
-    content:"Kumul. u";font-size:11px;line-height:1.25
+    content:"Spolu";font-size:11px;line-height:1.25
   }
 }
 @media(max-width:380px){
@@ -11850,7 +11850,7 @@ body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focus
 }
 body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table th:nth-child(n+3),
 body#blinqPremium.blinq-admin .monthly-performance.is-report-mode .monthly-focused-table td:nth-child(n+3){
-  text-align:right!important
+  text-align:center!important
 }
 body#blinqPremium.blinq-admin .monthly-performance.is-monthly-fullscreen{
   justify-items:center!important
