@@ -21,6 +21,20 @@ def evening_cap(now: datetime, next_reset: datetime) -> int | None:
         return min(8500, 3000 + 1200 * int(elapsed // 3600))
     return None
 
+def completed_history_end(now: datetime):
+    """Use only complete UTC days accepted by the native history importer.
+
+    At local midnight Bratislava is already on the next calendar day while
+    UTC is still yesterday. The previous local-only end date caused the
+    guarded nightly gapfill to fail before its first provider request.
+    """
+    if now.tzinfo is None:
+        raise ValueError("An aware dispatch time is required")
+    utc_date = now.astimezone(timezone.utc).date()
+    local_date = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
+    return min(utc_date, local_date) - timedelta(days=1)
+
+
 def hourly_wait_window_open(now: datetime) -> bool:
     """Only resume queued gapfill inside a viable, currently permitted slot.
 

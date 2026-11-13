@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from scripts.api_hourly_evening import evening_cap, hourly_wait_window_open
+from scripts.api_hourly_evening import evening_cap, hourly_wait_window_open, completed_history_end
 
 
 def reset_window(day):
@@ -202,3 +202,30 @@ def test_external_cron_handoff_uses_only_existing_protected_orchestrator():
         "- name: Dispatch guarded CDB API gapfill from existing external clock", 1)[1]
     assert "download_tennis_history.py" not in tail
     assert "cdb_global_writer_lock.py" not in tail
+
+@pytest.mark.parametrize("instant,expected", [
+    ("2026-11-12T23:02:00+00:00", "2026-11-11"),
+    ("2026-07-12T22:02:00+00:00", "2026-07-11"),
+    ("2026-11-13T00:02:00+00:00", "2026-11-12"),
+    ("2026-07-13T00:02:00+00:00", "2026-07-12"),
+    ("2026-11-13T16:30:00+00:00", "2026-11-12"),
+    ("2026-07-13T16:30:00+00:00", "2026-07-12"),
+])
+def test_history_end_is_complete_in_both_utc_and_local_day(instant, expected):
+    from datetime import date
+    observed = completed_history_end(datetime.fromisoformat(instant))
+    assert observed == date.fromisoformat(expected)
+    assert observed < datetime.fromisoformat(instant).astimezone(timezone.utc).date()
+
+
+def test_history_end_fails_closed_for_naive_clock_and_workflow_uses_helper():
+    with pytest.raises(ValueError, match="aware dispatch"):
+        completed_history_end(datetime(2026, 11, 12, 23, 2))
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
+    assert "last_complete = completed_history_end(now)" in workflow
+    assert "last_complete = local.date() - timedelta(days=1)" not in workflow
+    assert "from scripts.api_hourly_evening import (evening_cap" in workflow
+    assert "hourly_wait_window_open, completed_history_end)" in workflow
+    assert '\"end\": last_complete.isoformat()' in workflow
+
