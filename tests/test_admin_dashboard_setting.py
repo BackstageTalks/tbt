@@ -132,7 +132,7 @@ def test_public_markup_unchanged_and_admin_config_is_scoped():
     assert "state.feed?.dashboard_kpi_cards" in app
     # The immutable issued authority must still run after verified auth and
     # be consumed before any presentation projection or entitlement filter.
-    assert "pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou()))" in api
+    assert "pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou(reuse_source=True)))" in api
     assert api.index('issued_future, overlays_future = _prefetch_independent_feed_reads(pool)') > api.index('trace_stage("auth_verified")')
     assert api.index('source_feed = issued_future.result()') < api.index('source_feed = with_issued_ace_leader_signals(source_feed)')
     assert "return filter_unissued_offers(public, authority)" in api
