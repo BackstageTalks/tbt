@@ -33,7 +33,7 @@ def test_independent_reads_start_together_and_keep_original_source(monkeypatch):
         barrier.wait()
         return {"archive": ([], None)}
 
-    monkeypatch.setattr(api, "_read_feed_with_confirmed_aces_ou", lambda: raw)
+    monkeypatch.setattr(api, "_read_feed_with_confirmed_aces_ou", lambda **_kw: raw)
     monkeypatch.setattr(api, "_visible_issued_feed", issued)
     monkeypatch.setattr(api, "_feed_support_reads_parallel", overlays)
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -57,7 +57,7 @@ def test_independent_reads_propagate_source_errors_at_original_boundary(monkeypa
             raise failure
         return {"ui": ({}, None)}
 
-    monkeypatch.setattr(api, "_read_feed_with_confirmed_aces_ou", lambda: {})
+    monkeypatch.setattr(api, "_read_feed_with_confirmed_aces_ou", lambda **_kw: {})
     monkeypatch.setattr(api, "_visible_issued_feed", issued)
     monkeypatch.setattr(api, "_feed_support_reads_parallel", overlays)
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -132,7 +132,7 @@ def test_real_handler_overlaps_profile_and_both_independent_read_paths(monkeypat
     def profile(_user):
         arrived("profile")
         return {}
-    def issued():
+    def issued(**_kw):
         arrived("issued")
         return {"results": [], "top_daily_picks": []}
     def support():
