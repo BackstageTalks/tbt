@@ -201,13 +201,14 @@ API_VERSION = "3.10.0"
 CONFIRMED_ACE_OU = Path(__file__).parent / "data/confirmed_aces_ou.json"
 
 
-def _read_feed_with_confirmed_aces_ou():
-    """Load a validated read-only source, then apply fresh sent-issuance evidence.
+def _read_feed_with_confirmed_aces_ou(*, reuse_source=False):
+    """Load a validated source and apply fresh sent-issuance evidence.
 
-    Every downstream source/entitlement stage must be copy-on-write. Only
-    packaged source bytes are cached; the current ACE receipt is read afresh.
+    Source reuse is ONLY for the authenticated member feed, whose downstream
+    authorization/Results stages are copy-on-write. Workers, reconciliation and
+    serving read-back retain a fresh independently parsed source.
     """
-    base = read_serving_source_cached(FEED)
+    base = read_serving_source_cached(FEED) if reuse_source else read_feed(FEED)
     if not CONFIRMED_ACE_OU.is_file():
         return base
     try:
@@ -1552,7 +1553,7 @@ def _prefetch_independent_feed_reads(pool):
     Await the original source futures before applying publication, exclusion,
     result-access or KPI gates; no new cache, fallback or authorization shortcut.
     """
-    issued = pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou()))
+    issued = pool.submit(lambda: _visible_issued_feed(_read_feed_with_confirmed_aces_ou(reuse_source=True)))
     overlays = pool.submit(_feed_support_reads_parallel)
     return issued, overlays
 
