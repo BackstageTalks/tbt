@@ -219,6 +219,7 @@ def fetch(url):
 
 
 def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch):
+    injected_clock = now is not None
     now = now or datetime.now(timezone.utc)
     start = datetime.combine(target_day, time(6), TZ).astimezone(timezone.utc)
     end = datetime.combine(target_day + timedelta(days=1), time(6), TZ).astimezone(timezone.utc)
@@ -259,14 +260,23 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
               'out_of_target_window_events': 0,
               'market_labels_observed_sample': [],
               'prematch_aces_market_diagnostics': [],
+              # Full pre-start market evidence is archived even when the
+              # bookmaker quotes a match outside the *next* betting day.
+              # The morning publisher intentionally reads ONLY
+              # events_in_target_window; this research ledger is not a price
+              # fallback and cannot backdate an issued pick.
+              'observed_prematch_priced_events': [],
+              'observed_prematch_priced_pairs': 0,
+              'observed_priced_pairs_outside_target': 0,
               'errors': [],
               'cdb_writes': 0, 'published_picks_changed': 0, 'provider_paid_calls': 0}
     for idx, url in enumerate(urls):
         if idx and sleep_seconds:
             clock.sleep(sleep_seconds)
         try:
-            parsed = parse_detail(get(url), url, datetime.now(timezone.utc))
+            parsed = parse_detail(get(url), url, now if injected_clock else datetime.now(timezone.utc))
             event_start = datetime.fromisoformat(parsed['scheduled_at'])
+            observed_at = datetime.fromisoformat(parsed['captured_at'])
             # Observe public market labels irrespective of target day. Only
             # target-day events are eligible for the quote archive consumer.
             # This makes a daytime dry-run useful without backdating quotes.
@@ -274,7 +284,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
             for name in parsed['market_group_titles_sample']:
                 if name and name not in labels and len(labels) < 80:
                     labels.append(name)
-            if event_start > now and len(report['prematch_aces_market_diagnostics']) < 24:
+            if event_start > observed_at and len(report['prematch_aces_market_diagnostics']) < 24:
                 for market in parsed['aces_markets']:
                     if len(report['prematch_aces_market_diagnostics']) >= 24:
                         break
@@ -287,7 +297,34 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
                         'outcomes_observed': market['outcomes_observed'],
                         'verified_pairs': market['verified_pairs'][:3],
                     })
-            if start <= event_start < end:
+            in_target = start <= event_start < end
+            if event_start > observed_at:
+                priced = [
+                    {**market, 'verified_pairs': list(market['verified_pairs'])}
+                    for market in parsed['aces_markets']
+                    if market['kind'] in ('player_aces_ou', 'most_aces_match')
+                    and market['verified_pairs']
+                ]
+                if priced:
+                    local = event_start.astimezone(TZ)
+                    betting_date = (local - timedelta(days=1) if local.hour < 6
+                                    else local).date()
+                    report['observed_prematch_priced_events'].append({
+                        'provider': parsed['provider'],
+                        'event_id': parsed['event_id'],
+                        'players': parsed['players'],
+                        'scheduled_at': parsed['scheduled_at'],
+                        'captured_at': parsed['captured_at'],
+                        'source_url': parsed['source_url'],
+                        'source_sha256': parsed['source_sha256'],
+                        'event_betting_day': betting_date.isoformat(),
+                        'aces_markets': priced,
+                    })
+                    n = sum(len(m['verified_pairs']) for m in priced)
+                    report['observed_prematch_priced_pairs'] += n
+                    if not in_target:
+                        report['observed_priced_pairs_outside_target'] += n
+            if in_target:
                 report['events_in_target_window'].append(parsed)
             else:
                 report['out_of_target_window_events'] += 1

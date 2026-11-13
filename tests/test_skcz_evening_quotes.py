@@ -190,6 +190,25 @@ class FortunaMorningAttachment(unittest.TestCase):
         r["events_in_target_window"][0]["scheduled_at"] = "2026-11-11T03:30:00+00:00"
         self.assertEqual(len(validated_events(r, betting_day="2026-11-10", now=NOW)), 1)
 
+    def test_out_of_day_archive_evidence_never_prices_morning_picks(self):
+        # A real, verified quote from a different betting day must be
+        # retained in research but never leak into today's published picks.
+        r = report(markets=[])
+        old_event = report()["events_in_target_window"][0]
+        r["observed_prematch_priced_events"] = [{
+            **old_event, "event_betting_day": "2026-11-09",
+        }]
+        r["observed_prematch_priced_pairs"] = 2
+        r["observed_priced_pairs_outside_target"] = 2
+        r["events_in_target_window"] = []
+        r["status"] = "no_exact_aces_market_available"
+        original = row("aces")
+        aces, most, info = attach_prices([original], [], r, now=NOW)
+        self.assertEqual((aces, most), ([original], []))
+        self.assertEqual((info["aces"], info["most_aces"], info["eligible_events"]),
+                         (0, 0, 0))
+        self.assertIsNotNone(local_player_aces_ou(aces[0]))
+
     def test_private_snapshot_read_and_provenance(self):
         r = report()
         contents = base64.b64encode(json.dumps(r).encode()).decode()
