@@ -34,7 +34,7 @@ class StatisticsAvailabilityCircuit:
         "missing_unambiguous_all_period",
     })
 
-    def __init__(self, *, verified_prior=None):
+    def __init__(self, *, verified_prior=None, eligible_cohorts=None):
         self.samples = deque(maxlen=self.WINDOW)
         self.paid_cohort_counts = Counter()
         self.paid_attempts_observed = 0
@@ -57,9 +57,15 @@ class StatisticsAvailabilityCircuit:
                 prior_eligible[(tour, int(year))] = (
                     prior_eligible.get((tour, int(year)), 0) + paid)
         prior_tours = {key[0] for key in prior_eligible}
+        # No early exit when today's *eligible* CDB queue has other seasons
+        # that might yield usable values. The initial proof applies only
+        # when all currently eligible tour/year groups were already sampled.
+        current = (frozenset(eligible_cohorts)
+                   if eligible_cohorts is not None else frozenset())
         self._short_recheck_cohorts = (
             frozenset(prior_eligible)
-            if (len(prior_eligible) >= self.MIN_COHORTS
+            if (current and current.issubset(prior_eligible)
+                and len(prior_eligible) >= self.MIN_COHORTS
                 and len(prior_tours) >= self.MIN_TOURS
                 and sum(prior_eligible.values()) >= self.PRIOR_MIN_TOTAL_REQUESTS)
             else frozenset()
