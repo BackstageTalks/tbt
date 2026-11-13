@@ -57,7 +57,7 @@ jobs:
           from time import sleep
           from zoneinfo import ZoneInfo
           from scripts.api_hourly_evening import (evening_cap, operator_smoke_request_cap,
-                                                  hourly_wait_window_open)
+                                                  hourly_wait_window_open, completed_history_end)
 
           REPO = os.environ["GITHUB_REPOSITORY"]
           TOKEN = os.getenv("GH_TOKEN", "")
@@ -293,7 +293,8 @@ jobs:
           if now >= cutoff - timedelta(minutes=15):
               print("Less than 15 minutes until provider cutoff; no dispatch")
               sys.exit(0)
-          last_complete = local.date() - timedelta(days=1)
+          last_complete = completed_history_end(now)
+          print(f"Native importer safe end: {last_complete.isoformat()} (UTC day complete)")
           payload = {
               "ref": "main",
               "inputs": {
