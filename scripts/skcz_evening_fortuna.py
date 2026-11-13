@@ -219,6 +219,7 @@ def fetch(url):
 
 
 def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch):
+    injected_clock = now is not None
     now = now or datetime.now(timezone.utc)
     start = datetime.combine(target_day, time(6), TZ).astimezone(timezone.utc)
     end = datetime.combine(target_day + timedelta(days=1), time(6), TZ).astimezone(timezone.utc)
@@ -273,8 +274,9 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
         if idx and sleep_seconds:
             clock.sleep(sleep_seconds)
         try:
-            parsed = parse_detail(get(url), url, datetime.now(timezone.utc))
+            parsed = parse_detail(get(url), url, now if injected_clock else datetime.now(timezone.utc))
             event_start = datetime.fromisoformat(parsed['scheduled_at'])
+            observed_at = datetime.fromisoformat(parsed['captured_at'])
             # Observe public market labels irrespective of target day. Only
             # target-day events are eligible for the quote archive consumer.
             # This makes a daytime dry-run useful without backdating quotes.
@@ -282,7 +284,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
             for name in parsed['market_group_titles_sample']:
                 if name and name not in labels and len(labels) < 80:
                     labels.append(name)
-            if event_start > now and len(report['prematch_aces_market_diagnostics']) < 24:
+            if event_start > observed_at and len(report['prematch_aces_market_diagnostics']) < 24:
                 for market in parsed['aces_markets']:
                     if len(report['prematch_aces_market_diagnostics']) >= 24:
                         break
@@ -296,7 +298,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
                         'verified_pairs': market['verified_pairs'][:3],
                     })
             in_target = start <= event_start < end
-            if event_start > now:
+            if event_start > observed_at:
                 priced = [
                     {**market, 'verified_pairs': list(market['verified_pairs'])}
                     for market in parsed['aces_markets']
