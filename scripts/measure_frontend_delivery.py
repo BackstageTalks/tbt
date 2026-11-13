@@ -173,7 +173,7 @@ def probe_public_api_latency(origin: str, *, rounds: int = 3,
         path: {
             "median_total_ms": round(statistics.median(item["total_ms"] for item in samples)),
             "median_headers_ms": round(statistics.median(
-                item["headers_ms"] for item in samples if "headers_ms" in item,
+                [item["headers_ms"] for item in samples if "headers_ms" in item]
             )) if any("headers_ms" in item for item in samples) else None,
             "failed_or_non_2xx": sum(not 200 <= item["status"] < 300 for item in samples),
         }
