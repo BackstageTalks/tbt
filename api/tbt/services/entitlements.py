@@ -195,7 +195,7 @@ def _allowed_result_categories(manifest: dict) -> list[str]:
 
 def _filter_result_history(
     rows: list, hours: int | None, now: datetime | None = None,
-    allowed_categories: set[str] | None = None,
+    allowed_categories: set[str] | None = None, *, already_detached: bool = False,
 ) -> list:
     if hours is not None and hours <= 0:
         return []
@@ -226,7 +226,11 @@ def _filter_result_history(
         ]
         if not publications:
             continue
-        out.append(deepcopy({**row, "market_publications": publications}))
+        # The authenticated feed already detached these authorized Results
+        # before settlement. A final category recheck must still filter every
+        # publication but need not deep-copy all nested historical data again.
+        filtered = {**row, "market_publications": publications}
+        out.append(filtered if already_detached else deepcopy(filtered))
     return out
 
 
@@ -656,14 +660,19 @@ def filter_results_for_issued_day(
     return out
 
 
-def filter_results_for_categories(rows: list, categories: list[str] | set[str]) -> list:
+def filter_results_for_categories(
+    rows: list, categories: list[str] | set[str], *, already_detached: bool = False,
+) -> list:
     """Recheck runtime settlement overlays before the feed leaves the API.
 
     The first pass runs before the status overlay. This pass prevents a
     multi-market publication nested in an authorized daily pick from widening
-    a member's Results access during response-time settlement.
+    a member's Results access during response-time settlement. Only the feed
+    may opt into borrowing already-detached authorized nested values.
     """
-    return _filter_result_history(rows, None, allowed_categories=set(categories))
+    return _filter_result_history(
+        rows, None, allowed_categories=set(categories), already_detached=already_detached,
+    )
 
 
 def effective_plan(access: dict) -> str:
