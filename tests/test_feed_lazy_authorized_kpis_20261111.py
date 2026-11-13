@@ -41,7 +41,7 @@ def _stub_authenticated_feed(monkeypatch, *, fail_at=None):
     monkeypatch.setattr(api, "runtime_settled_results",
                         lambda _feed, _statuses, **_kwargs: [settled])
     monkeypatch.setattr(api, "filter_results_for_categories",
-                        lambda results, _categories: results)
+                        lambda results, _categories, **_kwargs: results)
     monkeypatch.setattr(api, "filter_results_for_member_limits",
                         lambda results, *_args, **_kw: results)
     def filter_issued(results, *_args, **_kw):
