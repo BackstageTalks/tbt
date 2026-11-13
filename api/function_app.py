@@ -118,7 +118,7 @@ from tbt.services.push_notifications import (
     delete_subscription, push_storage_diagnostics, save_subscription, sync_push_access, webpush_config,
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
-from tbt.services.feed import read_feed, visible_feed, serving_artifact_readback, _row_betting_day
+from tbt.services.feed import read_feed, read_serving_source_cached, visible_feed, serving_artifact_readback, _row_betting_day
 from tbt.services.ace_winner_bridge import with_issued_ace_leader_signals
 from tbt.services.most_aces_pricing import annotate_most_aces_offer
 from tbt.services.issued_authority import (
@@ -202,8 +202,12 @@ CONFIRMED_ACE_OU = Path(__file__).parent / "data/confirmed_aces_ou.json"
 
 
 def _read_feed_with_confirmed_aces_ou():
-    """Load canonical feed with a read-only exact sent-issuance overlay."""
-    base = read_feed(FEED)
+    """Load a validated read-only source, then apply fresh sent-issuance evidence.
+
+    Every downstream source/entitlement stage must be copy-on-write. Only
+    packaged source bytes are cached; the current ACE receipt is read afresh.
+    """
+    base = read_serving_source_cached(FEED)
     if not CONFIRMED_ACE_OU.is_file():
         return base
     try:
