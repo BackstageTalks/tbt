@@ -229,8 +229,10 @@ def _filter_result_history(
         # The authenticated feed already detached these authorized Results
         # before settlement. A final category recheck must still filter every
         # publication but need not deep-copy all nested historical data again.
-        filtered = {**row, "market_publications": publications}
-        out.append(filtered if already_detached else deepcopy(filtered))
+        if already_detached:
+            out.append({**row, "market_publications": publications})
+        else:
+            out.append(deepcopy({**row, "market_publications": publications}))
     return out
 
 
