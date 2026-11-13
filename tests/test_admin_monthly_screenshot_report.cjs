@@ -49,6 +49,11 @@ p.level='elite';p.view='report';
 rendered=t.renderMonthlyPerformance();
 for(const token of ['is-report-mode','monthly-focused-table','Kumulatívny profit · ELITE','monthly-profit-area','1. – 7. deň','Režim screenshotu','+0,70 u','-0,30 u','BlinQ · ADMIN / ANALYTIKA']) assert.ok(rendered.includes(token),token);
 assert.ok(!rendered.includes('monthly-tables-pair'));
+assert.ok(rendered.includes('<th>Spolu</th>') && !rendered.includes('<th>Kumulatívne</th>'), 'daily report total header');
+assert.ok(css.includes('content:"Spolu";font-size:11px'), 'mobile report total header');
+assert.ok(!css.includes('content:"Kumul. u"'), 'retired mobile header');
+assert.ok(css.includes('.monthly-focused-table td:nth-child(n+3){\n  text-align:center!important\n}'), 'profit and total cells centered');
+assert.ok(html.split('monthly-report-table=20261113').length===3, 'both JS and CSS cache keys updated');
 assert.ok(!rendered.includes('1. – 30. deň'));
 // Selected-level screenshot report hides the three specifically removed notes.
 assert.ok(!rendered.includes('Overené vyhodnotenia · 1 u / tip'));
