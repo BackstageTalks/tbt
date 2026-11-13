@@ -1191,6 +1191,15 @@ def train_from_matches(
         key: _metric_delta(holdout_metrics, production_metrics, key)
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
+    # Read-only 7.2.2 experiment: fixed 65%+ confidence slices and actual
+    # model-time feature availability, evaluated on the identical holdout.
+    # It is deliberately not a trainer selector, policy or promotion gate.
+    candidate_722_report = None
+    if training_profile == "accuracy-7.2.2":
+        from .candidate_722_diagnostics import candidate_722_confidence_evidence_report
+        candidate_722_report = candidate_722_confidence_evidence_report(
+            test, test_p, production_probabilities,
+        )
     report = {
         "training_profile": training_profile,
         "learning_window": {
@@ -1215,6 +1224,7 @@ def train_from_matches(
         "pit_evidence_holdout": paired_evidence_holdout_diagnostics(
             test, test_p, production_probabilities,
         ) if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
+        "candidate_722_confidence_evidence": candidate_722_report,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
         "atp_leaderboards": {
