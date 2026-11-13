@@ -112,7 +112,7 @@ def test_cached_source_is_not_mutated_by_member_and_results_processing(monkeypat
     monkeypatch.setattr(api, "FEED", path)
     monkeypatch.setattr(api, "CONFIRMED_ACE_OU", tmp_path / "absent.json")
     monkeypatch.setattr(api, "load_authority", lambda _day: None)
-    cached = api._read_feed_with_confirmed_aces_ou()
+    cached = api._read_feed_with_confirmed_aces_ou(reuse_source=True)
     before = deepcopy(cached)
     public = api._visible_issued_feed(cached)
     assert public is not cached
@@ -128,7 +128,7 @@ def test_cached_source_is_not_mutated_by_member_and_results_processing(monkeypat
     member["results"][0]["player1"]["rank"]["history"].append(99)
     member["results"][0]["market_publications"][0]["result"]["correct"] = False
     assert cached == before
-    assert api._read_feed_with_confirmed_aces_ou() is cached
+    assert api._read_feed_with_confirmed_aces_ou(reuse_source=True) is cached
     other, _ = api.filter_feed_for_access(
         api.merge_settled_results(api._visible_issued_feed(cached), []),
         {"id": "member-b", "status": "active",
@@ -146,9 +146,9 @@ def test_dynamic_ace_issuance_sidecar_is_reloaded_even_when_base_is_cached(monke
     monkeypatch.setattr(api, "CONFIRMED_ACE_OU", sidecar)
     monkeypatch.setattr(api, "attach_confirmed_aces_ou_sidecar",
                         lambda base, data: {**base, "receipt_revision": data["revision"]})
-    first = api._read_feed_with_confirmed_aces_ou()
+    first = api._read_feed_with_confirmed_aces_ou(reuse_source=True)
     sidecar.write_text(json.dumps({"schema": 1, "issued_aces_ou": [], "revision": 2}), encoding="utf-8")
-    second = api._read_feed_with_confirmed_aces_ou()
+    second = api._read_feed_with_confirmed_aces_ou(reuse_source=True)
     assert first["receipt_revision"] == 1
     assert second["receipt_revision"] == 2
     assert second["results"] is first["results"]  # Only validated base is cached.
