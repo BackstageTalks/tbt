@@ -1729,20 +1729,24 @@ def feed(req):
                 # Security boundary after response-time settlements. Already
                 # authorized market rows may embed other category publications.
                 data["results"] = filter_results_for_categories(
-                    data.get("results") or [], entitlements.get("result_categories") or []
+                    data.get("results") or [], entitlements.get("result_categories") or [],
+                    already_detached=True,
                 )
+                trace_stage("results_categories")
                 # Recheck the exact tier category/position grants after
                 # response-time settlement; this must not expand access.
                 data["results"] = filter_results_for_member_limits(
                     data["results"], entitlements, access_context, authorized_feed=data,
                     already_detached=True,
                 )
+                trace_stage("results_member")
                 # The post-settlement pass must also honor the exact issued
                 # 2 Nov offer, not just its broad TOP / VALUE / Aces category.
                 data["results"] = filter_results_for_issued_day(
                     data["results"], entitlements, authorized_feed=data,
                     already_detached=True,
                 )
+                trace_stage("results_issued")
                 if not exclusions_available:
                     data["results"] = []
                     data["results_exclusions_unavailable"] = True
@@ -1764,6 +1768,7 @@ def feed(req):
             data["dashboard_kpi_cards"] = selected_dashboard_cards(
                 kpi_source, runtime_ui
             )
+            trace_stage("kpi_cards")
             kpi_finalized = True
             # Response-only schedule corrections for rows this member can already
             # see; the published feed/ledger and betting odds remain untouched.
