@@ -170,6 +170,71 @@ class EveningFortunaTests(unittest.TestCase):
         self.assertEqual(groups[0]['verified_pairs'][0]['line'], 6.5)
         self.assertEqual(groups[0]['verified_pairs'][0]['over'], 1.8)
 
+    def test_verified_out_of_window_quotes_persist_in_full_archival_ledger(self):
+        # Evening capture for 11 Nov sees a valid 10 Nov pre-start quote.
+        # It must be archived as 10 Nov evidence, never as a 11 Nov pick.
+        def get(url):
+            return INDEX if url == f.INDEX else page()
+        report = f.collect(date(2026, 11, 11), max_events=2,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(report['exact_aces_pairs'], 0)
+        self.assertEqual(report['events_in_target_window'], [])
+        self.assertEqual(report['observed_prematch_priced_pairs'], 1)
+        self.assertEqual(report['observed_priced_pairs_outside_target'], 1)
+        stored = report['observed_prematch_priced_events']
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0]['event_betting_day'], '2026-11-10')
+        self.assertEqual(stored[0]['captured_at'], NOW.isoformat())
+        self.assertEqual(stored[0]['event_id'], 'ufo:mtch:1xl-1gk')
+        self.assertEqual(stored[0]['source_url'], URL)
+        self.assertEqual(len(stored[0]['source_sha256']), 64)
+        self.assertEqual(stored[0]['aces_markets'][0]['verified_pairs'][0]['over'], 1.8)
+
+    def test_target_day_quotes_saved_for_publisher_and_independent_ledger(self):
+        def get(url):
+            return INDEX if url == f.INDEX else page()
+        report = f.collect(date(2026, 11, 10), max_events=2,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(report['exact_aces_pairs'], 1)
+        self.assertEqual(report['observed_prematch_priced_pairs'], 1)
+        self.assertEqual(report['observed_priced_pairs_outside_target'], 0)
+        self.assertEqual(len(report['events_in_target_window']), 1)
+        self.assertEqual(len(report['observed_prematch_priced_events']), 1)
+
+    def test_archive_preserves_all_exact_lines_not_just_diagnostic_first_three(self):
+        extra = ''.join(
+            outcome(f'- {line}', 1.65, f'aces-{i}', f'under-{i}') +
+            outcome(f'+ {line}', 1.90, f'aces-{i}', f'over-{i}')
+            for i, line in enumerate((7.5, 8.5, 9.5), 1))
+        def get(url):
+            return INDEX if url == f.INDEX else page(extra=extra)
+        report = f.collect(date(2026, 11, 11), max_events=2,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(report['observed_prematch_priced_pairs'], 4)
+        quoted = report['observed_prematch_priced_events'][0]['aces_markets'][0]
+        self.assertEqual(len(quoted['verified_pairs']), 4)
+        self.assertEqual([p['line'] for p in quoted['verified_pairs']],
+                         [6.5, 7.5, 8.5, 9.5])
+        self.assertEqual(len(report['prematch_aces_market_diagnostics'][0]['verified_pairs']), 3)
+
+    def test_no_post_start_quote_or_three_way_market_enter_full_price_archive(self):
+        three_way = outcome('Remíza', 3.8, 'aces', 'third')
+        def get(url):
+            return INDEX if url == f.INDEX else page(
+                market='Zápas: viac es', a='Michelsen A.', b='Cerundolo J.M.',
+                extra=three_way)
+        report = f.collect(date(2026, 11, 11), max_events=2,
+                           sleep_seconds=0, now=NOW, get=get)
+        self.assertEqual(report['observed_prematch_priced_pairs'], 0)
+        self.assertEqual(report['observed_prematch_priced_events'], [])
+        def old_get(url):
+            return INDEX if url == f.INDEX else page()
+        # Now after event start, with a future target day.
+        late_now = datetime(2026, 11, 10, 16, tzinfo=timezone.utc)
+        report = f.collect(date(2026, 11, 11), max_events=2,
+                           sleep_seconds=0, now=late_now, get=old_get)
+        self.assertEqual(report['observed_prematch_priced_pairs'], 0)
+
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):
             f.collect(date(2026, 11, 8), now=NOW, get=lambda _: INDEX)
