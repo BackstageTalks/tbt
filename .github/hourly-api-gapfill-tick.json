@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "local_day": "2026-11-10",
-  "local_hour": 18,
-  "requested_utc": "2026-11-10T17:14:52Z",
+  "local_day": "2026-11-13",
+  "local_hour": 22,
+  "requested_utc": "2026-11-13T21:46:11Z",
   "source": "operator-approved-500-statistics-smoke",
-  "max_requests": 500,
-  "purpose": "One-time post-reset tennis statistics 500-request smoke after merged conflict quarantine and adaptive selection fixes. Existing hourly scheduler checks shared CAS 14500 global limit + 500 reserve, 6/s, CDB global lock, provider header and no writes for contradictory matches; independent CDB read-back required."
+  "max_requests": 300,
+  "purpose": "User-approved single guarded <=300 RapidAPI-request statistics yield comparison after PR #1597. Fresh shared Azure CAS budget, provider-header reserve, 6/s, 17:09 UTC reset, global CDB lock, native importer and independent exact-value/SHA256 CDB read-back remain mandatory. No automatic model promotion."
 }
