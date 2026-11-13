@@ -96,6 +96,10 @@ def test_operator_one_off_500_smoke_is_fresh_and_only_restrictive(tmp_path):
         with pytest.raises(ValueError, match="Invalid operator smoke request cap"):
             operator_smoke_request_cap(tick, enabled=True, now=now)
 
+    tick.write_text(json.dumps({**request, "source": "untrusted-test-source"}))
+    with pytest.raises(ValueError, match="Invalid operator smoke request source"):
+        operator_smoke_request_cap(tick, enabled=True, now=now)
+
     tick.write_text(json.dumps(request))
     with pytest.raises(ValueError, match="expired"):
         operator_smoke_request_cap(tick, enabled=True,
