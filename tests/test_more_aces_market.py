@@ -33,8 +33,8 @@ def test_independent_most_aces_is_not_bookmaker_player_total():
         "id": "future", "event_id": "999",
         "scheduled_at": (now + timedelta(hours=4)).isoformat(),
         "tour": "ATP", "surface": "hard",
-        "player1": {"id": "A", "name": "Alpha"},
-        "player2": {"id": "B", "name": "Beta"},
+        "player1": {"id": "A", "name": "Alpha", "rank": 250},
+        "player2": {"id": "B", "name": "Beta", "rank": 500},
     }
     picks, report = select_ace_winner_picks(history, [fixture], now=now)
     assert report["most_aces_selected"] == 1
