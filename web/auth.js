@@ -234,6 +234,10 @@
   }
 
   async function restore() {
+    // Cross-tab logout/account switch must also abort the former in-flight GET.
+    // The UI's storage event path calls restore() when another tab changes epoch.
+    if (pendingFeed && (pendingFeed.epoch !== epoch()
+        || pendingFeed.token !== session()?.access_token)) invalidatePendingFeed();
     const s = session();
     if (!s) return null;
     if (s.expires_at > Date.now() / 1000 + 60) return s;
