@@ -9553,27 +9553,40 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if (fullResultsFlight) return fullResultsFlight;
     const version=resultsLoadVersion, generation=feedGeneration;
     const operation=(async()=>{
-      const complete=[];
-      let snapshot='', expectedTotal=null;
-      for(let page=0;page<10000;page++){
-        if(version!==resultsLoadVersion||generation!==feedGeneration) return;
-        const batch=await BlinqAuth.resultsPage(page,500,snapshot);
-        if(version!==resultsLoadVersion||generation!==feedGeneration) return;
-        if (expectedTotal===null) {expectedTotal=batch.total;snapshot=batch.snapshot;}
-        if (batch.snapshot!==snapshot || batch.total!==expectedTotal ||
-            batch.page!==page || batch.limit!==500) throw new Error('Results pagination changed during loading.');
-        complete.push(...batch.results);
-        if (complete.length>expectedTotal) throw new Error('Results page returned too many rows.');
-        if (!batch.has_more) {
-          if (complete.length!==expectedTotal) throw new Error('Results history incomplete.');
-          state.feed.results=complete; normalizeFeedAceOdds(state.feed); state.feed.results_boot_partial=false;
-          fullResultsError='';
-          if (['results','stats','admin'].includes(state.route)) renderRoute(state.route);
-          return;
+      for(let restart=0;restart<2;restart++){
+        const complete=[];
+        let snapshot='', expectedTotal=null;
+        try {
+          for(let page=0;page<10000;page++){
+            if(version!==resultsLoadVersion||generation!==feedGeneration)return;
+            const batch=await BlinqAuth.resultsPage(page,500,snapshot);
+            if(version!==resultsLoadVersion||generation!==feedGeneration)return;
+            if(expectedTotal===null){expectedTotal=batch.total;snapshot=batch.snapshot;}
+            if(batch.snapshot!==snapshot||batch.total!==expectedTotal||
+               batch.page!==page||batch.limit!==500)
+              throw new Error('Results pagination changed during loading.');
+            complete.push(...batch.results);
+            if(complete.length>expectedTotal)throw new Error('Results page returned too many rows.');
+            if(!batch.has_more){
+              if(complete.length!==expectedTotal)throw new Error('Results history incomplete.');
+              state.feed.results=complete;
+              normalizeFeedAceOdds(state.feed);
+              state.feed.results_boot_partial=false;
+              fullResultsError='';
+              if(['results','stats','admin'].includes(state.route))renderRoute(state.route);
+              return;
+            }
+            if(!batch.results.length)throw new Error('Results pagination did not advance.');
+          }
+          throw new Error('Results history exceeds the supported page count.');
+        } catch(error){
+          // If the backend ledger/entitlements changed between pages, restart
+          // from page zero once. Never combine two different snapshots.
+          if(restart===0&&Number(error?.status)===409
+             &&String(error?.code||'')==='results_snapshot_changed')continue;
+          throw error;
         }
-        if (!batch.results.length) throw new Error('Results pagination did not advance.');
       }
-      throw new Error('Results history exceeds the supported page count.');
     })().catch(error=>{
       if(version===resultsLoadVersion&&generation===feedGeneration){
         fullResultsError=error?.message||'Results history unavailable.';
