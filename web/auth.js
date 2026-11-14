@@ -602,7 +602,11 @@
             status:0, code:timedOut ? 'AUTH_TIMEOUT' : 'AUTH_NETWORK_ERROR',
           });
         }
-        record.outcome = String(cause?.code || 'FEED_REQUEST_ERROR').slice(0,40);
+        const safeCodes = new Set(['AUTH_TIMEOUT','AUTH_NETWORK_ERROR','FEED_DECODE_ERROR',
+          'FEED_SCHEMA_ERROR','FEED_SESSION_CHANGED','FEED_HTTP_ERROR']);
+        const outcomeCode = String(cause?.code||'').toUpperCase();
+        record.outcome = safeCodes.has(outcomeCode)
+          ? outcomeCode : 'HTTP_'+String(record.status || 'ERROR');
         throw cause;
       } finally {
         record.durationMs = Math.max(0, Date.now()-began);
