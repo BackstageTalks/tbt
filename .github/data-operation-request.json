@@ -4,9 +4,9 @@
   "mode": "identity",
   "promote": false,
   "source": "tennisapi1_native_calendar_existing_cdb_identity_provenance",
-  "purpose": "User-approved bounded identity-gap audit and exact provider-native deterministic CDB identity recovery, ATP/WTA 2016-2026; no fuzzy links; safe shared CAS quota (14500/500), provider header reserve, max 100 paid calls including retries, global single-writer lock, checkpoint and independently verified readback; no model change.",
+  "purpose": "Follow-up authorized full 2016-2026 aggregate-only CDB opaque claim families, native serve/return and BP null-gap eligible cohort report after merged PR #1599; <=1 provider request (likely zero) with provider header, shared CAS budget, exact CDB lock/identity, no model promotion; no inferred cross-namespace ID mapping.",
   "requested_on": "2026-11-14",
-  "max_requests": 100,
+  "max_requests": 1,
   "start": "2016-01-01",
   "end": "2026-11-13",
   "targeted_statistics": false,
@@ -16,6 +16,7 @@
   "historical_match_winner_odds_as_model_feature": false,
   "source_only_tml_write_authorized": false,
   "audit_only_unmatched_identity_summary": true,
-  "run_scope": "provider_native_exact_identity_2016_2026_prior_zero_candidate_days",
-  "status": "OPERATOR_APPROVED_CONTROLLED_IDENTITY_RECOVERY"
+  "run_scope": "verified_live_103306_opaque_claims_zero_eligible_recheck_plus_stats_bp_eligibility",
+  "status": "OPERATOR_APPROVED_CONTROLLED_IDENTITY_RECOVERY",
+  "diagnostic_attempt": 2
 }
