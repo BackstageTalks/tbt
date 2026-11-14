@@ -139,6 +139,14 @@ body#blinqPremium.blinq-admin .monthly-stat {
   }
 }
 @media(max-width:600px) {
+  /* Match the exact existing phone court asset, without touching its home layer. */
+  body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel,
+  body#blinqPremium.blinq-admin .admin-workarea {
+    background-image:
+      linear-gradient(180deg,rgba(4,24,21,.70),rgba(2,17,18,.82)),
+      var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp"))!important;
+    background-position:center bottom!important;
+  }
   /* Results cards only. Approved home prediction cards remain at alpha .84. */
   body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin) .results-table tbody tr.results-card-row {
     background:rgba(3,23,17,.78)!important;
