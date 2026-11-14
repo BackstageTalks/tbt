@@ -545,7 +545,12 @@
     const timer = controller && typeof setTimeout === 'function'
       ? setTimeout(() => { deadlineExpired = true; controller.abort(); }, 16000) : null;
     const staleError = () => Object.assign(new Error('Session changed during feed request.'), {code:'FEED_SESSION_CHANGED'});
-    const verifySession = () => { if (!isCurrent()) throw staleError(); };
+    const verifySession = () => {
+      if (!isCurrent()) throw staleError();
+      if (deadlineExpired || Date.now() >= deadline) {
+        throw Object.assign(new Error('Feed request deadline exceeded.'), {status:0,code:'AUTH_TIMEOUT'});
+      }
+    };
 
     async function attempt(kind) {
       verifySession();
