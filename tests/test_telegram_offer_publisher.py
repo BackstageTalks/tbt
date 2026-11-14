@@ -24,6 +24,8 @@ def row(identifier, player="A", category="top"):
                 winner_id="p1", betting={"selection_id": "p1", "odds": 1.8,
                                            "blinq_probability": 0.7, "expected_value": 0.25})
     if category == "aces":
+        data["player1"]["rank"] = 140
+        data["player2"]["rank"] = 690
         data.update(market="aces", projection=8.3, opponent_projection=5.4,
                     projection_confidence=0.72)
         del data["betting"]

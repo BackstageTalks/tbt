@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from functools import lru_cache
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
@@ -10,6 +11,7 @@ from zoneinfo import ZoneInfo
 
 
 MAX_FEED_BYTES = 32 * 1024 * 1024  # Guarded headroom for verified 21,728,761-byte 2026-10-25 release
+MAX_ACES_PLAYER_RANK = 1000  # Both players, ATP/WTA active Aces / Most Aces only
 
 
 def main_tour_aces(row):
@@ -17,14 +19,26 @@ def main_tour_aces(row):
 
     Treat missing/ambiguous tours as ineligible. A generic ATP/WTA gender
     label is insufficient when the tournament is explicitly Challenger,
-    ITF/Futures or WTA 125. Never rewrite historical Results/issued receipts.
+    ITF/Futures or WTA 125. Both players need a known, positive, integral
+    ranking at or above the top-1000 threshold. Never rewrite historical
+    Results/issued receipts.
     """
     if not isinstance(row, dict) or str(row.get("tour") or "").strip().casefold() not in {
         "atp", "wta", "atp tour", "wta tour",
     }:
         return False
+    for side in ("player1", "player2"):
+        player = row.get(side)
+        if not isinstance(player, dict) or isinstance(player.get("rank"), bool):
+            return False
+        try:
+            rank = float(player.get("rank"))
+        except (TypeError, ValueError, OverflowError):
+            return False
+        if not math.isfinite(rank) or not rank.is_integer() or not 1 <= rank <= MAX_ACES_PLAYER_RANK:
+            return False
     for field in ("tournament", "tournament_name", "tournament_type",
-                  "competition_type", "tour_level", "tournament_level", "category"):
+                  "competition", "competition_type", "tour_level", "tournament_level", "category"):
         label = str(row.get(field) or "").strip().casefold()
         if any(tag in label for tag in (
                 "challenger", "itf", "futures", "wta 125", "wta125",

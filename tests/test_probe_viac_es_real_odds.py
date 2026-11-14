@@ -13,8 +13,8 @@ STAMP = "2026-11-08T13:30:00+00:00"
 
 def fixture(event="9876"):
     return {"event_id":event,"market":"aces","scheduled_at":STAMP,"tour":"ATP",
-            "player1":{"id":"11","name":"Ana A"},
-            "player2":{"id":"22","name":"Bob B"},
+            "player1":{"id":"11","name":"Ana A","rank":250},
+            "player2":{"id":"22","name":"Bob B","rank":430},
             "aces_superiority_hint":"Ana A","aces_superiority_player_id":"11",
             "selection_id":"22","price_contract":"player_total_ou",
             "market_line":5.5,"ou_side":"over","odds":1.70,

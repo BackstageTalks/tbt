@@ -29,8 +29,8 @@ def prediction(when):
     return {
         "id": "future", "event_id": "999", "scheduled_at": when.isoformat(),
         "tour": "ATP", "tournament": "Future Open", "surface": "hard",
-        "player1": {"id": "A", "name": "Alpha", "probability": .55},
-        "player2": {"id": "B", "name": "Beta", "probability": .45},
+        "player1": {"id": "A", "name": "Alpha", "probability": .55, "rank": 150},
+        "player2": {"id": "B", "name": "Beta", "probability": .45, "rank": 450},
         "winner_id": "A", "confidence": .55, "data_depth": .8,
     }
 
@@ -146,6 +146,48 @@ def test_local_aces_projection_bypasses_only_missing_bookmaker_market():
     assert local[0]["price_status"] == "projection_only"
 
 
+def test_aces_and_most_aces_require_two_known_top_1000_ranks():
+    from tbt.services.ace_selection import select_ace_winner_picks
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    history = []
+    for i in range(10):
+        when = now - timedelta(days=20 + i * 8)
+        history.append(historical(f"a{i}", when, "A", f"X{i}", 9, 3, 1, 2))
+        history.append(historical(f"b{i}", when, "B", f"Y{i}", 3, 8, 4, 2))
+    variants = {
+        "top1000-boundary": (1000, 1000),
+        "top1000-string": ("999", "1"),
+        "rank1001": (1001, 120),
+        "rank2001": (25, 2001),
+        "unranked": (25, None),
+        "missing": (25, None),
+        "not-a-number": (25, "NaN"),
+        "infinite": (25, float("inf")),
+        "boolean": (25, True),
+        "fractional": (25, 999.5),
+        "zero": (25, 0),
+    }
+    future = []
+    for key, (r1, r2) in variants.items():
+        row = prediction(now + timedelta(hours=5))
+        row["event_id"] = key
+        row["player1"]["rank"] = r1
+        if key == "missing":
+            row["player2"].pop("rank")
+        else:
+            row["player2"]["rank"] = r2
+        future.append(row)
+    cards, _ = select_ace_picks(
+        history, future, now=now, per_market_limit=30, total_limit=60,
+        target_count=30,
+    )
+    good = {"top1000-boundary", "top1000-string"}
+    assert {row["event_id"] for row in cards if row["market"] == "aces"} == good
+    assert "rank2001" in {row["event_id"] for row in cards if row["market"] == "double_faults"}
+    winners, _ = select_ace_winner_picks(history, future, now=now)
+    assert {row["event_id"] for row in winners} == good
+
+
 def test_aces_and_derived_most_aces_only_main_atp_wta_tours():
     from tbt.services.ace_selection import select_ace_winner_picks
     now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
@@ -158,9 +200,18 @@ def test_aces_and_derived_most_aces_only_main_atp_wta_tours():
         {**prediction(now + timedelta(hours=5)), "event_id":str(i), "tour":tour}
         for i,tour in enumerate(["ATP","WTA","ITF","ATP Challenger","WTA 125","unknown",""],1)
     ]
+    future.extend([
+        {**prediction(now + timedelta(hours=5)), "event_id":"mislabelled-challenger",
+         "tour":"ATP", "competition":"ATP Challenger"},
+        {**prediction(now + timedelta(hours=5)), "event_id":"mislabelled-itf",
+         "tour":"WTA", "competition":"ITF Women"},
+    ])
     cards, _ = select_ace_picks(history, future, now=now,
                                  per_market_limit=20,total_limit=40)
     assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA"}
     assert any(row["tour"]=="ITF" and row["market"]=="double_faults" for row in cards)
     more, _ = select_ace_winner_picks(history,future,now=now)
     assert {row["tour"] for row in more} == {"ATP","WTA"}
+    blocked = {"mislabelled-challenger", "mislabelled-itf"}
+    assert not any(row["event_id"] in blocked for row in cards if row["market"] == "aces")
+    assert not any(row["event_id"] in blocked for row in more)

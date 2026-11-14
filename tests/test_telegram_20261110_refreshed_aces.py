@@ -55,8 +55,8 @@ def candidate(event="new1", tour="ATP", tournament="Main Tour"):
             "scheduled_at":"2026-11-10T16:00:00+00:00",
             "aces_superiority_hint":"Ace Player",
             "aces_superiority_player_id":"S",
-            "player1":{"id":"S","name":"Ace Player"},
-            "player2":{"id":"O","name":"Opponent"}}
+            "player1":{"id":"S","name":"Ace Player","rank":150},
+            "player2":{"id":"O","name":"Opponent","rank":600}}
 
 
 def snapshot(rows=None):

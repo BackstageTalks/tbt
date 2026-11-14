@@ -17,8 +17,8 @@ CONFIRMED_AT = "2026-11-08T06:20:00+00:00"
 
 def row(*, hint="Alice Smith", hint_id="p1", selected="p2", event="fixture1", start=SCHEDULED):
     return {"market":"aces","event_id":event,"scheduled_at":start,"tour":"ATP",
-            "player1":{"id":"p1","name":"Alice Smith"},
-            "player2":{"id":"p2","name":"Bob Jones"},
+            "player1":{"id":"p1","name":"Alice Smith","rank":140},
+            "player2":{"id":"p2","name":"Bob Jones","rank":690},
             "aces_superiority_hint":hint,"aces_superiority_player_id":hint_id,
             "selection_id":selected,"price_contract":"player_total_ou",
             "market_line":4.5,"ou_side":"over","odds":1.76,
