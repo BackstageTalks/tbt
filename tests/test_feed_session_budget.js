@@ -126,12 +126,17 @@ async function test() {
     assert.deepEqual(requests,['secret-a','secret-b']);
   }
   { // A cross-tab account change is detected even without an abort event.
-    let resolveOld;
-    const {auth,local}=browser(async()=>new Promise(resolve=>{resolveOld=resolve;}));
+    let resolveOld,oldSignal;
+    const {auth,local}=browser(async(_url,options)=>{
+      oldSignal=options.signal;
+      return new Promise(resolve=>{resolveOld=resolve;});
+    });
     setSession(local);
     const pending=auth.feed();
     await new Promise(resolve=>setImmediate(resolve));
     setSession(local,'secret-b','epoch-b');
+    await auth.restore(); // Cross-tab storage event follows this path.
+    assert.equal(oldSignal.aborted,true,'stale account request must abort promptly');
     resolveOld(response(200,valid('user-a')));
     await assert.rejects(pending,error=>error.code==='FEED_SESSION_CHANGED');
   }
