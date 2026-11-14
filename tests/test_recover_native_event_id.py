@@ -226,7 +226,7 @@ def test_negative_category_mismatch_and_unverified_claims_remain_blocked():
 def test_native_claim_shape_diagnostic_never_promotes_or_exposes_raw_ids():
     from json import dumps
     samples = {
-        "00000000000000000000000000000000": "opaque_hex_32",
+        "a" * 32: "opaque_hex_32",
         "a" * 40: "opaque_hex_40",
         "b" * 64: "opaque_hex_64",
         "sackmann:secret-match-123": "namespace_text_sackmann",
