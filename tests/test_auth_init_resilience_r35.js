@@ -117,7 +117,7 @@ function createContext(fetchImpl) {
         return response(200, {idToken: 'token-feed', refreshToken: 'refresh-feed', expiresIn: '3600'});
       if (target.includes('accounts:lookup'))
         return response(200, {users: [{emailVerified: true}]});
-      if (String(url).startsWith('/api/v1/feed?blinq_feed_gzip=1')) {
+      if (String(url).includes('/api/v1/feed?') && String(url).includes('blinq_feed_gzip=1')) {
         feedCalls += 1;
         assert.strictEqual(options.headers['X-Blinq-Access-Token'], 'token-feed');
         if (feedCalls === 1) {
@@ -147,7 +147,7 @@ function createContext(fetchImpl) {
         return response(200, {idToken: 'token-rejected', refreshToken: 'refresh-rejected', expiresIn: '3600'});
       if (target.includes('accounts:lookup'))
         return response(200, {users: [{emailVerified: true}]});
-      if (String(url).startsWith('/api/v1/feed?blinq_feed_gzip=1')) { feedCalls += 1; return response(401, {error: 'unauthorized'}); }
+      if (String(url).includes('/api/v1/feed?') && String(url).includes('blinq_feed_gzip=1')) { feedCalls += 1; return response(401, {error: 'unauthorized'}); }
       throw new Error('Unexpected fetch: ' + target);
     });
     await context.BlinqAuth.signIn('member@example.com', 'password123');
