@@ -1861,7 +1861,7 @@ def results_page(req):
     # Returning the private in-process payload avoids a wasteful serialize +
     # decode of the entire ledger before selecting this page.
     authorized = feed(req, _raw=True)
-    if not isinstance(authorized, dict):
+    if not isinstance(authorized, dict) or "error" in authorized:
         return authorized  # Existing 401/403/503 path; never bypass auth.
     rows = authorized.get("results") or []
     # Existing feed order is stable, so reassembled pages retain source order;
