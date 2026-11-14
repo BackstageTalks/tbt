@@ -73,3 +73,82 @@ body#blinqPremium .insight-drawer-toolbar {
     background:rgba(3,23,17,.84)!important; /* former .74 */
   }
 }
+
+/* Subpage dark-glass pass 2026-11-14-2.
+   Only Admin and non-home routes. Homepage, its KPI strip and picks stay as-is.
+   No blur filters or glowing outlines: retain the approved dark tennis palette. */
+body#blinqPremium.blinq-route:not(.blinq-admin) {
+  background-image:
+    linear-gradient(90deg,rgba(1,11,12,.72),rgba(2,23,20,.55),rgba(1,10,12,.78)),
+    var(--blinq-page-bg,url("/assets/blinq_page_background.webp"))!important;
+}
+body#blinqPremium.blinq-admin {
+  background-image:
+    linear-gradient(90deg,rgba(1,11,12,.70),rgba(2,23,20,.53),rgba(1,10,12,.77)),
+    var(--blinq-page-bg,var(--blinq-page-bg-fallback,url("/assets/blinq_page_background.webp")))!important;
+  background-position:center top,var(--blinq-page-bg-position,center top)!important;
+  background-size:cover,var(--blinq-page-bg-size,cover)!important;
+}
+
+/* The existing tennis artwork is visible inside the larger section surfaces. */
+body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel {
+  background-image:
+    linear-gradient(180deg,rgba(4,24,21,.49),rgba(2,17,18,.65)),
+    var(--blinq-page-bg,url("/assets/blinq_page_background.webp"))!important;
+  background-position:center top!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+body#blinqPremium.blinq-admin .admin-workarea {
+  background-image:
+    linear-gradient(180deg,rgba(4,23,22,.56),rgba(2,16,18,.71)),
+    var(--blinq-page-bg,var(--blinq-page-bg-fallback,url("/assets/blinq_page_background.webp")))!important;
+  background-position:center top!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+body#blinqPremium.blinq-admin .admin-side-nav {
+  background:linear-gradient(180deg,rgba(5,26,25,.70),rgba(3,17,20,.79))!important;
+}
+
+/* Muted translucent data cards: keep original sizes, values and outcome colors. */
+body#blinqPremium.blinq-route:not(.blinq-admin) :is(
+  .metric-card,.route-sub,.state-card,.account-panel,.account-side
+) {
+  background:linear-gradient(155deg,rgba(6,29,25,.66),rgba(3,19,18,.76))!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar {
+  background:rgba(3,23,19,.71)!important;
+}
+body#blinqPremium.blinq-admin .admin-accounts-simple .admin-activity-panel {
+  background:linear-gradient(145deg,rgba(4,26,25,.64),rgba(2,16,19,.76))!important;
+}
+body#blinqPremium.blinq-admin .admin-activity-stats button:not(.is-selected):not(.is-attention) {
+  background:rgba(5,37,31,.69)!important;
+}
+body#blinqPremium.blinq-admin .admin-activity-management {
+  background:rgba(5,29,30,.75)!important;
+}
+body#blinqPremium.blinq-admin .monthly-stat {
+  background:linear-gradient(155deg,rgba(6,29,25,.73),rgba(3,19,18,.82))!important;
+}
+
+@media(max-width:900px) {
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-shell {
+    background:linear-gradient(180deg,rgba(5,28,24,.67),rgba(4,20,18,.78))!important;
+  }
+}
+@media(max-width:600px) {
+  /* Match the exact existing phone court asset, without touching its home layer. */
+  body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel,
+  body#blinqPremium.blinq-admin .admin-workarea {
+    background-image:
+      linear-gradient(180deg,rgba(4,24,21,.53),rgba(2,17,18,.70)),
+      var(--blinq-mobile-court-bg,url("/assets/blinq_mobile_court.webp"))!important;
+    background-position:center bottom!important;
+  }
+  /* Results cards only. Approved home prediction cards remain at alpha .84. */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin) .results-table tbody tr.results-card-row {
+    background:rgba(3,23,17,.72)!important;
+  }
+}
