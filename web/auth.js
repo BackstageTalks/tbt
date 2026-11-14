@@ -21,6 +21,16 @@
   let config = null;
   let initPromise = null;
   let refreshing = null;
+  let pendingFeed = null;
+  let lastFeedDiagnostic = null;
+
+  // A session change is a hard security boundary for shared in-flight requests.
+  function invalidatePendingFeed() {
+    if (pendingFeed?.controller) pendingFeed.controller.abort();
+    pendingFeed = null;
+    lastFeedDiagnostic = null;
+  }
+  function feedDiagnostics() { return lastFeedDiagnostic; }
 
   function epoch() { return localStorage.getItem(EPOCH_KEY) || ''; }
   function mutateEpoch() {
@@ -33,6 +43,7 @@
     catch { return null; }
   }
   function clear() {
+    invalidatePendingFeed();
     mutateEpoch();
     localStorage.removeItem(KEY);
     sessionStorage.removeItem(KEY);
@@ -68,6 +79,7 @@
     return normalized;
   }
   function replaceSession(value, provider = config?.provider || 'firebase') {
+    invalidatePendingFeed();
     const nextEpoch = mutateEpoch();
     return save(value, nextEpoch, provider);
   }
@@ -506,40 +518,125 @@
   }
   async function feed() {
     const s = await restore();
-    // Keep normal non-browser API clients unchanged. Server stage timings
-    // remain opt-in through the authenticated boot diagnostic link.
+    if (!s?.access_token) throw new Error('Sign in again.');
+    const sessionEpoch = epoch();
+    const accessToken = s.access_token;
+    const isCurrent = () => epoch() === sessionEpoch && session()?.access_token === accessToken;
+    if (!isCurrent()) throw Object.assign(new Error('Session changed during feed request.'), {code:'FEED_SESSION_CHANGED'});
+
+    if (pendingFeed && pendingFeed.epoch === sessionEpoch && pendingFeed.token === accessToken) {
+      return pendingFeed.promise;
+    }
+    if (pendingFeed) invalidatePendingFeed();
+
+    // Compatibility: ordinary API clients continue using /api/v1/feed.
     let traced = false;
     try { traced = new URLSearchParams(location.search).get('blinq_boot_trace') === '1'; } catch {}
     const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';
-    // Mobile canary confirmed gzip decoding through the live Azure SWA proxy.
-    // Prefer the smaller payload for the authenticated web; an explicit ?blinq_feed_gzip=0
-    // disables it instantly (reversible comparison without any server change).
-    // Preserve the original endpoint as a safe fallback for malformed gzip.
     let useGzip = true;
     try { useGzip = new URLSearchParams(location.search).get('blinq_feed_gzip') !== '0'; } catch {}
-    const request = (target = url) => json(target, {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
-    const requestWithSafeFallback = async () => {
-      if (!useGzip) return request();
+    const gzipUrl = url + (url.includes('?') ? '&' : '?') + 'blinq_feed_gzip=1';
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const startedAt = Date.now();
+    const deadline = startedAt + 16000; // One total budget, not 20s per attempt.
+    const diagnostic = {attempts:[], fallback:'none', totalMs:0};
+    let deadlineExpired = false;
+    const timer = controller && typeof setTimeout === 'function'
+      ? setTimeout(() => { deadlineExpired = true; controller.abort(); }, 16000) : null;
+    const staleError = () => Object.assign(new Error('Session changed during feed request.'), {code:'FEED_SESSION_CHANGED'});
+    const verifySession = () => { if (!isCurrent()) throw staleError(); };
+
+    async function attempt(kind) {
+      verifySession();
+      if (Date.now() >= deadline) throw Object.assign(new Error('Feed request deadline exceeded.'), {code:'AUTH_TIMEOUT',status:0});
+      const record = {kind, durationMs:0, status:0, outcome:'pending', timingHeader:false,
+        serverTiming:[], contentEncoding:'absent'};
+      const began = Date.now();
+      diagnostic.attempts.push(record);
+      let response = null;
       try {
-        const compressed = await request(url + (url.includes('?') ? '&' : '?') + 'blinq_feed_gzip=1');
-        if (compressed && Array.isArray(compressed.upcoming) && Array.isArray(compressed.results)
-            && compressed.account && compressed.entitlements) return compressed;
-      } catch (error) {
-        if ([401, 403].includes(Number(error?.status))) throw error;
+        response = await fetch(kind === 'gzip' ? gzipUrl : url, {
+          headers: {Accept:'application/json', 'X-Blinq-Access-Token':accessToken},
+          cache:'no-store',
+          signal:controller?.signal,
+        });
+        record.status = Number(response.status)||0;
+        const timing = response.headers?.get?.('Server-Timing') || '';
+        record.timingHeader = Boolean(timing);
+        record.serverTiming = timing.split(',').map(part => {
+          const match = part.trim().match(/^(blinq_json|blinq_gzip);dur=(\\d+(?:\\.\\d+)?)$/);
+          return match ? [match[1], Math.round(Number(match[2]))] : null;
+        }).filter(Boolean);
+        const encoding = String(response.headers?.get?.('Content-Encoding')||'').toLowerCase();
+        record.contentEncoding = encoding.includes('gzip') ? 'gzip' : encoding ? 'other' : 'absent';
+        let data;
+        try { data = await response.json(); }
+        catch (cause) {
+          if (deadlineExpired || cause?.name === 'AbortError' || cause?.name === 'TimeoutError')
+            throw Object.assign(new Error('Feed request timed out.'), {status:0,code:'AUTH_TIMEOUT'});
+          if (!response.ok) data = {};
+          else throw Object.assign(new Error('Feed response could not be decoded.'), {status:response.status,code:'FEED_DECODE_ERROR'});
+        }
+        if (!response.ok) {
+          throw Object.assign(new Error(errorMessage(data, response.status)), {
+            status:response.status, code:typeof data?.error === 'string' ? data.error : 'FEED_HTTP_ERROR',
+          });
+        }
+        if (!data || !Array.isArray(data.upcoming) || !Array.isArray(data.results)
+            || !data.account || !data.entitlements) {
+          throw Object.assign(new Error('Feed response has an invalid structure.'), {
+            status:200, code:'FEED_SCHEMA_ERROR',
+          });
+        }
+        verifySession();
+        record.outcome = 'ok';
+        return data;
+      } catch (cause) {
+        if (!isCurrent()) cause = staleError();
+        else if (deadlineExpired || (controller?.signal?.aborted)) {
+          cause = Object.assign(new Error('Feed request deadline exceeded.'), {status:0,code:'AUTH_TIMEOUT'});
+        } else if (!cause?.code && !response) {
+          const timedOut = cause?.name === 'AbortError' || cause?.name === 'TimeoutError';
+          cause = Object.assign(new Error(timedOut ? 'Feed request timed out.' : 'Network request failed.'), {
+            status:0, code:timedOut ? 'AUTH_TIMEOUT' : 'AUTH_NETWORK_ERROR',
+          });
+        }
+        record.outcome = String(cause?.code || 'FEED_REQUEST_ERROR').slice(0,40);
+        throw cause;
+      } finally {
+        record.durationMs = Math.max(0, Date.now()-began);
       }
-      return request();
-    };
-    try {
-      return await requestWithSafeFallback();
-    } catch (error) {
-      // A cold gateway or a brief mobile-network dropout should not send a
-      // still-authenticated user back to the login form after a single timeout.
-      // Retry only this idempotent GET; never retry permission/credential errors.
-      const retryable = [0, 408, 502, 503, 504].includes(Number(error?.status))
-        && (Number(error?.status) !== 0 || ['auth_timeout', 'auth_network_error'].includes(codeOf(error)));
-      if (!retryable) throw error;
-      await wait(300);
-      return requestWithSafeFallback();
+    }
+
+    const operation = (async () => {
+      try {
+        const kind = useGzip ? 'gzip' : 'plain';
+        try { return await attempt(kind); }
+        catch (error) {
+          verifySession();
+          const code = codeOf(error), status = Number(error?.status)||0;
+          if (kind === 'gzip' && ['feed_decode_error','feed_schema_error'].includes(code)) {
+            diagnostic.fallback = code;
+            return await attempt('plain'); // Decode fallback: exactly one plain attempt.
+          }
+          const transient = [408,425,429,500,502,503,504].includes(status)
+            || (status === 0 && ['auth_timeout','auth_network_error'].includes(code));
+          if (!transient || deadlineExpired || Date.now()+250 >= deadline) throw error;
+          diagnostic.fallback = 'transient_retry';
+          await wait(250);
+          verifySession();
+          return await attempt(kind); // Server/network retry: same encoding, at most twice.
+        }
+      } finally {
+        if (timer !== null) clearTimeout(timer);
+        diagnostic.totalMs = Math.max(0,Date.now()-startedAt);
+        if (traced && isCurrent()) lastFeedDiagnostic = diagnostic;
+      }
+    })();
+    pendingFeed = {epoch:sessionEpoch,token:accessToken,controller,promise:operation};
+    try { return await operation; }
+    finally {
+      if (pendingFeed?.promise === operation) pendingFeed = null;
     }
   }
   async function matchIntelligence(player1Id, player2Id, surface = '', customId = '', eventId = '') {
@@ -831,7 +928,7 @@
   }
 
   window.BlinqAuth = {
-    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
+    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, feedDiagnostics, matchIntelligence,
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, adminHistoryRetention, adminCleanupHistory, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults,
