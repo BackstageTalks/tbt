@@ -67,6 +67,7 @@ def test_workflow_preserves_existing_guards_and_uses_evening_in_both_paths():
     assert workflow.count("if evening_limit is not None:") == 2
     assert workflow.count("limit = evening_limit") == 2
     assert workflow.count("limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])") == 2
+    assert workflow.count("final_topup = 7 * 60 <= until_reset <= 55 * 60 + 59") == 2
     assert "from scripts.api_writer_wait import read_cdb_writer_lock" in workflow
     assert "from scripts.api_writer_wait import wait_for_writer" in workflow
     assert "or budget.get(\"global_limit\") != 14500" in workflow
@@ -133,6 +134,10 @@ def test_external_clock_reuses_only_guarded_capacity_windows():
     check("2026-07-11T10:00:00+00:00", True)  # summer 12:00 CEST
     check("2026-07-11T09:00:00+00:00", False)
     check("2026-11-11T16:36:00+00:00", True)  # final closeout
+    # At 16:15 UTC the closeout gets a separate slot from 16:00 hourly.
+    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-11-11T16:13:00+00:00"), [])[2].endswith(":hourly")
+    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-11-11T16:15:00+00:00"), [])[2].endswith(":closeout")
+    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-07-11T16:15:00+00:00"), [])[2].endswith(":closeout")
     check("2026-11-11T16:50:00+00:00", False, "provider_cutoff_preflight")
     check("2026-11-11T18:00:00+00:00", True)  # after reset, evening cap
     check("2026-11-11T04:00:00+00:00", False)
@@ -174,6 +179,12 @@ def test_external_clock_prevents_duplicate_and_active_writer_orchestrator():
         closeout, [run(closeout.replace(minute=10), "completed", "success")])[0] is True
     assert external_clock_gapfill_decision(
         closeout, [run(closeout.replace(minute=34), "completed", "success")])[1] == "already_dispatched_this_slot"
+    # No second closeout dispatch after a successful earlier closeout.
+    early = closeout.replace(minute=15)
+    assert external_clock_gapfill_decision(
+        early, [run(early.replace(minute=0), "completed", "success")])[0] is True
+    assert external_clock_gapfill_decision(
+        closeout, [run(early, "completed", "success")])[1] == "already_dispatched_this_slot"
 
 
 def test_external_clock_invalid_metadata_fails_closed():
