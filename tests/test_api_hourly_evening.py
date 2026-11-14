@@ -136,8 +136,9 @@ def test_external_clock_reuses_only_guarded_capacity_windows():
     check("2026-11-11T16:36:00+00:00", True)  # final closeout
     # At 16:15 UTC the closeout gets a separate slot from 16:00 hourly.
     assert external_clock_gapfill_decision(datetime.fromisoformat("2026-11-11T16:13:00+00:00"), [])[2].endswith(":hourly")
-    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-11-11T16:15:00+00:00"), [])[2].endswith(":closeout")
-    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-07-11T16:15:00+00:00"), [])[2].endswith(":closeout")
+    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-11-11T16:15:00+00:00"), [])[2].endswith(":precloseout")
+    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-07-11T16:15:00+00:00"), [])[2].endswith(":precloseout")
+    assert external_clock_gapfill_decision(datetime.fromisoformat("2026-11-11T16:36:00+00:00"), [])[2].endswith(":closeout")
     check("2026-11-11T16:50:00+00:00", False, "provider_cutoff_preflight")
     check("2026-11-11T18:00:00+00:00", True)  # after reset, evening cap
     check("2026-11-11T04:00:00+00:00", False)
@@ -179,12 +180,15 @@ def test_external_clock_prevents_duplicate_and_active_writer_orchestrator():
         closeout, [run(closeout.replace(minute=10), "completed", "success")])[0] is True
     assert external_clock_gapfill_decision(
         closeout, [run(closeout.replace(minute=34), "completed", "success")])[1] == "already_dispatched_this_slot"
-    # No second closeout dispatch after a successful earlier closeout.
+    # A successful 16:15 pre-closeout suppresses duplicates in its own
+    # window, but MUST NOT suppress the original 16:36 final closeout.
     early = closeout.replace(minute=15)
     assert external_clock_gapfill_decision(
         early, [run(early.replace(minute=0), "completed", "success")])[0] is True
     assert external_clock_gapfill_decision(
-        closeout, [run(early, "completed", "success")])[1] == "already_dispatched_this_slot"
+        closeout.replace(minute=30), [run(early, "completed", "success")])[1] == "already_dispatched_this_slot"
+    assert external_clock_gapfill_decision(
+        closeout, [run(early, "completed", "success")])[0] is True
 
 
 def test_external_clock_invalid_metadata_fails_closed():
