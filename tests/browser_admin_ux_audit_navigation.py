@@ -41,6 +41,25 @@ def test_width(browser,width):
       s.adminInsightsLoading=false;s.adminInfoResultsLoading=false;s.adminLiveResultsLoading=false;
       host.innerHTML=h.renderAdminRoute();h.wireAdmin();
     }""")
+    # Admin SEKCIE navigation must paint the same dark tennis artwork,
+    # not only an opaque gradient that hides the existing background.
+    menu_style=page.locator(".admin-side-nav").evaluate("""el => {
+        const s=getComputedStyle(el);
+        return {background:s.backgroundImage,color:s.backgroundColor,
+                size:s.backgroundSize,display:s.display};
+    }""")
+    assert "linear-gradient" in menu_style["background"],(width,menu_style)
+    assert "url(" in menu_style["background"],(width,menu_style)
+    if width<=600:
+        assert "blinq_mobile_court.webp" in menu_style["background"],(width,menu_style)
+    assert page.locator(".admin-nav-toolbar [data-admin-nav-expand]").count()==1
+    assert page.locator(".admin-nav-entry.is-active").count()==1
+    if os.getenv("BLINQ_SCREENSHOTS") and width in (390,1440):
+        from pathlib import Path
+        out=Path(os.environ["BLINQ_SCREENSHOTS"])
+        out.mkdir(parents=True,exist_ok=True)
+        page.locator(".admin-side-nav").screenshot(path=str(out/f"admin-sekcie-menu-{width}.png"))
+
     # Zobrazenie: only focused view is displayed, never duplicate permissions.
     assert page.locator('[data-admin-subtab^="layout:"]').count()==3
     assert page.locator('[data-admin-subpanel="layout:access"]:visible').count()==1
