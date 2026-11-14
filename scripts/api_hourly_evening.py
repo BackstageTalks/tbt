@@ -129,14 +129,18 @@ def external_clock_gapfill_decision(now: datetime, workflow_runs: list[dict]) ->
 
     # The final closeout window can release additional shared headroom even if
     # the regular 16:00 UTC hourly staged allocation already dispatched.
-    # Start at ~16:14 UTC: a cold CDB bootstrap takes 10–15 min, and paid
-    # requests must stop by 17:07 UTC (the 17:09 reset stays unchanged).
+    # Start a separate pre-closeout at ~16:14 UTC to absorb cold bootstrap,
+    # *without replacing* the original final closeout at ~16:34 UTC.
+    # All calls still stop at 17:07 UTC before the 17:09 reset.
     def slot(instant: datetime) -> str:
         remaining = (reset - instant).total_seconds()
-        closeout = 7 * 60 <= remaining <= 55 * 60 + 59
-        return instant.strftime("%Y-%m-%dT%H") + (
-            ":closeout" if closeout else ":hourly"
-        )
+        if 7 * 60 <= remaining <= 35 * 60 + 59:
+            phase = ":closeout"
+        elif 35 * 60 + 59 < remaining <= 55 * 60 + 59:
+            phase = ":precloseout"
+        else:
+            phase = ":hourly"
+        return instant.strftime("%Y-%m-%dT%H") + phase
 
     target_slot = slot(now)
     recent = []
