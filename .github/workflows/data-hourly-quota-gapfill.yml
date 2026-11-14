@@ -299,7 +299,7 @@ jobs:
               "ref": "main",
               "inputs": {
                   "mode": "statistics",
-                  "start": "2022-01-01",
+                  "start": "2016-01-01",
                   "end": last_complete.isoformat(),
                   "max_requests": str(proposed),
                   "lookback_days": "1095",

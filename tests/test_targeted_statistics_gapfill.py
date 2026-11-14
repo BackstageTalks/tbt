@@ -240,7 +240,7 @@ def test_hourly_priority_favors_verified_yield_over_depleted_atp_2025(match_fact
     assert preferred[-1].match_id == 'atp-2025-ace'
     assert report['preferred_verified_cohort'] == 'atp:2024:serve_return_incomplete'
     assert report['verified_high_yield_cohorts'] == [
-        'atp:2024', 'wta:2023', 'wta:2024', 'wta:2022',
+        'atp:2024', 'wta:2021', 'wta:2023', 'wta:2024', 'wta:2022',
     ]
     assert report['historical_high_yield'] is True
     import pytest
@@ -651,3 +651,37 @@ def test_expired_identity_mismatch_recheck_quarantines_without_hourly_refetch(
         assert provider.calls == ["/api/tennis/event/123"]
     finally:
         enricher.close()
+
+
+def test_hourly_live_verified_wta_2021_eligible_in_full_2016_2026_window(match_factory):
+    """A real 13.1-field/call CDB cohort cannot be excluded by the old 2022 start."""
+    from datetime import date
+    from pathlib import Path
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    for tour, year, count in (("wta", 2021, 30), ("atp", 2025, 30),
+                              ("wta", 2026, 30), ("wta", 2016, 10)):
+        for i in range(count):
+            m = match_factory(f"{tour}-{year}-{i}", "A", "B", "A")
+            m.tour = tour.upper()
+            m.scheduled_at = datetime(year, 5, 1, tzinfo=timezone.utc) + timedelta(days=i)
+            m.stats = {"p1_service_points_won": 0.6}
+            m.provider_payload = {"id": str(20000 + len(rows))}
+            rows.append(m)
+    selected, plan = _statistics_candidates(
+        rows, date(2016, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True)
+    assert len(selected) == len(rows)
+    assert len({r.match_id for r in selected}) == len(rows)
+    assert any(r.tour.lower() == "wta" and r.scheduled_at.year == 2021
+               for r in selected[:4])
+    assert any(r.scheduled_at.year == 2016 for r in selected[:30])
+    assert sum(1 for r in selected if r.scheduled_at.year == 2021) == 30
+    assert "wta:2021" in plan["verified_high_yield_cohorts"]
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
+    assert '"start": "2016-01-01"' in workflow
+    assert '"start": "2022-01-01"' not in workflow
+    assert '"max_requests": str(proposed)' in workflow
+    assert 'min(5000, limit-spent, remaining, history_remaining)' in workflow

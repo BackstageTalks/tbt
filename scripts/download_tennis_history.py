@@ -37,12 +37,15 @@ from adaptive_verified_prior import read_prior
 from recover_native_event_id import candidate_days, recover_day, identity_gap_inventory
 
 # Initial priorities use recent independently read-back CDB yield:
-# ATP 2024 and WTA 2023 remain productive. WTA 2025 is sampled only if
+# WTA 2021: 100 paid calls, 1,310 exact persisted CDB NULL-only cells
+# (13.1 fields/call), 47 quality-ready transitions in run 43581904980.
+# ATP 2024 and WTA 2023 remain historical productive priors, but their
+# current eligible backlog is depleted. WTA 2025 is sampled only if
 # identity and retry gates find eligible provider-native matches.
 # These are initial ordering priors, not fixed quota shares: the online queue
 # relearns from paid CDB gains each run, with >=25% baseline exploration.
 # ATP 2025 and 2026 remain available for exploration, never guessed or forced.
-VERIFIED_HIGH_YIELD_COHORTS = (("atp", 2024), ("wta", 2023), ("wta", 2024), ("wta", 2022))
+VERIFIED_HIGH_YIELD_COHORTS = (("atp", 2024), ("wta", 2021), ("wta", 2023), ("wta", 2024), ("wta", 2022))
 
 
 def read_json(path, default):
