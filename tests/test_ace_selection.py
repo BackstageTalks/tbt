@@ -158,9 +158,18 @@ def test_aces_and_derived_most_aces_only_main_atp_wta_tours():
         {**prediction(now + timedelta(hours=5)), "event_id":str(i), "tour":tour}
         for i,tour in enumerate(["ATP","WTA","ITF","ATP Challenger","WTA 125","unknown",""],1)
     ]
+    future.extend([
+        {**prediction(now + timedelta(hours=5)), "event_id":"mislabelled-challenger",
+         "tour":"ATP", "competition":"ATP Challenger"},
+        {**prediction(now + timedelta(hours=5)), "event_id":"mislabelled-itf",
+         "tour":"WTA", "competition":"ITF Women"},
+    ])
     cards, _ = select_ace_picks(history, future, now=now,
                                  per_market_limit=20,total_limit=40)
     assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA"}
     assert any(row["tour"]=="ITF" and row["market"]=="double_faults" for row in cards)
     more, _ = select_ace_winner_picks(history,future,now=now)
     assert {row["tour"] for row in more} == {"ATP","WTA"}
+    blocked = {"mislabelled-challenger", "mislabelled-itf"}
+    assert not any(row["event_id"] in blocked for row in cards if row["market"] == "aces")
+    assert not any(row["event_id"] in blocked for row in more)
