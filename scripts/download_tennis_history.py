@@ -34,7 +34,8 @@ from audit_statistics_inventory import _quality_ready, statistics_value_change
 from adaptive_statistics_queue import AdaptiveStatisticsQueue
 from statistics_availability_circuit import StatisticsAvailabilityCircuit
 from adaptive_verified_prior import read_prior
-from recover_native_event_id import candidate_days, recover_day, identity_gap_inventory
+from recover_native_event_id import (candidate_days, recover_day, identity_gap_inventory,
+                                     identity_calendar_prefetch_groups)
 
 # Initial priorities use recent independently read-back CDB yield:
 # ATP 2024 and WTA 2023 remain productive. WTA 2025 is sampled only if
@@ -381,6 +382,28 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
         if not advanced:
             raise RuntimeError("Targeted gap queue stopped before consuming candidates")
     return result
+
+
+def _prefetch_native_identity_calendar(provider, days, report):
+    """Optional existing TennisApi batch cache; daily matcher remains authoritative."""
+    batch = getattr(provider, "prefetch_calendar_categories", None)
+    if batch is None:
+        return
+    before = provider.request_count
+    try:
+        cached_days = batch(days)
+    except RequestBudgetExceeded:
+        raise  # Never bypass the live shared provider quota stop.
+    except ProviderError:
+        report["identity_monthly_calendar_fallbacks"] += 1
+        return  # Existing per-day, per-category matching still runs.
+    finally:
+        report["identity_monthly_calendar_paid_requests"] += provider.request_count - before
+    if type(cached_days) is not int or not 0 <= cached_days <= len(days):
+        raise ValueError("Invalid provider calendar batch result")
+    report["identity_monthly_calendar_cached_days"] += cached_days
+    if cached_days == 0:
+        report["identity_monthly_calendar_fallbacks"] += 1
 
 
 def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False, target_tour=None, break_points_focus=False):
@@ -746,7 +769,11 @@ def main():
             report["identity_candidate_days"] = len(planned)
             report["identity_candidate_rows"] = sum(row[2] for row in planned)
             changed = set()
+            calendar_batches = identity_calendar_prefetch_groups(planned)
             for index, (day, tours, _total) in enumerate(planned, 1):
+                batch_days = calendar_batches.get(day)
+                if batch_days is not None:
+                    _prefetch_native_identity_calendar(provider, batch_days, report)
                 requests_before = provider.request_count
                 source_rows = []
                 for tour in tours:
