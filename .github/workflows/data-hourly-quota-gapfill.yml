@@ -88,7 +88,8 @@ jobs:
           stage_hour = local.hour + (19 - expected_reset.astimezone(ZONE).hour)
           until_reset = (expected_reset - now).total_seconds()
           # Runner start and writer resumption both recompute UTC-relative slots.
-          final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
+          # Early closeout gives cold CDB bootstrap time before the 17:07 UTC stop.
+          final_topup = 7 * 60 <= until_reset <= 55 * 60 + 59
           new_day_start = now.hour == 17 and 10 <= now.minute <= 13
           evening_limit = evening_cap(now, expected_reset)
           tick_cap = operator_smoke_request_cap(
@@ -229,7 +230,7 @@ jobs:
               expected_reset = next_provider_reset(now)
               stage_hour = local.hour + (19 - expected_reset.astimezone(ZONE).hour)
               until_reset = (expected_reset - now).total_seconds()
-              final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
+              final_topup = 7 * 60 <= until_reset <= 55 * 60 + 59
               new_day_start = now.hour == 17 and 10 <= now.minute <= 13
               evening_limit = evening_cap(now, expected_reset)
               tick_cap = operator_smoke_request_cap(
