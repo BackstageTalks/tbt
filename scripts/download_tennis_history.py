@@ -744,6 +744,9 @@ def main():
             # calls, no provider claim promotion, and no canonical mutations.
             _, stats_snapshot = _statistics_candidates(
                 eligible_rows_for_enrichment(), start, end, targeted=True)
+            _, bp_snapshot = _statistics_candidates(
+                eligible_rows_for_enrichment(), start, end, targeted=True,
+                break_points_focus=True)
             identity_statistics_opportunity = {
                 "schema": 1,
                 "policy": "existing_native_identity_missing_field_cooldown_eligibility_only",
@@ -753,6 +756,12 @@ def main():
                         stats_snapshot["eligibility_by_tour_year"].items())
                 },
                 "eligible_rows": int(stats_snapshot["candidate_rows"]),
+                "bp_only_eligible_by_tour_year": {
+                    cohort: int(counts.get("eligible", 0))
+                    for cohort, counts in sorted(
+                        bp_snapshot["eligibility_by_tour_year"].items())
+                },
+                "bp_only_eligible_rows": int(bp_snapshot["candidate_rows"]),
                 "provider_requests": 0,
                 "cdb_writes": 0,
             }
