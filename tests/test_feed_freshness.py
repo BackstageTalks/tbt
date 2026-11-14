@@ -132,12 +132,42 @@ def test_public_offer_winter_cet_boundary_has_exact_start():
     assert [row["event_id"] for row in visible["top_daily_picks"]] == ["new"]
 
 
+def test_active_aces_rank_1000_boundary_only_and_historical_results_preserved():
+    now = datetime.fromisoformat("2026-11-10T09:00:00+00:00")
+    start = "2026-11-10T14:00:00+00:00"
+    def card(key, r1, r2, market="aces"):
+        return {
+            "event_id": key, "tour": "ATP", "market": market,
+            "scheduled_at": start, "player1": {"rank": r1},
+            "player2": {"rank": r2},
+        }
+    cards = [
+        card("valid-boundary", 1000, 999),
+        card("invalid-one", 1001, 900),
+        card("invalid-2000", 25, 2000, "most_aces"),
+        card("unranked", None, 150),
+        card("valid-winner", 30, 50, "most_aces"),
+        card("untouched-df", 4000, None, "double_faults"),
+    ]
+    historical = {"event_id": "previous", "market": "aces", "player1": {"rank": 2000}}
+    payload = {"upcoming": list(cards), "ace_picks": cards, "results": [historical]}
+    shown = visible_feed(payload, now=now)
+    assert [row["event_id"] for row in shown["ace_picks"]] == [
+        "valid-boundary", "valid-winner", "untouched-df"
+    ]
+    assert len(shown["upcoming"]) == len(cards)
+    assert shown["results"] == [historical]
+    assert payload["ace_picks"] == cards
+
+
 def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
     now=datetime.fromisoformat("2026-11-10T09:00:00+00:00")
     start="2026-11-10T14:00:00+00:00"
     cards=[
-        {"event_id":"atp","tour":"ATP","market":"aces","scheduled_at":start},
-        {"event_id":"wta","tour":"WTA","market":"most_aces","scheduled_at":start},
+        {"event_id":"atp","tour":"ATP","market":"aces","scheduled_at":start,
+         "player1":{"rank":1000},"player2":{"rank":95}},
+        {"event_id":"wta","tour":"WTA","market":"most_aces","scheduled_at":start,
+         "player1":{"rank":90},"player2":{"rank":"999"}},
         {"event_id":"comp_challenger","tour":"ATP","tournament":"Prague Open","competition":"ATP Challenger","market":"aces","scheduled_at":start},
         {"event_id":"comp_itf","tour":"WTA","tournament":"Monastir Open","competition":"ITF Women","market":"most_aces","scheduled_at":start},
         {"event_id":"comp_wta125","tour":"WTA","tournament":"Bol Open","competition":"WTA 125","market":"aces","scheduled_at":start},
