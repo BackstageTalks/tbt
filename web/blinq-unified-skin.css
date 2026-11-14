@@ -267,11 +267,11 @@ body#blinqPremium.blinq-admin .admin-panel-v685 :is(
   border-color:rgba(112,218,176,.85)!important;
   outline-color:rgba(112,218,176,.65)!important;
 }
-body#blinqPremium.blinq-admin .admin-panel-v685 .btn-ghost:not(.is-danger) {
+body#blinqPremium.blinq-admin .admin-panel-v685 .btn-ghost:not(.is-danger):not(.danger):not(.admin-activity-delete):not([data-admin-action*="delete"]):not([data-admin-action*="remove"]):not([data-admin-action*="clear-"]):not([data-admin-action="tg-remove"]):not([data-admin-action="project-request-reject"]) {
   background:rgba(6,32,28,.75)!important;
   border-color:rgba(103,166,141,.40)!important;
 }
-body#blinqPremium.blinq-admin .admin-panel-v685 .btn-ghost:not(.is-danger):hover:not(:disabled) {
+body#blinqPremium.blinq-admin .admin-panel-v685 .btn-ghost:not(.is-danger):not(.danger):not(.admin-activity-delete):not([data-admin-action*="delete"]):not([data-admin-action*="remove"]):not([data-admin-action*="clear-"]):not([data-admin-action="tg-remove"]):not([data-admin-action="project-request-reject"]):hover:not(:disabled) {
   background:rgba(14,53,40,.83)!important;
   border-color:rgba(113,215,167,.56)!important;
 }
