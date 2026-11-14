@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "kind": "operator-approved-20261114-wta2021-native-statistics-pilot",
+  "kind": "operator-approved-20261114-wta2021-verified-yield-300-expansion",
   "mode": "statistics",
   "source": "tennisapi1",
   "promote": false,
-  "purpose": "CDB-authoritative ATP/WTA 2016-2026 high-yield follow-up: exact native WTA 2021 serve/return and aces/DF NULL-only enrichment pilot from 761 currently eligible rows, capped 100 requests including retries. No provider namespace substitution, no model changes, shared 14500 daily CAS, 500 reserve, 6/s, native writer/lock and independent full CDB read-back mandatory.",
+  "purpose": "User-authorized <=300-call extension after independent run 43581904980 verified 100 paid calls, 1310 actual WTA 2021 CDB NULL-only values and 47 full serve-return rows. Same exact provider-native 2021 WTA only, no model changes; shared 14500 CAS, 500 reserve, 6/s, CDB global writer/backup/rollback, cooldown, no overwrites, independent exact SHA/value readback.",
   "start": "2021-01-01",
   "end": "2021-12-31",
-  "max_requests": 100,
+  "max_requests": 300,
   "targeted_statistics": true,
   "target_tour": "wta",
   "high_yield_statistics": false,
@@ -15,6 +15,6 @@
   "cdb_writes_allowed": true,
   "model_changes": false,
   "pre_reset_provider_header_override": false,
-  "status": "OPERATOR_APPROVED_BOUNDED_NATIVE_STATISTICS_TEST",
-  "diagnostic_attempt": 1
+  "status": "OPERATOR_APPROVED_VERIFIED_HIGH_YIELD_EXTENSION",
+  "diagnostic_attempt": 2
 }
