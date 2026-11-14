@@ -24,7 +24,7 @@ def main_tour_aces(row):
     }:
         return False
     for field in ("tournament", "tournament_name", "tournament_type",
-                  "competition_type", "tour_level", "tournament_level", "category"):
+                  "competition", "competition_type", "tour_level", "tournament_level", "category"):
         label = str(row.get(field) or "").strip().casefold()
         if any(tag in label for tag in (
                 "challenger", "itf", "futures", "wta 125", "wta125",
