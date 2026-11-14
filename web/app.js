@@ -7351,6 +7351,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
   // Same deduped settled ledger as the Results table, before UI pagination.
   function adminCsvResultsEntries(){
+    if(state.feed?.results_boot_partial)
+      throw new Error('Úplný archív výsledkov sa ešte načítava. Export je zastavený.');
     if(state.feed?.results_archive_unavailable||state.feed?.results_exclusions_unavailable)
       throw new Error('Úplný archív výsledkov teraz nie je dostupný. Export je zastavený.');
     return settledPublishedEntries(state.feed?.results||[],'all',null).map(entry=>{
@@ -7402,7 +7404,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       })));
   }
   function renderAdminDataExport(){
-    const archiveReady=!state.feed?.results_archive_unavailable&&!state.feed?.results_exclusions_unavailable;
+    const archiveReady=!state.feed?.results_archive_unavailable&&!state.feed?.results_exclusions_unavailable
+      &&!state.feed?.results_boot_partial;
     const resultsCount=archiveReady?adminCsvResultsEntries().length:0;
     const predictionCount=adminCsvPredictionInputs().length;
     return '<section class="admin-ux-section admin-data-export"><header class="admin-test-head"><div><small>DÁTA · LEN NA ČÍTANIE</small><h3>Export CSV</h3><p>Kompletné dostupné tabuľky bez stránkovania. CSV v UTF-8 s hlavičkami, kategóriami a zdrojovými údajmi tipov.</p></div></header>'+
@@ -7417,6 +7420,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function adminDownloadCsv(kind){
     if(!isAdminAccount()||state.previewPlan||!['results','predictions'].includes(kind))return;
+    if(kind==='results'&&state.feed?.results_boot_partial){showStatus('Úplná história Results sa ešte načítava.');return;}
     if(!window.BlinqAdminCsv){showStatus('CSV export nie je načítaný. Obnov stránku.');return;}
     try{
       const data=kind==='results'
@@ -9292,12 +9296,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
-    if(route==='admin'&&state.feed?.results_boot_partial){
-      host.innerHTML='<div class="state-card">Načítavam úplnú históriu Results…</div>';
-      if(!fullResultsError)loadCompleteResults();else host.innerHTML='<div class="state-card">Históriu Results sa nepodarilo načítať. Obnov stránku.</div>';
-      return;
-    }
-    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
+    if(route==='admin'){
+      // Admin controls and prediction export stay usable while full Results
+      // hydrate. The results CSV itself is fail-closed until completion.
+      if(state.feed?.results_boot_partial&&!fullResultsError)loadCompleteResults();
+      host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{
