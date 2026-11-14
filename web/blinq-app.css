@@ -11381,8 +11381,7 @@ body#blinqPremium.blinq-admin .monthly-report-note{
 @media(max-width:480px){
   body#blinqPremium.blinq-admin .monthly-controls{grid-template-columns:minmax(0,1fr)}
   body#blinqPremium.blinq-admin .monthly-header-actions{width:100%}
-  body#blinqPremium.blinq-admin .monthly-month-field,
-  body#blinqPremium.blinq-admin .monthly-day-field{width:100%}
+  body#blinqPremium.blinq-admin .monthly-range-field{width:100%;flex-basis:100%}
   body#blinqPremium.blinq-admin .monthly-stats{gap:7px}
 }
 
@@ -11434,8 +11433,13 @@ body#blinqPremium.blinq-admin .monthly-header-actions{
 body#blinqPremium.blinq-admin .monthly-header-actions label{
   font-size:10px!important;color:var(--monthly-muted)!important
 }
-body#blinqPremium.blinq-admin .monthly-month-field input{min-width:170px}
-body#blinqPremium.blinq-admin .monthly-day-field select{min-width:140px}
+body#blinqPremium.blinq-admin .monthly-range-field{min-width:0;flex:1 1 170px}
+body#blinqPremium.blinq-admin .monthly-range-field input{width:100%;min-width:0}
+body#blinqPremium.blinq-admin .monthly-performance input[type=date]{
+  width:100%;min-height:39px;padding:9px 11px;
+  border:1px solid rgba(71,176,132,.30);border-radius:9px;
+  background:rgba(2,23,19,.6);color:#e9fbf0;color-scheme:dark;font-size:13px
+}
 body#blinqPremium.blinq-admin .monthly-performance input[type=month],
 body#blinqPremium.blinq-admin .monthly-performance input[type=number],
 body#blinqPremium.blinq-admin .monthly-performance select{
