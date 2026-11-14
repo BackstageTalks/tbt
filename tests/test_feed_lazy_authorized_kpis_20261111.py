@@ -28,7 +28,7 @@ def _stub_authenticated_feed(monkeypatch, *, fail_at=None):
         "exclusions": (set(), None),
         "ui": (({}, None, None), None),
     })
-    monkeypatch.setattr(api, "merge_settled_results", lambda feed, _archive: feed)
+    monkeypatch.setattr(api, "merge_settled_results", lambda feed, _archive, **_kw: feed)
     monkeypatch.setattr(api, "apply_result_exclusions", lambda feed, _exclusions: feed)
     monkeypatch.setattr(api, "_access_context_with_daily_allocation",
                         lambda *_args, **_kw: {"plan": "rookie"})

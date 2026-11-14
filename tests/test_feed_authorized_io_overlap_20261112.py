@@ -91,7 +91,7 @@ def test_authentication_and_account_profile_proceed_before_feed_authority_is_con
         'source_feed = with_issued_ace_leader_signals(source_feed)'
     )
     assert FEED.index('support_reads = overlays_future.result()') < FEED.index(
-        'merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"))'
+        'merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"), borrow_metadata=True)'
     )
     for token in (
         'source_feed = apply_result_exclusions(source_feed, excluded_result_ids)',

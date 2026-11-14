@@ -1561,7 +1561,11 @@ def _prefetch_independent_feed_reads(pool):
 
 
 def _feed_gzip_acceptable(req):
-    """Accept only an explicitly advertised gzip encoding, not a wildcard."""
+    """Honor browser opt-in even when the proxy rewrites Accept-Encoding.
+
+    The custom header is capability negotiation only, never authorization.
+    An explicit standard gzip refusal still wins; legacy callers are unchanged.
+    """
     headers = (getattr(req, "headers", None) or {})
     offered = str(headers.get("Accept-Encoding") or headers.get("accept-encoding") or "").lower()
     for entry in offered.split(","):
@@ -1576,7 +1580,7 @@ def _feed_gzip_acceptable(req):
                 except ValueError:
                     return False
         return True
-    return False
+    return str(headers.get("X-Blinq-Feed-Encoding") or headers.get("x-blinq-feed-encoding") or "").lower() == "gzip"
 
 
 def _gzip_feed_response(payload):
@@ -1600,7 +1604,7 @@ def _gzip_feed_response(payload):
             "X-Content-Type-Options": "nosniff",
             "X-BlinQ-Release": RELEASE,
             "Content-Encoding": "gzip",
-            "Vary": "Accept-Encoding",
+            "Vary": "Accept-Encoding, X-Blinq-Feed-Encoding",
             # Standard same-origin diagnostics; no data, identity or token.
             # This distinguishes response encoding from the Azure edge queue.
             "Server-Timing": (
@@ -1658,7 +1662,9 @@ def _authorized_feed_payload(req, *, bootstrap=False):
             support_reads = overlays_future.result()
             trace_stage("support_reads")
         try:
-            source_feed = merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"))
+            # Metadata is read-only until the entitlement gate detaches the
+            # authorized rows. Archive publications/outcomes remain detached.
+            source_feed = merge_settled_results(source_feed, _feed_support_value(support_reads, "archive"), borrow_metadata=True)
         except AdminStorageUnavailable:
             # An archive outage cannot grant access or invent outcomes. The
             # immutable issued feed remains available, but health is explicit.

@@ -512,21 +512,31 @@ def _verified_original_winner_day(canonical_row: dict, archived_row: dict,
     return authoritative_day
 
 
-def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
-    """Overlay settled outcomes only, preserving canonical publication metadata."""
+def merge_settled_results(feed: dict, archived: list[dict], *, borrow_metadata: bool = False) -> dict:
+    """Overlay outcomes without modifying either input.
+
+    The serving caller may borrow read-only player/model metadata until its
+    entitlement gate detaches rows. Publications are always independently
+    copied because this function updates their outcomes. Other callers retain
+    fully detached rows by default.
+    """
     out = dict(feed)
     rows = []
     for source_row in feed.get("results") or []:
         if not isinstance(source_row, dict):
             rows.append(deepcopy(source_row))
             continue
-        copy = deepcopy(source_row)
+        metadata = {key: value for key, value in source_row.items() if key != "market_publications"}
+        copy = dict(metadata) if borrow_metadata else deepcopy(metadata)
+        publications = source_row.get("market_publications")
         # Preserve legacy rows without publications; quarantine only invalid
         # Aces results, never unrelated result rows during a readback repair.
-        if not isinstance(copy.get("market_publications"), list) or not copy["market_publications"]:
+        if not isinstance(publications, list) or not publications:
+            if "market_publications" in source_row:
+                copy["market_publications"] = deepcopy(publications)
             rows.append(copy)
             continue
-        copy["market_publications"] = [validated for pub in copy.get("market_publications") or []
+        copy["market_publications"] = [validated for pub in publications
                                         if isinstance(pub, dict)
                                         for validated in [_verified_aces_outcome(pub)]
                                         if validated is not None]
@@ -634,7 +644,8 @@ def merge_settled_results(feed: dict, archived: list[dict]) -> dict:
                     if incumbent.get(field) in (None, "") and archived_pub.get(field) not in (None, ""):
                         incumbent[field] = deepcopy(archived_pub[field])
             continue
-        copy = deepcopy(archived_row)
+        metadata = {key: value for key, value in archived_row.items() if key != "market_publications"}
+        copy = dict(metadata) if borrow_metadata else deepcopy(metadata)
         copy["market_publications"] = [archived_pub]
         rows.append(copy)
         existing[key] = archived_pub
