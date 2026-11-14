@@ -11882,3 +11882,77 @@ body#blinqPremium.blinq-admin .monthly-parity-note.is-mismatch{
   }
   body#blinqPremium.blinq-admin .monthly-parity-note{font-size:10px}
 }
+
+/* BlinQ visual unification 2026-11-14.
+   Reuse the approved green court artwork across routes and overlays.
+   Preserve layout, card content, admin-selected hero and mobile court geometry. */
+body#blinqPremium.blinq-route:not(.blinq-admin) {
+  background-color:#031510!important;
+  background-image:
+    linear-gradient(90deg,rgba(1,11,12,.84),rgba(2,23,20,.66),rgba(1,10,12,.85)),
+    var(--blinq-page-bg,url("/assets/blinq_page_background.webp"))!important;
+  background-position:center top!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  background-attachment:fixed!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel {
+  background:linear-gradient(180deg,rgba(5,24,21,.86),rgba(3,18,17,.92))!important;
+}
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] {
+  background-color:#061a14!important;
+  background-image:
+    linear-gradient(180deg,rgba(3,21,16,.89),rgba(2,15,12,.94)),
+    url("/assets/blinq_mobile_court.webp")!important;
+  background-position:center,center bottom!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+body#blinqPremium #insightDrawer.insight-drawer {
+  background-color:#061a14!important;
+  background-image:
+    linear-gradient(180deg,rgba(3,21,17,.90),rgba(2,16,14,.94)),
+    url("/assets/blinq_mobile_court.webp")!important;
+  background-position:center,center bottom!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  border-color:rgba(122,190,158,.27)!important;
+}
+body#blinqPremium :is(.match-dialog,.account-dialog,.upgrade-dialog,.project-groups-dialog)[open] {
+  background-color:#071b16!important;
+  background-image:
+    linear-gradient(155deg,rgba(4,26,21,.95),rgba(3,17,15,.97)),
+    url("/assets/blinq_page_background.webp")!important;
+  background-position:center!important;
+  background-size:cover!important;
+  border-color:rgba(122,190,158,.29)!important;
+}
+/* More readable desktop KPI cards without losing the photo-backed shell. */
+@media(min-width:601px) {
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis>.dashboard-kpi {
+    background:linear-gradient(150deg,rgba(4,29,23,.91),rgba(3,19,16,.94))!important;
+  }
+  body#blinqPremium:not(.blinq-admin) #dashboardKpis .dashboard-kpi p {
+    color:#c7dace!important;
+  }
+}
+/* Preserve the existing single-piece four-KPI phone layout. Only its
+   backing surface and card opacity change; no geometry or text sizes. */
+@media(max-width:600px) {
+  body#blinqPremium.blinq-route:not(.blinq-admin) {
+    background-attachment:scroll!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
+    background:rgba(3,23,17,.66)!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi small {
+    color:#d4e6db!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi p {
+    color:#c7dace!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked),
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .results-table tbody tr.results-card-row {
+    background:rgba(3,23,17,.84)!important;
+  }
+}
