@@ -4385,8 +4385,8 @@
   ];
   function monthlyPerformanceState(){
     if(!state.monthlyPerformance){
-      const thisMonth=bratislavaBettingDayKey(Date.now(),6).slice(0,7);
-      state.monthlyPerformance={month:thisMonth,day:'',level:'all',view:'overview',fullscreen:false,sections:MONTHLY_SECTIONS.map(([key])=>key),
+      const today=bratislavaBettingDayKey(Date.now(),6);
+      state.monthlyPerformance={from:today.slice(0,7)+'-01',to:today,level:'all',view:'overview',fullscreen:false,sections:MONTHLY_SECTIONS.map(([key])=>key),
         tour:'',surface:'',minOdds:'',maxOdds:'',outcomes:['win','loss','void']};
     }
     return state.monthlyPerformance;
@@ -4403,21 +4403,40 @@
     const last=monthlyMonthEnd(month,today);
     return match&&match[1]===month&&Number(match[2])>=1&&Number(match[2])<=last?String(day):'';
   }
+  // Date filters operate on the existing 06:00–06:00 Bratislava betting days.
+  function monthlyValidDate(value){
+    if(!/^\d{4}-(0[1-9]|1[0-2])-([0-2]\d|3[01])$/.test(String(value||'')))return false;
+    const date=new Date(value+'T00:00:00Z');
+    return Number.isFinite(date.getTime())&&date.toISOString().slice(0,10)===value;
+  }
+  function monthlyReportPeriod(selection=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6)){
+    // Older month/day state is still accepted by historical browser fixtures.
+    const month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)?selection.month:today.slice(0,7);
+    const end=monthlyMonthEnd(month,today),legacyDay=monthlySelectedDay(month,selection.day,today);
+    const from=selection.from??(legacyDay||month+'-01');
+    const to=selection.to??(legacyDay||(end?month+'-'+String(end).padStart(2,'0'):month+'-01'));
+    const valid=monthlyValidDate(from)&&monthlyValidDate(to)&&from<=to&&to<=today;
+    return {from,to,valid,legacyFuture:selection.from==null&&month>today.slice(0,7)};
+  }
+  function monthlyRangeDays(from,to){
+    const start=Date.parse(from+'T00:00:00Z'),end=Date.parse(to+'T00:00:00Z');
+    if(!Number.isFinite(start)||!Number.isFinite(end)||start>end)return [];
+    const dates=[];
+    for(let t=start;t<=end;t+=86400000)dates.push(new Date(t).toISOString().slice(0,10));
+    return dates;
+  }
   function monthlyRecordDay(row){
     return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
   }
   function monthlyMetricRows(membership=''){
-    const selection=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6),
-      month=/^\d{4}-(0[1-9]|1[0-2])$/.test(selection.month)
-        ?selection.month:today.slice(0,7);
-    const end=monthlyMonthEnd(month,today);
-    if(!end)return [];
-    const selectedDay=monthlySelectedDay(month,selection.day,today);
+    const selection=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6);
+    const period=monthlyReportPeriod(selection,today);
+    if(!period.valid)return [];
     const categories=MONTHLY_SECTIONS.map(([key])=>key).filter(key=>selection.sections.includes(key));
     if(!categories.length)return [];
     const resultCategory=categories.length===MONTHLY_SECTIONS.length?'all':categories.join(',');
-    const filters={category:resultCategory,window:'custom',dateFrom:selectedDay||month+'-01',
-      dateTo:selectedDay||month+'-'+String(end).padStart(2,'0'),bettingDay:true,
+    const filters={category:resultCategory,window:'custom',dateFrom:period.from,
+      dateTo:period.to,bettingDay:true,
       tour:selection.tour,surface:selection.surface,membership};
     // Identical category, authorization, stats-exclusion and deduplication path
     // to the Results table/KPI; selecting a market happens BEFORE deduplication.
@@ -4501,9 +4520,14 @@
   }
   function renderMonthlyPerformance(){
     const s=monthlyPerformanceState(),today=bratislavaBettingDayKey(Date.now(),6);
-    const month=/^\d{4}-(0[1-9]|1[0-2])$/.test(s.month)?s.month:today.slice(0,7);
-    const days=monthlyMonthEnd(month,today);
-    const selectedDay=monthlySelectedDay(month,s.day,today);
+    const period=monthlyReportPeriod(s,today),{from,to}=period;
+    const daysWithResults=period.valid?monthlyRangeDays(from,to):[];
+    const days=daysWithResults.length,singleDay=days===1;
+    const spansMonths=from.slice(0,7)!==to.slice(0,7);
+    const spansYears=from.slice(0,4)!==to.slice(0,4);
+    const dayLabel=date=>Number(date.slice(-2))+'.'+
+      (spansMonths?' '+Number(date.slice(5,7))+'.'+(spansYears?' '+date.slice(0,4):''):'');
+    const rangeLabel=from===to?from:from+' – '+to;
     const currentLevel=MONTHLY_LEVELS.some(([id])=>id===s.level)?s.level:'all';
     const fmt=(value,d=2)=>Number(value).toLocaleString('sk-SK',
       {minimumFractionDigits:d,maximumFractionDigits:d});
@@ -4529,7 +4553,7 @@
     const m=active.metrics;
     // Live self-check against the Results KPI for the exact same betting day,
     // membership, section and surface. Mismatches stay visible to Admin.
-    const auditEnabled=Boolean(m)&&month===today.slice(0,7)&&(!selectedDay||selectedDay===today)&&selectedSections.length>0
+    const auditEnabled=Boolean(m)&&period.valid&&from<=today&&to>=today&&selectedSections.length>0
       &&s.minOdds===''&&s.maxOdds===''&&s.outcomes.length===3;
     const auditFilters=auditEnabled?{
       category:resultCategory,window:'today',bettingDay:true,
@@ -4551,7 +4575,6 @@
     const reportMode=s.view==='report'&&active.id!=='all'&&active.available;
     const fullscreen=reportMode&&s.fullscreen===true;
     const showAdvanced=s.filtersExpanded===true||(s.filtersExpanded==null&&!reportMode);
-    const daysWithResults=selectedDay?[selectedDay]:Array.from({length:days},(_,index)=>month+'-'+String(index+1).padStart(2,'0'));
     let running=0;
     const values=daysWithResults.map(date=>{
       running+=m?.daily.get(date)||0;
