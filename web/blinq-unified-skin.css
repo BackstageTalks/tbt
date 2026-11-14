@@ -1,0 +1,75 @@
+/* BlinQ unified tennis skin – visual only, 2026-11-14.
+   Match the approved homepage artwork across routes, menus and Info.
+   Preserve admin-selected page art, banner content, data, layout and interactions. */
+
+/* Results, statistics and other public routes share the homepage atmosphere. */
+body#blinqPremium.blinq-route:not(.blinq-admin) {
+  background-color:#031314!important;
+  background-image:
+    radial-gradient(850px 520px at 80% 0%,rgba(24,176,115,.07),transparent 70%),
+    linear-gradient(180deg,rgba(1,14,13,.76),rgba(1,12,12,.90)),
+    var(--blinq-page-bg,url("/assets/blinq_page_background.webp"))!important;
+  background-position:center top!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  background-attachment:fixed!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel {
+  background:linear-gradient(180deg,rgba(4,25,21,.91),rgba(2,17,17,.96))!important;
+}
+
+/* Admin retains its already configured wallpaper and fully readable controls. */
+body#blinqPremium.blinq-admin .admin-workarea {
+  background:linear-gradient(180deg,rgba(4,25,21,.96),rgba(2,17,16,.98))!important;
+}
+
+/* Unified account/navigation menu: artwork behind a strong dark scrim. */
+body#blinqPremium.bqm-unified-menu #bqm-dialog[open] {
+  background-color:#051a14!important;
+  background-image:
+    linear-gradient(160deg,rgba(3,25,19,.91),rgba(2,16,14,.95)),
+    url("/assets/blinq_page_background.webp")!important;
+  background-position:center center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+
+/* Info/LIVE uses the same skin; the feed remains on opaque readable tiles. */
+body#blinqPremium .insight-drawer {
+  background-color:#041812!important;
+  background-image:
+    linear-gradient(180deg,rgba(3,24,19,.92),rgba(2,17,15,.96)),
+    url("/assets/blinq_page_background.webp")!important;
+  background-position:center center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  border-color:rgba(112,190,145,.24)!important;
+}
+body#blinqPremium .insight-drawer-toolbar {
+  background:rgba(3,25,21,.94)!important;
+  border-bottom-color:rgba(114,184,148,.22)!important;
+}
+
+@media(max-width:900px) {
+  body#blinqPremium.blinq-route:not(.blinq-admin) {
+    background-attachment:scroll!important;
+  }
+}
+
+/* The phone's approved court image remains stable during address-bar resize.
+   Only increase card opacity; never touch its grids or mobile spacing. */
+@media(max-width:600px) {
+  body#blinqPremium.bqm-unified-menu #bqm-dialog[open],
+  body#blinqPremium .insight-drawer {
+    background-image:
+      linear-gradient(180deg,rgba(3,24,19,.91),rgba(2,16,14,.96)),
+      url("/assets/blinq_mobile_court.webp")!important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis {
+    background:rgba(3,23,17,.66)!important; /* former .48 */
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked),
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) .results-table tbody tr.results-card-row {
+    background:rgba(3,23,17,.84)!important; /* former .74 */
+  }
+}
