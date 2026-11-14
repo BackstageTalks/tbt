@@ -9563,7 +9563,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         if (complete.length>expectedTotal) throw new Error('Results page returned too many rows.');
         if (!batch.has_more) {
           if (complete.length!==expectedTotal) throw new Error('Results history incomplete.');
-          state.feed.results=complete; state.feed.results_boot_partial=false;
+          state.feed.results=complete; normalizeFeedAceOdds(state.feed); state.feed.results_boot_partial=false;
           fullResultsError='';
           if (['results','stats','admin'].includes(state.route)) renderRoute(state.route);
           return;
