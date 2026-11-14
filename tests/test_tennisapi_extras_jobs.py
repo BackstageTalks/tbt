@@ -175,7 +175,7 @@ def test_hourly_scheduler_keeps_bounded_extras_and_same_writer():
     root = Path(__file__).resolve().parents[1]
     hourly = (root / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
     data = (root / ".github/workflows/data.yml").read_text()
-    assert "extras_slot = stage_hour in (14, 17)" in hourly
+    assert "extras_slot = stage_hour in (14, 16)" in hourly
     assert "proposed = min(proposed, 450)" in hourly
     assert 'payload["inputs"]["mode"] = "extras"' in hourly
     assert "BLINQ_PROVIDER_REQUEST_RESERVE=500" in data
