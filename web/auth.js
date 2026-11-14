@@ -564,7 +564,7 @@
         const timing = response.headers?.get?.('Server-Timing') || '';
         record.timingHeader = Boolean(timing);
         record.serverTiming = timing.split(',').map(part => {
-          const match = part.trim().match(/^(blinq_json|blinq_gzip);dur=(\\d+(?:\\.\\d+)?)$/);
+          const match = part.trim().match(/^(blinq_json|blinq_gzip);dur=(\d+(?:\.\d+)?)$/);
           return match ? [match[1], Math.round(Number(match[2]))] : null;
         }).filter(Boolean);
         const encoding = String(response.headers?.get?.('Content-Encoding')||'').toLowerCase();
