@@ -22,7 +22,12 @@ def test_backend_trace_is_explicit_opt_in_only_after_auth():
         'trace_stage("auth_verified")')
     assert FEED.index('data["__blinq_feed_stage_ms"] = trace_marks') > FEED.index(
         'data = attach_offer_clv(data)')
-    assert FEED.endswith('return response({"error": "feed_unavailable"}, 503)\n\n\n')
+    # The API's public route delegates to a pure authorized builder so
+    # pagination shares the exact policy without an extra JSON encode/decode.
+    assert 'def _authorized_feed_payload(req, *, bootstrap=False):' in FEED
+    assert 'return response({"error": "feed_unavailable"}, 503)' in FEED
+    assert 'return data' in FEED
+    assert '_authorized_feed_payload(req, bootstrap=True)' in FEED
 
 
 def test_existing_access_and_feed_workflows_remain_authoritative():

@@ -1613,6 +1613,15 @@ def _gzip_feed_response(payload):
 
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
+    data = _authorized_feed_payload(req, bootstrap=True)
+    if not isinstance(data, dict) or "error" in data:
+        return data
+    if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
+        return _gzip_feed_response(data)
+    return response(data)
+
+
+def _authorized_feed_payload(req, *, bootstrap=False):
     try:
         # Explicit authenticated diagnostics only: relative durations, no account
         # fields, IDs, prices, or private payloads. Ordinary feed stays identical.
@@ -1802,13 +1811,28 @@ def feed(req):
         trace_stage("clv_complete")
         if trace_started is not None:
             data["__blinq_feed_stage_ms"] = trace_marks
-        # Real mobile diagnostics established that Azure SWA and browsers can
-        # safely decode this already tested JSON-equivalent gzip response.
-        # Keep gzip *explicitly requested* by the web client: other API
-        # consumers and the uncompressed rollback URL remain unchanged.
-        if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
-            return _gzip_feed_response(data)
-        return response(data)
+        # Compute cards and all authorization/settlement rules against the full
+        # member-visible Results ledger. Only the opt-in browser bootstrap view
+        # is abbreviated, *after* those security and KPI boundaries.
+        if bootstrap and str((getattr(req, "params", None) or {}).get("blinq_feed_view") or "") == "bootstrap":
+            authorized_results = data.get("results") or []
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+            recent = []
+            for row in authorized_results:
+                if not isinstance(row, dict):
+                    continue
+                value = row.get("scheduled_at") or row.get("date")
+                if not value:
+                    continue
+                try:
+                    timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                    if timestamp.tzinfo is not None and timestamp.astimezone(timezone.utc) >= cutoff:
+                        recent.append(row)
+                except (TypeError, ValueError, OverflowError):
+                    continue
+            data["results"] = recent
+            data["results_boot_partial"] = len(recent) != len(authorized_results)
+        return data
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
         return response({"error": "auth_unavailable"}, 503)
@@ -1816,6 +1840,48 @@ def feed(req):
         logging.exception("Serving feed unavailable")
         record_system_event("error", "feed", "Serving feed unavailable", details={"error": exc.__class__.__name__})
         return response({"error": "feed_unavailable"}, 503)
+
+
+@app.route(route="v1/results", methods=["GET"])
+def results_page(req):
+    """Deterministically page the exact complete member-authorized Results view.
+
+    No alternate authorization, cache or globally scoped cursor. Each request
+    runs the same complete feed's access, exclusion and settlement gates. Clients
+    must restart if the authorized snapshot changes while paging.
+    """
+    params = getattr(req, "params", None) or {}
+    try:
+        page = int(params.get("page", "0"))
+        size = int(params.get("limit", "250"))
+    except (TypeError, ValueError):
+        return response({"error": "invalid_results_page"}, 400)
+    if not 0 <= page <= 100000 or not 1 <= size <= 500:
+        return response({"error": "invalid_results_page"}, 400)
+
+    # Returning the private in-process payload avoids a wasteful serialize +
+    # decode of the entire ledger before selecting this page.
+    authorized = _authorized_feed_payload(req)
+    if not isinstance(authorized, dict) or "error" in authorized:
+        return authorized  # Existing 401/403/503 path; never bypass auth.
+    rows = authorized.get("results") or []
+    # Existing feed order is stable, so reassembled pages retain source order;
+    # the version binds both ordering and contents to an authorized snapshot.
+    revision = hashlib.sha256(
+        json.dumps(rows, ensure_ascii=False, sort_keys=True, allow_nan=False).encode("utf-8")
+    ).hexdigest()[:24]
+    requested_revision = str(params.get("snapshot") or "")
+    if requested_revision and requested_revision != revision:
+        return response({"error": "results_snapshot_changed"}, 409)
+    start = page * size
+    return response({
+        "results": rows[start:start + size],
+        "page": page,
+        "limit": size,
+        "total": len(rows),
+        "has_more": start + size < len(rows),
+        "snapshot": revision,
+    })
 
 
 @app.route(route="v1/internal/clv-snapshot", methods=["POST"])

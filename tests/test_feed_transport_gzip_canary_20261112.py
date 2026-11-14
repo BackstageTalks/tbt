@@ -82,8 +82,8 @@ def test_diagnostics_are_opt_in_without_altering_normal_transport():
     assert 'return response(data)' in feed
     assert "const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';" in auth
     assert "useGzip = new URLSearchParams(location.search).get('blinq_feed_gzip') !== '0'" in auth
-    assert "return request();" in auth
-    assert "return requestWithSafeFallback();" in auth
+    assert "return await attempt('plain');" in auth
+    assert "return await attempt(kind);" in auth
     assert "performance.getEntriesByType('resource')" in app
     assert "Feed sieť: TTFB " in app
     assert "window.alert(message)" in app
