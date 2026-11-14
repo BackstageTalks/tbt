@@ -292,9 +292,17 @@ def test_identity_audit_reuses_existing_native_statistics_eligibility_without_ca
     assert plan["eligibility_by_tour_year"]["wta:2025"]["eligible"] == 1
     assert plan["eligibility_by_tour_year"]["wta:2025"]["missing_or_conflicting_event_id"] == 1
     assert [dict(m.provider_payload) for m in (original, invalid)] == before
+    bp_rows, bp_plan = _statistics_candidates(
+        [original, invalid], date(2025, 1, 1), date(2025, 12, 31),
+        targeted=True, historical_high_yield=False, break_points_focus=True)
+    assert [m.match_id for m in bp_rows] == [original.match_id]
+    assert bp_plan["eligibility_by_tour_year"]["wta:2025"]["eligible"] == 1
+    assert bp_plan["eligibility_by_tour_year"]["wta:2025"]["missing_or_conflicting_event_id"] == 1
     source = (Path(__file__).resolve().parents[1] /
               "scripts/download_tennis_history.py").read_text()
     assert '"identity_parallel_statistics_opportunity"' in source
     assert 'stats_snapshot["eligibility_by_tour_year"]' in source
+    assert 'bp_snapshot["eligibility_by_tour_year"]' in source
+    assert '"bp_only_eligible_rows"' in source
     assert '"provider_requests": 0' in source
     assert '"cdb_writes": 0' in source
