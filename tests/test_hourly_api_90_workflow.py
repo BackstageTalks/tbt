@@ -63,7 +63,9 @@ def test_utc_closeout_window_and_restart_season_independent():
     next_reset = namespace["next_provider_reset"]
     for day in ((2026, 9, 27), (2026, 10, 25)):
         day_start = datetime(*day, 17, 9, tzinfo=timezone.utc)
-        for mins_before, expected in ((36, False), (35, True), (7, True), (6, False)):
+        # Pre-closeout now begins 55 min before reset; original 35-min final slot remains.
+        for mins_before, expected in ((56, False), (55, True), (36, True),
+                                      (35, True), (7, True), (6, False)):
             now = day_start - timedelta(minutes=mins_before)
             until_reset = (next_reset(now) - now).total_seconds()
             scope = {"until_reset": until_reset, "now": now}
