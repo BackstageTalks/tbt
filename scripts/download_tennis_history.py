@@ -738,6 +738,36 @@ def main():
                 max_days=args.identity_max_days)
             report["identity_gap_inventory"] = gaps
             print(json.dumps({"identity_gap_inventory": gaps}, sort_keys=True), flush=True)
+            # Independent NULL-gap eligibility inventory on the SAME canonical
+            # snapshot: identify productive ATP/WTA 2016-21 segments that the
+            # ordinary hourly 2022+ scheduler has not yet considered. Zero API
+            # calls, no provider claim promotion, and no canonical mutations.
+            _, stats_snapshot = _statistics_candidates(
+                eligible_rows_for_enrichment(), start, end, targeted=True)
+            _, bp_snapshot = _statistics_candidates(
+                eligible_rows_for_enrichment(), start, end, targeted=True,
+                break_points_focus=True)
+            identity_statistics_opportunity = {
+                "schema": 1,
+                "policy": "existing_native_identity_missing_field_cooldown_eligibility_only",
+                "eligible_by_tour_year": {
+                    cohort: int(counts.get("eligible", 0))
+                    for cohort, counts in sorted(
+                        stats_snapshot["eligibility_by_tour_year"].items())
+                },
+                "eligible_rows": int(stats_snapshot["candidate_rows"]),
+                "bp_only_eligible_by_tour_year": {
+                    cohort: int(counts.get("eligible", 0))
+                    for cohort, counts in sorted(
+                        bp_snapshot["eligibility_by_tour_year"].items())
+                },
+                "bp_only_eligible_rows": int(bp_snapshot["candidate_rows"]),
+                "provider_requests": 0,
+                "cdb_writes": 0,
+            }
+            report["identity_parallel_statistics_opportunity"] = identity_statistics_opportunity
+            print(json.dumps({"identity_parallel_statistics_opportunity":
+                              identity_statistics_opportunity}, sort_keys=True), flush=True)
             planned = candidate_days(matches, start=start, end=end,
                                      attempts=attempts, max_days=args.identity_max_days)
             if (len(planned) != gaps["scheduled_days"] or

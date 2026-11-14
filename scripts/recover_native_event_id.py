@@ -50,6 +50,48 @@ def _pair(match):
     return tuple(sorted(ids)) if all(ids) and ids[0] != ids[1] else ()
 
 
+def _claim_shape(value):
+    """Describe an opaque identity claim without exposing or trusting the ID."""
+    token = str(value)
+    if not token:
+        return "empty"
+    if token.isascii() and token.isdigit():
+        return "positive_integer" if int(token) > 0 else "zero_integer"
+    if token.strip() != token:
+        return "whitespace_wrapped"
+    if re.fullmatch(r"[0-9a-fA-F]{64}", token):
+        return "opaque_hex_64"
+    if re.fullmatch(r"[0-9a-fA-F]{40}", token):
+        return "opaque_hex_40"
+    if re.fullmatch(r"[0-9a-fA-F]{32}", token):
+        return "opaque_hex_32"
+    if re.fullmatch(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", token):
+        return "opaque_uuid"
+    prefix, sep, _rest = token.partition(":")
+    # This is a classification ONLY, not evidence of provider namespace.
+    if sep:
+        family = prefix.lower()
+        if family in {"tennisapi1", "sackmann", "tml", "rapidapi", "tbt", "propline"}:
+            return f"namespace_text_{family}"
+        return "opaque_namespaced"
+    if re.fullmatch(r"[-+]?[0-9]+", token):
+        return "signed_integer_text"
+    if re.fullmatch(r"[A-Za-z0-9._-]+", token):
+        return "opaque_alphanumeric"
+    return "opaque_other"
+
+
+def _raw_category_witness(raw):
+    """Count potential nested category metadata, never infer or promote it."""
+    if not isinstance(raw, dict):
+        return False
+    tournament = raw.get("tournament")
+    if not isinstance(tournament, dict):
+        return False
+    category = tournament.get("category")
+    return isinstance(category, dict) and category.get("id") not in (None, "")
+
+
 def _id_claims(match):
     raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
     native = [raw.get(k) for k in (
@@ -125,6 +167,9 @@ def identity_gap_inventory(canonical, *, start: date, end: date,
     counted = 0
     claim_details = Counter()
     secondary_blockers = Counter()
+    claim_shapes = Counter()
+    participant_shapes = Counter()
+    embedded_source_metadata = Counter()
     for match in canonical:
         day = _day(match)
         if (str(match.tour or "").lower() not in {"atp", "wta"}
@@ -138,6 +183,21 @@ def identity_gap_inventory(canonical, *, start: date, end: date,
         if claims:
             reason = "existing_unusable_or_conflicting_event_claims"
             raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+            for claim in claims:
+                claim_shapes[_claim_shape(claim)] += 1
+            if pair:
+                ids = (str(match.player1_id), str(match.player2_id))
+                participant_shapes[
+                    "both_positive_numeric" if all(
+                        v.isascii() and v.isdigit() and int(v) > 0 for v in ids
+                    ) else "non_numeric_or_mixed"
+                ] += 1
+            if _raw_category_witness(raw):
+                embedded_source_metadata["nested_tournament_category_id_present"] += 1
+            if isinstance(raw.get("_tbt_event_identity"), dict):
+                embedded_source_metadata["identity_marker_present"] += 1
+            if isinstance(raw.get("_tbt_raw_provenance"), dict):
+                embedded_source_metadata["raw_provenance_marker_present"] += 1
             keys = ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id")
             native_claim = raw.get("_tbt_provider_event_id")
             if native_claim not in (None, ""):
@@ -207,6 +267,11 @@ def identity_gap_inventory(canonical, *, start: date, end: date,
         "primary_blockers": dict(sorted(reasons.items())),
         "existing_claim_diagnostics": dict(sorted(claim_details.items())),
         "existing_claim_secondary_blockers": dict(sorted(secondary_blockers.items())),
+        # Diagnostic dimensions are counts only. No raw IDs, names, sources
+        # or relinking decisions are exported from the authoritative CDB.
+        "opaque_claim_shapes": dict(sorted(claim_shapes.items())),
+        "opaque_participant_shapes": dict(sorted(participant_shapes.items())),
+        "embedded_source_metadata_presence": dict(sorted(embedded_source_metadata.items())),
         "by_tour_year": {
             name: dict(sorted(value.items()))
             for name, value in sorted(by_cohort.items())

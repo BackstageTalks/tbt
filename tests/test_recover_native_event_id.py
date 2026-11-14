@@ -2,7 +2,8 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
-from scripts.recover_native_event_id import candidate_days, eligible, recover_day, identity_gap_inventory
+from scripts.recover_native_event_id import (candidate_days, eligible, recover_day,
+                                             identity_gap_inventory, _claim_shape)
 
 
 @dataclass
@@ -220,3 +221,88 @@ def test_negative_category_mismatch_and_unverified_claims_remain_blocked():
         assert not recover_day([canonical], [native()], day=date(2025, 4, 10))[0]
     canonical = Match("slam", provider_payload={"_tbt_source_category_id": -100})
     assert not recover_day([canonical], [native()], day=date(2025, 4, 10))[0]
+
+
+def test_native_claim_shape_diagnostic_never_promotes_or_exposes_raw_ids():
+    from json import dumps
+    samples = {
+        "a" * 32: "opaque_hex_32",
+        "a" * 40: "opaque_hex_40",
+        "b" * 64: "opaque_hex_64",
+        "sackmann:secret-match-123": "namespace_text_sackmann",
+        "tennisapi1:secret-match-456": "namespace_text_tennisapi1",
+        "untrusted:secret-987": "opaque_namespaced",
+        "opaque-alpha-700": "opaque_alphanumeric",
+        "000": "zero_integer",
+        "-100": "signed_integer_text",
+        " 123 ": "whitespace_wrapped",
+    }
+    for raw, shape in samples.items():
+        assert _claim_shape(raw) == shape
+    m = Match("redacted-canonical", provider_payload={
+        "_tbt_provider_event_id": "sackmann:secret-event-123",
+        "tournament": {"category": {"id": 456}},
+        "_tbt_event_identity": {"event_id": "broken-id"},
+    })
+    before = dict(m.provider_payload)
+    report = identity_gap_inventory([m], start=date(2025, 1, 1),
+                                    end=date(2026, 1, 1))
+    assert report["eligible_native_calendar_rows"] == 0
+    assert report["opaque_claim_shapes"] == {
+        "namespace_text_sackmann": 1, "opaque_alphanumeric": 1,
+    }
+    assert report["opaque_participant_shapes"] == {"both_positive_numeric": 1}
+    assert report["embedded_source_metadata_presence"] == {
+        "identity_marker_present": 1,
+        "nested_tournament_category_id_present": 1,
+    }
+    assert "secret-event-123" not in dumps(report)
+    assert "redacted-canonical" not in dumps(report)
+    assert m.provider_payload == before
+
+
+def test_native_claim_shape_counts_without_source_names_or_import_permissions():
+    m = Match("foreign", provider_payload={
+        "_tbt_source_category_id": "456",
+        "_tbt_provider_event_id": "custom-provenance:PRIVATE-123",
+    }, player1_id="foreign-A")
+    report = identity_gap_inventory([m], start=date(2025, 1, 1),
+                                    end=date(2026, 1, 1))
+    assert report["opaque_claim_shapes"] == {"opaque_namespaced": 1}
+    assert report["opaque_participant_shapes"] == {"non_numeric_or_mixed": 1}
+    assert report["scheduled_days"] == 0
+    assert report["cdb_writes"] == report["native_provider_requests"] == 0
+
+
+def test_identity_audit_reuses_existing_native_statistics_eligibility_without_calls():
+    from pathlib import Path
+    from scripts.download_tennis_history import _statistics_candidates
+    original = native("900")
+    original.stats = {}
+    invalid = Match("opaque", provider_payload={
+        "_tbt_provider_event_id": "synthetic:opaque",
+        "_tbt_source_category_id": "456",
+    })
+    before = [dict(m.provider_payload) for m in (original, invalid)]
+    selected, plan = _statistics_candidates(
+        [original, invalid], date(2025, 1, 1), date(2025, 12, 31),
+        targeted=True, historical_high_yield=False)
+    assert [m.match_id for m in selected] == [original.match_id]
+    assert plan["candidate_rows"] == 1
+    assert plan["eligibility_by_tour_year"]["wta:2025"]["eligible"] == 1
+    assert plan["eligibility_by_tour_year"]["wta:2025"]["missing_or_conflicting_event_id"] == 1
+    assert [dict(m.provider_payload) for m in (original, invalid)] == before
+    bp_rows, bp_plan = _statistics_candidates(
+        [original, invalid], date(2025, 1, 1), date(2025, 12, 31),
+        targeted=True, historical_high_yield=False, break_points_focus=True)
+    assert [m.match_id for m in bp_rows] == [original.match_id]
+    assert bp_plan["eligibility_by_tour_year"]["wta:2025"]["eligible"] == 1
+    assert bp_plan["eligibility_by_tour_year"]["wta:2025"]["missing_or_conflicting_event_id"] == 1
+    source = (Path(__file__).resolve().parents[1] /
+              "scripts/download_tennis_history.py").read_text()
+    assert '"identity_parallel_statistics_opportunity"' in source
+    assert 'stats_snapshot["eligibility_by_tour_year"]' in source
+    assert 'bp_snapshot["eligibility_by_tour_year"]' in source
+    assert '"bp_only_eligible_rows"' in source
+    assert '"provider_requests": 0' in source
+    assert '"cdb_writes": 0' in source
