@@ -255,7 +255,7 @@ def main():
                             heroRadius:document.querySelector('#dashboardHero')?getComputedStyle(document.querySelector('#dashboardHero')).borderRadius:null,navBg,navLine};
                         }""")
                         assert 'sports-intelligence=20261030-1' in premium['css'], premium
-                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgba(3, 23, 17, 0.74)', premium
+                        assert premium['rowBg'] == 'none' and premium['rowBgColor'] == 'rgba(3, 23, 17, 0.84)', premium
                         assert premium['pickBg'] == 'rgba(0, 0, 0, 0)', premium
                         assert premium['heroRadius'] == '11px', premium
                         assert premium['navBg'] == 'none', premium
