@@ -11380,7 +11380,9 @@ body#blinqPremium.blinq-admin .monthly-report-note{
 }
 @media(max-width:480px){
   body#blinqPremium.blinq-admin .monthly-controls{grid-template-columns:minmax(0,1fr)}
-  body#blinqPremium.blinq-admin .monthly-month-field{width:100%}
+  body#blinqPremium.blinq-admin .monthly-header-actions{width:100%}
+  body#blinqPremium.blinq-admin .monthly-month-field,
+  body#blinqPremium.blinq-admin .monthly-day-field{width:100%}
   body#blinqPremium.blinq-admin .monthly-stats{gap:7px}
 }
 
@@ -11433,6 +11435,7 @@ body#blinqPremium.blinq-admin .monthly-header-actions label{
   font-size:10px!important;color:var(--monthly-muted)!important
 }
 body#blinqPremium.blinq-admin .monthly-month-field input{min-width:170px}
+body#blinqPremium.blinq-admin .monthly-day-field select{min-width:140px}
 body#blinqPremium.blinq-admin .monthly-performance input[type=month],
 body#blinqPremium.blinq-admin .monthly-performance input[type=number],
 body#blinqPremium.blinq-admin .monthly-performance select{
