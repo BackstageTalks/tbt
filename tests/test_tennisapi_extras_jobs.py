@@ -414,7 +414,7 @@ def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
     assert "limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])" in dispatch
     assert "proposed = min(proposed, 450)" in dispatch
     assert 'payload["inputs"]["mode"] = "extras"' in dispatch
-    assert '"start": "2022-01-01"' in dispatch
+    assert '"start": "2016-01-01"' in dispatch
     assert "14500" in dispatch and "reserved_provider_headroom" in dispatch
     assert "newest_season_first_then_verified_identity" in source
     assert 'report["extras_candidate_rows_by_year"]' in source
