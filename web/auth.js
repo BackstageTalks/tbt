@@ -535,7 +535,8 @@
     const url = traced ? '/api/v1/feed?blinq_feed_trace=1' : '/api/v1/feed';
     let useGzip = true;
     try { useGzip = new URLSearchParams(location.search).get('blinq_feed_gzip') !== '0'; } catch {}
-    const gzipUrl = url + (url.includes('?') ? '&' : '?') + 'blinq_feed_gzip=1';
+    const requestUrl = url + (url.includes('?') ? '&' : '?') + 'blinq_feed_view=bootstrap';
+    const gzipUrl = requestUrl + '&blinq_feed_gzip=1';
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const startedAt = Date.now();
     const deadline = startedAt + 16000; // One total budget, not 20s per attempt.
@@ -555,7 +556,7 @@
       diagnostic.attempts.push(record);
       let response = null;
       try {
-        response = await fetch(kind === 'gzip' ? gzipUrl : url, {
+        response = await fetch(kind === 'gzip' ? gzipUrl : requestUrl, {
           headers: {Accept:'application/json', 'X-Blinq-Access-Token':accessToken},
           cache:'no-store',
           signal:controller?.signal,
@@ -638,6 +639,25 @@
     finally {
       if (pendingFeed?.promise === operation) pendingFeed = null;
     }
+  }
+  async function resultsPage(page = 0, limit = 250, snapshot = '') {
+    const s = await restore();
+    if (!s?.access_token) throw new Error('Sign in again.');
+    const sessionEpoch = epoch(), token = s.access_token;
+    const params = new URLSearchParams({page:String(page),limit:String(limit)});
+    if (snapshot) params.set('snapshot',snapshot);
+    const result = await json('/api/v1/results?'+params.toString(), {
+      timeoutMs:16000, headers:{'X-Blinq-Access-Token':token},
+    });
+    // Never return another account's ledger after a concurrent logout/login.
+    if (epoch() !== sessionEpoch || session()?.access_token !== token) {
+      throw Object.assign(new Error('Session changed during Results request.'), {code:'FEED_SESSION_CHANGED'});
+    }
+    if (!Array.isArray(result?.results) || !Number.isSafeInteger(result.total)
+        || !result.snapshot) {
+      throw Object.assign(new Error('Invalid Results page.'), {code:'RESULTS_SCHEMA_ERROR'});
+    }
+    return result;
   }
   async function matchIntelligence(player1Id, player2Id, surface = '', customId = '', eventId = '') {
     const params = new URLSearchParams({
@@ -928,7 +948,7 @@
   }
 
   window.BlinqAuth = {
-    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, feedDiagnostics, matchIntelligence,
+    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, feedDiagnostics, resultsPage, matchIntelligence,
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, adminHistoryRetention, adminCleanupHistory, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults,
