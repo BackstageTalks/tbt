@@ -152,3 +152,133 @@ body#blinqPremium.blinq-admin .monthly-stat {
     background:rgba(3,23,17,.72)!important;
   }
 }
+
+
+/* Admin visual consistency — 2026-11-15.
+   Applies to all 14 Admin destinations, NEVER the public homepage.
+   Unify neutral blue/violet surfaces to the existing restrained tennis-green.
+   Keep real status colors, destructive actions, hero previews and charts intact.
+   Paint only: no DOM, dimensions, grid, spacing, sticky logic or visual FX. */
+body#blinqPremium.blinq-admin .admin-console-v685 {
+  --bq-admin-glass:rgba(4,27,24,.76);
+  --bq-admin-inset:rgba(4,24,22,.84);
+  --bq-admin-edge:rgba(99,171,137,.25);
+  --bq-admin-muted:#a1bdb0;
+  --bq-admin-mint:#70dab0;
+}
+
+/* Navigation and wayfinding: one muted, readable selection language. */
+body#blinqPremium.blinq-admin .admin-console-v687 .admin-tabs-v685 button {
+  background:rgba(4,28,24,.68)!important;
+  border-color:var(--bq-admin-edge)!important;
+  color:#d0e6dc!important;
+}
+body#blinqPremium.blinq-admin .admin-console-v687 .admin-tabs-v685 button.active {
+  background:rgba(13,63,46,.62)!important;
+  border-color:rgba(101,214,164,.49)!important;
+  color:#f2fff8!important;
+}
+body#blinqPremium.blinq-admin .admin-console-v687 .admin-tabs-v685 button:hover:not(.active) {
+  background:rgba(13,49,39,.71)!important;
+  border-color:rgba(109,194,155,.42)!important;
+}
+body#blinqPremium.blinq-admin :is(
+  .admin-side-brand>span,.admin-workarea-head>div>small,
+  .admin-ux-heading small,.admin-test-head small,
+  .admin-activity-header small,.admin-nav-group>span,
+  .admin-daily-matrix-card>header small
+) {
+  color:var(--bq-admin-mint)!important;
+}
+body#blinqPremium.blinq-admin .admin-console-v687 .admin-tabs-v685 small {
+  color:#9ab9ab!important;
+}
+body#blinqPremium.blinq-admin .admin-nav-toolbar button,
+body#blinqPremium.blinq-admin .admin-subnav,
+body#blinqPremium.blinq-admin .admin-guide-map {
+  background:var(--bq-admin-glass)!important;
+  border-color:var(--bq-admin-edge)!important;
+}
+body#blinqPremium.blinq-admin .admin-subnav button,
+body#blinqPremium.blinq-admin .admin-guide-map-group button {
+  background:var(--bq-admin-inset)!important;
+  border-color:var(--bq-admin-edge)!important;
+  color:#d9ede4!important;
+}
+body#blinqPremium.blinq-admin .admin-subnav button.is-active {
+  background:rgba(15,69,49,.85)!important;
+  border-color:rgba(101,214,164,.53)!important;
+  color:#f1fff7!important;
+}
+
+/* Shared neutral cards across Accounts, Projects, Membership, Dashboard,
+   Export, Tests, Layout, Telegram, Info, Model Lab and System. */
+body#blinqPremium.blinq-admin :is(
+  .admin-simple-toolbar,.admin-simple-stats>span,.admin-simple-card,
+  .admin-admin-guide>div,.admin-level-focus-card,.admin-daily-preset-bar,
+  .admin-daily-matrix-card,.admin-dashboard-slot,.admin-payment-ledger,
+  .admin-user-payment,.admin-system-card,.admin-content-pages article,
+  .admin-insight-composer,.admin-insight-list,.admin-live-radar-card,
+  .admin-insight-upload,.admin-calibration-panel,.admin-calibration-card,
+  .admin-calibration-progress,.admin-calibration-bottom,
+  .admin-test-filters,.admin-guide-map-group,.admin-hero-carousel-controls
+) {
+  background:linear-gradient(155deg,rgba(6,37,31,.73),rgba(3,23,23,.80))!important;
+  border-color:var(--bq-admin-edge)!important;
+}
+body#blinqPremium.blinq-admin .admin-daily-matrix-head,
+body#blinqPremium.blinq-admin .admin-analytics-table thead th {
+  background:rgba(11,49,38,.78)!important;
+  color:#b9d5c7!important;
+  border-color:var(--bq-admin-edge)!important;
+}
+body#blinqPremium.blinq-admin .admin-table-wrap {
+  border-color:var(--bq-admin-edge)!important;
+  background:rgba(3,22,21,.55)!important;
+}
+body#blinqPremium.blinq-admin .admin-analytics-table td {
+  border-color:rgba(99,171,137,.18)!important;
+}
+body#blinqPremium.blinq-admin .admin-calibration-panel thead th,
+body#blinqPremium.blinq-admin .admin-calibration-card small,
+body#blinqPremium.blinq-admin .admin-system-card small {
+  color:#a1c6b4!important;
+}
+body#blinqPremium.blinq-admin .admin-calibration-panel>p,
+body#blinqPremium.blinq-admin .admin-calibration-progress p,
+body#blinqPremium.blinq-admin .admin-workarea-head p {
+  color:var(--bq-admin-muted)!important;
+}
+
+/* Neutral form controls; never recolor check/radio toggles, colour pickers,
+   file inputs, progress bars or authored banner previews. */
+body#blinqPremium.blinq-admin .admin-panel-v685 :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+  select,textarea
+):not(.admin-banner-preview-input) {
+  background-color:rgba(3,22,21,.90)!important;
+  border-color:rgba(100,163,138,.34)!important;
+  color:#e9f5ef!important;
+}
+body#blinqPremium.blinq-admin .admin-panel-v685 :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="hidden"]),
+  select,textarea
+):focus-visible {
+  border-color:rgba(112,218,176,.85)!important;
+  outline-color:rgba(112,218,176,.65)!important;
+}
+body#blinqPremium.blinq-admin .admin-panel-v685 .btn-ghost:not(.is-danger) {
+  background:rgba(6,32,28,.75)!important;
+  border-color:rgba(103,166,141,.40)!important;
+}
+body#blinqPremium.blinq-admin .admin-panel-v685 .btn-ghost:not(.is-danger):hover:not(:disabled) {
+  background:rgba(14,53,40,.83)!important;
+  border-color:rgba(113,215,167,.56)!important;
+}
+
+/* Do not overwrite warning/error/selected-action fills or special reports.
+   Only harmonize the neutral Account Activity outer shell. */
+body#blinqPremium.blinq-admin .admin-accounts-simple .admin-activity-panel {
+  background:linear-gradient(145deg,rgba(5,33,29,.67),rgba(2,19,21,.76))!important;
+  border-color:var(--bq-admin-edge)!important;
+}
