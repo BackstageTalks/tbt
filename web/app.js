@@ -9292,6 +9292,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
+    if(route==='admin'&&state.feed?.results_boot_partial){
+      host.innerHTML='<div class="state-card">Načítavam úplnú históriu Results…</div>';
+      if(!fullResultsError)loadCompleteResults();else host.innerHTML='<div class="state-card">Históriu Results sa nepodarilo načítať. Obnov stránku.</div>';
+      return;
+    }
     if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
@@ -9322,12 +9327,21 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     else if(route==='sg') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Sets / Games'))}</strong><span>${escapeHtml(lcopy('Point-in-time projections from structured historical set/game scores. Sets use long-match probability; Games use projected total versus the ATP/WTA best-of baseline. No odds/ROI are inferred yet.','Point-in-time predikcie zo štruktúrovaných historických skóre setov/hier. Sety používajú pravdepodobnosť dlhého zápasu; hry používajú projektovaný celkový počet oproti ATP/WTA baseline. Kurz/ROI sa zatiaľ neodvodzujú.','Point-in-time predikce ze strukturovaných historických skóre setů/her. Sety používají pravděpodobnost dlouhého zápasu; hry používají projektovaný celkový počet oproti ATP/WTA baseline. Kurz/ROI se zatím neodvozují.'))}</span></div>${detailCards(marketRows('sg'),'sg')}`;
     else if(route==='doubles') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Doubles model'))}</strong><span>${escapeHtml(lcopy('Separate pair/team model only. Pair identity, pair history, individual strength, surface form and pair chemistry stay isolated from singles probabilities.','Iba samostatný model dvojíc/tímov. Identita dvojice, spoločná história, individuálna sila, forma na povrchu a súhra zostávajú oddelené od pravdepodobností dvojhry.','Pouze samostatný model dvojic/týmů. Identita dvojice, společná historie, individuální síla, forma na povrchu a souhra zůstávají oddělené od pravděpodobností dvouhry.'))}</span></div>${detailCards(marketRows('doubles'),'doubles')}`;
     else if(route==='results'){
+      if(state.feed?.results_boot_partial){
+        body='<div class="state-card">'+escapeHtml(fullResultsError||'Načítavam úplnú históriu Results…')+'</div>';
+        if(!fullResultsError)loadCompleteResults();
+      }else{
       // An empty Today result is a valid outcome of the selected filters.
       // Never silently switch to All time and show results from other days.
       body=resultsAccessAllowed()?(renderResultsFilters()+resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`):resultsLockedCard();
+      }
     }
     else if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming tournament coverage is currently published.'))}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming players are currently published.'))}</div>`;}
+    else if(route==='stats'&&state.feed?.results_boot_partial){
+      body='<div class="state-card">'+escapeHtml(fullResultsError||'Načítavam úplnú históriu Results…')+'</div>';
+      if(!fullResultsError)loadCompleteResults();
+    }
     else if(route==='stats') body=metricCards([[publicText('Vyhodnotené predikcie'),String(p.n??0),publicText('Published and scored')],[publicText('Accuracy'),p.accuracy!=null?pct(p.accuracy):'—',publicText('Observed results')],['Log loss',number(p.log_loss),publicText('Lower is better')],[publicText('Brier score'),number(p.brier_score),publicText('Probability quality')]])+`<div class="route-sub"><h3>${escapeHtml(publicText('Results'))}</h3>${renderResults()}</div>`;
     else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([[publicText('Model'),String(feed.model?.version||'—'),publicText('Production artifact')],['Holdout n',String(h.n??'—'),publicText('Chronological holdout')],['Holdout úspešnosť',h.accuracy!=null?pct(h.accuracy):'—',publicText('Evaluation report')],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—',publicText('Negative is better')]])+`<div class="route-sub static-copy"><h3>${escapeHtml(publicText('Data window'))}</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(lcopy(`${history.matches??'—'} historical matches in the current serving metadata.`,`${history.matches??'—'} historických zápasov v aktuálnych metadátach.`,`${history.matches??'—'} historických zápasů v aktuálních metadatech.`))}</p><p>${escapeHtml(lcopy('No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.','Žiadny výsledok tu nie je prezentovaný ako záruka. Holdout metriky opisujú konkrétne historické obdobie vyhodnotenia.','Žádný výsledek zde není prezentován jako záruka. Holdout metriky popisují konkrétní historické období vyhodnocení.'))}</p></div>`;}
     else if(route==='account') body=renderAccountPage();
@@ -9490,6 +9504,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     $('upgradeDialogClose')?.focus({preventScroll:true});
   }
   function clearPrivateWorkspaceState(){
+    resultsLoadVersion++;fullResultsFlight=null;fullResultsError='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
@@ -9529,6 +9544,42 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
+  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='';
+  async function loadCompleteResults() {
+    if (!state.feed?.results_boot_partial || !resultsAccessAllowed()) return;
+    if (fullResultsFlight) return fullResultsFlight;
+    const version=resultsLoadVersion, generation=feedGeneration;
+    const operation=(async()=>{
+      const complete=[];
+      let snapshot='', expectedTotal=null;
+      for(let page=0;page<10000;page++){
+        if(version!==resultsLoadVersion||generation!==feedGeneration) return;
+        const batch=await BlinqAuth.resultsPage(page,500,snapshot);
+        if(version!==resultsLoadVersion||generation!==feedGeneration) return;
+        if (expectedTotal===null) {expectedTotal=batch.total;snapshot=batch.snapshot;}
+        if (batch.snapshot!==snapshot || batch.total!==expectedTotal ||
+            batch.page!==page || batch.limit!==500) throw new Error('Results pagination changed during loading.');
+        complete.push(...batch.results);
+        if (complete.length>expectedTotal) throw new Error('Results page returned too many rows.');
+        if (!batch.has_more) {
+          if (complete.length!==expectedTotal) throw new Error('Results history incomplete.');
+          state.feed.results=complete; state.feed.results_boot_partial=false;
+          fullResultsError='';
+          if (['results','stats','admin'].includes(state.route)) renderRoute(state.route);
+          return;
+        }
+        if (!batch.results.length) throw new Error('Results pagination did not advance.');
+      }
+      throw new Error('Results history exceeds the supported page count.');
+    })().catch(error=>{
+      if(version===resultsLoadVersion&&generation===feedGeneration){
+        fullResultsError=error?.message||'Results history unavailable.';
+        if(['results','stats','admin'].includes(state.route))renderRoute(state.route);
+      }
+    }).finally(()=>{if(fullResultsFlight===operation)fullResultsFlight=null;});
+    fullResultsFlight=operation;
+    return operation;
+  }
   async function syncExternalSession(){
     feedGeneration++;clearPrivateWorkspaceState();feedLoading=false;
     const generation=feedGeneration;
@@ -9552,6 +9603,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
       const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);if(generation!==feedGeneration)return;
+      resultsLoadVersion++;fullResultsFlight=null;fullResultsError='';
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
