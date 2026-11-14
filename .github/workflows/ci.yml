@@ -346,6 +346,7 @@ jobs:
           node tests/test_static_cache_and_push_origin.cjs
           node tests/test_player_avatar_fallback.cjs
           node tests/test_auth_refresh_race.js
+          node tests/test_feed_session_budget.js
           node tests/test_firebase_web_auth.js
           node tests/test_firebase_email_verification.js
           node tests/test_auth_init_resilience_r35.js
