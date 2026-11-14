@@ -29,6 +29,9 @@ function response(status, payload) {
     AbortSignal: {timeout: () => undefined},
     Math,
     Date,
+    setTimeout,
+    clearTimeout,
+    AbortController,
     fetch: async (url, options = {}) => {
       calls.push({url: String(url), options});
       if (url === '/api/v1/auth/config') {
@@ -45,9 +48,13 @@ function response(status, payload) {
       if (String(url).includes('identitytoolkit.googleapis.com/v1/accounts:lookup')) {
         return response(200, {users: [{email: 'member@example.com', emailVerified: true}]});
       }
-      if (url === '/api/v1/feed') {
+      if (String(url).startsWith('/api/v1/feed?')) {
         assert.strictEqual(options.headers['X-Blinq-Access-Token'], 'firebase-id-token');
-        return response(200, {account: {id: 'u1'}});
+        assert(String(url).includes('blinq_feed_view=bootstrap'));
+        assert(String(url).includes('blinq_feed_gzip=1'));
+        return response(200, {
+          account: {id: 'u1'},entitlements: {results:true},upcoming:[],results:[]
+        });
       }
       throw new Error(`Unexpected fetch: ${url}`);
     },
