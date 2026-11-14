@@ -138,6 +138,9 @@ def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
     cards=[
         {"event_id":"atp","tour":"ATP","market":"aces","scheduled_at":start},
         {"event_id":"wta","tour":"WTA","market":"most_aces","scheduled_at":start},
+        {"event_id":"comp_challenger","tour":"ATP","tournament":"Prague Open","competition":"ATP Challenger","market":"aces","scheduled_at":start},
+        {"event_id":"comp_itf","tour":"WTA","tournament":"Monastir Open","competition":"ITF Women","market":"most_aces","scheduled_at":start},
+        {"event_id":"comp_wta125","tour":"WTA","tournament":"Bol Open","competition":"WTA 125","market":"aces","scheduled_at":start},
         {"event_id":"challenger","tour":"ATP","tournament":"Prague Challenger","market":"aces","scheduled_at":start},
         {"event_id":"wta125","tour":"WTA","tournament":"WTA 125 Open","market":"most_aces","scheduled_at":start},
         {"event_id":"itf","tour":"ITF","market":"aces","scheduled_at":start},
@@ -152,5 +155,5 @@ def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
     visible=visible_feed(payload,now=now)
     assert [x["event_id"] for x in visible["ace_picks"]]==["atp","wta","df"]
     assert visible["results"]==payload["results"]
-    assert len(visible["upcoming"])==8  # Match Winner discovery remains unchanged.
+    assert len(visible["upcoming"])==11  # Match Winner discovery remains unchanged.
     assert payload["ace_picks"]==original  # Canonical published data is immutable.
