@@ -1612,7 +1612,16 @@ def _gzip_feed_response(payload):
 
 
 @app.route(route="v1/feed", methods=["GET"])
-def feed(req, *, _raw=False):
+def feed(req):
+    data = _authorized_feed_payload(req, bootstrap=True)
+    if not isinstance(data, dict) or "error" in data:
+        return data
+    if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
+        return _gzip_feed_response(data)
+    return response(data)
+
+
+def _authorized_feed_payload(req, *, bootstrap=False):
     try:
         # Explicit authenticated diagnostics only: relative durations, no account
         # fields, IDs, prices, or private payloads. Ordinary feed stays identical.
@@ -1805,7 +1814,7 @@ def feed(req, *, _raw=False):
         # Compute cards and all authorization/settlement rules against the full
         # member-visible Results ledger. Only the opt-in browser bootstrap view
         # is abbreviated, *after* those security and KPI boundaries.
-        if str((getattr(req, "params", None) or {}).get("blinq_feed_view") or "") == "bootstrap" and not _raw:
+        if bootstrap and str((getattr(req, "params", None) or {}).get("blinq_feed_view") or "") == "bootstrap":
             authorized_results = data.get("results") or []
             cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
             recent = []
@@ -1823,15 +1832,7 @@ def feed(req, *, _raw=False):
                     continue
             data["results"] = recent
             data["results_boot_partial"] = len(recent) != len(authorized_results)
-        if _raw:
-            return data
-        # Real mobile diagnostics established that Azure SWA and browsers can
-        # safely decode this already tested JSON-equivalent gzip response.
-        # Keep gzip *explicitly requested* by the web client: other API
-        # consumers and the uncompressed rollback URL remain unchanged.
-        if str((getattr(req, "params", None) or {}).get("blinq_feed_gzip") or "") == "1" and _feed_gzip_acceptable(req):
-            return _gzip_feed_response(data)
-        return response(data)
+        return data
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
         return response({"error": "auth_unavailable"}, 503)
@@ -1860,7 +1861,7 @@ def results_page(req):
 
     # Returning the private in-process payload avoids a wasteful serialize +
     # decode of the entire ledger before selecting this page.
-    authorized = feed(req, _raw=True)
+    authorized = _authorized_feed_payload(req)
     if not isinstance(authorized, dict) or "error" in authorized:
         return authorized  # Existing 401/403/503 path; never bypass auth.
     rows = authorized.get("results") or []
