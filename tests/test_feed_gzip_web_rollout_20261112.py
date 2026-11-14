@@ -50,7 +50,8 @@ def test_authenticated_web_uses_gzip_with_explicit_opt_out_and_original_fallback
                app.index('@app.route(route="v1/internal/clv-snapshot"')]
     assert "let useGzip = true;" in auth
     assert "get('blinq_feed_gzip') !== '0'" in auth
-    assert "url + (url.includes('?') ? '&' : '?') + 'blinq_feed_gzip=1'" in auth
+    assert "const requestUrl = url + (url.includes('?') ? '&' : '?') + 'blinq_feed_view=bootstrap'" in auth
+    assert "const gzipUrl = requestUrl + '&blinq_feed_gzip=1'" in auth
     assert "const kind = useGzip ? 'gzip' : 'plain'" in auth
     assert "return await attempt('plain')" in auth
     assert "return await attempt(kind)" in auth
