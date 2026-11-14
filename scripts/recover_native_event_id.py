@@ -71,6 +71,31 @@ def eligible(match):
             and bool(missing_fields(match)))
 
 
+def identity_calendar_prefetch_groups(planned):
+    """Plan 2-5-day same-month native calendar cache batches, with no API calls.
+
+    Preserve the already approved candidate-day ordering and source identity
+    gates; no further dates, provider events or foreign IDs are introduced.
+    The first scheduled date in a group triggers an optional prefetch. If the
+    batched source is missing/invalid, normal exact daily discovery remains.
+    """
+    months = defaultdict(list)
+    seen = set()
+    for row in planned:
+        day = row[0]
+        if not isinstance(day, date) or isinstance(day, datetime) or day in seen:
+            raise ValueError("Invalid or repeated native identity calendar date")
+        seen.add(day)
+        months[(day.year, day.month)].append(day)
+    starts = {}
+    for days in months.values():
+        for offset in range(0, len(days), 5):
+            chunk = tuple(days[offset:offset + 5])
+            if len(chunk) >= 2:
+                starts[chunk[0]] = chunk
+    return starts
+
+
 def candidate_days(canonical, *, start: date, end: date, attempts=None,
                    today: date | None = None, max_days=40):
     """Batch candidates by calendar date, preferring 2024-26 and larger gaps.
