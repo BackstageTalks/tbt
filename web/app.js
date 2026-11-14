@@ -9731,6 +9731,26 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         // data. It distinguishes gateway/TTFB, body transfer and JSON parse.
         const feedRequests=performance.getEntriesByType('resource').filter(x=>
           typeof x.name==='string'&&x.name.includes('/api/v1/feed'));
+        const operation=BlinqAuth.feedDiagnostics?.();
+        if(operation&&Array.isArray(operation.attempts)){
+          const attempts=operation.attempts.slice(0,3);
+          // Only transport metadata: never include URLs, identities or payloads.
+          const rows=attempts.map((entry,index)=>{
+            const resource=feedRequests[index];
+            const exposed=Array.isArray(resource?.serverTiming)
+              ?resource.serverTiming.filter(item=>['blinq_json','blinq_gzip'].includes(item.name)):[];
+            const timingState=entry.timingHeader
+              ?(exposed.length?'hlavička aj Resource Timing':'hlavička áno, Resource Timing nie')
+              :'hlavička Server-Timing nedostupná';
+            const server=entry.serverTiming?.length
+              ?' ['+entry.serverTiming.map(([name,ms])=>name+' '+ms+' ms').join(', ')+']':'';
+            return '#'+(index+1)+' '+entry.kind+' HTTP '+entry.status+
+              ' '+entry.durationMs+' ms ('+entry.outcome+'), '+timingState+
+              ', Content-Encoding '+entry.contentEncoding+server;
+          });
+          phases.unshift('Feed operácia '+operation.totalMs+' ms, dôvod ďalšieho pokusu: '+
+            operation.fallback+'\n'+rows.join('\n'));
+        }
         const network=feedRequests[feedRequests.length-1];
         if(network&&network.responseEnd>network.startTime){
           const firstByte=Math.max(0,network.responseStart-network.startTime);
