@@ -4995,8 +4995,21 @@
     if(bettingDay)bettingDay.onchange=()=>{state.resultsFilters.bettingDay=Boolean(bettingDay.checked);rerender();};
     const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='all';rerender();};
     const monthly=monthlyPerformanceState();
-    const updateMonthly=(field,value)=>{if(field==='month')monthly.day='';monthly[field]=value;renderRoute('results');};
-    [['monthlyMonth','month'],['monthlyDay','day'],['monthlyTour','tour'],['monthlySurface','surface'],
+    const updateMonthly=(field,value)=>{monthly[field]=value;renderRoute('results');};
+    const updateMonthlyDate=(field,value)=>{
+      const today=bratislavaBettingDayKey(Date.now(),6);
+      if(!monthlyValidDate(value)||value>today){renderRoute('results');return;}
+      const current=monthlyReportPeriod(monthly,today);
+      monthly.from=current.valid?current.from:value;
+      monthly.to=current.valid?current.to:value;
+      monthly[field]=value;
+      if(monthly.from>monthly.to)monthly[field==='from'?'to':'from']=value;
+      renderRoute('results');
+    };
+    [['monthlyDateFrom','from'],['monthlyDateTo','to']].forEach(([id,field])=>{
+      const el=$(id);if(el)el.onchange=()=>updateMonthlyDate(field,el.value);
+    });
+    [['monthlyTour','tour'],['monthlySurface','surface'],
       ['monthlyMinOdds','minOdds'],['monthlyMaxOdds','maxOdds']].forEach(([id,field])=>{
       const el=$(id);if(el)el.onchange=()=>updateMonthly(field,el.value);
     });
@@ -7725,7 +7738,20 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function wireAdmin(){
     if(state.adminTab==='monthlyresults'){
       const monthly=monthlyPerformanceState();
-      const updateMonthly=(field,value)=>{if(field==='month')monthly.day='';monthly[field]=value;rerenderAdmin();};
+      const updateMonthly=(field,value)=>{monthly[field]=value;rerenderAdmin();};
+      const updateMonthlyDate=(field,value)=>{
+        const today=bratislavaBettingDayKey(Date.now(),6);
+        if(!monthlyValidDate(value)||value>today){rerenderAdmin();return;}
+        const current=monthlyReportPeriod(monthly,today);
+        monthly.from=current.valid?current.from:value;
+        monthly.to=current.valid?current.to:value;
+        monthly[field]=value;
+        if(monthly.from>monthly.to)monthly[field==='from'?'to':'from']=value;
+        rerenderAdmin();
+      };
+      [['monthlyDateFrom','from'],['monthlyDateTo','to']].forEach(([id,field])=>{
+        const el=$(id);if(el)el.onchange=()=>updateMonthlyDate(field,el.value);
+      });
       document.querySelectorAll('[data-monthly-level]').forEach(el=>el.onclick=()=>{
         const level=el.dataset.monthlyLevel||'all';
         monthly.level=level;
@@ -7758,7 +7784,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           monthly.fullscreen=false;rerenderAdmin();
         }
       };
-      [['monthlyMonth','month'],['monthlyDay','day'],['monthlyTour','tour'],['monthlySurface','surface'],
+      [['monthlyTour','tour'],['monthlySurface','surface'],
         ['monthlyMinOdds','minOdds'],['monthlyMaxOdds','maxOdds']].forEach(([id,field])=>{
         const el=$(id);if(el)el.onchange=()=>updateMonthly(field,el.value);
       });
