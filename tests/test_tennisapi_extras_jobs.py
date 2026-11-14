@@ -406,7 +406,12 @@ def test_daily_extras_slots_keep_2026_first_and_share_provider_budget():
     dispatch = (root / ".github/workflows/data-hourly-quota-gapfill.yml").read_text()
     source = (root / "scripts/download_tennis_history.py").read_text()
 
-    assert "extras_slot = stage_hour in (14, 17)" in dispatch
+    # Keep two extras windows but bring the later one forward: by 15 UTC
+    # the unfinished daily budget must be spent on productive statistics,
+    # not a capped 450-call extras slot with only ~2 hours before reset.
+    assert "extras_slot = stage_hour in (14, 16)" in dispatch
+    assert "extras_slot = stage_hour in (14, 17)" not in dispatch
+    assert "limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])" in dispatch
     assert "proposed = min(proposed, 450)" in dispatch
     assert 'payload["inputs"]["mode"] = "extras"' in dispatch
     assert '"start": "2022-01-01"' in dispatch
