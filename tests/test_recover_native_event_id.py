@@ -2,7 +2,8 @@
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 
-from scripts.recover_native_event_id import candidate_days, eligible, recover_day, identity_gap_inventory
+from scripts.recover_native_event_id import (candidate_days, eligible, recover_day,
+                                             identity_gap_inventory, identity_calendar_prefetch_groups)
 
 
 @dataclass
@@ -220,3 +221,102 @@ def test_negative_category_mismatch_and_unverified_claims_remain_blocked():
         assert not recover_day([canonical], [native()], day=date(2025, 4, 10))[0]
     canonical = Match("slam", provider_payload={"_tbt_source_category_id": -100})
     assert not recover_day([canonical], [native()], day=date(2025, 4, 10))[0]
+
+
+def test_native_identity_batches_only_selected_days_in_same_month():
+    planned = [
+        (date(2025, 4, d), ("atp",), 1)
+        for d in (3, 9, 12, 18, 25, 26)
+    ] + [
+        (date(2026, 5, 1), ("wta",), 1),
+        (date(2025, 4, 30), ("wta",), 1),
+        (date(2026, 5, 8), ("wta",), 1),
+        (date(2026, 6, 1), ("atp",), 1),
+    ]
+    groups = identity_calendar_prefetch_groups(planned)
+    assert groups == {
+        date(2025, 4, 3): tuple(date(2025, 4, d)
+                                for d in (3, 9, 12, 18, 25)),
+        date(2025, 4, 26): (date(2025, 4, 26), date(2025, 4, 30)),
+        date(2026, 5, 1): (date(2026, 5, 1), date(2026, 5, 8)),
+    }
+    assert all(2 <= len(chunk) <= 5 for chunk in groups.values())
+    assert date(2026, 6, 1) not in groups  # Lone day uses normal daily route.
+    assert len({d for v in groups.values() for d in v}) == 9
+
+
+def test_native_identity_batch_planner_rejects_duplicate_or_invalid_days():
+    import pytest
+    for planned in [
+        [(date(2025, 1, 1), (), 0), (date(2025, 1, 1), (), 0)],
+        [(datetime(2025, 1, 1, tzinfo=timezone.utc), (), 0)],
+        [(None, (), 0)],
+    ]:
+        with pytest.raises(ValueError, match="native identity calendar date"):
+            identity_calendar_prefetch_groups(planned)
+
+
+def test_existing_native_identity_prefetch_cache_records_paid_batch_not_matches():
+    from collections import Counter
+    from scripts.download_tennis_history import _prefetch_native_identity_calendar
+
+    class Provider:
+        request_count = 0
+        calls = []
+        def prefetch_calendar_categories(self, days):
+            self.calls.append(tuple(days))
+            self.request_count += 1
+            return len(days)
+
+    provider, report = Provider(), Counter()
+    days = (date(2025, 4, 4), date(2025, 4, 12))
+    _prefetch_native_identity_calendar(provider, days, report)
+    assert provider.calls == [days]
+    assert report["identity_monthly_calendar_paid_requests"] == 1
+    assert report["identity_monthly_calendar_cached_days"] == 2
+    assert report["identity_recovered"] == 0
+
+
+def test_native_identity_invalid_batch_falls_back_without_changing_id_gate():
+    from collections import Counter
+    from tbt.errors import ProviderError
+    from scripts.download_tennis_history import _prefetch_native_identity_calendar
+    class Provider:
+        request_count = 0
+        def prefetch_calendar_categories(self, days):
+            self.request_count += 1
+            raise ProviderError("optional monthly route unavailable")
+    provider, report = Provider(), Counter()
+    _prefetch_native_identity_calendar(provider, (date(2025, 4, 4),
+                                                  date(2025, 4, 12)), report)
+    assert report["identity_monthly_calendar_paid_requests"] == 1
+    assert report["identity_monthly_calendar_fallbacks"] == 1
+    assert report["identity_recovered"] == 0
+
+
+def test_native_identity_shared_quota_stop_never_becomes_daily_fallback():
+    import pytest
+    from collections import Counter
+    from tbt.providers.budget import RequestBudgetExceeded
+    from scripts.download_tennis_history import _prefetch_native_identity_calendar
+    class Provider:
+        request_count = 0
+        def prefetch_calendar_categories(self, days):
+            self.request_count += 1
+            raise RequestBudgetExceeded("shared quota already exhausted")
+    provider, report = Provider(), Counter()
+    with pytest.raises(RequestBudgetExceeded, match="shared quota"):
+        _prefetch_native_identity_calendar(provider, (date(2025, 4, 4),
+                                                      date(2025, 4, 12)), report)
+    assert report["identity_monthly_calendar_paid_requests"] == 1
+    assert report["identity_recovered"] == 0
+
+
+def test_native_identity_production_run_uses_only_existing_provider_and_writer():
+    from pathlib import Path
+    src = (Path(__file__).resolve().parents[1] /
+           "scripts/download_tennis_history.py").read_text()
+    assert "calendar_batches = identity_calendar_prefetch_groups(planned)" in src
+    assert "_prefetch_native_identity_calendar(provider, batch_days, report)" in src
+    assert "source_rows.extend(provider.matches_for_day(tour, day, historical=True))" in src
+    assert "updates, outcomes = recover_day(matches, source_rows, day=day)" in src
