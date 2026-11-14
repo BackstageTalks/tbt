@@ -120,18 +120,20 @@ def external_clock_gapfill_decision(now: datetime, workflow_runs: list[dict]) ->
 
     local = now.astimezone(ZoneInfo("Europe/Bratislava"))
     stage_hour = local.hour + (19 - reset.astimezone(ZoneInfo("Europe/Bratislava")).hour)
-    final_topup = 7 * 60 <= until_reset <= 35 * 60 + 59
+    final_topup = 7 * 60 <= until_reset <= 55 * 60 + 59
     permitted = (evening_cap(now, reset) is not None or
                  stage_hour in {12, 13, 14, 15, 16, 17, 18} or
                  final_topup)
     if not permitted:
         return False, "outside_existing_guarded_slots", ""
 
-    # The final closeout window can release another 1,000 calls even if
+    # The final closeout window can release additional shared headroom even if
     # the regular 16:00 UTC hourly staged allocation already dispatched.
+    # Start at ~16:14 UTC: a cold CDB bootstrap takes 10–15 min, and paid
+    # requests must stop by 17:07 UTC (the 17:09 reset stays unchanged).
     def slot(instant: datetime) -> str:
         remaining = (reset - instant).total_seconds()
-        closeout = 7 * 60 <= remaining <= 35 * 60 + 59
+        closeout = 7 * 60 <= remaining <= 55 * 60 + 59
         return instant.strftime("%Y-%m-%dT%H") + (
             ":closeout" if closeout else ":hourly"
         )
