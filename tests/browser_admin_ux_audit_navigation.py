@@ -3,6 +3,7 @@
 No private account data, API write requests, model operations or deployment.
 """
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
@@ -103,6 +104,39 @@ def test_width(browser,width):
     page.locator('[data-admin-action="insight-new"]').first.click()
     assert page.locator('#adminInsightForm').is_visible()
     assert page.locator('[data-admin-subtab="insights:messages"]').get_attribute('aria-pressed')=='true'
+    # All 14 Admin destinations share the same neutral visual language.
+    # This reads synthetic state only; no API writes, previews or publishing.
+    tabs=('accounts','projects','levels','dashboard','testresults','dataexport',
+          'monthlyresults','layout','banners','telegram','tgbot','insights',
+          'calibration','system')
+    screenshots=os.getenv("BLINQ_SCREENSHOTS")
+    for tab in tabs:
+        style=page.evaluate("""tab => {
+          const h=adminAuditHarness,s=h.state,host=document.querySelector('#routePanel');
+          s.adminTab=tab;
+          host.innerHTML=h.renderAdminRoute();
+          const nav=document.querySelector('[data-admin-tab="'+tab+'"]');
+          const palette=getComputedStyle(document.querySelector('.admin-console-v685'));
+          return {
+            tabCount:document.querySelectorAll('[data-admin-tab]').length,
+            heading:document.querySelector('.admin-workarea-head h2')?.textContent?.trim(),
+            active:Boolean(nav?.classList.contains('active')),
+            accent:palette.getPropertyValue('--bq-admin-mint').trim(),
+            navBg:nav?getComputedStyle(nav).backgroundColor:null,
+            guideColor:getComputedStyle(document.querySelector('.admin-nav-toolbar button')).backgroundColor
+          };
+        }""",tab)
+        assert style["tabCount"]==14,(width,tab,style)
+        assert style["heading"] and style["active"],(width,tab,style)
+        assert style["accent"]=="#70dab0",(width,tab,style)
+        assert style["navBg"]=="rgba(13, 63, 46, 0.62)",(width,tab,style)
+        assert style["guideColor"]=="rgba(4, 27, 24, 0.76)",(width,tab,style)
+        if screenshots and width in (390,1440) and tab in (
+            'accounts','layout','banners','insights','calibration','system'):
+            out=Path(screenshots)
+            out.mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(out / f"admin-theme-{tab}-{width}.png"))
+
     assert not errors,(width,errors)
     page.close()
 
