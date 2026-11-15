@@ -110,7 +110,7 @@ def test_one_shot_new_aces_and_ball_are_from_exact_live_website(tmp_path, monkey
     assert not (tmp_path/"out"/"ready").exists()
 
 
-def test_excluded_venues_stale_website_and_original_receipts_fail_closed():
+def test_ranked_challenger_eligible_but_stale_website_and_receipts_fail_closed():
     old=state()
     _,old_attempt,original,_=task.checked_original(old)
     altered=deepcopy(old)
@@ -125,8 +125,12 @@ def test_excluded_venues_stale_website_and_original_receipts_fail_closed():
             **snapshot(),
             "source_feed_generated_at":old_attempt["source_feed_generated_at"]
         },site(),datetime.fromisoformat(NOW),old_attempt)
-    assert task.main_tour_aces(candidate("c","ATP","Challenger Open")) is False
-    assert task.main_tour_aces(candidate("w","WTA","WTA 125")) is False
+    assert task.main_tour_aces(candidate("c","ATP","Challenger Open")) is True
+    assert task.main_tour_aces(candidate("w","WTA","WTA 125")) is True
+    assert task.main_tour_aces(candidate("i","ATP","ITF Futures Open")) is False
+    missing_rank=candidate("r","ATP","Challenger Open")
+    missing_rank["player2"]["rank"]=None
+    assert task.main_tour_aces(missing_rank) is False
 
 
 def test_new_issued_refs_are_included_in_results_without_erasing_original():
