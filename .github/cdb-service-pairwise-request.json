@@ -1,17 +1,17 @@
 {
   "schema": 2,
-  "mode": "write",
+  "mode": "dry-run",
   "workflow": "cdb-service-pairwise-guarded.yml",
-  "purpose": "One-shot provider-native exact 2026 NULL-only serve/return complementary rates, user-authorized 2026-11-15. Never alter existing values, identity, model, or quotas.",
-  "approved_by_operator": true,
-  "production_write_allowed": true,
+  "purpose": "Read-only local rehearsal of newly observed 8196 exact 2026 serve/return NULL fields after main pipeline changed canonical CDB.",
+  "approved_by_operator": false,
+  "production_write_allowed": false,
   "provider_api_requests_allowed": 0,
   "training_allowed": false,
   "model_promotion_allowed": false,
   "source": "existing_canonical_post_match_service_rates_only",
   "scope": "all canonical years; independently isolate conflicting opposite-player rate pairs; no source or player identity inference",
   "current_release_tag": "tbt-data-v1",
-  "known_last_bundle_manifest_sha256": "d7113a57ac5efcfe7ab525cb023d1db3982d5765b3dba3389516240aade78004",
+  "known_last_bundle_manifest_sha256": "8a419decb75578e419a4816c9529e739cfd0a00d075dfe74b879f5999b1f7052",
   "prior_batches_not_to_repeat": [
     {
       "run_id": 41320493332,
@@ -30,11 +30,11 @@
     }
   ],
   "audit_date": "2026-11-15",
-  "gate": "Exact snapshot SHA, stage match and cell counts, changed years, and conflict quarantine must match; global lock, prewrite backup, CAS, full independent readback and idempotence. Abort on any drift; do not retry same stale request.",
+  "gate": "Exact current CDB SHA and stage 2052/8196 must be independently reverified with scoped full readback before one-shot production write; provider requests zero.",
   "audit_request_id": "pairwise-2026-post-merge-refresh-20261115-2116Z",
-  "expected_cdb_bundle_sha256": "d7113a57ac5efcfe7ab525cb023d1db3982d5765b3dba3389516240aade78004",
-  "expected_staged_matches": 1885,
-  "expected_new_stat_values": 7533,
+  "expected_cdb_bundle_sha256": "8a419decb75578e419a4816c9529e739cfd0a00d075dfe74b879f5999b1f7052",
+  "expected_staged_matches": 2052,
+  "expected_new_stat_values": 8196,
   "expected_canonical_matches": 1008436,
   "expected_full_canonical_matches": 1008436,
   "expected_quarantined_conflicting_pairs": 3115,
@@ -42,6 +42,6 @@
   "expected_changed_years": [
     2026
   ],
-  "evidence_run_id": 43762084678,
-  "execution_id": "blinq-cdb-pairwise-20261115-7533-once"
+  "evidence_run_id": 43763338335,
+  "execution_id": "blinq-cdb-pairwise-20261115-8196-rehearsal"
 }
