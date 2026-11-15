@@ -173,6 +173,39 @@ def _segment_release_screen(cohort, overall_gate, segments):
         "recommendation": "REVIEW_ONLY_NO_PRODUCTION_SWITCH" if reasons else "RUN_SEPARATE_PROMOTION_GOVERNANCE",
     }
 
+def _confidence_65_paired_cohorts(settled):
+    """Read-only model-strength slices, always comparing the SAME fixtures.
+
+    The 65% cut is on raw model-favorite probability, NOT the published
+    depth-adjusted probability or proof that a fixture qualified for TOP.
+    Both model-selected cohorts are reported to expose selection bias.
+    """
+    def favorite_strength(row, prefix):
+        p = float(row[prefix + "_player1_probability"])
+        return max(p, 1.0 - p)
+
+    groups = {
+        "champion_65_plus": lambda a, b: a >= .65,
+        "challenger_65_plus": lambda a, b: b >= .65,
+        "both_65_plus": lambda a, b: a >= .65 and b >= .65,
+        "both_below_65": lambda a, b: a < .65 and b < .65,
+    }
+    result = {}
+    for name, include in groups.items():
+        rows = [
+            row for row in settled
+            if include(favorite_strength(row, "production"),
+                       favorite_strength(row, "challenger"))
+        ]
+        result[name] = {
+            "n": len(rows),
+            "status": "SMALL_SAMPLE" if len(rows) < 50 else "DESCRIPTIVE_ONLY",
+            "same_fixtures_for_both_models": True,
+            "model_quality": _metrics(rows),
+        }
+    return result
+
+
 def summarize(rows, production_version, challenger_version, source_ts=None):
     if production_version == challenger_version:
         raise ValueError("Challenger is identical to champion")
@@ -200,6 +233,7 @@ def summarize(rows, production_version, challenger_version, source_ts=None):
         "challenger_model_version": challenger_version,
         "cohort": summary["cohort"],
         "overall": _metrics(settled),
+        "confidence_65_paired_cohorts": _confidence_65_paired_cohorts(settled),
         "paired": summary["paired"],
         "calibration_research": research_comparison(cohort, production_version, challenger_version),
         "gate": summary["gate"],
@@ -217,6 +251,7 @@ def summarize(rows, production_version, challenger_version, source_ts=None):
             "No retraining or modification of model artifacts, CDB or public predictions.",
             "Settlements reflect the last private shadow ledger update, not independently refreshed outcomes.",
             "Comparison uses identical originally issued matches; sample size and age must be considered.",
+            "65% confidence cohorts use RAW favorite probabilities and are not TOP published picks.",
             "The shadow test does not establish incremental benefit of today's CDB imports.",
         ],
     }
