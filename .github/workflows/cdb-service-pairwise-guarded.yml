@@ -58,8 +58,8 @@ jobs:
           test -n "$GH_TOKEN"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
           python -m pip install -r api/requirements-train.txt pytest
-          python -m pytest -q tests/test_recover_cdb_opponent_service_rates.py tests/test_cdb_global_writer_lock.py tests/test_cdb_writer_workflow_coverage.py
-          python -m compileall -q scripts/recover_cdb_opponent_service_rates.py scripts/download_stable_cdb.py
+          python -m pytest -q tests/test_recover_cdb_opponent_service_rates.py tests/test_verify_cdb_scoped_rate_delta.py tests/test_cdb_global_writer_lock.py tests/test_cdb_writer_workflow_coverage.py
+          python -m compileall -q scripts/recover_cdb_opponent_service_rates.py scripts/verify_cdb_scoped_rate_delta.py scripts/download_stable_cdb.py
 
       - name: Acquire global canonical writer lock
         if: ${{ steps.request.outputs.mode == 'write' }}
@@ -151,11 +151,10 @@ jobs:
             --mode write --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" \
             --out-dir "$root/rehearsal"
-          python scripts/recover_cdb_opponent_service_rates.py  \
-            --mode verify --history-dir "$root/history" \
-            --before-dir "$root/rehearsal-before" \
+          python scripts/verify_cdb_scoped_rate_delta.py \
+            --before-dir "$root/rehearsal-before" --after-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" \
-            --out-dir "$root/rehearsal-readback"
+            --out "$root/rehearsal-readback/report.json"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -254,9 +253,9 @@ jobs:
           python scripts/recover_cdb_opponent_service_rates.py  \
             --mode write --history-dir "$root/history" \
             --stage-file "$root/stage/stage.jsonl" --out-dir "$root/write"
-          python scripts/recover_cdb_opponent_service_rates.py  \
-            --mode verify --history-dir "$root/history" --before-dir "$root/before" \
-            --stage-file "$root/stage/stage.jsonl" --out-dir "$root/local-readback"
+          python scripts/verify_cdb_scoped_rate_delta.py \
+            --before-dir "$root/before" --after-dir "$root/history" \
+            --stage-file "$root/stage/stage.jsonl" --out "$root/local-readback/report.json"
           python - <<'PY'
           import json
           from pathlib import Path
@@ -307,9 +306,9 @@ jobs:
           root=.cache/tbt/cdb-pairwise-write
           python scripts/download_stable_cdb.py --repository "$TBT_DATA_REPOSITORY" \
             --out "$root/persisted" --report "$root/persisted-download.json"
-          python scripts/recover_cdb_opponent_service_rates.py  \
-            --mode verify --history-dir "$root/persisted" --before-dir "$root/before" \
-            --stage-file "$root/stage/stage.jsonl" --out-dir "$root/persisted-readback"
+          python scripts/verify_cdb_scoped_rate_delta.py \
+            --before-dir "$root/before" --after-dir "$root/persisted" \
+            --stage-file "$root/stage/stage.jsonl" --out "$root/persisted-readback/report.json"
           python - <<'PY'
           import json
           from pathlib import Path
