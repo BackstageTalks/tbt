@@ -9636,8 +9636,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
     })().catch(error=>{
       if(version===resultsLoadVersion&&generation===feedGeneration){
-        fullResultsError=error?.message||'Results history unavailable.';
-        if(['results','stats','admin'].includes(state.route))renderRoute(state.route);
+        // A speculative preload failure must not disable Results navigation:
+        // retry on demand; show errors only when the user is already viewing it.
+        const visible=['results','stats','admin'].includes(state.route);
+        fullResultsError=visible?(error?.message||'Results history unavailable.'):'';
+        if(visible)renderRoute(state.route);
       }
     }).finally(()=>{if(fullResultsFlight===operation)fullResultsFlight=null;});
     fullResultsFlight=operation;
