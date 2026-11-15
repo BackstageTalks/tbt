@@ -23,7 +23,7 @@ def test_gzip_requires_explicit_flag_but_not_diagnostic_trace(monkeypatch):
     compressed = api.feed(Request(blinq_feed_gzip="1"))
     assert compressed.status_code == 200
     assert compressed.headers["Content-Encoding"] == "gzip"
-    assert compressed.headers["Vary"] == "Accept-Encoding"
+    assert compressed.headers["Vary"] == "Accept-Encoding, X-Blinq-Feed-Encoding"
     assert compressed.headers["Cache-Control"] == "no-store"
     assert "__blinq_feed_stage_ms" not in json.loads(gzip.decompress(compressed.get_body()))
     decoded = json.loads(gzip.decompress(compressed.get_body()))

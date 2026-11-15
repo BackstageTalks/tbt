@@ -566,7 +566,8 @@
       let response = null;
       try {
         response = await fetch(kind === 'gzip' ? gzipUrl : requestUrl, {
-          headers: {Accept:'application/json', 'X-Blinq-Access-Token':accessToken},
+          headers: {Accept:'application/json', 'X-Blinq-Access-Token':accessToken,
+            ...(kind === 'gzip' ? {'X-Blinq-Feed-Encoding':'gzip'} : {})},
           cache:'no-store',
           signal:controller?.signal,
         });

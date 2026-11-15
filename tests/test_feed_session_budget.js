@@ -45,6 +45,7 @@ async function test() {
     const {auth,local}=browser(async(url,opts)=>{
       calls++;
       assert(isGzip(url));assert.equal(opts.headers['X-Blinq-Access-Token'],'secret-a');
+      assert.equal(opts.headers['X-Blinq-Feed-Encoding'],'gzip');
       return response(200,valid(),{'server-timing':'blinq_json;dur=45.2, blinq_gzip;dur=30.8',
         'content-encoding':'gzip'});
     },{trace:true});
@@ -60,8 +61,9 @@ async function test() {
   }
   { // A broken gzip decoder falls back exactly once; never repeats both requests.
     const seen=[];
-    const {auth,local}=browser(async url=>{
+    const {auth,local}=browser(async (url,opts)=>{
       seen.push(isGzip(url)?'gzip':'plain');
+      assert.equal(opts.headers['X-Blinq-Feed-Encoding'],isGzip(url)?'gzip':undefined);
       if(isGzip(url))return { ...response(200,{}),json:async()=>{throw new SyntaxError('bad stream');} };
       return response(200,valid());
     },{trace:true});

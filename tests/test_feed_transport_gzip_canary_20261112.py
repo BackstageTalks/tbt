@@ -35,7 +35,7 @@ def test_canary_gzip_response_preserves_exact_json_and_never_caches():
     reply = api._gzip_feed_response(payload)
     assert reply.status_code == 200
     assert reply.headers["Content-Encoding"] == "gzip"
-    assert reply.headers["Vary"] == "Accept-Encoding"
+    assert reply.headers["Vary"] == "Accept-Encoding, X-Blinq-Feed-Encoding"
     assert reply.headers["Cache-Control"] == "no-store"
     assert reply.headers["X-Content-Type-Options"] == "nosniff"
     expected = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
