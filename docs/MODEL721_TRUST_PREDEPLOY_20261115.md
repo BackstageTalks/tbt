@@ -61,3 +61,15 @@ evaluation proves the effect on the actual issued population. Do not fit a new
 calibrator on this issued cohort and then evaluate on the same 51 outcomes.
 The TOP count-cap removal in this PR changes future issuance; never merge
 this draft solely on the strength of these aggregates.
+
+## Release action — Codex 7.2.1 exact-scope UI deployment
+
+The original scope was merged in PR #1632 at commit
+`76b7789c2029393c80360938b58ad34030a1bdab`.
+Its full PR CI succeeded (run 43756074512); the main-commit read-only
+selector-reliability replay succeeded (run 43763114243). The checked-in
+model artifact was not replaced. This source-only administrative status
+update requests the existing explicit Azure UI/API deployment workflow;
+it must pass the workflow's stamped SHA and exact live-asset hash read-back.
+No model training, promotion, PROMO change, provider calls or CDB writes
+are authorized by this deployment note.
