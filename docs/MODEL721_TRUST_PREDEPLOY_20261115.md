@@ -23,3 +23,41 @@ Research patch only. Serving champion stays v7.2.1; no fitting, provider calls, 
 - Require full branch CI, focused tests, metadata parity, authorized tier checks, unchanged VALUE/ACES, and private snapshot read-back before considering merge.
 - Accuracy uplift is **NOT ESTABLISHED**. Before any recalibration train/fitting or champion change: immutable training input, rollback backup read-back, PIT leakage checks, validation-vs-holdout split, per-tour/quality calibration and objective comparison with the fixed serving model. No arbitrary confidence threshold changes.
 - PROMO/7.2.2 not part of this patch.
+
+## Independent aggregate cross-check (2026-11-15; retrospective, not a recalibration)
+
+The following recomputes aggregates from the user-supplied immutable
+`BlinQ-issued-top-current.json` and `BlinQ-model-diagnosis.json` reports,
+not from a fresh serving API read-back or individual raw match records.
+
+- Exact published 7.2.1 TOP: 57 published, 51 settled, 30W/21L,
+  **58.82%** accuracy (95% Wilson descriptive interval **45.17–71.25%**)
+  against **76.23%** average issued probability, **-17.41 percentage
+  points** observed minus forecast; Brier **0.27845**. This is a
+  *selected issued cohort* and must not be relabelled overall model accuracy.
+- Its settled competition mix is **26 ITF, 19 Challenger, 4 ATP, 2 WTA**.
+  Only **5/51** have verified paired serve/return availability in the
+  report; the other **46 are unverified**, **not proven missing**.
+  The separate `stats=yes` field for 51/51 is *not* equivalent to
+  verified paired serve/return evidence.
+- The separate 266-match same-capture shadow sample has 7.2.1 accuracy
+  **176/266 = 66.17%**, mean confidence **67.67%** and Brier
+  **0.21570**. Neither its sampling frame nor its published/issued
+  status matches the 51 settled TOP rows; do not infer causation or an
+  unbiased global calibration correction from this contrast.
+- On champion-confidence anchored, **same-event** shadow bins:
+  **>=70%** contains 111 matches with 85 correct for **both** models;
+  **>=80%** contains 60 matches with 49 correct for **both** models.
+  This does not establish any 7.2.2 uplift. An exact **>=65%**
+  result **cannot** be reconstructed from the exported 60–70% band;
+  the separate read-only diagnostic in PR #1570 now computes an
+  inclusive 65% aggregate only when scored row-level holdout is available.
+
+**Release guard:** the success of CI, the 172 earlier local tests, or the
+higher retrospective candidate-pool hit rate does **not** establish a repaired
+7.2.1 calibration. The current production champion and TOP offer policy remain
+untouched until a frozen, time-separated, identity-verified point-in-time
+evaluation proves the effect on the actual issued population. Do not fit a new
+calibrator on this issued cohort and then evaluate on the same 51 outcomes.
+The TOP count-cap removal in this PR changes future issuance; never merge
+this draft solely on the strength of these aggregates.
