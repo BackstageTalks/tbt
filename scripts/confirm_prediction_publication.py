@@ -8,6 +8,7 @@ import os
 from urllib.request import Request, urlopen
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from _bootstrap import ROOT
 from release_store import ReleaseStore
@@ -178,6 +179,72 @@ def sync_confirmed_authority(deployed_path: Path, deployed_feed: dict, confirmed
     }
 
 
+
+def summarize_confirmed_offer_snapshot(snapshot):
+    """Validate and count *issued* markets without merging ESÁ and Viac Es."""
+    if not isinstance(snapshot, dict) or snapshot.get("schema") != 1 or snapshot.get("confirmed_only") is not True:
+        raise ValueError("Daily snapshot is not confirmed-only")
+    sections = ("top_daily_picks", "prime_picks", "value_picks", "ace_picks",
+                "sg_picks", "doubles_picks")
+    totals = snapshot.get("totals")
+    if not isinstance(totals, dict):
+        raise ValueError("Daily snapshot has no category totals")
+    for key in sections:
+        rows = snapshot.get(key)
+        if not isinstance(rows, list) or type(totals.get(key)) is not int or totals[key] != len(rows):
+            raise ValueError(f"Daily snapshot category mismatch: {key}")
+        identities = []
+        for row in rows:
+            if not isinstance(row, dict) or not str(row.get("event_id") or "").strip():
+                raise ValueError(f"Invalid issued daily snapshot row: {key}")
+            identities.append((
+                str(row["event_id"]),
+                str(row.get("market") or "match_winner"),
+                str(row.get("selection_id") or (row.get("betting") or {}).get("selection_id") or ""),
+            ))
+        if len(identities) != len(set(identities)):
+            raise ValueError(f"Duplicate issued daily snapshot selection: {key}")
+    ace_markets = {
+        "aces": 0,
+        "most_aces": 0,
+        "double_faults": 0,
+    }
+    for row in snapshot["ace_picks"]:
+        market = str(row.get("market") or "").strip().lower()
+        if market not in ace_markets:
+            raise ValueError(f"Unknown issued ace market: {market}")
+        ace_markets[market] += 1
+    return {
+        "betting_day": snapshot.get("betting_day"),
+        "confirmed_only": True,
+        "top": len(snapshot["top_daily_picks"]),
+        "value": len(snapshot["value_picks"]),
+        "esa": ace_markets["aces"],
+        "viac_es": ace_markets["most_aces"],
+        "double_faults": ace_markets["double_faults"],
+        "prime": len(snapshot["prime_picks"]),
+    }
+
+
+def verify_uploaded_offer_snapshot(repository, expected):
+    """Read back the immutable confirmed snapshot from private GitHub release."""
+    with TemporaryDirectory(prefix="blinq-confirmed-offer-readback-") as directory:
+        read_store = ReleaseStore(repository, "tbt-predictions-v1", Path(directory))
+        read_store.download(
+            extra_names=("daily_offer_snapshot.json",),
+            required_names=("daily_offer_snapshot.json",),
+            require_bundle_manifest=True,
+        )
+        remote = json.loads(
+            (Path(directory) / "daily_offer_snapshot.json").read_text(encoding="utf-8")
+        )
+        if remote != expected:
+            raise RuntimeError("Private release confirmed daily snapshot read-back mismatch")
+        counts = summarize_confirmed_offer_snapshot(remote)
+        counts["status"] = "verified"
+        return counts
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -291,6 +358,7 @@ def main(argv=None):
         directory / "ledger.json",
         directory / "daily_offer_snapshot.json",
     ])
+    snapshot_readback = verify_uploaded_offer_snapshot(args.data_repository, daily_snapshot)
     authority_readback = (
         sync_confirmed_authority(Path(args.deployed_feed), deployed_feed, confirmed)
         if args.sync_serving_authority and args.deployed_feed else None
@@ -303,6 +371,7 @@ def main(argv=None):
         "market_newly_confirmed": market_new,
         "published_ids": len(published_rows),
         "issued_authority_readback": authority_readback,
+        "daily_snapshot_readback": snapshot_readback,
     }))
 
 

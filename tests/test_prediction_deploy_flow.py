@@ -138,6 +138,11 @@ def test_prepare_and_confirm_restore_same_issued_market_snapshot(monkeypatch, tm
     assert not (tmp_path / 'api/data/ledger.json').exists()
     monkeypatch.setattr(confirm, 'ROOT', tmp_path)
     monkeypatch.setattr(confirm, 'ReleaseStore', Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
     confirm.main(['--data-repository', 'test/private', '--deployed-feed', str(deployed)])
     confirmed = json.loads((tmp_path / '.cache/tbt/predictions-confirm/ledger.json').read_text())
     assert json.dumps(confirmed[0]['market_publications'], sort_keys=True) == original_publications
@@ -197,6 +202,11 @@ def test_confirm_no_candidate_is_noop_only_for_empty_deployment(monkeypatch, tmp
 
     monkeypatch.setattr(confirm, "ROOT", tmp_path)
     monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
     deployed = tmp_path / "empty.json"
     deployed.write_text(json.dumps(empty_feed()))
     confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
@@ -225,6 +235,11 @@ def test_confirm_complete_candidate_requires_exact_non_presentation_feed(monkeyp
 
     monkeypatch.setattr(confirm, "ROOT", tmp_path)
     monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
     deployed = tmp_path / "deployed.json"
     deployed.write_text(json.dumps(feed))
     confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
@@ -259,6 +274,11 @@ def test_confirm_allows_player_presentation_enrichment_only(monkeypatch, tmp_pat
 
     monkeypatch.setattr(confirm, "ROOT", tmp_path)
     monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
 
     deployed = json.loads(json.dumps(feed))
     deployed["player_assets"] = {
@@ -311,6 +331,11 @@ def test_confirm_still_rejects_non_presentation_change(monkeypatch, tmp_path):
 
     monkeypatch.setattr(confirm, "ROOT", tmp_path)
     monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
     deployed = json.loads(json.dumps(feed))
     deployed["upcoming"][0]["tournament"] = "Wrong Open"
     deployed_path = tmp_path / "deployed-wrong.json"
@@ -364,6 +389,11 @@ def test_confirm_rejects_same_event_with_different_ledger_pick(monkeypatch, tmp_
 
     monkeypatch.setattr(confirm, "ROOT", tmp_path)
     monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
     deployed = tmp_path / "deployed.json"
     deployed.write_text(json.dumps(feed))
     with pytest.raises(RuntimeError, match="feed/ledger mismatch"):
@@ -401,6 +431,11 @@ def test_confirm_retry_after_authority_sync_failure_is_idempotent(monkeypatch, t
 
     monkeypatch.setattr(confirm, 'ROOT', tmp_path)
     monkeypatch.setattr(confirm, 'ReleaseStore', Store)
+    # In-memory fake Store intentionally does not implement private release readback.
+    monkeypatch.setattr(
+        confirm, 'verify_uploaded_offer_snapshot',
+        lambda _repo, snapshot: confirm.summarize_confirmed_offer_snapshot(snapshot),
+    )
     attempts = []
     def sync_once_failed(_path, _feed, _ledger):
         attempts.append(True)

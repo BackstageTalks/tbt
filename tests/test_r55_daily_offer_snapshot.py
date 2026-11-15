@@ -313,3 +313,57 @@ def test_confirmed_snapshot_remains_backward_compatible_without_ui_config():
     ledger = [{"event_id": "issued-no-access", "market_publications": [publication_for(issued, "top_daily", issued=True)]}]
     snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now)
     assert "access_contract" not in snapshot
+
+
+def test_confirmed_daily_snapshot_preserves_two_top_and_two_esa_separately_from_viac_es():
+    """A finished match may leave the live offer but must remain in Results evidence."""
+    now = datetime(2026, 11, 15, 15, 0, tzinfo=timezone.utc)
+    when = "2026-11-15T17:00:00+00:00"
+    top = [
+        winner_row(f"top-{i}", when, selection="Alpha", odds=1.70,
+                   day="2026-11-15") for i in range(2)
+    ]
+    aces = [
+        winner_row(f"aces-{i}", when, selection="Over 8.5", odds=1.85,
+                   day="2026-11-15") for i in range(2)
+    ]
+    viac_es = winner_row("viac", when, selection="Alpha", odds=1.90,
+                         day="2026-11-15")
+    pending = winner_row("unissued", when, selection="Under 7.5", odds=1.90,
+                         day="2026-11-15")
+    for card in aces + [pending]:
+        card["market"] = "aces"
+        card["betting"]["market"] = "aces"
+    viac_es["market"] = "most_aces"
+    viac_es["betting"]["market"] = "most_aces"
+    cards = top + aces + [viac_es, pending]
+    ledger = [
+        {
+            "event_id": card["event_id"],
+            "market_publications": [publication_for(
+                card, "top_daily" if card in top else
+                "ace_winner" if card is viac_es else "ace",
+                issued=card is not pending,
+            )],
+        } for card in cards
+    ]
+    feed = {
+        "generated_at": "2026-11-15T12:00:00+00:00",
+        "top_daily_picks": top,
+        "prime_picks": [], "value_picks": [], "doubles_picks": [],
+        "ace_picks": aces + [viac_es, pending], "sg_picks": [],
+    }
+    snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now)
+    assert snapshot["confirmed_only"] is True
+    assert snapshot["betting_day"] == "2026-11-15"
+    assert [row["event_id"] for row in snapshot["top_daily_picks"]] == [
+        "top-0", "top-1",
+    ]
+    assert [row["event_id"] for row in snapshot["ace_picks"]] == [
+        "aces-0", "aces-1", "viac",
+    ]
+    assert snapshot["totals"]["top_daily_picks"] == 2
+    assert snapshot["totals"]["ace_picks"] == 3
+    # The two ESÁ O/U are distinct from the independent Viac Es offer.
+    assert sum(row["market"] == "aces" for row in snapshot["ace_picks"]) == 2
+    assert sum(row["market"] == "most_aces" for row in snapshot["ace_picks"]) == 1
