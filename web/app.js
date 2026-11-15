@@ -9772,6 +9772,55 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     window.addEventListener('hashchange',()=>{const route=location.hash.slice(1)||'predictions';if(!$('appShell').hidden&&route!==state.route)setRoute(route,false);});
   }
 
+  // An opt-in diagnostic needs a readable, screenshot-friendly surface.
+  // Native browser alerts have a fixed, often tiny viewport. This panel is
+  // created only for explicit ?blinq_boot_trace=1 and carries timing text only.
+  function showBootTracePanel(message){
+    document.getElementById('blinqBootTracePanel')?.remove();
+    const dialog=document.createElement('dialog');
+    dialog.id='blinqBootTracePanel';
+    dialog.setAttribute('aria-label','BlinQ – diagnostika načítania');
+    dialog.style.cssText='box-sizing:border-box;width:min(98vw,1120px);height:92vh;max-width:none;max-height:none;padding:0;margin:auto;border:1px solid #4b5c70;border-radius:12px;background:#131a24;color:#f2f6fd;box-shadow:0 16px 60px rgba(0,0,0,.6);font-family:system-ui,sans-serif;z-index:2147483647';
+    const layout=document.createElement('div');
+    layout.style.cssText='display:flex;flex-direction:column;height:100%;min-height:0';
+    const toolbar=document.createElement('div');
+    toolbar.style.cssText='display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:14px 18px;border-bottom:1px solid #39475a';
+    const heading=document.createElement('strong');
+    heading.textContent='BlinQ – diagnostika načítania';
+    heading.style.cssText='font-size:16px';
+    const buttons=document.createElement('div');
+    buttons.style.cssText='display:flex;gap:10px';
+    const button=(label,callback)=>{
+      const node=document.createElement('button');
+      node.type='button';node.textContent=label;
+      node.style.cssText='padding:9px 13px;border:1px solid #6b7c91;border-radius:8px;background:#24364b;color:#fff;font:inherit;cursor:pointer';
+      node.addEventListener('click',callback);
+      return node;
+    };
+    const output=document.createElement('pre');
+    output.textContent=message;
+    output.style.cssText='flex:1;min-height:0;overflow:auto;box-sizing:border-box;padding:18px 22px;margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;user-select:text';
+    const copy=button('Kopírovať celý výpis',async()=>{
+      try{
+        await navigator.clipboard.writeText(message);
+        copy.textContent='Skopírované';
+      }catch{
+        const range=document.createRange();
+        range.selectNodeContents(output);
+        const selection=window.getSelection();
+        selection?.removeAllRanges();selection?.addRange(range);
+        copy.textContent='Označené – stlač Ctrl+C';
+      }
+    });
+    buttons.append(copy,button('Zavrieť',()=>dialog.close()));
+    toolbar.append(heading,buttons);
+    layout.append(toolbar,output);
+    dialog.append(layout);
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    document.body.append(dialog);
+    dialog.showModal();
+  }
+
   // Read-only, opt-in startup timing. Never runs on ordinary BlinQ URLs.
   // The diagnostic displays timing labels only; it never sends tokens or data.
   const bootTimingProbe=(() => {
@@ -9845,7 +9894,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           steps.map(x=>x.name+': +'+x.delta+' ms').join('\n')+'\n\n':'';
         const message='BlinQ – diagnostika načítania\n\n'+server+phases.join('\n')+'\n\nPošli snímku tejto diagnostiky.';
         console.info('[BlinQ boot timing]\n'+server+phases.join('\n'));
-        setTimeout(()=>window.alert(message),450);
+        setTimeout(()=>showBootTracePanel(message),450);
       }
     };
   })();
