@@ -17,11 +17,10 @@ from .feed import ace_eligibility_reason, main_tour_aces
 
 
 def _main_tour_for_aces(row: dict[str, Any]) -> bool:
-    """Main ATP/WTA tours only; never infer eligibility from player history.
+    """Shared ESÁ and Viac Es market gate: ranked main tour/Challenger/WTA125.
 
-    Challenger, ITF, WTA 125 and unknown tours fail closed even if the same
-    player has ATP/WTA history. This applies to Aces and derived Most Aces,
-    not Match Winner, Value, Double Faults or other market selection.
+    ITF/Futures, unknown tours and either player without a known TOP1000 rank
+    remain excluded. Match Winner, Value and Double Faults are unchanged.
     """
     return main_tour_aces(row)
 
