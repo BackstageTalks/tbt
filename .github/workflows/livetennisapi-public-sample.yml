@@ -41,7 +41,12 @@ jobs:
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
 
-      - name: Download canonical history and public Zenodo sample
+      - name: Acquire cross-repository CDB single-writer lock
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+
+      - name: Download canonical history and public October sample
         shell: bash
         run: |
           set -euo pipefail
@@ -50,14 +55,19 @@ jobs:
           mkdir -p .cache/tbt/livetennisapi/source .cache/tbt/livetennisapi/link .cache/tbt/livetennisapi/dryrun .cache/tbt/livetennisapi/import
           cp -a .cache/tbt/history .cache/tbt/livetennisapi/history-enriched
 
-          base="https://zenodo.org/records/22048731/files"
-          curl -fsSL --retry 4 --retry-delay 3 "$base/matches.csv.gz?download=1" -o .cache/tbt/livetennisapi/source/matches.csv.gz
-          curl -fsSL --retry 4 --retry-delay 3 "$base/players.csv.gz?download=1" -o .cache/tbt/livetennisapi/source/players.csv.gz
-          curl -fsSL --retry 4 --retry-delay 3 "$base/points_sample_2026-06.csv.gz?download=1" -o .cache/tbt/livetennisapi/source/points_sample_2026-06.csv.gz
-          test -s .cache/tbt/livetennisapi/source/matches.csv.gz
-          test -s .cache/tbt/livetennisapi/source/players.csv.gz
-          test -s .cache/tbt/livetennisapi/source/points_sample_2026-06.csv.gz
+          # Pinned to the exact compressed October files audited against the operator upload.
+          base="https://huggingface.co/datasets/livetennisapi/tennis-point-by-point/resolve/main"
+          curl -fsSL --retry 4 --retry-delay 3 "$base/matches.csv.gz?download=true" -o .cache/tbt/livetennisapi/source/matches.csv.gz
+          curl -fsSL --retry 4 --retry-delay 3 "$base/players.csv.gz?download=true" -o .cache/tbt/livetennisapi/source/players.csv.gz
+          curl -fsSL --retry 4 --retry-delay 3 "$base/points_sample_2026-10.csv.gz?download=true" -o .cache/tbt/livetennisapi/source/points_sample_2026-10.csv.gz
           gzip -t .cache/tbt/livetennisapi/source/*.gz
+          (
+            cd .cache/tbt/livetennisapi/source
+            printf '%s\n' \
+              '667937761e05fd5e1d50e025835604f5335419755fc4e7eba904036309550a3d  matches.csv.gz' \
+              '5dc70657344a8dffb1e7f0fd29c1cb43f944d48abe0629c0fc9cb848f5d5459c  players.csv.gz' \
+              '224f1f504ef3bbe0235b65bd8485da62c4ba950b47d66ca2a47a0bcd49b8f54d  points_sample_2026-10.csv.gz' | sha256sum --check --strict
+          )
 
           python - <<'PY'
           import csv, gzip, hashlib, json
@@ -66,7 +76,7 @@ jobs:
           required={
             "matches.csv.gz":{"match_id","player1_id","player2_id","scheduled_time_utc"},
             "players.csv.gz":{"player_id","name"},
-            "points_sample_2026-06.csv.gz":{"match_id","sets_p1","sets_p2","games_p1","games_p2","points_p1","points_p2","server"},
+            "points_sample_2026-10.csv.gz":{"match_id","sets_p1","sets_p2","games_p1","games_p2","points_p1","points_p2","server"},
           }
           files=[]
           for name,cols in required.items():
@@ -83,7 +93,7 @@ jobs:
               files.append({"name":name,"rows":rows,"sha256":hashlib.sha256(path.read_bytes()).hexdigest()})
           manifest={
             "schema":1,
-            "source":"Live Tennis API public academic sample",
+            "source":"Live Tennis API public October 2026 sample",
             "doi":"10.5281/zenodo.22048731",
             "license":"CC BY-NC 4.0",
             "raw_redistributed":False,
@@ -97,7 +107,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/link_livetennisapi_pbp_serve_return.py             --history-dir .cache/tbt/livetennisapi/history-enriched             --matches .cache/tbt/livetennisapi/source/matches.csv.gz             --players .cache/tbt/livetennisapi/source/players.csv.gz             --points .cache/tbt/livetennisapi/source/points_sample_2026-06.csv.gz             --source-version "zenodo-22048731"             --out-dir .cache/tbt/livetennisapi/link
+          python scripts/link_livetennisapi_pbp_serve_return.py             --history-dir .cache/tbt/livetennisapi/history-enriched             --matches .cache/tbt/livetennisapi/source/matches.csv.gz             --players .cache/tbt/livetennisapi/source/players.csv.gz             --points .cache/tbt/livetennisapi/source/points_sample_2026-10.csv.gz             --source-version "huggingface-2026-10:sha256:224f1f504ef3bbe0235b65bd8485da62c4ba950b47d66ca2a47a0bcd49b8f54d"             --out-dir .cache/tbt/livetennisapi/link
 
       - name: Dry-run strict import and safety gate
         shell: bash
@@ -119,6 +129,11 @@ jobs:
               raise SystemExit(f"Quality projection mismatch: {projected} != {actual}")
           print(json.dumps({"quality_ready_added":actual,"safety":forbidden},indent=2))
           PY
+
+      - name: Verify cross-repository writer ownership
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
 
       - name: Write enriched local history
         shell: bash
@@ -191,7 +206,7 @@ jobs:
           report={
               "schema":1,
               "status":"verified",
-              "source":"Live Tennis API public academic sample",
+              "source":"Live Tennis API public October 2026 sample",
               "doi":"10.5281/zenodo.22048731",
               "license":"CC BY-NC 4.0",
               "raw_redistributed":False,
@@ -218,6 +233,10 @@ jobs:
           else
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify Live Tennis API public PBP sample" -f content="$encoded" >/dev/null
           fi
+
+      - name: Release cross-repository CDB single-writer lock
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
 
       - name: Upload audit artifact
         if: always()
