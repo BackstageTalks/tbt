@@ -9534,6 +9534,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     $('upgradeDialogClose')?.focus({preventScroll:true});
   }
   function clearPrivateWorkspaceState(){
+    cancelResultsPreload();
     resultsLoadVersion++;fullResultsFlight=null;fullResultsError='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
@@ -9574,7 +9575,26 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
-  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='';
+  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='', resultsPreloadTimer=null;
+  function cancelResultsPreload(){
+    if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
+    resultsPreloadTimer=null;
+  }
+  function scheduleResultsPreload(generation){
+    cancelResultsPreload();
+    // Preserve fast bootstrap: start authorized history only after the dashboard
+    // has been shown. A direct Results/Stats/Admin route already loads on demand.
+    if(generation!==feedGeneration||!state.feed?.results_boot_partial
+       ||!resultsAccessAllowed()||['results','stats','admin'].includes(state.route))return;
+    resultsPreloadTimer=setTimeout(()=>{
+      resultsPreloadTimer=null;
+      if(generation!==feedGeneration||$('appShell')?.hidden
+         ||!state.feed?.results_boot_partial||!resultsAccessAllowed())return;
+      // Reuse the same single-flight pagination and in-memory Results state as
+      // on-demand navigation; do not create a second cache or request path.
+      loadCompleteResults();
+    },5000);
+  }
   async function loadCompleteResults() {
     if (!state.feed?.results_boot_partial || !resultsAccessAllowed()) return;
     if (fullResultsFlight) return fullResultsFlight;
@@ -9616,8 +9636,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
     })().catch(error=>{
       if(version===resultsLoadVersion&&generation===feedGeneration){
-        fullResultsError=error?.message||'Results history unavailable.';
-        if(['results','stats','admin'].includes(state.route))renderRoute(state.route);
+        // A speculative preload failure must not disable Results navigation:
+        // retry on demand; show errors only when the user is already viewing it.
+        const visible=['results','stats','admin'].includes(state.route);
+        fullResultsError=visible?(error?.message||'Results history unavailable.'):'';
+        if(visible)renderRoute(state.route);
       }
     }).finally(()=>{if(fullResultsFlight===operation)fullResultsFlight=null;});
     fullResultsFlight=operation;
@@ -9640,7 +9663,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     clearTimeout(externalSessionTimer);externalSessionTimer=setTimeout(()=>{syncExternalSession().catch(error=>console.warn('[BlinQ auth] cross-tab session sync failed.',error));},40);
   }
   async function loadFeed(showLoading=true){
-    if(feedLoading)return;feedLoading=true;const generation=feedGeneration;window.BlinqUI.sync('loading');
+    if(feedLoading)return;feedLoading=true;cancelResultsPreload();const generation=feedGeneration;window.BlinqUI.sync('loading');
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML=`<div class="state-card">${escapeHtml(publicText('Loading current model predictions…'))}</div>`;
     try{
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
@@ -9679,6 +9702,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; markBootTiming('Dashboard odkrytý'); if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
+      scheduleResultsPreload(generation);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
   async function refreshWorkspace(showLoading=false){
