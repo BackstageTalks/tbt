@@ -86,4 +86,6 @@ def test_diagnostics_are_opt_in_without_altering_normal_transport():
     assert "return await attempt(kind);" in auth
     assert "performance.getEntriesByType('resource')" in app
     assert "Feed sieť: TTFB " in app
-    assert "window.alert(message)" in app
+    assert "setTimeout(()=>showBootTracePanel(message),450);" in app
+    assert "document.createElement('dialog')" in app
+    assert "navigator.clipboard.writeText(message)" in app
