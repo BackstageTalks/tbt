@@ -69,3 +69,10 @@ readback for the historical Shelton–Fils absence is unavailable in the
 attached release snapshots; independently replayed no-price model calibration
 versus a fresh untouched holdout is also not available. Do not claim those
 checks completed solely from this historical report.
+
+## Release deployment record
+
+- Codex source PR #1632 merged as `76b7789c2029393c80360938b58ad34030a1bdab`.
+- Serving/UI completion PR #1636 merged as `c9bd70bfb7b787e66e3d05af4a1e94b09c98bac8`; exact-head CI `43764875368` passed backend, Node and browser.
+- The first full CI deployment run for `c9bd70b` was cancelled by a newer unrelated `main` commit before upload. This marker requests the existing fail-closed Azure UI/API hotfix deploy of the current `main` with exact-revision and asset-hash read-back. **Deployment is not verified by this commit; use the workflow run and live checks.**
+- Neither model binary nor serving-model calibration was modified or promoted. Historical issued records remain immutable.
