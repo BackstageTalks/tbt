@@ -21,6 +21,10 @@ The existing candidate fit (only for `accuracy-7.2.2`) now includes
 
 - Predetermined confidence bands: below 65%, [65%,70%), [70%,75%),
   [75%,80%), and 80%+. A probability equal to 65% enters [65%,70%).
+- A separate **65%+ aggregate** named `confidence_65_plus` on each reported
+  subgroup uses champion-confidence >=0.65 (inclusive). It overlaps the
+  disjoint bands and must **never be added** to their counts. Both models
+  use the identical frozen fixtures; candidate-only reports are not paired.
 - **Same-fixture** champion vs. candidate accuracy, Wilson intervals,
   mean confidence, realized-minus-predicted confidence gap, Brier and log loss.
 - **Selection anchor:** frozen champion confidence, not candidate confidence,
