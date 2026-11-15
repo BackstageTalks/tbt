@@ -1,10 +1,10 @@
 {
   "schema": 2,
-  "mode": "dry-run",
+  "mode": "write",
   "workflow": "cdb-service-pairwise-guarded.yml",
-  "purpose": "Read-only local rehearsal of newly observed 8196 exact 2026 serve/return NULL fields after main pipeline changed canonical CDB.",
-  "approved_by_operator": false,
-  "production_write_allowed": false,
+  "purpose": "One-shot exact 2026 canonical NULL-only 8196 serve-return values after completed SHA-pinned audit and full scoped readback; explicit user request.",
+  "approved_by_operator": true,
+  "production_write_allowed": true,
   "provider_api_requests_allowed": 0,
   "training_allowed": false,
   "model_promotion_allowed": false,
@@ -30,7 +30,7 @@
     }
   ],
   "audit_date": "2026-11-15",
-  "gate": "Exact current CDB SHA and stage 2052/8196 must be independently reverified with scoped full readback before one-shot production write; provider requests zero.",
+  "gate": "Original source CDB manifest SHA 8a419..., exact 2052/8196 counts, global single-writer lock, full immutable private backup, CAS, independent full remote readback and idempotence. No overwrite; abort any drift.",
   "audit_request_id": "pairwise-2026-post-merge-refresh-20261115-2116Z",
   "expected_cdb_bundle_sha256": "8a419decb75578e419a4816c9529e739cfd0a00d075dfe74b879f5999b1f7052",
   "expected_staged_matches": 2052,
@@ -42,6 +42,6 @@
   "expected_changed_years": [
     2026
   ],
-  "evidence_run_id": 43763338335,
-  "execution_id": "blinq-cdb-pairwise-20261115-8196-rehearsal"
+  "evidence_run_id": 43763929783,
+  "execution_id": "blinq-cdb-pairwise-8196-20261115-once"
 }
