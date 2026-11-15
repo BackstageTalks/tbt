@@ -18,5 +18,6 @@
   "canonical_writes_permitted": false,
   "model_training_permitted": false,
   "provider_requests_permitted": 0,
-  "notes": "Read-only after one-shot #38824831943. No new production writes without a fresh SHA/count-pinned operator-approved request, source-rights review and all mandatory backup/CAS/read-back checks. Noncommercial source attribution remains; no model activation."
+  "notes": "Recheck fixed canonical 2018@0/16 source-native BP converted COUNTS against current checksum-verified CDB. Read-only local rehearsals, global writer unchanged. Future write requires fresh SHA/count pinned request and source provenance.",
+  "audit_request_id": "sackmann-counts-cdb-current-gate-20261115"
 }
