@@ -82,6 +82,36 @@ def test_pending_not_scored_as_loss():
     assert report["cohort"]["settled"] == 0
 
 
+def test_65_plus_comparison_keeps_identical_fixtures_and_both_favorite_orientations():
+    rows = [
+        row(1, p_prod=.70, p_chal=.80, target=1),
+        row(2, p_prod=.60, p_chal=.80, target=1),
+        row(3, p_prod=.80, p_chal=.60, target=1),
+        row(4, p_prod=.55, p_chal=.45, target=1),
+        row(5, p_prod=.30, p_chal=.20, target=0),
+    ]
+    result = summarize(rows, "champion", "candidate")
+    groups = result["confidence_65_paired_cohorts"]
+    assert groups["champion_65_plus"]["n"] == 3
+    assert groups["challenger_65_plus"]["n"] == 3
+    assert groups["both_65_plus"]["n"] == 2
+    assert groups["both_below_65"]["n"] == 1
+    for group in groups.values():
+        assert group["status"] == "SMALL_SAMPLE"
+        assert group["same_fixtures_for_both_models"] is True
+        assert group["model_quality"]["champion"]["n"] == group["n"] if group["n"] else True
+        assert group["model_quality"]["challenger"]["n"] == group["n"] if group["n"] else True
+    assert result["gate"]["automatic_promotion"] is False
+    assert "RAW" in result["limits"][-2] or any("RAW" in x for x in result["limits"])
+
+
+def test_65_plus_empty_set_remains_unscored_not_success():
+    from scripts.audit_model_shadow_readonly import _confidence_65_paired_cohorts
+    groups = _confidence_65_paired_cohorts([])
+    assert all(group["n"] == 0 and group["model_quality"] == {}
+               for group in groups.values())
+
+
 def test_isolation_and_no_fit_contract():
     from pathlib import Path
     script = (Path(__file__).resolve().parents[1] / "scripts/audit_model_shadow_readonly.py").read_text()
