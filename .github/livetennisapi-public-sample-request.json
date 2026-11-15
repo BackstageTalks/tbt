@@ -1,9 +1,15 @@
 {
   "schema": 1,
-  "requested_at": "2026-10-06T04:58:00+02:00",
+  "requested_at": "2026-11-15T22:03:09Z",
   "action": "integrate_livetennisapi_public_pbp_sample",
-  "source": "Live Tennis API Zenodo public sample DOI 10.5281/zenodo.22048731",
+  "source": "Live Tennis API Hugging Face October 2026 public sample",
   "license": "CC BY-NC 4.0",
-  "policy": "complete point tapes only; exact date + player pair; unique canonical candidate; no fuzzy identity; no raw redistribution; zero provider API",
-  "note": "Created before protected morning window; trigger only after morning production writer is clear."
+  "policy": "existing native linker/importer only; exact identity; no fuzzy matches; provable one-point transitions; global lock; NULL-only; no raw redistribution; zero RapidAPI",
+  "note": "User-authorized October CDB enrichment. Existing production data writer active at dispatch; wait for global lock without bypass. Persisted readback required for success claim.",
+  "source_sample": "2026-10",
+  "source_shas": {
+    "matches": "667937761e05fd5e1d50e025835604f5335419755fc4e7eba904036309550a3d",
+    "players": "5dc70657344a8dffb1e7f0fd29c1cb43f944d48abe0629c0fc9cb848f5d5459c",
+    "points": "224f1f504ef3bbe0235b65bd8485da62c4ba950b47d66ca2a47a0bcd49b8f54d"
+  }
 }
