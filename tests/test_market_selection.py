@@ -555,3 +555,92 @@ def test_morning_same_original_top_offer_across_feed_and_publication_without_oth
     assert [x['event_id'] for x in rendered['value_picks']] == ['value']
     assert rendered['ace_picks'] == aces
     assert 'top1_picks' not in rendered and 'top3_picks' not in rendered
+
+
+
+def test_public_offer_day_filters_before_top_limit_and_aligns_publication_audit():
+    """High-scoring tomorrow fixtures must not occupy the three today's TOP slots."""
+    from tbt.services.market_selection import (
+        annotate_market_publication_candidates, attach_market_sections_to_feed,
+    )
+
+    today = [
+        row(f'today-{i}', .74 - .01 * i, 1.60, 2.50, depth=1.0)
+        for i in range(3)
+    ]
+    tomorrow = [
+        row(f'tomorrow-{i}', .79 - .01 * i, 1.60, 2.50, depth=1.0)
+        for i in range(3)
+    ]
+    for fixture in tomorrow:
+        fixture['scheduled_at'] = '2026-09-08T12:00:00+00:00'
+        fixture['created_at'] = '2026-09-08T06:00:00Z'
+        fixture['betting']['betting_day'] = '2026-09-08'
+        fixture['betting']['captured_at'] = '2026-09-08T07:00:00Z'
+
+    candidates = tomorrow + today
+    unscoped = select_market_sections(candidates)
+    assert {x['event_id'] for x in unscoped['top_daily_picks']} == {
+        'tomorrow-0', 'tomorrow-1', 'tomorrow-2',
+    }
+
+    scoped = select_market_sections(candidates, public_offer_day='2026-09-07')
+    assert {x['event_id'] for x in scoped['top_daily_picks']} == {
+        'today-0', 'today-1', 'today-2',
+    }
+    assert scoped['market_selection']['selection_counts']['top_daily'] == 3
+    assert not scoped['prime_picks'] and not scoped['value_picks']
+
+    annotated = annotate_market_publication_candidates(
+        candidates, public_offer_day='2026-09-07'
+    )
+    by_id = {x['event_id']: x for x in annotated}
+    assert all(not by_id[x['event_id']]['market_publication_candidates'] for x in tomorrow)
+    assert all(
+        any(publication['section'] == 'top_daily'
+            for publication in by_id[x['event_id']]['market_publication_candidates'])
+        for x in today
+    )
+    serving = attach_market_sections_to_feed(
+        {'upcoming': []}, annotated, public_offer_day='2026-09-07'
+    )
+    assert {x['event_id'] for x in serving['top_daily_picks']} == {
+        'today-0', 'today-1', 'today-2',
+    }
+
+    replay = build_selection_candidate_snapshot(
+        candidates, generated_at=datetime(2026, 9, 7, 9, tzinfo=timezone.utc),
+        public_offer_day='2026-09-07',
+    )
+    assert replay['scope']['all_singles_selector_inputs'] == 6
+    by_id = {x['event_id']: x for x in replay['rows']}
+    assert all(by_id[x['event_id']]['selected_section'] == 'top_daily' for x in today)
+    assert all(by_id[x['event_id']]['selected_section'] is None for x in tomorrow)
+
+
+def test_public_offer_day_matches_bratislava_six_am_boundary_and_fails_closed():
+    from tbt.services.market_selection import _belongs_to_public_offer_day
+
+    def fixture(stamp):
+        return {'scheduled_at': stamp}
+
+    assert _belongs_to_public_offer_day(
+        fixture('2026-11-15T05:00:00Z'), '2026-11-15'
+    )
+    assert not _belongs_to_public_offer_day(
+        fixture('2026-11-15T04:59:59Z'), '2026-11-15'
+    )
+    assert not _belongs_to_public_offer_day(
+        fixture('2026-11-16T03:30:00Z'), '2026-11-15'
+    )
+    assert not _belongs_to_public_offer_day(
+        fixture('2026-11-15T12:00:00'), '2026-11-15'
+    )
+    assert not _belongs_to_public_offer_day(fixture('invalid'), '2026-11-15')
+    # DST switch: the 06:00 local boundary is 05:00 UTC in October.
+    assert not _belongs_to_public_offer_day(
+        fixture('2026-10-25T04:59:59Z'), '2026-10-25'
+    )
+    assert _belongs_to_public_offer_day(
+        fixture('2026-10-25T05:00:00Z'), '2026-10-25'
+    )
