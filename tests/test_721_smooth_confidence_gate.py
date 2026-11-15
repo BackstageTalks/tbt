@@ -83,6 +83,38 @@ def test_invalid_probabilities_or_targets_fail_closed(bad_raw, bad_labels, bad_p
         )
 
 
+
+def test_untouched_holdout_compares_same_champion_anchored_65pct_fixtures():
+    import pandas as pd
+    from tbt.services.training import paired_evidence_holdout_diagnostics
+
+    table = pd.DataFrame({
+        "target": [1, 0, 0, 1],
+        "stats_known_both": [1., 0., 1., 0.],
+        "rank_known_both": [0., 1., 0., 1.],
+    })
+    champion = np.array([.65, .35, .64, .36])
+    candidate = np.array([.55, .45, .80, .20])
+    original = table.copy(deep=True)
+    result = paired_evidence_holdout_diagnostics(table, candidate, champion)
+    block = result["same_fixture_top65"]
+    assert block["threshold_inclusive"] == .65
+    assert block["selection_anchor"] == "champion_confidence"
+    assert block["n"] == 2
+    assert block["candidate"]["n"] == block["champion"]["n"] == 2
+    assert block["candidate"]["wins"] == block["champion"]["wins"] == 2
+    assert block["same_fixture_brier_delta"] == pytest.approx(
+        block["candidate"]["brier_score"] - block["champion"]["brier_score"]
+    )
+    assert block["same_fixture_log_loss_delta"] == pytest.approx(
+        block["candidate"]["log_loss"] - block["champion"]["log_loss"]
+    )
+    assert result["never_select_on_holdout"] is True
+    pd.testing.assert_frame_equal(table, original)
+    unpaired = paired_evidence_holdout_diagnostics(table, candidate)
+    assert unpaired["same_fixture_top65"]["champion"] is None
+    assert unpaired["same_fixture_top65"]["selection_anchor"] == "candidate_confidence_unpaired"
+
 def test_only_new_smooth_profile_invokes_confidence_gate():
     source = Path("api/tbt/models/ensemble.py").read_text()
     training = Path("api/tbt/services/training.py").read_text()
