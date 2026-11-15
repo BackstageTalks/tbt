@@ -68,6 +68,7 @@ from tbt.services.market_selection import (
     annotate_market_publication_candidates,
     build_selection_candidate_snapshot,
     attach_market_sections_to_feed,
+    betting_day_bounds,
     attach_match_winner_market,
     enrich_current_betting_day_odds,
     extract_match_winner_odds,
@@ -592,6 +593,7 @@ def _publish_predictions(
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
     now = datetime.now(timezone.utc)
+    _, _, public_offer_day = betting_day_bounds(now, start_hour=betting_day_start_hour)
     # Betting sections have their own publication lifecycle. The Match Winner
     # probability may already be public before provider odds arrive, so freeze
     # pending Daily / Prime / Value candidates independently and confirm them only
@@ -603,7 +605,8 @@ def _publish_predictions(
         freeze_most_aces_price(row) for row in (ace_winner_picks or [])
     ]
     ledger_predictions = annotate_market_publication_candidates(
-        ledger_predictions, ace_picks=issued_ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
+        ledger_predictions, ace_picks=issued_ace_picks, sg_picks=sg_picks,
+        doubles_picks=doubles_picks, public_offer_day=public_offer_day,
     )
     settlement_source = matches if settlement_matches is None else settlement_matches
     settlement_rows = list(settlement_source) + list(doubles_matches or [])
@@ -617,6 +620,7 @@ def _publish_predictions(
         ace_picks=issued_ace_picks, ace_report=ace_report,
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,
+        public_offer_day=public_offer_day,
     )
     # PRIME remains internal, but its rows carry a separately trained-on-history
     # conditional projection used only after the favourite loses set 1 LIVE.
@@ -690,7 +694,9 @@ def _publish_predictions(
     # Persist the complete pre-match singles selector universe for chronological
     # replay. Monthly gzip partitions keep release asset count bounded while
     # preserving every generated snapshot. Outcomes are deliberately absent.
-    candidate_snapshot = clean(build_selection_candidate_snapshot(predictions, generated_at=now))
+    candidate_snapshot = clean(build_selection_candidate_snapshot(
+        predictions, generated_at=now, public_offer_day=public_offer_day,
+    ))
     candidate_month_path = store.directory / f"selection_candidates_{now:%Y-%m}.json.gz"
     candidate_history = {"schema": 1, "month": f"{now:%Y-%m}", "snapshots": []}
     if candidate_month_path.exists():
