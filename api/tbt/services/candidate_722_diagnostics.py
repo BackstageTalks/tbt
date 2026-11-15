@@ -49,7 +49,8 @@ def _score(probabilities, labels, selection):
 
 def _same_fixture(candidate, champion, labels, anchor, group):
     bands = {}
-    for name, lo, hi in BANDS:
+    # Keep the fixed disjoint bands and add an overlapping >=65% aggregate.
+    for name, lo, hi in (*BANDS, ("65_plus", 0.65, 1.01)):
         selected = group & (anchor >= lo) & (anchor < hi)
         candidate_score = _score(candidate, labels, selected)
         champion_score = (_score(champion, labels, selected)
@@ -65,7 +66,9 @@ def _same_fixture(candidate, champion, labels, anchor, group):
             "log_loss_delta": (candidate_score["log_loss"] - champion_score["log_loss"]
                                if champion_score and candidate_score["n"] else None),
         }
-    return {"n": int(group.sum()), "bands": bands}
+    confidence_65_plus = bands.pop("65_plus")
+    return {"n": int(group.sum()), "bands": bands,
+            "confidence_65_plus": confidence_65_plus}
 
 
 def candidate_722_confidence_evidence_report(test, candidate_p, champion_p=None):
