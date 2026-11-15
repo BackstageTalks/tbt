@@ -9,7 +9,7 @@ def sports_prediction_audit(rows, generated_at):
     for row in rows:
         if not isinstance(row, dict) or row.get("prediction_family") == "doubles":
             continue
-        players = [row.get(side) or {} for side in ("player1", "player2")]
+        players = [row.get(side) if isinstance(row.get(side), dict) else {} for side in ("player1", "player2")]
         ids = [str(p.get("id") or "") for p in players]
         winner = str(row.get("winner_id") or "")
         reasons = []
@@ -30,9 +30,9 @@ def sports_prediction_audit(rows, generated_at):
             created = datetime.fromisoformat(row["created_at"].replace("Z", "+00:00"))
             if not (created <= generated_at < start) or not row.get("model_version"):
                 raise ValueError()
-        except (KeyError, ValueError, TypeError):
+        except (KeyError, ValueError, TypeError, AttributeError):
             reasons.append("missing_prematch_model_evidence")
-        quality = row.get("quality") or {}
+        quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
         output.append({
             "event_id": row.get("event_id"), "winner_id": winner,
             "model_version": row.get("model_version"),
@@ -40,7 +40,7 @@ def sports_prediction_audit(rows, generated_at):
             "status": "predicted" if not reasons else "unavailable",
             "reasons": reasons, "reliability_status": "cohort_validation_required",
             "statistics_evidence": {
-                side: deepcopy((quality.get(side) or {}).get("statistics_evidence"))
+                side: deepcopy((quality.get(side) or {}).get("statistics_evidence")) if isinstance(quality.get(side), dict) else None
                 for side in ("player1", "player2")},
         })
     valid = sorted((r for r in output if not r["reasons"]),

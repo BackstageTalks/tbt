@@ -67,3 +67,17 @@ def test_invalid_and_duplicate_sports_predictions_do_not_gain_rank():
     audit = sports_prediction_audit([bad, pick('a', .8), pick('a', .8)], now)
     assert audit[0]['status'] == 'unavailable'
     assert sum('sports_rank' in r for r in audit) == 1
+
+
+def test_malformed_optional_evidence_is_flagged_without_crashing_daily_audit():
+    now = datetime(2026, 9, 7, 8, tzinfo=timezone.utc)
+    malformed = pick('bad', .8)
+    malformed['player1'] = 'untrusted-invalid-player'
+    malformed['quality'] = 'invalid evidence'
+    malformed['scheduled_at'] = None
+    audit = sports_prediction_audit([malformed, pick('good', .8)], now)
+    assert audit[0]['status'] == 'unavailable'
+    assert 'invalid_identity' in audit[0]['reasons']
+    assert 'missing_prematch_model_evidence' in audit[0]['reasons']
+    assert audit[1]['status'] == 'predicted'
+    assert audit[1]['sports_rank'] == 1

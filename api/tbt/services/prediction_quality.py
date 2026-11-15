@@ -17,8 +17,11 @@ def coverage(builder, match):
         # This is the actual retained feature-state window, not lifetime coverage.
         past = [r for r in state.recent if r.played_at < match.scheduled_at]
         def valid(value):
-            return (value is not None and math.isfinite(float(value))
-                    and 0 <= float(value) <= 1)
+            try:
+                number = float(value)
+                return math.isfinite(number) and 0 <= number <= 1
+            except (TypeError, ValueError, OverflowError):
+                return False
         def summarize(rows):
             paired = [r for r in rows if valid(r.serve_quality) and valid(r.return_quality)]
             weights = [0.5 ** ((match.scheduled_at-r.played_at).total_seconds()/86400/120)
