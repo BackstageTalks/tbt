@@ -228,9 +228,9 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     ]
     before = deepcopy(rows)
     result = select_market_sections(rows)
-    assert ids(result) == ["atp70", "wta68", "atp65"]
+    assert ids(result) == ["atp70", "wta68", "atp65", "challenger", "itf"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "main_0.65", "main_0.65", "main_0.65"
+        "main_0.65", "main_0.65", "main_0.65", "challenger_0.65", "women_itf_0.65"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
@@ -250,7 +250,7 @@ def test_65_floor_applies_to_challenger_and_proven_w35_only():
         [atp, challenger, w35, rejected],
         generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
-    assert snap["selection_policy"] == "priority_tours_top_v20"
+    assert snap["selection_policy"] == "evidence_unlimited_top_v21"
     assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
 
 
@@ -347,6 +347,6 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
     assert verify() == {
-        "status": "PASS", "policy": "priority_tours_top_v20",
+        "status": "PASS", "policy": "evidence_unlimited_top_v21",
         "provider_requests": 0,
     }

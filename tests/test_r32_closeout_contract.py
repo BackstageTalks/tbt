@@ -36,7 +36,7 @@ def test_r32_top_short_odds_boundary_and_value_priority_survive_ranked_top():
     assert top["min_odds"] == 1.5
     assert top["fallback_min_odds"] == 1.5
     assert top["dynamic_fallback_tiers"] == []
-    assert top["limit"] == 3 and top["target_count"] == 3
+    assert top["limit"] is None and top["target_count"] == 3
     assert UI["market_rules"]["match_winner_assignment"]["exclusive"] is True
     assert UI["market_rules"]["match_winner_assignment"]["priority"][:2] == ["value", "top_daily"]
 

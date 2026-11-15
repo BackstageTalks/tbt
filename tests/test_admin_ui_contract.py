@@ -188,7 +188,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["prime"]["max_negative_expected_value"] is None
     assert rules["prime"]["limit"] == 30
     assert rules["top_daily"]["label"] == "TOP Predictions"
-    assert rules["top_daily"]["limit"] == 3
+    assert rules["top_daily"]["limit"] is None
     assert rules["top_daily"]["presentation_preview_limit"] == 10
     assert rules["top_daily"]["target_count"] == 3
     assert rules["top_daily"]["confidence_tiers"] == [.65]
