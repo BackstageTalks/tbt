@@ -80,7 +80,7 @@ def test_trace_never_shows_payload_or_changes_tennis_loading_screen():
     assert "sessionStorage" not in probe
     assert "innerHTML" not in probe
     assert "performance.now()" in probe
-    assert "setTimeout(()=>window.alert(message),450);" in probe
+    assert "setTimeout(()=>showBootTracePanel(message),450);" in probe
     html = (ROOT / "web/index.html").read_text(encoding="utf-8")
     assert 'class="boot-splash boot-splash-tennis"' in html
     assert "/assets/blinq-loader.webp" in html
