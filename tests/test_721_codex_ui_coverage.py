@@ -22,7 +22,11 @@ def test_significant_duels_use_only_server_authorized_nonbetting_board():
     end = source.index("  function contentLocale(){", start)
     snippet = source[start:end]
     assert "feed.board_upcoming" in snippet
+    assert "Array.isArray(feed.upcoming)?feed.upcoming:[]" in snippet
     assert "meta.locked===true" in snippet
+    # A 57% prediction must remain discoverable; the server board list
+    # enforces a distinct 65% eligibility floor.
+    assert "if(!board.length)return '';" in snippet
     assert "rank>=1&&rank<=20" in snippet
     assert "row.prediction_family!=='doubles'" in snippet
     assert "renderTop20MatchCoverage()" in source[source.index("else if(route==='top_daily')"):]
