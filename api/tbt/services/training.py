@@ -931,9 +931,44 @@ def paired_evidence_holdout_diagnostics(test, candidate_p, champion_p=None):
             ),
             "small_sample": len(ids) < 100,
         }
+    # One frozen set for each model: the serving champion defines which
+    # holdout matches were >=65% before the candidate recalibrated them.
+    # These outcomes describe acceptance evidence; NEVER feed them into fit.
+    anchor = champion if champion is not None else candidate
+    selected = np.maximum(anchor, 1 - anchor) >= .65
+    chosen_y = labels[selected]
+    def anchored_65_metrics(probabilities):
+        if probabilities is None or not selected.any():
+            return None
+        p = probabilities[selected]
+        measured = evaluate_probabilities(chosen_y, p)
+        return {
+            "n": int(selected.sum()),
+            "wins": int(((p >= .5) == chosen_y).sum()),
+            "accuracy": measured["accuracy"],
+            "mean_confidence": measured["mean_confidence"],
+            "calibration_gap": measured["accuracy"] - measured["mean_confidence"],
+            "brier_score": measured["brier_score"],
+            "log_loss": measured["log_loss"],
+        }
+    candidate_top65 = anchored_65_metrics(candidate)
+    champion_top65 = anchored_65_metrics(champion)
     return {"status": ("PAIRED_UNSEEN_HOLDOUT" if champion is not None
                        else "CANDIDATE_ONLY_NOT_PROMOTION_READY"),
-            "cohorts": result, "holdout_only": True, "never_select_on_holdout": True}
+            "cohorts": result, "holdout_only": True, "never_select_on_holdout": True,
+            "same_fixture_top65": {
+                "selection_anchor": ("champion_confidence" if champion is not None
+                                     else "candidate_confidence_unpaired"),
+                "threshold_inclusive": .65,
+                "n": int(selected.sum()),
+                "candidate": candidate_top65, "champion": champion_top65,
+                "same_fixture_brier_delta": (
+                    candidate_top65["brier_score"] - champion_top65["brier_score"]
+                    if champion_top65 is not None else None),
+                "same_fixture_log_loss_delta": (
+                    candidate_top65["log_loss"] - champion_top65["log_loss"]
+                    if champion_top65 is not None else None),
+            }}
 
 
 def train_from_matches(
