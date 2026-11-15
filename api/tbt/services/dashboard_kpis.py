@@ -141,7 +141,8 @@ def _result_outcome(publication: dict) -> str:
 
 
 def published_results_metrics(feed: dict, period: str, category: str = "all",
-                              *, now: datetime | None = None) -> dict:
+                              *, now: datetime | None = None,
+                              _scan_cache: dict | None = None) -> dict:
     """Use exactly the available public Results rows, including the 1000-row cap.
 
     Category=all covers all eight actual published product sections and
@@ -156,11 +157,22 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
     if now.tzinfo is None:
         raise ValueError("Results dashboard clock must have a timezone")
     cutoff = None if period == "all" else now.astimezone(timezone.utc) - timedelta(days=int(period))
+    # Request-local memoization: automatic KPI comparisons scan the same
+    # authorized ledger over several windows, but its rows cannot change
+    # during this calculation. No global cache or account state is retained.
+    memo = _scan_cache if _scan_cache is not None else {}
+    dates = memo.setdefault("row_dates", {})
+    issued_dates = memo.setdefault("issued_dates", {})
+    identities = memo.setdefault("identities", {})
+    outcomes = memo.setdefault("outcomes", {})
     unique: dict[str, dict] = {}
     for row in feed.get("results") or []:
         if not isinstance(row, dict):
             continue
-        scheduled = _result_datetime(row.get("scheduled_at"))
+        row_id = id(row)
+        if row_id not in dates:
+            dates[row_id] = _result_datetime(row.get("scheduled_at"))
+        scheduled = dates[row_id]
         if cutoff is not None and (scheduled is None or scheduled < cutoff):
             continue
         for index, p in enumerate(row.get("market_publications") or []):
@@ -177,23 +189,32 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
             if category == "winners" and (market != "match_winner" or section == "doubles"
                                             or str(row.get("prediction_family") or "").lower() == "doubles"):
                 continue
-            if _result_outcome(p) == "pending":
+            pub_id = id(p)
+            if pub_id not in outcomes:
+                outcomes[pub_id] = _result_outcome(p)
+            outcome = outcomes[pub_id]
+            if outcome == "pending":
                 continue
-            key = _result_identity(row, p, index)
+            identity_id = (row_id, index)
+            if identity_id not in identities:
+                identities[identity_id] = _result_identity(row, p, index)
+            key = identities[identity_id]
             prior = unique.get(key)
-            issued = _result_datetime(p.get("issued_at"))
+            if pub_id not in issued_dates:
+                issued_dates[pub_id] = _result_datetime(p.get("issued_at"))
+            issued = issued_dates[pub_id]
             if prior is None or (
                 issued is not None and
                 (prior["_issued"] is None or issued < prior["_issued"])
             ):
-                unique[key] = {"publication": p, "row": row, "_issued": issued}
+                unique[key] = {"publication": p, "row": row, "_issued": issued, "_outcome": outcome}
     wins = losses = odds_count = 0
     odds_sum = 0.0
     staked = profit = 0.0
     stake_count = 0
     for entry in unique.values():
         p = entry["publication"]
-        outcome = _result_outcome(p)
+        outcome = entry["_outcome"]
         if outcome == "void":
             continue
         if outcome == "win":
@@ -267,7 +288,11 @@ def _metric_window_value(feed: dict, metric: str, period: str,
         category = "top_daily" if metric == "avg_odds" else "all"
         key = (period, category)
         if key not in cache:
-            cache[key] = published_results_metrics(feed, period, category, now=now)
+            # Share only parsed metadata within this one KPI invocation.
+            scan_cache = cache.setdefault(("_request", "result_scan"), {})
+            cache[key] = published_results_metrics(
+                feed, period, category, now=now, _scan_cache=scan_cache,
+            )
         stats = cache[key]
         field = {"avg_odds": "avg_odds", "roi": "roi", "yield_units": "profit_units"}[metric]
         sample = stats["odds_sample"] if metric == "avg_odds" else stats["stake_count"]
@@ -276,7 +301,11 @@ def _metric_window_value(feed: dict, metric: str, period: str,
         category, field = RESULTS_METRICS[metric]
         key = (period, category)
         if key not in cache:
-            cache[key] = published_results_metrics(feed, period, category, now=now)
+            # Share only parsed metadata within this one KPI invocation.
+            scan_cache = cache.setdefault(("_request", "result_scan"), {})
+            cache[key] = published_results_metrics(
+                feed, period, category, now=now, _scan_cache=scan_cache,
+            )
         stats = cache[key]
         # A zero-profit portfolio is valid if it contains settled real stakes.
         size = stats["stake_count"] if field in {"roi", "profit_units"} else (
