@@ -41,7 +41,8 @@ def main():
                 assert source.count("  boot();") == 1
                 source = source.replace("  boot();", """
   window.lazyResultsTest={state,setRoute,loadCompleteResults,renderDashboardKpis,
-    scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration)};
+    scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration),
+    reuseHydratedResultsOnRefresh};
   boot();""")
                 route.fulfill(content_type="application/javascript", body=source)
                 return
@@ -80,7 +81,7 @@ def main():
                     refresh_token:'fixture-refresh',expires_at:Date.now()/1000+3600
                   }));
                   t.state.feed={
-                    account:{plan:'admin',role:'admin',is_admin:true,status:'active'},
+                    account:{id:'fixture-user',email:'user@example.test',plan:'admin',role:'admin',is_admin:true,status:'active'},
                     entitlements:{results:true,result_categories:['top_daily']},
                     upcoming:[],results:[row],results_boot_partial:true,
                     dashboard_kpi_cards:[],performance:{},model:{}
@@ -115,6 +116,25 @@ def main():
                   overflow: document.documentElement.scrollWidth-window.innerWidth
                 })""")
                 assert hydrated["rows"] == ["recent", "history"], (width, hydrated)
+                # A fresh authorized bootstrap with the same ledger reuses
+                # hydrated rows; revocation or changed revision fails closed.
+                reuse = page.evaluate("""() => {
+                  const t=window.lazyResultsTest, old=t.state.feed;
+                  const next={
+                    account:{...old.account},entitlements:{results:true},
+                    results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot'
+                  };
+                  const retained=t.reuseHydratedResultsOnRefresh(next);
+                  const reused=next.results===old.results&&next.results_boot_partial===false;
+                  const denied={
+                    account:{...old.account},entitlements:{results:false},
+                    results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot'
+                  };
+                  const refused=t.reuseHydratedResultsOnRefresh(denied);
+                  return {retained,reused,refused,deniedEmpty:denied.results.length===0};
+                }""")
+                assert reuse == {"retained": True, "reused": True,
+                                 "refused": False, "deniedEmpty": True}, (width, reuse)
                 assert hydrated["overflow"] <= 2, (width, hydrated["overflow"])
                 assert not errors, (width, errors)
                 context.close()

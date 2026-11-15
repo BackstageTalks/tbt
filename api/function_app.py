@@ -1615,6 +1615,13 @@ def _gzip_feed_response(payload):
     )
 
 
+def _authorized_results_revision(rows):
+    """Fingerprint the exact account-authorized, settled Results ledger."""
+    return hashlib.sha256(
+        json.dumps(rows, ensure_ascii=False, sort_keys=True, allow_nan=False).encode("utf-8")
+    ).hexdigest()[:24]
+
+
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
     data = _authorized_feed_payload(req, bootstrap=True)
@@ -1823,6 +1830,7 @@ def _authorized_feed_payload(req, *, bootstrap=False):
         # / Stats route fetches the *complete* authorized ledger via v1/results
         # only when opened. The normal (non-bootstrap) API remains unchanged.
         if bootstrap and str((getattr(req, "params", None) or {}).get("blinq_feed_view") or "") == "bootstrap":
+            data["results_snapshot"] = _authorized_results_revision(data.get("results") or [])
             data["results_boot_partial"] = bool(data.get("results"))
             data["results"] = []
         return data
@@ -1860,9 +1868,7 @@ def results_page(req):
     rows = authorized.get("results") or []
     # Existing feed order is stable, so reassembled pages retain source order;
     # the version binds both ordering and contents to an authorized snapshot.
-    revision = hashlib.sha256(
-        json.dumps(rows, ensure_ascii=False, sort_keys=True, allow_nan=False).encode("utf-8")
-    ).hexdigest()[:24]
+    revision = _authorized_results_revision(rows)
     requested_revision = str(params.get("snapshot") or "")
     if requested_revision and requested_revision != revision:
         return response({"error": "results_snapshot_changed"}, 409)

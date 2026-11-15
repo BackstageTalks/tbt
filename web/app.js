@@ -9535,7 +9535,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function clearPrivateWorkspaceState(){
     cancelResultsPreload();
-    resultsLoadVersion++;fullResultsFlight=null;fullResultsError='';
+    resultsLoadVersion++;fullResultsFlight=null;fullResultsError='';completeResultsSnapshot='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
@@ -9575,10 +9575,30 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
-  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='', resultsPreloadTimer=null;
+  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='', resultsPreloadTimer=null, completeResultsSnapshot='';
   function cancelResultsPreload(){
     if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
     resultsPreloadTimer=null;
+  }
+  function reuseHydratedResultsOnRefresh(nextFeed){
+    // The server fingerprint is computed AFTER all membership, settlement,
+    // category and exclusion gates. The account identity must also match.
+    // Never persist private Results across sign-out or a changed entitlement.
+    const current=state.feed;
+    const currentIdentity=String(current?.account?.id||current?.account?.email||'').trim().toLowerCase();
+    const nextIdentity=String(nextFeed?.account?.id||nextFeed?.account?.email||'').trim().toLowerCase();
+    const reusable=Boolean(currentIdentity&&currentIdentity===nextIdentity&&completeResultsSnapshot
+      &&current?.results_boot_partial===false&&Array.isArray(current?.results)
+      &&nextFeed?.results_boot_partial===true&&nextFeed?.entitlements?.results===true
+      &&!nextFeed?.results_archive_unavailable&&!nextFeed?.results_exclusions_unavailable
+      &&String(nextFeed?.results_snapshot||'')===completeResultsSnapshot);
+    if(reusable){
+      nextFeed.results=current.results;
+      nextFeed.results_boot_partial=false;
+    }else{
+      completeResultsSnapshot='';
+    }
+    return reusable;
   }
   function scheduleResultsPreload(generation){
     cancelResultsPreload();
@@ -9619,6 +9639,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               state.feed.results=complete;
               normalizeFeedAceOdds(state.feed);
               state.feed.results_boot_partial=false;
+              completeResultsSnapshot=snapshot;
               fullResultsError='';
               if(['results','stats','admin'].includes(state.route))renderRoute(state.route);
               return;
@@ -9669,6 +9690,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
       const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);if(generation!==feedGeneration)return;
+      reuseHydratedResultsOnRefresh(feed);
       resultsLoadVersion++;fullResultsFlight=null;fullResultsError='';
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace

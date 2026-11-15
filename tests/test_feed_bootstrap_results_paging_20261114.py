@@ -21,6 +21,7 @@ def test_bootstrap_defers_history_but_kpi_remains_complete(monkeypatch):
     boot = api.feed(request(blinq_feed_view="bootstrap"))
     assert boot["results"] == []
     assert boot["results_boot_partial"] is True
+    assert boot["results_snapshot"] == api._authorized_results_revision(normal["results"])
     assert boot["dashboard_kpi_cards"] == normal["dashboard_kpi_cards"]
     assert computed == [("settled",), ("settled",)]
 
@@ -90,3 +91,23 @@ def test_empty_authorized_results_do_not_trigger_unnecessary_lazy_load(monkeypat
     boot = api.feed(request(blinq_feed_view="bootstrap"))
     assert boot["results"] == []
     assert boot["results_boot_partial"] is False
+
+
+def test_bootstrap_revision_matches_pages_and_changes_with_authorized_results(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    first = api.feed(request(blinq_feed_view="bootstrap"))
+    page = api.results_page(request(page="0", limit="500"))
+    assert first["results_snapshot"] == page["snapshot"]
+    assert first["results"] == []
+    assert first["results_boot_partial"] is True
+    assert len(first["results_snapshot"]) == 24
+    assert api._authorized_results_revision([{"event_id": "other"}]) != first["results_snapshot"]
+
+
+def test_empty_authorized_bootstrap_has_empty_revision(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    monkeypatch.setattr(api, "runtime_settled_results",
+                        lambda _feed, _statuses, **_kwargs: [])
+    feed = api.feed(request(blinq_feed_view="bootstrap"))
+    assert feed["results_boot_partial"] is False
+    assert feed["results_snapshot"] == api._authorized_results_revision([])
