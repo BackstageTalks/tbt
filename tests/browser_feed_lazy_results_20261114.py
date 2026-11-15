@@ -40,7 +40,7 @@ def main():
                 source = (WEB / "app.js").read_text(encoding="utf-8")
                 assert source.count("  boot();") == 1
                 source = source.replace("  boot();", """
-  window.lazyResultsTest={state,setRoute,loadCompleteResults,renderDashboardKpis};
+  window.lazyResultsTest={state,setRoute,loadCompleteResults,scheduleResultsPreload,renderDashboardKpis};
   boot();""")
                 route.fulfill(content_type="application/javascript", body=source)
                 return
@@ -89,16 +89,25 @@ def main():
                   if(dialog.open)dialog.close();
                   t.setRoute('predictions',false);
                   const kpis=document.getElementById('dashboardKpis').textContent;
-                  t.setRoute('results',false);
+                  // Mobile: let the background timer hydrate without opening
+                  // Results. Desktop: navigate immediately to cover the race.
+                  if(window.innerWidth===390)t.scheduleResultsPreload(0);
+                  else t.setRoute('results',false);
                   return {kpis,partial:t.state.feed.results_boot_partial};
                 }""", full[0])
                 assert before["partial"] is True, before
                 assert before["kpis"].strip(), (width, before)
+                if width == 390:
+                    page.wait_for_timeout(350)
+                    assert len(requests) == 0, "Background history started before the delay"
                 page.wait_for_function(
                     "window.lazyResultsTest.state.feed.results_boot_partial === false",
                     timeout=15000,
                 )
                 assert len(requests) == 1, (width, len(requests))
+                if width == 390:
+                    page.evaluate("window.lazyResultsTest.setRoute('results',false)")
+                    assert len(requests) == 1, "Opening preloaded Results fetched history again"
                 hydrated = page.evaluate("""() => ({
                   rows: window.lazyResultsTest.state.feed.results.map(x=>x.event_id),
                   rendered: document.getElementById('routePanel').textContent,
@@ -110,7 +119,7 @@ def main():
                 context.close()
             finally:
                 browser.close()
-    print("BlinQ 390/1440 real-browser lazy Results and dashboard: PASS")
+    print("BlinQ 390px background preload + 1440px immediate Results navigation: PASS")
 
 
 if __name__ == "__main__":
