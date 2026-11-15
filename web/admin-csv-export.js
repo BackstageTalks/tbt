@@ -9,7 +9,7 @@
 
   const CATEGORY_NAMES = Object.freeze({
     top_daily: 'TOP', prime: 'ACCA', value: 'Value', doubles: 'Štvorhra',
-    ace: 'Esá', double_faults: 'Dvojchyby', sets: 'Sety', games: 'Gamy',
+    ace: 'Esá', ace_winner: 'Viac es', double_faults: 'Dvojchyby', sets: 'Sety', games: 'Gamy',
   });
   const MAIN_COLUMNS = [
     'Kategória', 'Kategória_kód', 'Dátum_zápasu', 'Event_ID',
@@ -22,7 +22,7 @@
     'Jednotky', 'Publikované', 'Model_verzia',
   ];
   const PREDICTION_COLUMNS = [
-    ...MAIN_COLUMNS, 'Publikované', 'Model_verzia',
+    ...MAIN_COLUMNS, 'Publikované', 'Model_verzia', 'Zdroj_záznamu',
   ];
 
   const str = value => value == null ? '' : String(value);
@@ -97,15 +97,60 @@
       return out;
     });
   }
+  // A historical published contract is not the same as today's display row.
+  // Retain one record per category, event, market, selection and O/U line.
+  function predictionIdentity(item) {
+    const match = item.row || {}, p = item.publication || {};
+    const event = str(first(match.event_id, match.id, match.match_id)).trim();
+    const category = str(item.category).trim().toLowerCase();
+    const market = str(first(p.market, match.market, ({
+      top_daily:'match_winner', prime:'match_winner', value:'match_winner',
+      doubles:'match_winner', ace:'aces', ace_winner:'most_aces',
+      double_faults:'double_faults', sets:'sets', games:'games',
+    })[category])).trim().toLowerCase();
+    const selection = str(first(p.selection_id, p.pick_id, p.winner_id,
+      match.selection_id, match.pick_id, match.winner_id,
+      p.selection, match.selection, match.pick, item.pick)).trim().toLowerCase();
+    if (!event || !category || !market || !selection) return '';
+    return JSON.stringify([event, category, market, selection,
+      str(first(p.projection_scope, match.projection_scope)),
+      str(first(p.projection_metric, match.projection_metric)),
+      str(first(p.price_contract, match.price_contract)),
+      str(first(p.ou_side, match.ou_side)).toLowerCase(),
+      str(first(p.market_line, match.market_line, match.line))]);
+  }
+  function mergePredictionInputs(historical, current) {
+    const rows = [], seen = new Set();
+    for (const item of [...(historical || []), ...(current || [])]) {
+      if (!item || !item.row) continue;
+      const key = predictionIdentity(item);
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      rows.push(item);
+    }
+    return rows;
+  }
   function predictionRows(items) {
     if (!Array.isArray(items)) return [];
     return items.map(item => {
-      const match = item.row || {};
-      const category = str(item.category);
-      const out = baseRow(match, category ? [category] : [], null, item.pick);
-      out['Publikované'] = first(match.issued_at, match.published_at);
-      out['Model_verzia'] = str(match.model_version);
-      flatten(match, 'src_predikcia', out);
+      const match = item.row || {}, category = str(item.category);
+      // Never place post-match settlement data in a historical pre-match CSV.
+      const published = item.publication && typeof item.publication === 'object'
+        ? {...item.publication} : null;
+      if (published) delete published.result;
+      const out = baseRow(match, category ? [category] : [], published, item.pick);
+      out['Publikované'] = published ? str(published.issued_at) : first(match.issued_at, match.published_at);
+      out['Model_verzia'] = first(published?.model_version, match.model_version);
+      out['Zdroj_záznamu'] = published ? 'archív publikácií' : 'aktuálna ponuka';
+      // Results archive stores settlements in market_publications; export only
+      // the issued contract here. The separate Results CSV keeps outcomes.
+      if (published) {
+        const {market_publications, ...preMatch} = match;
+        flatten(preMatch, 'src_predikcia', out);
+        flatten(published, 'src_publikácia', out);
+      } else {
+        flatten(match, 'src_predikcia', out);
+      }
       return out;
     });
   }
@@ -144,5 +189,5 @@
     }
     return {filename, count: rows.length};
   }
-  return {resultRows, predictionRows, serialize, download};
+  return {resultRows, predictionRows, predictionIdentity, mergePredictionInputs, serialize, download};
 });

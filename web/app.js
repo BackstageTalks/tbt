@@ -7394,33 +7394,60 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     });
   }
   function adminCsvPredictionInputs(){
-    // Published category tables, without their visible row/page limits.
-    return ['daily','prime','value','ace','ace_winner','double_faults','doubles','games','sets']
+    if(state.feed?.results_boot_partial)
+      throw new Error('Úplný archív predikcií sa ešte načítava. Export je zastavený.');
+    if(state.feed?.results_archive_unavailable||state.feed?.results_exclusions_unavailable)
+      throw new Error('Historický archív nie je dostupný. Neúplný export je zastavený.');
+    // Results pages contain the durable issued publication contracts, not only
+    // today's cards. Recover historical pre-match fields even after settlement.
+    const historical=(state.feed?.results||[]).flatMap(row=>
+      publicResultPublications(row)
+        .filter(p=>String(p.publication_status||'published').toLowerCase()==='published'
+          &&p.ace_winner_issued!==false
+          &&p.ace_winner_source!=='issued_aces_signal_only')
+        .map(publication=>{
+          const market=String(publication.market||'').toLowerCase();
+          const category=({aces:'ace',most_aces:'ace_winner',double_faults:'double_faults',
+            sets:'sets',games:'games'})[market]||String(publication.section||'');
+          const identity=resultPickIdentity(publication,row);
+          return {row,publication,category,
+            pick:isProjectionPublication(publication)
+              ?projectionResultSelectionText(publication,identity.name):identity.name};
+        })
+        .filter(item=>Object.values(RESULT_CATEGORY_BY_TAB).includes(item.category))
+    );
+    // Current verified serving offer fills the still-unsettled end of history.
+    // Never change dashboard row filters or create another publication here.
+    const current=['daily','prime','value','ace','ace_winner','double_faults','doubles','games','sets']
       .flatMap(tab=>dailyHubRows(tab).map(row=>({
         row,
         category:RESULT_CATEGORY_BY_TAB[tab],
         pick:['ace','ace_winner','double_faults','sets','games'].includes(tab)
           ?projectionPickText(row,tab):modelPickName(row),
       })));
+    return window.BlinqAdminCsv.mergePredictionInputs(historical,current);
   }
   function renderAdminDataExport(){
     const archiveReady=!state.feed?.results_archive_unavailable&&!state.feed?.results_exclusions_unavailable
       &&!state.feed?.results_boot_partial;
     const resultsCount=archiveReady?adminCsvResultsEntries().length:0;
-    const predictionCount=adminCsvPredictionInputs().length;
+    const predictionCount=archiveReady?adminCsvPredictionInputs().length:0;
     return '<section class="admin-ux-section admin-data-export"><header class="admin-test-head"><div><small>DÁTA · LEN NA ČÍTANIE</small><h3>Export CSV</h3><p>Kompletné dostupné tabuľky bez stránkovania. CSV v UTF-8 s hlavičkami, kategóriami a zdrojovými údajmi tipov.</p></div></header>'+
       '<div class="admin-ux-section"><div class="admin-subsection-heading"><div><strong>Výsledky</strong><span>'+(archiveReady?resultsCount+' vyhodnotených tipov':'Archív nedostupný')+'</span></div></div>'+
       '<p>Celá dostupná história publikovaných tipov vrátane všetkých kategórií, trhov, výsledku, kurzu, jednotiek, projekcií a zdrojových polí. Bez obmedzenia na aktuálnu stránku alebo filtre.</p>'+
       '<button type="button" class="btn btn-primary" data-admin-export-csv="results" '+(archiveReady&&resultsCount?'':'disabled')+'>↓ Export výsledkov CSV</button>'+
       (archiveReady?'':'<p role="alert">Archív alebo politika vylúčení nie sú dostupné; neúplný CSV sa neexportuje.</p>')+'</div>'+
       '<div class="admin-ux-section"><div class="admin-subsection-heading"><div><strong>Predikcie</strong><span>'+predictionCount+' publikovaných riadkov</span></div></div>'+
-      '<p>Aktuálna publikovaná ponuka TOP, ACCA, Value, Esá, Viac es, Dvojchyby, Štvorhra, Sety a Gamy. Vrátane kategórie, modelového odhadu, kurzu, hranice a dostupných zdrojových polí.</p>'+
-      '<button type="button" class="btn btn-primary" data-admin-export-csv="predictions" '+(predictionCount?'':'disabled')+'>↓ Export predikcií CSV</button></div>'+
+      '<p>Celé dostupné obdobie publikovaných predikcií TOP, ACCA, Value, Esá, Viac es, Dvojchyby, Štvorhra, Sety a Gamy: historické vydané tipy z archívu výsledkov + aktuálna ponuka, bez filtrov dátumu a stránkovania. Nedochované publikácie sa nevymýšľajú.</p>'+
+      '<button type="button" class="btn btn-primary" data-admin-export-csv="predictions" '+(archiveReady&&predictionCount?'':'disabled')+'>↓ Export predikcií CSV</button>'+
+      (archiveReady?'':'<p role="alert">História alebo politika vylúčení nie sú dostupné; neúplný CSV sa neexportuje.</p>')+'</div>'+
       '<p class="admin-detail-help">Dáta pochádzajú z publikovaného admin feedu a overeného archívu. Bez nových provider API požiadaviek, CDB zápisov alebo zmeny modelu.</p></section>';
   }
   function adminDownloadCsv(kind){
     if(!isAdminAccount()||state.previewPlan||!['results','predictions'].includes(kind))return;
-    if(kind==='results'&&state.feed?.results_boot_partial){showStatus('Úplná história Results sa ešte načítava.');return;}
+    if(state.feed?.results_boot_partial||state.feed?.results_archive_unavailable||state.feed?.results_exclusions_unavailable){
+      showStatus('Úplný archív ešte nie je dostupný. Export je zastavený.');return;
+    }
     if(!window.BlinqAdminCsv){showStatus('CSV export nie je načítaný. Obnov stránku.');return;}
     try{
       const data=kind==='results'

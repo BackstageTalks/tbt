@@ -1,5 +1,7 @@
 """Chromium end-to-end: admin CSV buttons download all Results and offered predictions."""
 import os
+import csv
+import io
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
@@ -79,8 +81,15 @@ def main():
             predictions_dl = info.value
             assert predictions_dl.suggested_filename.startswith("blinq_predikcie_")
             predictions_text = predictions_dl.path().read_bytes().decode("utf-8-sig")
-            assert '"TOP"' in predictions_text and '"ACCA"' in predictions_text
+            records = list(csv.DictReader(io.StringIO(predictions_text), delimiter=";"))
+            assert len(records) == 244, len(records)  # 121 × (TOP + Value), plus 2 current picks
+            assert {row['Kategória'] for row in records} == {'TOP', 'Value', 'ACCA'}
+            assert sum(row['Zdroj_záznamu'] == 'archív publikácií' for row in records) == 242
+            assert sum(row['Zdroj_záznamu'] == 'aktuálna ponuka' for row in records) == 2
+            assert any(row['Event_ID'] == 'evt-0' and row['Publikované'] == '2026-11-07T08:00:00Z' for row in records)
+            assert any(row['Event_ID'] == 'evt-1001' for row in records)
             assert '"src_predikcia.event_id"' in predictions_text
+            assert '"src_publikácia.result.correct"' not in predictions_text
             assert not errors, errors
 
             # Never export a misleading historical CSV after archive outage.
@@ -90,9 +99,18 @@ def main():
               adminCsvHarness.wireAdmin();
             }""")
             assert page.locator('[data-admin-export-csv="results"]').is_disabled()
-            assert page.locator('[data-admin-export-csv="predictions"]').is_enabled()
+            assert page.locator('[data-admin-export-csv="predictions"]').is_disabled()
+            page.evaluate("""() => {
+              const s=adminCsvHarness.state;
+              s.feed.results_archive_unavailable=false;
+              s.feed.results_boot_partial=true;
+              document.getElementById('routePanel').innerHTML=adminCsvHarness.renderAdminRoute();
+              adminCsvHarness.wireAdmin();
+            }""")
+            assert page.locator('[data-admin-export-csv="results"]').is_disabled()
+            assert page.locator('[data-admin-export-csv="predictions"]').is_disabled()
             context.close()
-            print("Admin CSV browser downloads: 121 Results, merged categories, predictions, archive fail-closed: PASS")
+            print("Admin CSV browser: 121 Results, 244 historical/current predictions, partial/outage fail-closed: PASS")
         finally:
             browser.close()
 
