@@ -9593,7 +9593,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // Reuse the same single-flight pagination and in-memory Results state as
       // on-demand navigation; do not create a second cache or request path.
       loadCompleteResults();
-    },2500);
+    },5000);
   }
   async function loadCompleteResults() {
     if (!state.feed?.results_boot_partial || !resultsAccessAllowed()) return;
