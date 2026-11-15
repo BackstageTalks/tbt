@@ -47,3 +47,30 @@ def test_model_feed_eligibility_and_aces_remain_unmodified_by_ui_change():
     assert "renderMarketSection('value','valueGrid'" in source
     assert "renderDailyHub()" in source
     assert "dailyHubRows('daily')" in source
+
+
+def test_unlimited_v21_top_survives_serving_entitlement_without_legacy_three_pick_core():
+    from test_market_selection import row
+    from tbt.services.market_selection import select_market_sections
+    from tbt.services.entitlements import _daily_rows
+
+    candidates = [
+        row("high-80", .80, 1.60, 2.60, depth=1.0),
+        row("high-75", .75, 1.60, 2.60, depth=1.0),
+        row("high-70", .70, 1.60, 2.60, depth=1.0),
+        row("eligible-66", .66, 1.60, 2.60, depth=1.0),
+        row("eligible-65", .65, 1.60, 2.60, depth=1.0),
+    ]
+    published = select_market_sections(candidates)
+    original_ids = [x["event_id"] for x in published["top_daily_picks"]]
+    assert original_ids == [
+        "high-80", "high-75", "high-70", "eligible-66", "eligible-65",
+    ]
+    assert published["market_selection"]["top_daily_rule"]["policy"] == "evidence_unlimited_top_v21"
+    assert published["market_selection"]["top_daily_rule"]["fallback_only_if_core_count_below"] is None
+    assert [x["event_id"] for x in _daily_rows(published)] == original_ids
+    # The old 3-pick tier rule must remain isolated from the new policy.
+    previous = {**published, "market_selection": {
+        "top_daily_rule": {"policy": "priority_tours_top_v20", "core_min_probability": .68,
+                           "fallback_only_if_core_count_below": 3}}}
+    assert len(_daily_rows(previous)) == 3
