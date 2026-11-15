@@ -437,6 +437,63 @@ class TennisEnsemble:
                     p[mask] = self._calibrated(calibrator, raw[mask])
         return np.clip(p, .01, .99)
 
+    @staticmethod
+    def _smooth_confidence_validation(raw, labels, predictions):
+        """Reject newly fitted smooth maps that harm the predeclared 65%+ group.
+
+        Only the *later* calibration-selection days are scored. The selection
+        set is frozen by the uncalibrated symmetric prediction, never by a
+        candidate's own probability or a bookmaker quote. This prevents a
+        candidate from escaping its mistakes by moving events below 65%.
+        Never consult the untouched chronological test/issuance outcomes.
+        """
+        raw = np.asarray(raw, dtype=float)
+        labels = np.asarray(labels, dtype=float)
+        if (raw.ndim != 1 or labels.shape != raw.shape or not len(raw)
+                or not np.isfinite(raw).all() or np.any(raw <= 0)
+                or np.any(raw >= 1) or not np.isfinite(labels).all()
+                or not np.isin(labels, (0., 1.)).all()
+                or not isinstance(predictions, dict) or "identity" not in predictions):
+            raise ValueError("Invalid point-in-time smooth calibration evidence")
+        anchored = np.maximum(raw, 1 - raw) >= 0.65
+        n = int(anchored.sum())
+        scores = {}
+        for kind, values in predictions.items():
+            p = np.asarray(values, dtype=float)
+            if (p.shape != raw.shape or not np.isfinite(p).all()
+                    or np.any(p <= 0) or np.any(p >= 1)):
+                raise ValueError("Unaligned high-confidence calibration probabilities")
+            if n:
+                subset = p[anchored]
+                truth = labels[anchored]
+                scores[kind] = {
+                    "brier_score": float(np.mean((subset - truth) ** 2)),
+                    "log_loss": float(log_loss(truth, subset, labels=[0, 1])),
+                    "mean_confidence": float(np.maximum(subset, 1 - subset).mean()),
+                    "observed_accuracy": float(((subset >= 0.5) == truth).mean()),
+                }
+        # An unproven high-confidence subset cannot justify a different map.
+        # Identity is the deterministic, side-symmetric fail-closed default.
+        eligible = {"identity"}
+        if n >= 100:
+            baseline = scores["identity"]
+            for kind, score in scores.items():
+                if kind != "identity" and (
+                    score["brier_score"] <= baseline["brier_score"] + 1e-12
+                    and score["log_loss"] <= baseline["log_loss"] + 1e-12
+                ):
+                    eligible.add(kind)
+        return eligible, {
+            "status": "EVALUATED" if n >= 100 else "INSUFFICIENT_HIGH_CONFIDENCE_SELECTION",
+            "selection_anchor": "uncalibrated_symmetric_probability",
+            "threshold_inclusive": 0.65,
+            "minimum_rows": 100,
+            "rows": n,
+            "selected_methods": sorted(eligible),
+            "scores": scores,
+            "holdout_or_issued_outcomes_used": False,
+        }
+
     def fit(self, train_frame, calibration_frame):
         self.fitted = False
         if len(train_frame) < 300:
@@ -527,6 +584,7 @@ class TennisEnsemble:
                 kinds.append("isotonic")
             candidates = []
             calibration_brier = {}
+            candidate_predictions = {}
             for kind in kinds:
                 calibrator = self._fit_calibrator(kind, raw[:split], y_cal[:split])
                 if ((getattr(self, "accuracy_blend_selection", False)
@@ -536,7 +594,15 @@ class TennisEnsemble:
                 p = self._calibrated(calibrator, raw[split:])
                 candidates.append((float(log_loss(y_cal[split:], p, labels=[0, 1])), kind))
                 calibration_brier[kind] = float(np.mean((p - y_cal[split:]) ** 2))
+                if getattr(self, "smooth_calibration_only", False):
+                    candidate_predictions[kind] = p
             if getattr(self, "smooth_calibration_only", False):
+                allowed, confidence_audit = self._smooth_confidence_validation(
+                    raw[split:], y_cal[split:], candidate_predictions,
+                )
+                self.metadata["smooth_high_confidence_validation"] = confidence_audit
+                candidates = [(loss, kind) for loss, kind in candidates
+                              if kind in allowed]
                 # Do not cure isotonic plateaus by trading away Brier quality.
                 # Identity is always eligible and preserves the original raw
                 # probability when smooth Platt does not beat both scores.
