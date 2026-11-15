@@ -1,7 +1,12 @@
 {
   "schema": 1,
   "trigger": "one-time-operator-approved-complete-daily-offer",
-  "betting_day": "2026-11-08",
-  "requested_at": "2026-11-08T08:55:00+01:00",
-  "source": "website_confirmed_telegram_recovery"
+  "betting_day": "2026-11-15",
+  "requested_at": "2026-11-15T14:36:00+01:00",
+  "source": "operator-request-confirmed-2-top-2-aces-separate-more-aces",
+  "requirements": {
+    "snapshot": "confirmed_only; independent TOP and ESÁ records; no backdating",
+    "telegram": "existing publisher, reserve-once, no duplicate",
+    "deploy": "zero-provider current feed readback"
+  }
 }
