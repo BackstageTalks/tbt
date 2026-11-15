@@ -907,6 +907,14 @@ def _daily_rows(payload: dict) -> list[dict]:
         # Preserve the selector's competition/tier order. Old publications and
         # settled results are not mutated by this active-board filter.
         return out
+    if rule.get("policy") == "evidence_unlimited_top_v21":
+        # The selector already proved eligibility for ALL published >=65% rows.
+        # The legacy three-core threshold below would silently discard valid
+        # 65–68% TOP picks whenever three higher scores exist, even with
+        # TOP_LIMIT=None. Keep every validated, distinct, priced item and the
+        # published competition-first order; member visibility is capped later
+        # by independent server authorization.
+        return out
     try:
         core_floor=float(rule.get("core_min_probability",0.68))
         core_floor=core_floor/100 if core_floor>1 else core_floor
