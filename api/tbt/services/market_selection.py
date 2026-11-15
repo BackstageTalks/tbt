@@ -1097,6 +1097,23 @@ def _fill_top_dynamic(
     return selected, added, applied
 
 
+def _belongs_to_public_offer_day(row: dict[str, Any], day: str) -> bool:
+    """Match visible_feed's Bratislava calendar day and 06:00 opening boundary.
+
+    Filter before section limits: tomorrow's highly ranked candidates must not
+    consume today's TOP slots. Invalid/naive timestamps fail closed.
+    """
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+    try:
+        starts_at = datetime.fromisoformat(str(raw or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return False
+    if starts_at.tzinfo is None:
+        return False
+    local = starts_at.astimezone(ZoneInfo("Europe/Bratislava"))
+    return local.date().isoformat() == day and local.hour >= 6
+
+
 def select_market_sections(
     predictions: list[dict[str, Any]],
     *,
@@ -1123,6 +1140,7 @@ def select_market_sections(
     ace_picks: list[dict[str, Any]] | None = None,
     sg_picks: list[dict[str, Any]] | None = None,
     doubles_picks: list[dict[str, Any]] | None = None,
+    public_offer_day: str | None = None,
 ) -> dict[str, Any]:
     """Publish existing TOP/PRIME/VALUE with unchanged markets and price contracts.
 
@@ -1133,6 +1151,7 @@ def select_market_sections(
         card for row in predictions
         if isinstance(row, dict)
         and row.get("prediction_family") != "doubles"
+        and (public_offer_day is None or _belongs_to_public_offer_day(row, public_offer_day))
         and (card := _market_card(row)) is not None
     ]
 
@@ -1407,7 +1426,8 @@ def select_market_sections(
 
 
 def build_selection_candidate_snapshot(
-    predictions: list[dict[str, Any]], *, generated_at: datetime
+    predictions: list[dict[str, Any]], *, generated_at: datetime,
+    public_offer_day: str | None = None,
 ) -> dict[str, Any]:
     """Freeze the full singles selector input before public section assignment.
 
@@ -1415,7 +1435,7 @@ def build_selection_candidate_snapshot(
     Selected and unselected candidates are both retained so future policy tests
     can preserve historical daily capacity.
     """
-    sections = select_market_sections(predictions)
+    sections = select_market_sections(predictions, public_offer_day=public_offer_day)
     assigned: dict[str, str] = {}
     tier: dict[str, str | None] = {}
     for section, key in (
@@ -1770,6 +1790,7 @@ def attach_market_sections_to_feed(
     sg_report: dict[str, Any] | None = None,
     doubles_picks: list[dict[str, Any]] | None = None,
     doubles_report: dict[str, Any] | None = None,
+    public_offer_day: str | None = None,
 ) -> dict[str, Any]:
     """Attach live market presentation without changing prediction commitments."""
     result = deepcopy(feed)
@@ -1790,7 +1811,8 @@ def attach_market_sections_to_feed(
     result["upcoming"] = upcoming
 
     sections = select_market_sections(
-        enriched_predictions, ace_picks=ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
+        enriched_predictions, ace_picks=ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks,
+        public_offer_day=public_offer_day,
     )
     result.update(sections)
     result["market_selection"] = {
