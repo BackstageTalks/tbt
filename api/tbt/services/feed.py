@@ -14,37 +14,47 @@ MAX_FEED_BYTES = 32 * 1024 * 1024  # Guarded headroom for verified 21,728,761-by
 MAX_ACES_PLAYER_RANK = 1000  # Both players, ATP/WTA active Aces / Most Aces only
 
 
-def main_tour_aces(row):
-    """Shared ATP/WTA-only active Aces and Most Aces market eligibility.
+def ace_eligibility_reason(row):
+    """Explain the active ESÁ/Viac Es gate, without changing model thresholds.
 
-    Treat missing/ambiguous tours as ineligible. A generic ATP/WTA gender
-    label is insufficient when the tournament is explicitly Challenger,
-    ITF/Futures or WTA 125. Both players need a known, positive, integral
-    ranking at or above the top-1000 threshold. Never rewrite historical
-    Results/issued receipts.
+    Main ATP/WTA and Challenger/WTA 125 singles may qualify if *both* players
+    have verified, integral TOP-1000 ranks. ITF/Futures and unknown tours never
+    qualify. Historic Results/issued receipts are not touched.
     """
-    if not isinstance(row, dict) or str(row.get("tour") or "").strip().casefold() not in {
+    if not isinstance(row, dict):
+        return "unsupported_tour"
+    tour = str(row.get("tour") or "").strip().casefold()
+    if tour not in {
         "atp", "wta", "atp tour", "wta tour",
+        "atp challenger", "wta challenger", "wta 125", "wta125", "wta-125",
     }:
-        return False
-    for side in ("player1", "player2"):
-        player = row.get(side)
-        if not isinstance(player, dict) or isinstance(player.get("rank"), bool):
-            return False
-        try:
-            rank = float(player.get("rank"))
-        except (TypeError, ValueError, OverflowError):
-            return False
-        if not math.isfinite(rank) or not rank.is_integer() or not 1 <= rank <= MAX_ACES_PLAYER_RANK:
-            return False
+        return "unsupported_tour"
     for field in ("tournament", "tournament_name", "tournament_type",
                   "competition", "competition_type", "tour_level", "tournament_level", "category"):
         label = str(row.get(field) or "").strip().casefold()
-        if any(tag in label for tag in (
-                "challenger", "itf", "futures", "wta 125", "wta125",
-                "wta-125", "atp challenger")):
-            return False
-    return True
+        if any(tag in label for tag in ("itf", "futures")):
+            return "excluded_itf_futures"
+    for side in ("player1", "player2"):
+        player = row.get(side)
+        if not isinstance(player, dict) or player.get("rank") in (None, ""):
+            return "missing_player_rank"
+        value = player.get("rank")
+        if isinstance(value, bool):
+            return "invalid_player_rank"
+        try:
+            rank = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return "invalid_player_rank"
+        if not math.isfinite(rank) or not rank.is_integer() or rank < 1:
+            return "invalid_player_rank"
+        if rank > MAX_ACES_PLAYER_RANK:
+            return "outside_top1000"
+    return "eligible"
+
+
+def main_tour_aces(row):
+    """Compatibility gate for active ESÁ and Viac Es selection/presentation."""
+    return ace_eligibility_reason(row) == "eligible"
 
 
 def _betting_day_key(moment, *, timezone_name="Europe/Bratislava", start_hour=6):

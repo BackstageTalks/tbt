@@ -13,15 +13,14 @@ from datetime import datetime, timezone
 import math
 from typing import Any
 
-from .feed import main_tour_aces
+from .feed import ace_eligibility_reason, main_tour_aces
 
 
 def _main_tour_for_aces(row: dict[str, Any]) -> bool:
-    """Main ATP/WTA tours only; never infer eligibility from player history.
+    """Shared ESÁ and Viac Es market gate: ranked main tour/Challenger/WTA125.
 
-    Challenger, ITF, WTA 125 and unknown tours fail closed even if the same
-    player has ATP/WTA history. This applies to Aces and derived Most Aces,
-    not Match Winner, Value, Double Faults or other market selection.
+    ITF/Futures, unknown tours and either player without a known TOP1000 rank
+    remain excluded. Match Winner, Value and Double Faults are unchanged.
     """
     return main_tour_aces(row)
 
@@ -715,6 +714,11 @@ def select_ace_picks(
 
     by_market: dict[str, list[dict[str, Any]]] = {"aces": [], "double_faults": []}
     eligible_matches = 0
+    ace_gate_counts = {
+        "eligible": 0, "unsupported_tour": 0,
+        "excluded_itf_futures": 0, "missing_player_rank": 0,
+        "invalid_player_rank": 0, "outside_top1000": 0,
+    }
     for row in predictions:
         p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
         p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
@@ -722,6 +726,8 @@ def select_ace_picks(
         if not p1_id or not p2_id:
             continue
         eligible_matches += 1
+        ace_gate_reason = ace_eligibility_reason(row)
+        ace_gate_counts[ace_gate_reason] += 1
         surface = str(row.get("surface") or "unknown").lower()
         best_of = row.get("best_of")
         try:
@@ -730,7 +736,7 @@ def select_ace_picks(
             best_of = None
 
         for market in ("aces", "double_faults"):
-            if market == "aces" and not _main_tour_for_aces(row):
+            if market == "aces" and ace_gate_reason != "eligible":
                 continue
             if (available_markets_by_event is not None
                 and market not in available_markets_by_event.get(str(row.get("event_id") or ""), set())
@@ -791,6 +797,7 @@ def select_ace_picks(
         "odds_backed": False,
         "settlement_enabled": True,
         "eligible_upcoming_matches": eligible_matches,
+        "aces_gate_counts": ace_gate_counts,
         "history_matches_with_aces": stat_matches["aces"],
         "history_matches_with_double_faults": stat_matches["double_faults"],
         "baseline_aces": round(baselines["aces"], 3),

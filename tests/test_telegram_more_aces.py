@@ -235,7 +235,7 @@ def test_workflow_wires_only_existing_telegram_sender_and_ledger():
     assert 'group: blinq-telegram-ledger' in job
 
 
-def test_more_aces_rejects_off_tour_balls_but_keeps_atp_wta():
+def test_more_aces_keeps_ranked_atp_wta_wta125_but_rejects_unsupported_tours():
     rows=[
         row(event="atp")|{"tour":"ATP"},
         row(event="wta")|{"tour":"WTA"},
@@ -245,10 +245,10 @@ def test_more_aces_rejects_off_tour_balls_but_keeps_atp_wta():
         row(event="unknown")|{"tour":None},
     ]
     result=more.offered_rows(snapshot(rows),NOW)
-    assert [r["event_id"] for r in result]==["atp","wta"]
+    assert [r["event_id"] for r in result]==["atp","wta","wta125"]
 
 
-def test_more_aces_rejects_tour_mislabeled_challenger_or_125():
+def test_more_aces_includes_ranked_challenger_or_125_even_if_tour_is_generic():
     examples=[
         row(event="atp")|{"tour":"ATP","tournament":"Main draw"},
         row(event="wta")|{"tour":"WTA","tournament":"WTA Tour"},
@@ -256,4 +256,4 @@ def test_more_aces_rejects_tour_mislabeled_challenger_or_125():
         row(event="wta125")|{"tour":"WTA","tournament":"WTA 125 Mumbai"},
     ]
     rows=more.offered_rows(snapshot(examples),NOW)
-    assert [r["event_id"] for r in rows]==["atp","wta"]
+    assert [r["event_id"] for r in rows]==["atp","wta","challenger","wta125"]
