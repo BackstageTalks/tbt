@@ -1367,7 +1367,7 @@ def select_market_sections(
                 "all_qualifying_above_active_tier": top_limit is None,
                 "no_forced_fill": True,
                 "observed_pick_count": len(top),
-                "fallback_only_if_core_count_below": TOP_MIN_COUNT,
+                "fallback_only_if_core_count_below": None,
                 "dynamic_fallback": False,
                 "tiered_priority_fallback": False,
                 "dynamic_fallback_tiers": [
