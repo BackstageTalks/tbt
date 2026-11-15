@@ -40,7 +40,8 @@ def main():
                 source = (WEB / "app.js").read_text(encoding="utf-8")
                 assert source.count("  boot();") == 1
                 source = source.replace("  boot();", """
-  window.lazyResultsTest={state,setRoute,loadCompleteResults,scheduleResultsPreload,renderDashboardKpis};
+  window.lazyResultsTest={state,setRoute,loadCompleteResults,renderDashboardKpis,
+    scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration)};
   boot();""")
                 route.fulfill(content_type="application/javascript", body=source)
                 return
@@ -91,7 +92,7 @@ def main():
                   const kpis=document.getElementById('dashboardKpis').textContent;
                   // Mobile: let the background timer hydrate without opening
                   // Results. Desktop: navigate immediately to cover the race.
-                  if(window.innerWidth===390)t.scheduleResultsPreload(0);
+                  if(window.innerWidth===390)t.scheduleResultsPreload();
                   else t.setRoute('results',false);
                   return {kpis,partial:t.state.feed.results_boot_partial};
                 }""", full[0])
