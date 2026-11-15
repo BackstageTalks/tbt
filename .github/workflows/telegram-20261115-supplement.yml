@@ -1,0 +1,99 @@
+name: BlinQ Telegram verified TOP and ESÁ supplemental offer 2026-11-15
+# Operator-authorized correction: new confirmed picks only, never resend morning.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/telegram-20261115-supplement-tick.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-telegram-ledger
+  cancel-in-progress: false
+
+jobs:
+  supplement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout approved main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Checkout existing private Telegram receipts
+        uses: actions/checkout@v4
+        with:
+          repository: BackstageTalks/tbt-data
+          ref: telegram-bot-state
+          token: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          path: .private-telegram
+          sparse-checkout: ops
+          sparse-checkout-cone-mode: true
+          persist-credentials: true
+      - name: Verify operator request and prepare only new issued pre-match tips
+        id: prepare
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" && test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -s .private-telegram/ops/telegram-bot-state.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          doc=json.loads(Path(".github/telegram-20261115-supplement-tick.json").read_text())
+          assert doc.get("schema")==1 and doc.get("betting_day")=="2026-11-15"
+          assert doc.get("revision")=="top-aces-added-v1"
+          assert doc.get("send")=="confirmed_new_only"
+          assert doc.get("preserve_original") is True
+          print("Approved 15 Nov TOP/ESÁ supplemental request verified")
+          PY
+          python scripts/telegram_offer_supplement_20261115.py \
+            --state .private-telegram/ops/telegram-bot-state.json \
+            --config-url "$BLINQ_URL/api/v1/ui-config"
+          if [[ -s /tmp/blinq-telegram/ready ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Durably reserve exact supplemental picks before Telegram API
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram config user.name "github-actions[bot]"
+          git -C .private-telegram config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Reserve exact new 15 Nov TOP/ESÁ Telegram rows [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Supplement reservation read-back failed"; exit 1; }
+      - name: Send only new confirmed premium TOP and ESÁ
+        if: steps.prepare.outputs.ready == 'true'
+        env:
+          TGB: ${{ secrets.TGB }}
+          TGCH: ${{ secrets.TGCH }}
+        run: python scripts/telegram_offer_publisher.py send
+      - name: Confirm message IDs, persist receipts and independently read back
+        if: steps.prepare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/telegram_offer_publisher.py mark-sent
+          cp /tmp/blinq-telegram/state.json .private-telegram/ops/telegram-bot-state.json
+          git -C .private-telegram add ops/telegram-bot-state.json
+          git -C .private-telegram commit -m "Confirm new 15 Nov Telegram message receipts [skip ci]"
+          git -C .private-telegram push origin HEAD:telegram-bot-state
+          expected="$(git -C .private-telegram rev-parse HEAD)"
+          actual="$(git -C .private-telegram ls-remote origin refs/heads/telegram-bot-state | awk '{print $1}')"
+          test "$expected" = "$actual" || { echo "::error::Supplement receipt read-back failed"; exit 1; }
