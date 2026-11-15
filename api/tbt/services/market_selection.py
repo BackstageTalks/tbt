@@ -79,7 +79,7 @@ TOP_MIN_ODDS: float | None = 1.50
 TOP_FALLBACK_MIN_ODDS = 1.50
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
-TOP_LIMIT: int | None = 3
+TOP_LIMIT: int | None = None
 TOP_BACKUP_MIN_DATA_DEPTH = TOP_MIN_DATA_DEPTH
 TOP_BACKUP_MIN_SURFACE_MATCHES = TOP_MIN_SURFACE_MATCHES
 
@@ -699,7 +699,9 @@ def attach_match_winner_market(
         "fair_implied_probability": implied,
         "model_probability": model_probability,
         "blinq_probability": blinq_probability,
-        "probability_reliability": _depth(result),
+        "historical_count_depth": _depth(result),
+        "probability_reliability": None,
+        "reliability_status": "not_established_by_history_count",
         # Freeze model-time ranks from the predictor's point-in-time row.
         # Presentation may fill player ranks later; it is never evidence for
         # authorizing an originally unsupported high-confidence bet.
@@ -873,7 +875,9 @@ def _market_card(row: dict[str, Any]) -> dict[str, Any] | None:
         adjusted_probability = _blinq_probability(card)
     card["raw_model_probability"] = raw_probability
     card["blinq_probability"] = adjusted_probability
-    card["probability_reliability"] = _number(betting.get("probability_reliability")) or _depth(card)
+    card["historical_count_depth"] = _depth(card)
+    card["probability_reliability"] = None
+    card["reliability_status"] = "not_established_by_history_count"
     card["probability"] = adjusted_probability
     card["fair_implied_probability"] = betting.get("fair_implied_probability")
     card["betting_day"] = betting.get("betting_day")
@@ -992,20 +996,14 @@ def _fill_to_minimum(
 
 
 def _top_quality_rank(card: dict[str, Any]) -> tuple:
-    """Conservative model/bookmaker agreement, not a calibrated success claim."""
-    p = float(_number(card.get("probability")) or 0.0)
-    odds = float(_number(card.get("odds")) or 0.0)
-    fair = _number(card.get("fair_implied_probability"))
-    paired = fair is not None and 0.0 < fair < 1.0
-    market = float(fair) if paired else (1.0 / odds if odds > 1.0 else 0.0)
-    agreement = 2.0 * p * market / (p + market) if p + market > 0.0 else 0.0
-    return (agreement, int(paired), _depth(card),
+    """Sports evidence tie-break only. Counts are not calibrated confidence."""
+    return (_depth(card),
             min(_surface_samples(card)), min(_overall_samples(card)),
             _selection_identity(card))
 
 
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
-                         *, target: int = TOP_TARGET_COUNT,
+                         *, target: int | None = None,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     """Exhaust ATP/WTA >=65%, then Challenger, then verified ITF W35+ >=65%.
 
@@ -1033,7 +1031,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
         added = 0
         for card in eligible:
             event = str(card.get("event_id") or "")
-            if not event or event in seen or len(selected) >= target:
+            if not event or event in seen or (target is not None and len(selected) >= target):
                 continue
             item = deepcopy(card)
             item["selection_tier"] = f"{label}_0.65"
@@ -1043,7 +1041,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
         if added:
             applied.append({"competition_tier": label, "min_probability": .65,
                             "selected": added, "step": step})
-        if len(selected) >= target:
+        if target is not None and len(selected) >= target:
             break
 
     fallback_count = sum(row["selection_tier"] != "main_0.65" for row in selected)
@@ -1245,7 +1243,7 @@ def select_market_sections(
         prime_core, prime_fallback, minimum_count=PRIME_MIN_COUNT, rank_key=rank
     )
     top_qualified, top_fallback_added, top_fallback_applied = _rank_full_slate_top(
-        top_core, top_fallback, target=TOP_TARGET_COUNT, minimum=TOP_MIN_COUNT,
+        top_core, top_fallback, target=top_limit, minimum=TOP_MIN_COUNT,
     )
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
@@ -1282,7 +1280,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "priority_tours_top_v20",
+            "selection_policy": "evidence_unlimited_top_v21",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1300,7 +1298,7 @@ def select_market_sections(
                 "limited_out": sum(limited_out.values()),
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "daily_preferred_target": TOP_MIN_COUNT,
-                "all_qualifying_above_active_tier": False,
+                "all_qualifying_above_active_tier": top_limit is None,
                 "active_top_probability_floor": top_fallback_applied["min_probability"],
                 "top_daily_shortfall": max(0, TOP_MIN_COUNT-len(top)),
                 "minimum_shortfall": {
@@ -1366,12 +1364,12 @@ def select_market_sections(
                     {"group": "ITF W35+ verified serve/return", "min_probability_exclusive": 0.65, "max_odds_inclusive": 1.70},
                 ],
                 "daily_minimum_target": TOP_MIN_COUNT,
-                "all_qualifying_above_active_tier": False,
+                "all_qualifying_above_active_tier": top_limit is None,
                 "no_forced_fill": True,
                 "observed_pick_count": len(top),
                 "fallback_only_if_core_count_below": TOP_MIN_COUNT,
                 "dynamic_fallback": False,
-                "tiered_priority_fallback": True,
+                "tiered_priority_fallback": False,
                 "dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
@@ -1387,9 +1385,9 @@ def select_market_sections(
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
-                "sort": "competition_then_probability_then_quality_consensus",
+                "sort": "competition_then_probability_then_history_counts",
                 "ranked_full_slate": True,
-                "policy": "priority_tours_top_v20",
+                "policy": "evidence_unlimited_top_v21",
                 "competition_priority": [["ATP", "WTA"], ["Challenger"], ["ITF"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
@@ -1448,6 +1446,8 @@ def build_selection_candidate_snapshot(
                 assigned[identity] = section
                 tier[identity] = card.get("selection_tier")
 
+    from .sports_prediction_audit import sports_prediction_audit
+    sports_audit = sports_prediction_audit(predictions, generated_at)
     rows = []
     for source in predictions:
         if not isinstance(source, dict) or source.get("prediction_family") == "doubles":
@@ -1496,6 +1496,10 @@ def build_selection_candidate_snapshot(
             # Count depth does not certify that point-in-time performance
             # statistics exist. Keep the original evidence for independent audits.
             "feature_evidence": deepcopy(quality.get("feature_evidence")),
+            "statistics_evidence": {
+                "player1": deepcopy(q1.get("statistics_evidence")),
+                "player2": deepcopy(q2.get("statistics_evidence")),
+            },
             "samples": {
                 "player1_matches": q1.get("matches"), "player2_matches": q2.get("matches"),
                 "player1_surface_matches": q1.get("surface_matches"),
@@ -1530,6 +1534,7 @@ def build_selection_candidate_snapshot(
         "generated_at": generated_at.astimezone(timezone.utc).isoformat(),
         "selection_policy": (sections.get("market_selection") or {}).get("selection_policy"),
         "selection_counts": (sections.get("market_selection") or {}).get("selection_counts"),
+        "sports_prediction_audit": sports_audit,
         "rows": rows,
         "scope": {
             "all_singles_selector_inputs": len(rows),

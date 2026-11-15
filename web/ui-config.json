@@ -974,7 +974,7 @@
     "top_daily": {
       "label": "TOP Predictions",
       "internal_key": "top_daily",
-      "limit": 3,
+      "limit": null,
       "markets": [
         "match_winner"
       ],
@@ -991,17 +991,17 @@
       "min_expected_value": null,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "sort": "competition_then_probability_then_consensus",
+      "sort": "competition_then_probability_then_history_counts",
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "ATP/WTA >=65% first; if below 3, Challenger >=65%; if still below 3, ITF strictly >65% and verified price 1.50–1.70 inclusive. Existing fail-closed women W35+ pre-match serve/return and surface S/R evidence gate applies; male/ambiguous ITF excluded. Keep quality checks, VALUE priority, and no forced fill.",
+      "cascade": "All qualifying candidates, no count cap; minimum daily objective 3 without forced fill. ATP/WTA first, then Challenger, then verified women ITF W35+. Existing probability, data and subsequent price eligibility checks remain; count depth is not calibrated confidence.",
       "confidence_tiers": [
         0.65
       ],
       "minimum_dashboard_count": 3,
       "fallback_min_probability": 0.65,
-      "fallback_only_if_core_count_below": 3,
+      "fallback_only_if_core_count_below": null,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
       "backup_min_data_depth": 0.8,
@@ -1019,7 +1019,7 @@
         ]
       ],
       "quality_fallback": false,
-      "policy": "priority_tours_top_v20"
+      "policy": "evidence_unlimited_top_v21"
     },
     "value": {
       "label": "Value Predictions",

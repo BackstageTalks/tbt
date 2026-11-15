@@ -9345,7 +9345,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     }
     else if(route==='top_daily'){
       const r=state.ui?.market_rules?.top_daily||{},day=state.feed?.market_selection?.odds_report?.betting_day||'current';
-      const desc=lcopy(`TOP aims for 3 picks, prioritizing ATP/WTA. Probability tiers: 80%, 78%, 75%, 70%; data quality stays fixed. Odds from 1.50 with no upper limit. Value takes priority above 1.80 with a two-way odds gap up to 15%.`, `TOP cieli na 3 tipy s prioritou ATP/WTA. Hranice: 80 %, 78 %, 75 %, 70 %; kvalita dát sa neznižuje. Kurz od 1,50 bez horného limitu. Value má prednosť nad 1,80 pri rozdiele dvojice kurzov najviac 15 %.`, `TOP cílí na 3 tipy s prioritou ATP/WTA. Hranice: 80 %, 78 %, 75 %, 70 %; kvalita dat se nesnižuje. Kurz od 1,50 bez horního limitu. Value má přednost nad 1,80 při rozdílu dvojice kurzů nejvýše 15 %.`);
+      const desc=lcopy(`TOP aims for at least 3 qualified predictions daily, with no count cap. Predictions are ordered by competition and model probability; odds are checked afterwards. The daily target never lowers qualification requirements.`, `TOP cieli na aspoň 3 kvalifikované predikcie denne, bez horného limitu počtu. Poradie určuje súťaž a modelová pravdepodobnosť; kurz sa kontroluje následne. Denný cieľ neznižuje požiadavky na kvalifikáciu.`, `TOP cílí na alespoň 3 kvalifikované predikce denně, bez horního limitu počtu. Pořadí určuje soutěž a modelová pravděpodobnost; kurz se kontroluje následně. Denní cíl nesnižuje požadavky na kvalifikaci.`);
       body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('TOP Predictions rule'))}</strong><span>${escapeHtml(desc)}</span></div>${detailCards(marketRows('top_daily'),'top_daily')}`;
     }
     else if(route==='value'){
@@ -9442,7 +9442,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(Array.isArray(configured)&&configured.length)return configured.map(value=>String(value||'').trim()).filter(Boolean);
     const features={
       pro:[
-        lcopy('3 TOP picks per day','3 TOP picky denne','3 TOP tipy denně'),
+        lcopy('TOP predictions without a count cap','TOP predikcie bez limitu počtu','TOP predikce bez limitu počtu'),
         lcopy('3 PRIME value picks','3 PRIME value picky','3 PRIME value tipy'),
         lcopy('Full dashboard','Plný dashboard','Plný dashboard'),
         lcopy('Custom notifications','Vlastné upozornenia','Vlastní upozornění')

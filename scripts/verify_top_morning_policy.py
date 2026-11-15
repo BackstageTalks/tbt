@@ -8,7 +8,8 @@ def verify():
     from tbt.services.top_policy import rejection_reasons
     rule = select_market_sections([])["market_selection"]["top_daily_rule"]
     ui = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]["top_daily"]
-    assert rule["policy"] == ui["policy"] == "priority_tours_top_v20"
+    assert rule["policy"] == ui["policy"] == "evidence_unlimited_top_v21"
+    assert rule["limit"] is None and ui["limit"] is None
     assert rule["core_min_probability"] == ui["min_probability"] == .65
     assert rule["probability_tiers"] == ui["confidence_tiers"] == [.65]
     assert rule["daily_minimum_target"] == ui["target_count"] == 3
@@ -22,8 +23,8 @@ def verify():
             card("main-65", "ATP", .65), card("main-68", "ATP", .69),
             card("main-70", "WTA", .79), card("excluded", "WTA 125", .99)]
     selected, _, details = _rank_full_slate_top(pool, [])
-    assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65"]
-    assert all(c["selection_tier"] == "main_0.65" for c in selected)
+    assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65", "secondary", "w35"]
+    assert all(c["selection_tier"] == "main_0.65" for c in selected[:3])
     assert details["shortfall"] == 0
     selected, _, details = _rank_full_slate_top([pool[0], pool[1], pool[4]], [])
     assert [c["event_id"] for c in selected] == ["main-70", "secondary", "w35"]
