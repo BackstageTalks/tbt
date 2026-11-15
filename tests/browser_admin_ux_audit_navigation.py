@@ -3,6 +3,7 @@
 No private account data, API write requests, model operations or deployment.
 """
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
@@ -41,6 +42,25 @@ def test_width(browser,width):
       s.adminInsightsLoading=false;s.adminInfoResultsLoading=false;s.adminLiveResultsLoading=false;
       host.innerHTML=h.renderAdminRoute();h.wireAdmin();
     }""")
+    # Admin SEKCIE navigation must paint the same dark tennis artwork,
+    # not only an opaque gradient that hides the existing background.
+    menu_style=page.locator(".admin-side-nav").evaluate("""el => {
+        const s=getComputedStyle(el);
+        return {background:s.backgroundImage,color:s.backgroundColor,
+                size:s.backgroundSize,display:s.display};
+    }""")
+    assert "linear-gradient" in menu_style["background"],(width,menu_style)
+    assert "url(" in menu_style["background"],(width,menu_style)
+    if width<=600:
+        assert "blinq_mobile_court.webp" in menu_style["background"],(width,menu_style)
+    assert page.locator(".admin-nav-toolbar [data-admin-nav-expand]").count()==1
+    assert page.locator(".admin-nav-entry.is-active").count()==1
+    if os.getenv("BLINQ_SCREENSHOTS") and width in (390,1440):
+        from pathlib import Path
+        out=Path(os.environ["BLINQ_SCREENSHOTS"])
+        out.mkdir(parents=True,exist_ok=True)
+        page.locator(".admin-side-nav").screenshot(path=str(out/f"admin-sekcie-menu-{width}.png"))
+
     # Zobrazenie: only focused view is displayed, never duplicate permissions.
     assert page.locator('[data-admin-subtab^="layout:"]').count()==3
     assert page.locator('[data-admin-subpanel="layout:access"]:visible').count()==1
@@ -103,6 +123,39 @@ def test_width(browser,width):
     page.locator('[data-admin-action="insight-new"]').first.click()
     assert page.locator('#adminInsightForm').is_visible()
     assert page.locator('[data-admin-subtab="insights:messages"]').get_attribute('aria-pressed')=='true'
+    # All 14 Admin destinations share the same neutral visual language.
+    # This reads synthetic state only; no API writes, previews or publishing.
+    tabs=('accounts','projects','levels','dashboard','testresults','dataexport',
+          'monthlyresults','layout','banners','telegram','tgbot','insights',
+          'calibration','system')
+    screenshots=os.getenv("BLINQ_SCREENSHOTS")
+    for tab in tabs:
+        style=page.evaluate("""tab => {
+          const h=adminAuditHarness,s=h.state,host=document.querySelector('#routePanel');
+          s.adminTab=tab;
+          host.innerHTML=h.renderAdminRoute();
+          const nav=document.querySelector('[data-admin-tab="'+tab+'"]');
+          const palette=getComputedStyle(document.querySelector('.admin-console-v685'));
+          return {
+            tabCount:document.querySelectorAll('[data-admin-tab]').length,
+            heading:document.querySelector('.admin-workarea-head h2')?.textContent?.trim(),
+            active:Boolean(nav?.classList.contains('active')),
+            accent:palette.getPropertyValue('--bq-admin-mint').trim(),
+            navBg:nav?getComputedStyle(nav).backgroundColor:null,
+            guideColor:getComputedStyle(document.querySelector('.admin-nav-toolbar button')).backgroundColor
+          };
+        }""",tab)
+        assert style["tabCount"]==14,(width,tab,style)
+        assert style["heading"] and style["active"],(width,tab,style)
+        assert style["accent"]=="#70dab0",(width,tab,style)
+        assert style["navBg"]!="rgba(0, 0, 0, 0)",(width,tab,style)
+        assert style["guideColor"]!="rgba(0, 0, 0, 0)",(width,tab,style)
+        if screenshots and width in (390,1440) and tab in (
+            'accounts','layout','banners','insights','calibration','system'):
+            out=Path(screenshots)
+            out.mkdir(parents=True,exist_ok=True)
+            page.screenshot(path=str(out / f"admin-theme-{tab}-{width}.png"))
+
     assert not errors,(width,errors)
     page.close()
 
