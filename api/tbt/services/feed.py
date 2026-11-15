@@ -296,6 +296,55 @@ def visible_feed(payload, now=None):
     return result
 
 
+# Trusted, bounded public-day category counts; ESÁ O/U and Viac Es remain
+# independent even though the historical serving schema shares ace_picks.
+_MARKET_FEED_TAGS = {
+    "ace": ("ace_picks", "aces"),
+    "ace_winner": ("ace_picks", "most_aces"),
+    "double_faults": ("ace_picks", "double_faults"),
+    "sets": ("sg_picks", "sets"),
+    "games": ("sg_picks", "games"),
+}
+
+
+def _offer_market_counts(payload):
+    counts = {
+        "top_daily": len(payload.get("top_daily_picks") or []),
+        "prime": len(payload.get("prime_picks") or []),
+        "value": len(payload.get("value_picks") or []),
+        "doubles": len(payload.get("doubles_picks") or []),
+    }
+    for category, (feed_key, market) in _MARKET_FEED_TAGS.items():
+        counts[category] = sum(
+            isinstance(row, dict) and str(row.get("market") or "").strip().lower() == market
+            for row in payload.get(feed_key) or []
+        )
+    counts["unknown_ace"] = len(payload.get("ace_picks") or []) - sum(
+        counts[category] for category in ("ace", "ace_winner", "double_faults")
+    )
+    counts["unknown_sg"] = len(payload.get("sg_picks") or []) - counts["sets"] - counts["games"]
+    return counts
+
+
+def _offer_surface_counts(payload, *, current_day=False):
+    """Count cards eligible for the normal browser surface guard, not tier access.
+
+    The TOP count also applies the server's canonical price integrity filter.
+    No claim is made about the signed-in user's Admin-plan overrides.
+    """
+    source = dict(payload)
+    if current_day:
+        from .entitlements import _daily_rows
+        source["top_daily_picks"] = _daily_rows(source)
+    def eligible(row):
+        surface = str((row or {}).get("surface") or (row or {}).get("court_surface") or "").strip().lower()
+        return bool(surface and surface != "unknown")
+    result = dict(source)
+    for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
+        result[key] = [row for row in source.get(key, []) if isinstance(row, dict) and eligible(row)]
+    return _offer_market_counts(result)
+
+
 # Worker-token-only diagnostic: never expose row identities, member access
 # allocations, selections or odds. This is independent *serving file* evidence,
 # not proof of an authenticated customer's plan-specific rendered UI.
@@ -316,6 +365,8 @@ def serving_artifact_readback(path, *, now=None):
     visible = visible_feed(payload, now=now)
     raw_counts = {key: len(payload.get(key) or []) for key in _SERVING_COUNT_KEYS}
     visible_counts = {key: len(visible.get(key) or []) for key in _SERVING_COUNT_KEYS}
+    market_counts = _offer_market_counts(visible)
+    surface_counts = _offer_surface_counts(visible, current_day=True)
     return {
         "ok": True,
         "schema": 1,
@@ -327,4 +378,6 @@ def serving_artifact_readback(path, *, now=None):
         "stale": visible.get("stale") is True,
         "raw_counts": raw_counts,
         "visible_counts": visible_counts,
+        "visible_market_counts": market_counts,
+        "surface_eligible_market_counts": surface_counts,
     }
