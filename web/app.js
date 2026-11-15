@@ -8868,13 +8868,53 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${timeDateHtml(m.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
   }
   function detailCards(rows,key){
-    const cap=Math.max(3,Math.min(5,Number(state.ui?.dashboard?.detail_pick_limit)||5));
+    // Only the dashboard is a preview. The full TOP page must show every
+    // server-authorized qualifying selection, never a hidden 3-5 card cap.
+    const cap=key==='top_daily'?(Array.isArray(rows)?rows.length:0):Math.max(3,Math.min(5,Number(state.ui?.dashboard?.detail_pick_limit)||5));
     const list=(rows||[]).slice(0,cap);
     if(!list.length)return `<div class="state-card">${escapeHtml(publicText('No published predictions are available in this section yet.'))}</div>`;
     const cards=key==='prime'?list.map(primeDetailCard).join(''):list.map((row,index)=>marketPreviewCard(row,key,index,false)).join('');
     return `<div class="detail-picks-grid">${cards}</div><div class="detail-picks-foot"><span>${escapeHtml(publicText(`Showing ${list.length} of ${(rows||[]).length} published pick${(rows||[]).length===1?'':'s'}.`))}</span><button type="button" class="btn btn-ghost" data-route="predictions">${escapeHtml(publicText('← Dashboard'))}</button></div>`;
   }
 
+
+  function renderTop20MatchCoverage(){
+    // This is discovery from the server-authorized board, not an extra TOP
+    // offer or permission bypass. Missing board access means no disclosure.
+    const feed=state.feed||{},board=Array.isArray(feed.board_upcoming)?feed.board_upcoming:[],
+          meta=feed.board_meta||{};
+    if(meta.locked===true||!board.length)return '';
+    const rankOf=(row,side)=>{
+      const p=row?.[side]||{},rank=Number(p.rank);
+      return Number.isInteger(rank)&&rank>=1&&rank<=20?rank:null;
+    };
+    const significant=board.filter(row=>row&&row.prediction_family!=='doubles'&&
+      rankOf(row,'player1')!==null&&rankOf(row,'player2')!==null);
+    if(!significant.length)return '';
+    const selectedIds=new Set(marketRows('top_daily').map(row=>String(row?.event_id||'')));
+    const valueIds=new Set(marketRows('value').map(row=>String(row?.event_id||'')));
+    const primeIds=new Set(marketRows('prime').map(row=>String(row?.event_id||'')));
+    const rows=significant.map(row=>{
+      const event=String(row.event_id||''),m=normalize(row);
+      const calibrated=Number(row?.blinq_probability);
+      const hasCalibrated=row?.blinq_probability!==null&&row?.blinq_probability!==undefined&&Number.isFinite(calibrated);
+      const depth=Number(row?.data_depth);
+      const probability=hasCalibrated?calibrated:
+        Number.isFinite(m.probability)&&Number.isFinite(depth)?0.5+(m.probability-0.5)*depth:null;
+      const hasPrediction=Number.isFinite(probability)&&probability>=.5&&probability<1&&m.pickId;
+      const status=selectedIds.has(event)
+        ?lcopy('Published TOP selection','Publikovaný TOP tip','Publikovaný TOP tip')
+        :valueIds.has(event)?'VALUE'
+        :primeIds.has(event)?'PRIME'
+        :!hasPrediction?lcopy('No verified model prediction in board','Bez overenej modelovej predikcie v prehľade','Bez ověřené modelové predikce v přehledu')
+        :probability<.65?lcopy('Below the TOP 65% floor','Pod hranicou TOP 65 %','Pod hranicí TOP 65 %')
+        :lcopy('Not confirmed in your visible TOP selection','Nepotvrdené vo vašej zobrazenej TOP ponuke','Nepotvrzeno ve vaší zobrazené TOP nabídce');
+      const summary=hasPrediction?`${escapeHtml(m.pick)} · ${Math.round(probability*1000)/10}%`:
+        escapeHtml(lcopy('No score','Bez skóre','Bez skóre'));
+      return `<div class="route-sub route-rules"><strong>${escapeHtml(m.p1)} (#${rankOf(row,'player1')}) – ${escapeHtml(m.p2)} (#${rankOf(row,'player2')})</strong><span>${summary} · ${escapeHtml(status)}</span></div>`;
+    }).join('');
+    return `<section class="route-sub"><h3>${escapeHtml(lcopy('TOP 20 head-to-head coverage','Duel dvoch hráčov TOP 20','Duel dvou hráčů TOP 20'))}</h3><p>${escapeHtml(lcopy('Sports predictions from your authorized match board, independent of the TOP betting offer. A non-TOP status is not a new bet or an invented price.','Športové predikcie z vášho oprávneného prehľadu zápasov, oddelene od stávkovej ponuky TOP. Stav mimo TOP nie je nový tip ani vymyslený kurz.','Sportovní predikce z vašeho oprávněného přehledu zápasů, odděleně od sázkové nabídky TOP. Stav mimo TOP není nový tip ani smyšlený kurz.'))}</p>${rows}</section>`;
+  }
 
   function contentLocale(){return ['sk','cz','en'].includes(locale)?locale:'sk';}
   function sitePage(route){
@@ -9346,7 +9386,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     else if(route==='top_daily'){
       const r=state.ui?.market_rules?.top_daily||{},day=state.feed?.market_selection?.odds_report?.betting_day||'current';
       const desc=lcopy(`TOP aims for at least 3 qualified predictions daily, with no count cap. Predictions are ordered by competition and model probability; odds are checked afterwards. The daily target never lowers qualification requirements.`, `TOP cieli na aspoň 3 kvalifikované predikcie denne, bez horného limitu počtu. Poradie určuje súťaž a modelová pravdepodobnosť; kurz sa kontroluje následne. Denný cieľ neznižuje požiadavky na kvalifikáciu.`, `TOP cílí na alespoň 3 kvalifikované predikce denně, bez horního limitu počtu. Pořadí určuje soutěž a modelová pravděpodobnost; kurz se kontroluje následně. Denní cíl nesnižuje požadavky na kvalifikaci.`);
-      body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('TOP Predictions rule'))}</strong><span>${escapeHtml(desc)}</span></div>${detailCards(marketRows('top_daily'),'top_daily')}`;
+      body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('TOP Predictions rule'))}</strong><span>${escapeHtml(desc)}</span></div>${detailCards(marketRows('top_daily'),'top_daily')}${renderTop20MatchCoverage()}`;
     }
     else if(route==='value'){
       const r=state.ui?.market_rules?.value||{},tiers=Array.isArray(r.fallback_tiers)?r.fallback_tiers.length:0;
