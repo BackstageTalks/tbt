@@ -72,3 +72,54 @@ def test_profile_does_not_grant_itf_or_unknown_tour_eligibility():
     for tour in ("ITF", "unknown"):
         rows, _ = supplement_ace_ranks([match(tour=tour)], profiles(), now=NOW)
         assert ace_eligibility_reason(rows[0]) == "unsupported_tour"
+
+
+def test_fresh_profiles_restore_real_aces_and_more_aces_shortlists():
+    from tbt.schemas import MatchRecord
+    from tbt.services.ace_selection import select_ace_picks, select_ace_winner_picks
+
+    history = []
+    for i in range(10):
+        when = NOW - timedelta(days=20 + i * 7)
+        history.extend((
+            MatchRecord(
+                match_id=f"a{i}", tour="atp", scheduled_at=when,
+                player1_id="200", player1_name="Player One",
+                player2_id=f"x{i}", player2_name=f"x{i}",
+                winner_id="200", status="finished", surface="hard",
+                tournament="History",
+                stats={"p1_aces": 10, "p2_aces": 3,
+                       "p1_double_faults": 1, "p2_double_faults": 2},
+            ),
+            MatchRecord(
+                match_id=f"b{i}", tour="atp", scheduled_at=when,
+                player1_id="300", player1_name="Player Two",
+                player2_id=f"y{i}", player2_name=f"y{i}",
+                winner_id=f"y{i}", status="finished", surface="hard",
+                tournament="History",
+                stats={"p1_aces": 2, "p2_aces": 9,
+                       "p1_double_faults": 4, "p2_double_faults": 2},
+            ),
+        ))
+
+    future = match()
+    future.update({
+        "id": "future", "event_id": "future",
+        "scheduled_at": (NOW + timedelta(hours=5)).isoformat(),
+        "surface": "hard",
+    })
+    original, _ = select_ace_picks(
+        history, [future], now=NOW, allow_local_aces_fallback=True,
+    )
+    assert not any(row["market"] == "aces" for row in original)
+
+    supplemented, report = supplement_ace_ranks([future], profiles(), now=NOW)
+    assert report["ranks_filled"] == 2
+    cards, selection = select_ace_picks(
+        history, supplemented, now=NOW, allow_local_aces_fallback=True,
+    )
+    assert selection["aces_gate_counts"]["eligible"] == 1
+    assert any(row["market"] == "aces" for row in cards)
+    winners, _ = select_ace_winner_picks(history, supplemented, now=NOW)
+    assert len(winners) >= 1
+    assert future["player1"]["rank"] is None
