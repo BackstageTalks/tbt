@@ -2,7 +2,7 @@
   "schema": 2,
   "mode": "dry-run",
   "workflow": "cdb-service-pairwise-guarded.yml",
-  "purpose": "Fresh current-CDB pairwise service/return NULL-only local rehearsal after PR #1338 strict identity fix",
+  "purpose": "Current exact CDB pairwise derived service/return NULL gaps, identify new usable values before guarded write",
   "approved_by_operator": false,
   "production_write_allowed": false,
   "provider_api_requests_allowed": 0,
@@ -29,6 +29,6 @@
       "matches": 52
     }
   ],
-  "audit_date": "2026-11-03",
-  "gate": "Local-only stage/rehearsal; current exact bundle manifest SHA and CDB rows must be independently reported; no production write; wait for observed report before a separately pinned one-shot approval."
+  "audit_date": "2026-11-15",
+  "gate": "Fresh checksum-verified CDB NULL-only stage and local readback; do not publish until observed positive verified current delta and SHA/count pinned write."
 }
