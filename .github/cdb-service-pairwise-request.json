@@ -2,7 +2,7 @@
   "schema": 2,
   "mode": "dry-run",
   "workflow": "cdb-service-pairwise-guarded.yml",
-  "purpose": "Current exact CDB pairwise derived service/return NULL gaps, identify new usable values before guarded write",
+  "purpose": "Recompute 2026 exact observed complementary serve/return NULLs on newest canonical CDB after concurrent writer advanced history; require scoped full integrity readback before SHA/count-pinned write",
   "approved_by_operator": false,
   "production_write_allowed": false,
   "provider_api_requests_allowed": 0,
@@ -30,5 +30,6 @@
     }
   ],
   "audit_date": "2026-11-15",
-  "gate": "Fresh checksum-verified CDB NULL-only stage and local readback; do not publish until observed positive verified current delta and SHA/count pinned write."
+  "gate": "Read-only current coherent canonical release audit, strict stage and scoped full CDB integrity rehearsal; no production mutation or provider requests",
+  "audit_request_id": "pairwise-2026-post-merge-refresh-20261115-2116Z"
 }
