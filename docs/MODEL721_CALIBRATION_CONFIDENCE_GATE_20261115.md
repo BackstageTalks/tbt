@@ -45,6 +45,10 @@ holdout labels enter the calibration.
    `training_profile=top-7.2.1`, using **zero tennis provider requests**.
 4. Compare candidate/production on the **same untouched PIT holdout**, plus
    ATP/WTA, serve/return evidence cohorts, and **champion-anchored 65%+**.
+   Training report `pit_evidence_holdout.same_fixture_top65` now records the
+   *same* held-out fixtures for both models with accuracy, mean confidence,
+   calibration gap, Brier, log loss and paired deltas. This is evaluation
+   evidence only, never training input or automatic promotion.
    Reject if Brier, log loss, accuracy or appropriate subgroup gates regress
    under established promotion rules. Do not fit calibration on published TOP
    and also evaluate on those 51 same results.
