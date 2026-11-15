@@ -67,6 +67,43 @@ assert.equal(predictions[2]['Kurz'], '');
 assert.equal(predictions[2]['Projekcia'], 4.8);
 assert.equal(predictions[2]['Stav_kurzu'], 'projection_only');
 
+// Full-period predictions join immutable historical publications with the
+// current (not yet settled) offer. Preserve each genuinely separate category.
+const older = [
+  {row: {...match, event_id: 'historic-1'}, publication, category: 'top_daily', pick: 'Vzor A'},
+  {row: {...match, event_id: 'historic-1'}, publication: {...publication, section:'value'}, category: 'value', pick: 'Vzor A'},
+  {row: {...match, event_id: 'historic-2'}, publication: {
+    ...publication, section:'ace_winner', market:'most_aces', selection_id:'p2',
+    selection:'Vzor B', result:{status:'hit', correct:true},
+  }, category:'ace_winner', pick:'Vzor B · Viac es'},
+  {row: {...match, event_id: 'historic-3'}, publication: {
+    ...publication, section:'ace', market:'aces', selection_id:'p1',
+    price_contract:'player_total_ou', market_line:4.5, ou_side:'over',
+  }, category:'ace', pick:'Vzor A · Over 4.5 Aces'},
+  {row: {...match, event_id: 'historic-3'}, publication: {
+    ...publication, section:'ace', market:'aces', selection_id:'p1',
+    price_contract:'player_total_ou', market_line:5.5, ou_side:'under',
+  }, category:'ace', pick:'Vzor A · Under 5.5 Aces'},
+];
+const current = [
+  {row: {...match, event_id:'historic-1', winner_id:'p1'}, category:'top_daily', pick:'Vzor A'},
+  {row: {...match, event_id:'current-1', winner_id:'p2'}, category:'prime', pick:'Vzor B'},
+];
+const combined = csv.mergePredictionInputs(older, current);
+assert.equal(combined.length, 6, 'same published bet deduped; distinct category and O/U lines preserved');
+assert.equal(csv.mergePredictionInputs(older, current).length, 6, 'stable idempotent export');
+const historicalRows = csv.predictionRows(combined);
+assert.equal(historicalRows.filter(row=>row['Zdroj_záznamu']==='archív publikácií').length, 5);
+assert.equal(historicalRows.filter(row=>row['Zdroj_záznamu']==='aktuálna ponuka').length, 1);
+assert.equal(historicalRows[2]['Kategória'], 'Viac es');
+assert.equal(historicalRows[0]['Publikované'], publication.issued_at);
+assert.equal(historicalRows[0]['Model_pravdepodobnosť_%'], 76);
+assert.equal(historicalRows[0]['src_publikácia.section'], 'top_daily');
+assert.equal(historicalRows[0]['src_publikácia.result.status'], undefined,
+  'post-match results must stay in the separate Results export');
+assert.equal(historicalRows[0]['src_predikcia.market_publications'], undefined);
+assert.equal(historicalRows[5]['Publikované'], '', 'current unissued date is never fabricated');
+
 const malicious = csv.predictionRows([{category: 'value', row: {
   ...match, player1: {name: '=HYPERLINK("http://attack")'},
   tournament: 'Tournament; "quoted"\nsecond line',
@@ -90,6 +127,8 @@ for (const needle of [
   'function adminCsvResultsEntries()', 'function adminCsvPredictionInputs()',
   'function renderAdminDataExport()', 'function adminDownloadCsv(kind)',
   'settledPublishedEntries(state.feed?.results||[],',
+  'window.BlinqAdminCsv.mergePredictionInputs(historical,current)',
+  'state.feed?.results_boot_partial',
   'state.feed?.results_archive_unavailable', 'state.feed?.results_exclusions_unavailable',
   'dataexport:renderAdminDataExport', 'data-admin-export-csv="results"',
   'data-admin-export-csv="predictions"', 'csvButton.dataset.adminExportCsv',
