@@ -54,12 +54,22 @@ def test_fixed_baseline_confidence_bands_have_no_outcome_based_selection():
             assert row["log_loss_delta"] == pytest.approx(
                 row["candidate"]["log_loss"] - row["champion"]["log_loss"]
             )
+    # The independent >=65% diagnostic includes exactly 65.0%, and both
+    # models are evaluated on the champion-selected event set.
+    threshold = result["groups"]["overall"]["all"]["confidence_65_plus"]
+    assert threshold["n"] == 9
+    assert threshold["candidate"]["n"] == threshold["champion"]["n"] == 9
+    assert threshold["champion"]["mean_confidence"] == pytest.approx(champion[1:].mean())
+    assert threshold["accuracy_delta"] == pytest.approx(
+        threshold["candidate"]["accuracy"] - threshold["champion"]["accuracy"]
+    )
     changed = candidate_722_confidence_evidence_report(
         table, np.full(10, .97), champion,
     )
     assert {key: v["n"] for key, v in changed["groups"]["overall"]["all"]["bands"].items()} == {
         key: v["n"] for key, v in bands.items()
     }
+    assert changed["groups"]["overall"]["all"]["confidence_65_plus"]["n"] == 9
     pd.testing.assert_frame_equal(table, original)
 
 
@@ -74,6 +84,7 @@ def test_report_exposes_tour_surface_and_paired_feature_coverage_not_freshness()
     assert result["groups"]["input_evidence"]["missing_paired_serve_return"]["n"] == 4
     assert result["groups"]["tour_paired_serve_return"]["ATP"]["n"] == 2
     assert result["evidence_coverage"]["rank_known_both"]["known_both"] == 5
+    assert result["groups"]["input_evidence"]["paired_serve_return"]["confidence_65_plus"]["n"] == 5
     assert result["source_freshness"]["status"] == "UNVERIFIED"
     assert "provider_requests" not in result
 
@@ -83,6 +94,7 @@ def test_candidate_only_never_claims_paired_success_or_promotion():
     assert result["status"] == "CANDIDATE_ONLY_NOT_COMPARABLE"
     assert result["promotion_ready"] is False
     assert result["groups"]["overall"]["all"]["bands"]["80_plus"]["champion"] is None
+    assert result["groups"]["overall"]["all"]["confidence_65_plus"]["champion"] is None
 
 
 @pytest.mark.parametrize("mutation,pattern", [
