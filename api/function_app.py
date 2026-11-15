@@ -1593,7 +1593,7 @@ def _gzip_feed_response(payload):
     raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
     serialized_ms = (time.perf_counter() - begin) * 1000
     begin = time.perf_counter()
-    compressed = gzip.compress(raw, compresslevel=1, mtime=0)
+    compressed = gzip.compress(raw, compresslevel=5, mtime=0)
     compressed_ms = (time.perf_counter() - begin) * 1000
     return func.HttpResponse(
         body=compressed,
@@ -1817,27 +1817,14 @@ def _authorized_feed_payload(req, *, bootstrap=False):
         trace_stage("clv_complete")
         if trace_started is not None:
             data["__blinq_feed_stage_ms"] = trace_marks
-        # Compute cards and all authorization/settlement rules against the full
-        # member-visible Results ledger. Only the opt-in browser bootstrap view
-        # is abbreviated, *after* those security and KPI boundaries.
+        # Full authorized Results have already passed every entitlement,
+        # settlement, exclusion and KPI gate above. Returning any historical
+        # rows during dashboard boot wastes network time; the existing Results
+        # / Stats route fetches the *complete* authorized ledger via v1/results
+        # only when opened. The normal (non-bootstrap) API remains unchanged.
         if bootstrap and str((getattr(req, "params", None) or {}).get("blinq_feed_view") or "") == "bootstrap":
-            authorized_results = data.get("results") or []
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
-            recent = []
-            for row in authorized_results:
-                if not isinstance(row, dict):
-                    continue
-                value = row.get("scheduled_at") or row.get("date")
-                if not value:
-                    continue
-                try:
-                    timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-                    if timestamp.tzinfo is not None and timestamp.astimezone(timezone.utc) >= cutoff:
-                        recent.append(row)
-                except (TypeError, ValueError, OverflowError):
-                    continue
-            data["results"] = recent
-            data["results_boot_partial"] = len(recent) != len(authorized_results)
+            data["results_boot_partial"] = bool(data.get("results"))
+            data["results"] = []
         return data
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})

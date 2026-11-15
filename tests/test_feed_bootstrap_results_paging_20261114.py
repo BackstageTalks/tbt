@@ -1,4 +1,5 @@
 """Contract for opt-in bootstrap and complete, member-authorized Results pages."""
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import function_app as api
@@ -9,14 +10,14 @@ def request(**params):
     return SimpleNamespace(params=params, headers={})
 
 
-def test_bootstrap_skips_old_history_but_kpi_remains_complete(monkeypatch):
+def test_bootstrap_defers_history_but_kpi_remains_complete(monkeypatch):
     computed = _stub_authenticated_feed(monkeypatch)
     normal = api.feed(request())
     assert normal["results"] == [{"event_id": "settled"}]
     assert "results_boot_partial" not in normal
 
-    # The test fixture has no scheduled date, so it belongs to full history
-    # but cannot be counted in the "recent" bootstrap preview.
+    # Dashboard bootstrap no longer transfers *any* Results records; the
+    # Results route hydrates the full authorized history when actually opened.
     boot = api.feed(request(blinq_feed_view="bootstrap"))
     assert boot["results"] == []
     assert boot["results_boot_partial"] is True
@@ -57,3 +58,35 @@ def test_results_route_does_not_bypass_feed_verification(monkeypatch):
     monkeypatch.setattr(api, "_verified_user",
                         lambda req: {"id": "user-1", "email_verified": False})
     assert api.results_page(request()) == {"error": "email_not_verified"}
+
+
+
+def test_bootstrap_defers_even_recent_results_with_same_kpi_and_full_paging(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    recent = {
+        "event_id": "recent-settled",
+        "scheduled_at": datetime.now(timezone.utc).isoformat(),
+        "market_publications": [{"section": "top_daily", "result": {"correct": True}}],
+    }
+    monkeypatch.setattr(api, "runtime_settled_results",
+                        lambda _feed, _statuses, **_kwargs: [recent])
+    normal = api.feed(request())
+    bootstrap = api.feed(request(blinq_feed_view="bootstrap"))
+    page = api.results_page(request(page="0", limit="500"))
+
+    assert normal["results"] == [recent]
+    assert bootstrap["results"] == []
+    assert bootstrap["results_boot_partial"] is True
+    assert bootstrap["dashboard_kpi_cards"] == normal["dashboard_kpi_cards"]
+    assert page["results"] == [recent]
+    assert page["total"] == 1
+    assert page["has_more"] is False
+
+
+def test_empty_authorized_results_do_not_trigger_unnecessary_lazy_load(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    monkeypatch.setattr(api, "runtime_settled_results",
+                        lambda _feed, _statuses, **_kwargs: [])
+    boot = api.feed(request(blinq_feed_view="bootstrap"))
+    assert boot["results"] == []
+    assert boot["results_boot_partial"] is False

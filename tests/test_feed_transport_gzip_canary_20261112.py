@@ -89,3 +89,26 @@ def test_diagnostics_are_opt_in_without_altering_normal_transport():
     assert "setTimeout(()=>showBootTracePanel(message),450);" in app
     assert "document.createElement('dialog')" in app
     assert "navigator.clipboard.writeText(message)" in app
+
+
+
+def test_transport_uses_better_compression_for_repetitive_realistic_rows():
+    # This is a transport-only optimization. Verify the original JSON bytes
+    # round-trip and that it can shrink repetitive nested rows vs level 1.
+    rows = [
+        {
+            "event_id": str(i),
+            "signals": [{"surface": "hard", "sample": j % 32,
+                         "win_probability": (j % 79) / 100}
+                        for j in range(150)],
+        }
+        for i in range(120)
+    ]
+    payload = {"upcoming": rows, "results": [], "account": {"plan": "elite"}}
+    raw = json.dumps(payload, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    optimized = api._gzip_feed_response(payload).get_body()
+    baseline = gzip.compress(raw, compresslevel=1, mtime=0)
+    assert gzip.decompress(optimized) == raw
+    assert len(optimized) < len(baseline), (
+        f"Expected less transfer with level-5 gzip: optimized={len(optimized)} baseline={len(baseline)}"
+    )
