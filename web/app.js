@@ -8881,9 +8881,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function renderTop20MatchCoverage(){
     // This is discovery from the server-authorized board, not an extra TOP
     // offer or permission bypass. Missing board access means no disclosure.
-    const feed=state.feed||{},board=Array.isArray(feed.board_upcoming)?feed.board_upcoming:[],
-          meta=feed.board_meta||{};
-    if(meta.locked===true||!board.length)return '';
+    const feed=state.feed||{},meta=feed.board_meta||{};
+    // board_upcoming itself has a 65% selection floor; using it would hide
+    // important TOP20 duels such as Shelton-Fils below TOP qualification.
+    // Only board-authorized plans receive the complete upcoming pool.
+    if(meta.locked===true||!Array.isArray(feed.board_upcoming))return '';
+    const board=Array.isArray(feed.upcoming)?feed.upcoming:[];
+    if(!board.length)return '';
     const rankOf=(row,side)=>{
       const p=row?.[side]||{},rank=Number(p.rank);
       return Number.isInteger(rank)&&rank>=1&&rank<=20?rank:null;
