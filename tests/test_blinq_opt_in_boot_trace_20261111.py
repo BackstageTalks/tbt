@@ -19,7 +19,8 @@ def test_diagnostics_are_query_opt_in_and_read_only():
     assert "if(!enabled)return null;" in PROBE
     assert "performance.now()" in PROBE
     assert "performance.getEntriesByType('navigation')" in PROBE
-    assert "setTimeout(()=>window.alert(message),450);" in PROBE
+    assert "setTimeout(()=>showBootTracePanel(message),450);" in PROBE
+    assert "window.alert(message)" not in PROBE
     assert "fetch(" not in PROBE
     assert "localStorage" not in PROBE
     assert "sessionStorage" not in PROBE
@@ -50,3 +51,18 @@ def test_stage_markers_cover_network_and_render_without_changing_loader():
     assert "function finishBootSplash(){const splash=$('bootSplash');" in APP
     assert "loadAdminDraft(); renderAllUiContent(); populateFilters();" in APP
     assert "BlinqAuth.feed()" in APP
+
+
+def test_full_size_opt_in_dialog_displays_copyable_text_without_touching_normal_ui():
+    panel = APP[APP.index("function showBootTracePanel(message){"):
+                APP.index("// Read-only, opt-in startup timing.")]
+    assert "document.createElement('dialog')" in panel
+    assert "width:min(98vw,1120px);height:92vh" in panel
+    assert "dialog.showModal();" in panel
+    assert "output.textContent=message;" in panel
+    assert "navigator.clipboard.writeText(message)" in panel
+    assert "Kopírovať celý výpis" in panel
+    assert "dialog.addEventListener('close',()=>dialog.remove(),{once:true})" in panel
+    assert "innerHTML" not in panel
+    assert "fetch(" not in panel
+    assert "localStorage" not in panel
