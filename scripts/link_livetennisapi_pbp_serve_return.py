@@ -152,6 +152,25 @@ def _same_score(a, b):
     )
 
 
+def _can_end_game_in_one_point(prev, winner):
+    """Reject scoreboard jumps whose final point cannot be established.
+
+    A game/set transition alone does not prove that only one point was played.
+    In advantage scoring, the prospective winner must hold game point; a
+    tiebreak requires a set point. No-ad 40-40 is conservatively excluded.
+    """
+    winning = prev["points"][winner - 1]
+    losing = prev["points"][2 - winner]
+    if prev["is_tiebreak"] is True:
+        try:
+            a, b = int(winning), int(losing)
+        except (TypeError, ValueError):
+            return False
+        return a >= 6 and a - b >= 1
+    return ((winning == "40" and losing in {"0", "15", "30"})
+            or (winning == "A" and losing == "40"))
+
+
 def _point_winner(prev, nxt):
     """Infer winner (1/2) from one score-state transition; else None."""
     if _same_score(prev, nxt):
@@ -163,9 +182,9 @@ def _point_winner(prev, nxt):
         return None
     ds = (ns1 - ps1, ns2 - ps2)
     if ds == (1, 0):
-        return 1
+        return 1 if _can_end_game_in_one_point(prev, 1) else None
     if ds == (0, 1):
-        return 2
+        return 2 if _can_end_game_in_one_point(prev, 2) else None
     if ds != (0, 0):
         return None
 
@@ -175,9 +194,9 @@ def _point_winner(prev, nxt):
         return None
     dg = (sum(ng1) - sum(pg1), sum(ng2) - sum(pg2))
     if dg == (1, 0):
-        return 1
+        return 1 if _can_end_game_in_one_point(prev, 1) else None
     if dg == (0, 1):
-        return 2
+        return 2 if _can_end_game_in_one_point(prev, 2) else None
     if dg != (0, 0):
         return None
 
