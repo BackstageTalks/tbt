@@ -208,3 +208,62 @@ def test_signed_live_canary_rejects_feed_that_aged_while_azure_uploaded(tmp_path
         source, now=datetime(2026, 11, 6, 8, tzinfo=timezone.utc))
     assert validate(source.read_bytes(), still_current,
                     require_current=True)["status"] == "verified"
+
+
+def test_live_display_counts_separate_aces_more_aces_and_top_access(tmp_path):
+    from tbt.services.entitlements import entitlement_manifest
+    from tbt.services.feed import visible_feed
+
+    path = fixture(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    template = payload["top_daily_picks"][0]
+
+    def card(event_id, market, surface="hard", scheduled=None):
+        return {
+            **template, "event_id": event_id, "market": market,
+            "scheduled_at": scheduled or template["scheduled_at"],
+            "surface": surface, "tour": "ATP",
+            "player1": {**template["player1"], "rank": 50},
+            "player2": {**template["player2"], "rank": 250},
+        }
+
+    payload["top_daily_picks"] = [{**template, "odds": 1.65, "probability": .74}]
+    payload["ace_picks"] = [
+        card("ace", "aces"),
+        card("more", "most_aces"),
+        card("more-unknown-surface", "most_aces", surface="unknown"),
+        card("df", "double_faults"),
+        card("legacy", "older_untyped"),
+        card("tomorrow", "aces", scheduled="2026-11-07T13:30:00Z"),
+    ]
+    payload["sg_picks"] = [card("sets", "sets"), card("games", "games")]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    now = datetime(2026, 11, 6, 8, tzinfo=timezone.utc)
+    reported = serving_artifact_readback(path, now=now)
+    visible = reported["visible_market_counts"]
+    surface = reported["surface_eligible_market_counts"]
+
+    assert visible["top_daily"] == 1
+    assert visible["ace"] == 1
+    assert visible["ace_winner"] == 2
+    assert visible["double_faults"] == 1
+    assert visible["unknown_ace"] == 1
+    assert visible["sets"] == 1 and visible["games"] == 1
+    assert reported["visible_counts"]["ace_picks"] == 5
+    assert surface["ace"] == 1 and surface["ace_winner"] == 1
+    assert surface["top_daily"] <= visible["top_daily"]
+    assert validate(path.read_bytes(), reported)["visible_market_counts"] == visible
+
+    # The worker readback is independent of membership. Public category
+    # entitlement never lets VIAC ES entries leak into the ESÁ O/U tab.
+    today = visible_feed(payload, now=now)
+    admin = entitlement_manifest({"is_admin": True}, today)
+    assert admin["sections"]["ace"]["total"] == 1
+    assert admin["sections"]["ace_winner"]["total"] == 2
+
+    corrupted = dict(reported, visible_market_counts={**visible, "ace_winner": 3})
+    with pytest.raises(ValueError, match="market display count mismatch"):
+        validate(path.read_bytes(), corrupted)
+    corrupted = dict(reported, surface_eligible_market_counts={**surface, "ace": 9})
+    with pytest.raises(ValueError, match="Invalid independent market display counts"):
+        validate(path.read_bytes(), corrupted)

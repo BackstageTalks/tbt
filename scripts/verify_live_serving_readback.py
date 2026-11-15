@@ -52,6 +52,30 @@ def validate(prepared_bytes: bytes, received: dict, *, require_current: bool = F
             raise ValueError("Production raw serving count mismatch: " + key)
         if type(visible.get(key)) is not int or not (0 <= visible[key] <= raw[key]):
             raise ValueError("Production public-day count invalid: " + key)
+    category_names = {
+        "top_daily", "prime", "value", "doubles", "ace", "ace_winner",
+        "double_faults", "sets", "games", "unknown_ace", "unknown_sg",
+    }
+    breakdown = received.get("visible_market_counts")
+    surface = received.get("surface_eligible_market_counts")
+    if not isinstance(breakdown, dict) or not isinstance(surface, dict):
+        raise ValueError("Missing independent market display counts")
+    if set(breakdown) != category_names or set(surface) != category_names:
+        raise ValueError("Invalid independent market display count keys")
+    for key in category_names:
+        a, b = breakdown[key], surface[key]
+        if type(a) is not int or type(b) is not int or not (0 <= b <= a):
+            raise ValueError("Invalid independent market display counts: " + key)
+    for category, raw_key in (
+        ("top_daily", "top_daily_picks"), ("prime", "prime_picks"),
+        ("value", "value_picks"), ("doubles", "doubles_picks"),
+    ):
+        if breakdown[category] != visible[raw_key]:
+            raise ValueError("Market display count mismatch: " + category)
+    if sum(breakdown[k] for k in ("ace", "ace_winner", "double_faults", "unknown_ace")) != visible["ace_picks"]:
+        raise ValueError("ESÁ / Viac Es market display count mismatch")
+    if sum(breakdown[k] for k in ("sets", "games", "unknown_sg")) != visible["sg_picks"]:
+        raise ValueError("Sets/Games market display count mismatch")
     if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(received.get("betting_day") or "")):
         raise ValueError("Invalid production betting-day key")
     if type(received.get("stale")) is not bool:
@@ -66,6 +90,8 @@ def validate(prepared_bytes: bytes, received: dict, *, require_current: bool = F
         "stale": received["stale"],
         "raw_counts": raw,
         "visible_counts": visible,
+        "visible_market_counts": breakdown,
+        "surface_eligible_market_counts": surface,
         "paid_provider_requests": 0,
     }
 
