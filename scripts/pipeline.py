@@ -15,6 +15,7 @@ from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget
 from release_store import ReleaseStore
 from rank_feature_inputs import load_rank_feature_inputs
+from ace_rank_sources import supplement_ace_ranks
 from tbt.config import settings
 from tbt.errors import ProviderError
 from tbt.data.history_snapshot import (
@@ -1545,19 +1546,54 @@ def main():
             if args.market_odds_max_events == -1
             else max(0, int(args.market_odds_max_events))
         )
+        # Provider fixtures often omit a current ranking even for an ATP
+        # top-200 Challenger player. The already-published player profile asset
+        # contains exact provider-player IDs and fresh ranks, but was formerly
+        # attached *after* Aces candidate selection in prepare_feed.py.
+        # Fill ONLY missing ranks in independent Aces/Most Aces rows. Never
+        # mutate champion predictions, Match Winner, TOP or historical CDB.
+        ace_predictions = predictions
+        ace_rank_report = {"status": "unavailable", "ranks_filled": 0}
+        try:
+            rank_dir = cache / "ace-current-player-ranks"
+            rank_store = ReleaseStore(
+                args.data_repository, "tbt-player-assets-v1", rank_dir
+            )
+            if "player_profiles.json" not in rank_store._asset_names():
+                raise FileNotFoundError("Recent player profile asset unavailable")
+            rank_store.download(
+                extra_names=("player_profiles.json",),
+                required_names=("player_profiles.json",),
+            )
+            ace_predictions, ace_rank_report = supplement_ace_ranks(
+                predictions, read_json(rank_dir / "player_profiles.json", {}),
+                now=prediction_now,
+            )
+        except Exception as exc:
+            # A missing/stale profile cannot veto an otherwise qualified
+            # provider-native rank. It also must never bypass the TOP1000 gate.
+            ace_rank_report = {
+                "status": "unavailable", "ranks_filled": 0,
+                "error_type": type(exc).__name__,
+            }
+        print(json.dumps({"ace_rank_supplement": ace_rank_report},
+                         ensure_ascii=False), flush=True)
+
         # Freeze BlinQ's own statistically ranked Aces/DF picks before any
         # bookmaker market discovery. Quotes can attach to these identities,
         # never determine which matches the model originally selects.
         ace_picks, ace_report = select_ace_picks(
-            matches, predictions, now=selection_now,
+            matches, ace_predictions, now=selection_now,
             per_market_limit=10, total_limit=20, target_count=10,
             allow_local_aces_fallback=True,
         )
         # Independent player-superiority offer from the entire prediction pool.
         # It must survive the subsequent player-total O/U bookmaker filtering.
         ace_winner_picks, ace_winner_report = select_ace_winner_picks(
-            matches, predictions, now=selection_now,
+            matches, ace_predictions, now=selection_now,
         )
+        if isinstance(ace_report, dict):
+            ace_report["rank_supplement"] = ace_rank_report
         if isinstance(ace_report, dict):
             ace_report["selection_policy"] = "blinq_model_first_then_odds_attachment"
             ace_report["pre_odds_selected"] = len(ace_picks)
