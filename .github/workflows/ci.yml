@@ -334,6 +334,7 @@ jobs:
       - name: Check frontend JavaScript
         run: |
           node --check web/app.js
+          node tests/test_721_codex_ui_coverage.cjs
           node --check web/admin-csv-export.js
           node tests/test_admin_csv_export.cjs
           node tests/test_local_aces_results_equivalence.cjs
