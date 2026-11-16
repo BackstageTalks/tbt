@@ -4,11 +4,13 @@ Synthetic rows only. No private data, provider calls, CDB writes or publication.
 Checks the rendered winner tabs, market detail tiles and desktop pop-out.
 """
 import os
+from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from threading import Thread
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
-from browser_runtime_r43 import WEB, ORIGIN, static_route, browser_path
+from browser_runtime_r43 import WEB, static_route, browser_path
 
 
 def route_request(route):
@@ -28,7 +30,31 @@ def route_request(route):
         static_route(route)
 
 
+class StaticWebHandler(SimpleHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(WEB), **kwargs)
+
+    def log_message(self, *_args):
+        pass
+
+
 def main():
+    # Real same-origin HTTP asset requests: document.write() pop-ups opened
+    # from synthetic blinq.test did not resolve link styles in Chromium.
+    # Keep all API replies synthetic and prevent off-machine requests.
+    http = ThreadingHTTPServer(("127.0.0.1", 0), StaticWebHandler)
+    thread = Thread(target=http.serve_forever, daemon=True)
+    thread.start()
+    origin = f"http://127.0.0.1:{http.server_address[1]}"
+    try:
+      _run_browser(origin)
+    finally:
+      http.shutdown()
+      http.server_close()
+      thread.join(timeout=5)
+
+
+def _run_browser(origin):
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True, executable_path=os.getenv("BLINQ_BROWSER") or browser_path()
@@ -36,11 +62,16 @@ def main():
         try:
             for width in (390, 768, 1440):
                 context = browser.new_context(viewport={"width": width, "height": 950})
-                context.route("**/*", route_request)
+                # The actual HTTP server delivers stylesheets to both the
+                # main document and the newly created pop-out. Only JS
+                # harness and fake API responses are intercepted.
+                context.route("**/app.js*", route_request)
+                context.route("**/api/**", static_route)
+                context.route("https://**", lambda route: route.abort())
                 page = context.new_page()
                 errors = []
                 page.on("pageerror", lambda err: errors.append(str(err)))
-                page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
+                page.goto(origin + "/index.html?lang=sk", wait_until="networkidle")
                 page.wait_for_function(
                     "window.detailSkinHarness && detailSkinHarness.state.ui"
                 )
