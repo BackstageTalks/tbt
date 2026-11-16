@@ -63,3 +63,35 @@ def test_sports_weights_ignore_results_probs_and_bookmaker_inputs():
                         ev=np.linspace(-1, 1, len(f)),
                         elo_probability=np.linspace(.1, .9, len(f)))
     assert np.array_equal(original, model._sports_fit_weights(modified))
+
+
+def test_weighted_candidate_fits_both_base_estimators_with_symmetric_rows():
+    from datetime import datetime, timedelta, timezone
+    start = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    rng = np.random.default_rng(119)
+    n = 320
+    f = pd.DataFrame({
+        "match_id": [str(i) for i in range(n)],
+        "scheduled_at": [start + timedelta(days=i) for i in range(n)],
+        "target": (rng.uniform(size=n) < .5).astype(int),
+        "elo_probability": rng.uniform(.22, .78, size=n),
+        "competition": ["ATP" if i % 3 == 0 else "ITF" for i in range(n)],
+        "tour": ["atp"]*n,
+    })
+    model = TennisEnsemble(feature_names=["elo_probability"], objective="log_loss")
+    model.sports_sample_weight_profile = "main_tour_2x"
+    model.fit(f, f.iloc[:0].copy())
+    assert model.fitted
+    assert model.metadata["sports_sample_weight_profile"] == "main_tour_2x"
+    assert model.metadata["sports_train_weight_sum"] == 320 + 107
+    p = model.predict_proba(f.iloc[:5])
+    assert len(p) == 5
+    assert np.isfinite(p).all()
+
+
+def test_weighted_experiment_cannot_silently_refit_to_production():
+    from types import SimpleNamespace
+    from tbt.services.training import refit_serving_model
+    selected = SimpleNamespace(sports_sample_weight_profile="main_tour_2x")
+    with pytest.raises(ValueError, match="separate verified"):
+        refit_serving_model(SimpleNamespace(model=selected, feature_frame=pd.DataFrame()))
