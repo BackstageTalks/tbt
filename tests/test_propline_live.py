@@ -482,3 +482,54 @@ def test_repeated_propline_timeouts_open_circuit_without_losing_prior_prices():
     assert client.calls == 6  # board + markets + odds + 3 failing markets
     assert "match_winner" in priced["rapid-new-0"]
     assert "rapid-new-4" not in priced
+
+
+def test_surname_first_initial_can_recover_real_two_player_fixture_without_guessing():
+    """Short scoreboards use surname-first initials; quotes still need both IDs."""
+    alcaraz = {
+        "event_id": "atp-final",
+        "scheduled_at": START,
+        "tour": "ATP",
+        "player1": {"id": "alcaraz", "name": "Carlos Alcaraz"},
+        "player2": {"id": "tiafoe", "name": "Frances Tiafoe"},
+    }
+    prop = {
+        "id": "889977",
+        "home_team": "Tiafoe F.",
+        "away_team": "Alcaraz C.",
+        "commence_time": START,
+    }
+    from tbt.services.propline_live import _match_board_with_diagnostics
+    found, audit = _match_board_with_diagnostics([alcaraz], [prop], NOW)
+    assert len(found) == 1
+    assert found[0][0]["event_id"] == "atp-final"
+    assert audit["matched_abbreviated"] == 1
+    # One mismatched initial, missing opponent or too-distant fixture must
+    # never be joined just because one surname happens to agree.
+    for wrong in [
+        {**prop, "home_team": "Tiafoe A."},
+        {**prop, "away_team": "Somebody C."},
+        {**prop, "commence_time": (NOW + timedelta(hours=8)).isoformat()},
+    ]:
+        assert _match_board([alcaraz], [wrong], NOW) == []
+
+
+def test_surname_first_initial_collision_fails_closed_before_any_quote_call():
+    """Two different Carlos/Charlie Alcaraz identities are not interchangeable."""
+    first = {
+        "event_id": "one", "scheduled_at": START, "tour": "ATP",
+        "player1": {"id": "p1", "name": "Carlos Alcaraz"},
+        "player2": {"id": "p2", "name": "Frances Tiafoe"},
+    }
+    second = {
+        **first, "event_id": "two",
+        "player1": {"id": "p3", "name": "Charlie Alcaraz"},
+    }
+    prop = {
+        "id": "889977", "home_team": "Alcaraz C.",
+        "away_team": "Tiafoe F.", "commence_time": START,
+    }
+    from tbt.services.propline_live import _match_board_with_diagnostics
+    found, diag = _match_board_with_diagnostics([first, second], [prop], NOW)
+    assert found == []
+    assert diag["ambiguous_rejected"] == 1
