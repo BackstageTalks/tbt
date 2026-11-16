@@ -149,3 +149,4 @@ jobs:
           path: work/qa/aggregate-report.json
           if-no-files-found: ignore
           retention-days: 21
+# 2026-11-16 repeat READ-ONLY audit: separate calendar-day/actual-clock mismatches; no CDB import permission changed.
