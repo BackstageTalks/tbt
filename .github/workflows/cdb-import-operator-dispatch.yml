@@ -33,6 +33,7 @@ jobs:
         contains(github.event.head_commit.message, '[cdb-drive-continue-20261024]') ||
         contains(github.event.head_commit.message, '[cdb-tennisdata-20261116]') ||
         contains(github.event.head_commit.message, '[cdb-tennisdata-alias-20261116]') ||
+        contains(github.event.head_commit.message, '[cdb-tennisdata-event-alias-20261116]') ||
         contains(github.event.head_commit.message, '[cdb-tml-full-archive-20261116]'))))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -57,6 +58,15 @@ jobs:
               -f catchup_remaining=0 \
               -f replay_drive_ids="1WG00xLC6DaaiCI4U6n6ceqp6vcWRI-aq"
             echo 'TML_USER_44_SOURCE_ARCHIVE_GUARDED_DISPATCHED_NOT_IMPORT_VERIFIED'
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tennisdata-event-alias-20261116]"* ]]; then
+            # Same original SHA-bound twelve CSVs. The optional event alias
+            # translator only reconciles 12 independently corroborated ATP/WTA
+            # tournament display names; canonical matching is unchanged.
+            gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main \
+              -f request_id=tennisdata-verified-event-aliases-20261116 \
+              -f catchup_remaining=0 \
+              -f replay_drive_ids="1LqiYRtVeNgcCUq71em5ILmzbe_rksZj3,1v-hyb3kzyYjA5NYBV_6Rw0pDzIUMpcgK,1OQDvg7Xu16lfV29BWpL7jssBm-f9IzOw,15Uhy3qKzikP4lNsRXpm1fx_gW6B4LM14,1iVCT0ngvXgAfP9gqQvJJ3cMXPi_wBpsX,1Q0CI6YGySNzCUmvw4DmvSLesG6R0u1Ga,1IUsW7OqA4HTE9pmogZyWpuP_U076U7f_,1WWh5NexicqX7oA05YwuWseeJB7E6cE7u,1tgwu-4TCvcew3CwjDT3S6pV15bs8i1A4,1DtYRJsrLX9FBMtROru0qytvfl0xGlI12,1TlrRKXqCv_GIGvATjB-ow82W9LLCeZxA,1tbgeDIEBt251imJJ_dPKtvKfI_Pci7xD"
+            echo 'TENNISDATA_VERIFIED_EVENT_SYNONYM_SOURCE_REPLAY_DISPATCHED_NOT_VERIFIED'
           elif [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tennisdata-alias-20261116]"* ]]; then
             # Same twelve raw CSV SHA-pinned inputs, with source-native full
             # player names recovered only from private, independently checked
