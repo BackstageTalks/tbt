@@ -365,6 +365,8 @@ def _split_serving_refit_by_date(
 def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     """Refit only after promotion approval, consuming the already-used holdout."""
     selected = result.model
+    if getattr(selected, "sports_sample_weight_profile", "none") != "none":
+        raise ValueError("Experimental sport-weighted model requires separate verified serving-refit design")
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
     serving = _new_production_ensemble()
