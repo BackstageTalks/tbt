@@ -101,6 +101,34 @@ jobs:
           if [[ "$count" -eq 0 ]]; then
             echo "HF_CURRENT_CDB_EXACT_DRYRUN_ZERO_DELTA_NO_PRODUCTION_WRITE"
           else
+            # The native importer conservatively requires ALL 78 partitions
+            # declared in the authoritative manifest. A three-year subset is
+            # enough for read-only identity QA but not a native safety dry-run.
+            gh release download tbt-data-v1 -R "$DATA_REPO" -D work/cdb \
+              -p 'history-*.parquet' --clobber
+            python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          folder=Path("work/cdb")
+          data=json.load(open("work/release.json"))
+          assets={x["name"]:x for x in data["assets"]}
+          years=json.loads((folder/"history_manifest.json").read_text())["years"]
+          bundle=json.loads((folder/"_tbt_bundle_manifest.json").read_text())["files"]
+          count=0
+          for year,entry in years.items():
+              name=f"history-{year}.parquet"
+              path=folder/name
+              if not path.exists():
+                  raise SystemExit("MISSING_DECLARED_CDB_YEAR "+name)
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              if (entry["sha256"]!=digest or bundle[name]["sha256"]!=digest
+                      or assets[name].get("digest")!="sha256:"+digest):
+                  raise SystemExit("FULL_NATIVE_CDB_SHA_MISMATCH "+name)
+              count+=1
+          if count!=78:
+              raise SystemExit("CDB_YEAR_COUNT_DRIFT")
+          print("CDB_ALL_78_PARTITIONS_SHA_VERIFIED")
+          PY
             python scripts/import_offline_linked_serve_return.py \
               --stage work/qa/eligible-private.jsonl \
               --history-dir work/cdb --out-dir work/qa/native-dryrun
