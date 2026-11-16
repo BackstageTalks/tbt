@@ -448,7 +448,8 @@ def test_exact_replay_only_never_downloads_unrelated_pending_sources(tmp_path):
     fetch(ROOT, tmp_path / "first", session=drive, max_files=1,
           next_state_path=checkpoint)
     before = json.loads(checkpoint.read_text())
-    assert set(before["processed"]) == {ID1}
+    # Unsupported README is a reviewed checkpoint entry in the baseline reader.
+    assert set(before["processed"]) == {ID1, ID4}
     drive.file_reads.clear()
 
     after = tmp_path / "after.json"
@@ -463,7 +464,8 @@ def test_exact_replay_only_never_downloads_unrelated_pending_sources(tmp_path):
     assert {x["id"] for x in result["files"]} == {ID2}
     updated = json.loads(after.read_text())
     assert updated["processed"][ID1] == before["processed"][ID1]
-    assert set(updated["processed"]) == {ID1, ID2}
+    assert updated["processed"][ID4] == before["processed"][ID4]
+    assert set(updated["processed"]) == {ID1, ID2, ID4}
     assert ID3 not in updated["processed"]
 
 
