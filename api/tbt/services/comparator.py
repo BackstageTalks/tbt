@@ -289,6 +289,9 @@ def compare(
         features.update(wta_season_stats.features_for_match(synthetic, current=True))
     rank_semantics = (getattr(model, "metadata", None) or {}).get("rank_feature_source")
     if rank_semantics == "point_in_time_weekly":
+        if (tour == "atp" and atp_rank_history is None or
+                tour == "wta" and wta_rank_history is None):
+            raise ComparatorCoverageError("Missing frozen weekly rank source")
         _pit_rank_snapshot(features, synthetic.tour)
     elif rank_semantics not in (None,):
         raise ComparatorCoverageError("Unknown model rank evidence provenance")
