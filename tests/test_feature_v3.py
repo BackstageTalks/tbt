@@ -119,6 +119,37 @@ def test_serving_respects_legacy_artifact_feature_schema(match_factory):
     assert model.columns == model.feature_names
 
 
+
+def test_context_calibrated_serving_gets_original_competition_but_not_legacy_models(match_factory):
+    """Extra context is opt-in: historical models keep their exact schema."""
+    from tbt.services import engine
+
+    class Model:
+        version = "context-guard-test"
+        feature_names = ["elo_diff", "elo_probability", "data_depth"]
+
+        def __init__(self, maps):
+            self.context_calibrators = maps
+            self.columns = None
+            self.competitions = None
+
+        def predict_proba(self, frame):
+            self.columns = list(frame.columns)
+            self.competitions = list(frame["competition"]) if "competition" in frame else None
+            return [0.6] * len(frame)
+
+    history = [match_factory("past-context", "A", "C", "A", day=1)]
+    upcoming = match_factory("future-context", "A", "B", None, day=5)
+    now = upcoming.scheduled_at.replace(day=4)
+    legacy = Model({})
+    context = Model({"main_atp": object()})
+    assert engine.predict(legacy, history, [upcoming], now=now)
+    assert legacy.columns == legacy.feature_names
+    assert legacy.competitions is None
+    assert engine.predict(context, history, [upcoming], now=now)
+    assert context.columns == context.feature_names + ["competition"]
+    assert context.competitions == [upcoming.tournament_level or "unknown"]
+
 def test_point_weighted_quality_shrinks_small_samples_and_preserves_old_semantics(match_factory):
     from datetime import timedelta
     from tbt.models.feature_builder import RecentPerformance
