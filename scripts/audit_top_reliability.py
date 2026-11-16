@@ -429,7 +429,10 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
         for entry in entries:
             groups[entry[dimension]].append(entry)
         report["subgroups"][dimension] = {key: summarize(group) for key, group in sorted(groups.items())}
-    report["issued_probability_reliability"] = issued_reliability(entries)
+    if model_version is not None:
+        # Strict snapshot, version and two-sided quote were checked above.
+        # Legacy mixed-model audits cannot certify originally issued scores.
+        report["issued_probability_reliability"] = issued_reliability(entries)
     return report
 
 
