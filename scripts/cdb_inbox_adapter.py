@@ -511,10 +511,20 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
     normalized = out_dir / "normalized"
     normalized.mkdir(exist_ok=True)
     files = sorted(p for p in input_dir.iterdir() if p.is_file())
-    if tml_archive_exact_sha256 and (
-        len(files) != 1 or files[0].name != TML_USER_ARCHIVE_NAME
-    ):
-        raise ValueError("TML upload replay must contain only its exact named archive")
+    if tml_archive_exact_sha256:
+        # The Drive reader prefixes the local name with its file ID and
+        # replaces spaces/plus signs. Trust only the same-run Drive inventory
+        # source path or, for local regression tests, the literal filename.
+        if len(files) != 1:
+            raise ValueError("TML replay must contain exactly one archive")
+        original_source_path = source_hints.get(
+            str(files[0].resolve()), ("", "")
+        )[1]
+        if not (
+            files[0].name == TML_USER_ARCHIVE_NAME
+            or original_source_path.endswith("/" + TML_USER_ARCHIVE_NAME)
+        ):
+            raise ValueError("Unrecognized uploaded TML source path")
     if len(files) > max_files:
         raise ValueError("Unbounded inbox: file count exceeds configured limit")
     counts = Counter()
