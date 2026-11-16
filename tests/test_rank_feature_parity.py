@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+import math
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -9,7 +10,8 @@ import pytest
 from tbt.data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES, ATPRankHistory
 from tbt.data.wta_rank_history import WTARankHistory
 from tbt.services.engine import predict
-from tbt.services.training import _pit_rank_frame_inplace, _pit_rank_snapshot
+from tbt.services.training import _pit_rank_frame_inplace, _pit_rank_snapshot, _candidate_feature_names
+from tbt.models.symmetry import swap_frame
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -122,6 +124,48 @@ def test_protected_rank_feature_parity_is_applied_at_live_inference(match_factor
     # rank fields when its signed weekly source is absent.
     with pytest.raises(ValueError, match="Missing frozen weekly"):
         predict(model, [], [fixture], now)
+
+
+def test_absolute_pit_rank_strength_distinguishes_2500_from_50_with_same_ratio():
+    dt = date(2026, 9, 28)
+    snapshots = [
+        {"date": dt, "rank": r, "points": 200, "name": n}
+        for n, r in (("Top Alpha", 50), ("Top Beta", 100),
+                     ("Tail Alpha", 2500), ("Tail Beta", 5000))
+    ]
+    history = ATPRankHistory(snapshots)
+    def matchup(a, b):
+        return SimpleNamespace(tour="atp",
+                               scheduled_at=datetime(2026, 9, 29, 12, tzinfo=timezone.utc),
+                               player1_name=a, player2_name=b)
+    elite = history.features_for_match(matchup("Top Alpha", "Top Beta"))
+    tail = history.features_for_match(matchup("Tail Alpha", "Tail Beta"))
+    assert elite["atp_hist_known_both"] == tail["atp_hist_known_both"] == 1.
+    assert elite["atp_hist_rank_advantage"] == pytest.approx(tail["atp_hist_rank_advantage"], abs=.01)
+    assert elite["atp_hist_worst_rank_log"] == pytest.approx(math.log1p(100))
+    assert tail["atp_hist_worst_rank_log"] == pytest.approx(math.log1p(5000))
+    assert tail["atp_hist_best_rank_log"] == pytest.approx(math.log1p(2500))
+    # These invariant strength covariates cannot change when sides swap.
+    frame = pd.DataFrame([tail])
+    mirrored = swap_frame(frame)
+    assert mirrored["atp_hist_best_rank_log"].iloc[0] == tail["atp_hist_best_rank_log"]
+    assert mirrored["atp_hist_worst_rank_log"].iloc[0] == tail["atp_hist_worst_rank_log"]
+    assert mirrored["atp_hist_rank_advantage"].iloc[0] == pytest.approx(
+        -tail["atp_hist_rank_advantage"])
+
+
+def test_new_absolute_rank_features_remain_opt_in_for_protected_candidates():
+    legacy = _candidate_feature_names(atp_rank_history=object(), wta_rank_history=object())
+    protected = _candidate_feature_names(atp_rank_history=object(), wta_rank_history=object(),
+                                         pit_rank_aligned=True)
+    for tour in ("atp", "wta"):
+        for suffix in ("best_rank_log", "worst_rank_log"):
+            name = f"{tour}_hist_{suffix}"
+            assert name not in legacy
+            assert name in protected
+    assert "rank_advantage" in legacy
+    assert "rank_advantage" not in protected  # no duplicate relative rank
+    assert "rank_known_both" in protected      # evidence-gate parity retained
 
 def test_pipeline_wires_rank_history_into_train_backtest_and_serving():
     source = (ROOT / "scripts" / "pipeline.py").read_text(encoding="utf-8")
