@@ -136,6 +136,7 @@ def test_context_calibrated_serving_gets_original_competition_but_not_legacy_mod
         def predict_proba(self, frame):
             self.columns = list(frame.columns)
             self.competitions = list(frame["competition"]) if "competition" in frame else None
+            self.tournaments = list(frame["tournament"]) if "tournament" in frame else None
             return [0.6] * len(frame)
 
     history = [match_factory("past-context", "A", "C", "A", day=1)]
@@ -147,8 +148,9 @@ def test_context_calibrated_serving_gets_original_competition_but_not_legacy_mod
     assert legacy.columns == legacy.feature_names
     assert legacy.competitions is None
     assert engine.predict(context, history, [upcoming], now=now)
-    assert context.columns == context.feature_names + ["competition"]
+    assert context.columns == context.feature_names + ["competition", "tournament"]
     assert context.competitions == [upcoming.tournament_level or "unknown"]
+    assert context.tournaments == [upcoming.tournament or "unknown"]
 
 def test_point_weighted_quality_shrinks_small_samples_and_preserves_old_semantics(match_factory):
     from datetime import timedelta
