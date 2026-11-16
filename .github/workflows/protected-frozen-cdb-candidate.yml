@@ -103,6 +103,10 @@ jobs:
             tests/test_champion_rollback_rehearsal.py \
             tests/test_training_inputs.py \
             tests/test_verified_training_frame.py \
+            tests/test_calibration_override_guard.py \
+            tests/test_721_smooth_confidence_gate.py \
+            tests/test_721_evidence_recalibration.py \
+            tests/test_candidate_721_tour_calibration.py \
             tests/test_candidate_722_accuracy.py \
             tests/test_candidate_learning_window.py
       - name: Acquire global private canonical writer lock
