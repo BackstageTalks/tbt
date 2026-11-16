@@ -33,6 +33,8 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
   pull_request:
     paths:
       - scripts/cdb_large_source_stage.py
+      - scripts/release_store.py
+      - tests/test_release_not_found_fallback.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
       - scripts/tennisdata_source_aliases.py
@@ -64,6 +66,8 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
     branches: [main]
     paths:
       - scripts/cdb_large_source_stage.py
+      - scripts/release_store.py
+      - tests/test_release_not_found_fallback.py
       - tests/test_cdb_large_source_stage.py
       - scripts/cdb_inbox_*.py
       - scripts/tennisdata_source_aliases.py
@@ -112,7 +116,7 @@ jobs:
           PYTHONPATH: .:api:scripts
         run: |
           python -m compileall -q scripts/tml_uploaded_archive.py scripts/tennisdata_source_aliases.py scripts/cdb_inbox_adapter.py scripts/cdb_inbox_drive.py scripts/cdb_inbox_stage.py scripts/moviodds_cdb_batch.py scripts/moviodds_cdb_link.py scripts/moviodds_cdb_retry.py scripts/cdb_native_7z_unpack.py scripts/cdb_native_sackmann_stage.py scripts/cdb_native_slam_pbp_stage.py scripts/cdb_drive_identity_registry.py scripts/cdb_large_source_stage.py scripts/cdb_wta_lookback_guard.py scripts/link_offline_serve_return.py
-          python -m pytest tests/test_tml_uploaded_archive.py tests/test_tennisdata_source_aliases.py tests/test_moviodds_cdb_batch.py tests/test_moviodds_cdb_link.py tests/test_moviodds_cdb_retry.py tests/test_cdb_native_7z_unpack.py tests/test_cdb_native_sackmann_stage.py tests/test_cdb_native_slam_pbp_stage.py tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_date_provenance.py tests/test_cdb_wta_lookback_guard.py -q
+          python -m pytest tests/test_release_not_found_fallback.py tests/test_tml_uploaded_archive.py tests/test_tennisdata_source_aliases.py tests/test_moviodds_cdb_batch.py tests/test_moviodds_cdb_link.py tests/test_moviodds_cdb_retry.py tests/test_cdb_native_7z_unpack.py tests/test_cdb_native_sackmann_stage.py tests/test_cdb_native_slam_pbp_stage.py tests/test_cdb_inbox_adapter.py tests/test_cdb_drive_identity_registry.py tests/test_cdb_drive_multischema.py tests/test_cdb_large_source_stage.py tests/test_cdb_inbox_drive.py tests/test_cdb_inbox_scheduler_bridge.py tests/test_cdb_inbox_wait_resume.py tests/test_cdb_inbox_pending_batch.py tests/test_cdb_inbox_catchup.py tests/test_cdb_inbox_integration.py tests/test_cdb_date_provenance.py tests/test_cdb_wta_lookback_guard.py -q
 
   guarded-import:
     # Source preparation may proceed while immutable candidate training owns CDB.

@@ -195,17 +195,26 @@ class ReleaseStore:
         return digest.hexdigest()
 
     def _asset_names(self) -> set[str]:
-        payload = json.loads(
-            gh(
-                "release",
-                "view",
-                self.tag,
-                "--repo",
-                self.repository,
-                "--json",
-                "assets",
+        # Preserve the normal gh release view contract. A stale tag view can
+        # report "release not found" even when the authenticated release ID
+        # and its assets exist. Only in that specific case, consult the
+        # existing paginated REST inventory; all other failures stay closed.
+        try:
+            payload = json.loads(
+                gh(
+                    "release",
+                    "view",
+                    self.tag,
+                    "--repo",
+                    self.repository,
+                    "--json",
+                    "assets",
+                )
             )
-        )
+        except RuntimeError as exc:
+            if "release not found" not in str(exc).lower():
+                raise
+            return set(self._release_asset_inventory())
         return {
             str(asset.get("name"))
             for asset in payload.get("assets", [])
