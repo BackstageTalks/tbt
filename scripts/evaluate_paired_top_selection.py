@@ -65,11 +65,16 @@ def statistics(rows, model):
     predictions = [r["predictions"][model] for r in rows]
     wins = [p["correct"] for p in predictions]
     confidences = [p["confidence"] for p in predictions]
+    y = [p["target_player1_win"] for p in predictions]
+    p1 = [p["player1_probability"] for p in predictions]
     return {
         "n": n, "wins": sum(wins),
         "accuracy": sum(wins)/n,
         "mean_confidence": sum(confidences)/n,
+        "calibration_gap": sum(wins)/n - sum(confidences)/n,
+        "winner_roc_auc": auc(y, p1),
         "confidence_accuracy_auc": auc(wins, confidences),
+        "brier_selected_side": sum((p["confidence"] - p["correct"])**2 for p in predictions)/n,
     }
 
 
@@ -91,6 +96,7 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
             raise ValueError("Ambiguous duplicated market evidence")
         quote_by_id[key] = quote
     seen = set()
+    all_days = set()
     considered = defaultdict(list)
     totals = {"paired_rows": len(scores), "price_missing": 0,
               "price_after_start": 0, "sports_ineligible": 0,
@@ -101,6 +107,7 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
             raise ValueError("Duplicate scored fixture")
         seen.add(key)
         start = stamp(row["scheduled_at"])
+        all_days.add((start.astimezone(TZ) - timedelta(hours=6)).date().isoformat())
         if row["player1_id"] == row["player2_id"] or row["winner_id"] not in {
                 row["player1_id"], row["player2_id"]}:
             raise ValueError("Invalid player/winner identity")
@@ -140,6 +147,8 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
                 continue
             predictions[model] = {
                 "confidence": confidence,
+                "player1_probability": p,
+                "target_player1_win": y,
                 "correct": int((p >= .5) == bool(y)),
                 "odds": odds[selected],
             }
@@ -157,15 +166,24 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
             by_day[row["day"]].append(row)
         for items in by_day.values():
             items.sort(key=lambda r: (-r["predictions"][model]["confidence"], r["match_id"]))
-        daily = {day: len(items) for day, items in sorted(by_day.items())}
+        daily = {day: len(by_day.get(day, [])) for day in sorted(all_days)}
         result[model] = {
             "qualified": len(rows),
             "days_with_3plus": sum(n>=3 for n in daily.values()),
+            "days_evaluated": len(all_days),
             "days": daily,
             "all_qualified": statistics(rows, model),
             "top_3": statistics([r for items in by_day.values() for r in items[:3]], model),
             "top_5": statistics([r for items in by_day.values() for r in items[:5]], model),
             "top_7": statistics([r for items in by_day.values() for r in items[:7]], model),
+            "by_level": {
+                level: statistics([r for r in rows if (
+                    "challenger" in r["competition"].lower() if level == "challenger" else
+                    "itf" in r["competition"].lower() if level == "itf" else
+                    ("wta" in r["competition"].lower() or "atp" in r["competition"].lower())
+                    and "challenger" not in r["competition"].lower() and
+                    "itf" not in r["competition"].lower()
+                )], model) for level in ("main_tour", "challenger", "itf")},
             "by_tour": {tour: statistics([r for r in rows if r["tour"].lower() == tour], model)
                         for tour in ("atp", "wta")},
         }
