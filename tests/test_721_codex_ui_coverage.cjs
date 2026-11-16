@@ -35,7 +35,7 @@ const visible = render(fullFeed);
 assert.ok(visible.includes('Ben Shelton'));
 assert.ok(visible.includes('Arthur Fils'));
 assert.ok(visible.includes('57.4%'));
-assert.ok(visible.includes('Pod hranicou TOP 65 %'));
+assert.ok(visible.includes('Pod hranicou TOP 60 %'));
 assert.ok(!visible.includes('Publikovaný TOP tip'));
 // No chance of reading hidden full upcoming from a locked lower account.
 assert.equal(render({...fullFeed, board_meta: {locked: true}}), '');
