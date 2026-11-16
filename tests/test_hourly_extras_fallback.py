@@ -142,7 +142,7 @@ def test_workflow_preserves_lock_and_sequential_readback_before_fallback():
         "name: Continue provider-native extras under same CDB writer and allowance")
     extras_verify = workflow.index(
         "name: Independently verify every event extras CDB publication")
-    lock_release = workflow.index("name: Release cross-repository canonical writer")
+    lock_release = workflow.index("name: Release global cross-repository canonical writer")
     assert stats_verify < stats_summary < fallback_plan < fallback_import < extras_verify < lock_release
     assert "python scripts/hourly_extras_fallback.py" in workflow
     assert "steps.verified_extras_fallback.outputs.allowed == 'true'" in workflow
