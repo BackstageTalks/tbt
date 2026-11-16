@@ -2,7 +2,7 @@ name: BlinQ protected frozen-CDB candidate training
 
 on:
   push:
-    branches: [main, research/721-paired-top-selection-20261116]
+    branches: [main]
     paths:
       - .github/workflows/protected-frozen-cdb-candidate.yml
       - api/tbt/models/ensemble.py
@@ -45,10 +45,7 @@ jobs:
         (startsWith(github.event.head_commit.message,
          'feat(721): one-shot candidate-only tour calibration study') ||
          startsWith(github.event.head_commit.message,
-         'feat(722): one-shot PIT evidence calibration study') ||
-         (github.ref == 'refs/heads/research/721-paired-top-selection-20261116' &&
-          startsWith(github.event.head_commit.message,
-          'research(721): protected sports-weighted fit')))))
+         'feat(722): one-shot PIT evidence calibration study'))))
     runs-on: ubuntu-latest
     # A separate read-only gate waits for prior owners; the full six-hour
     # training budget starts only AFTER this job reports observed idle.
@@ -88,7 +85,7 @@ jobs:
       # Stream long-running training logs rather than losing output on runner exit.
       PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
-      BLINQ_SPORTS_WEIGHT_PROFILE: "${{ inputs.sports_weight_profile || ((github.ref == 'refs/heads/research/721-paired-top-selection-20261116' && startsWith(github.event.head_commit.message, 'research(721): protected sports-weighted fit')) && 'main_tour_2x') || 'none' }}"
+      BLINQ_SPORTS_WEIGHT_PROFILE: "${{ inputs.sports_weight_profile || 'none' }}"
       BLINQ_TRAINING_PROFILE: "${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}"
     steps:
       - uses: actions/checkout@v4
