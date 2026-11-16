@@ -9775,8 +9775,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
     })().catch(error=>{
       if(version===resultsLoadVersion&&generation===feedGeneration&&nonce===todayResultsNonce){
-        todayResultsError=error?.message||'Today Results unavailable.';
-        if(state.route==='results'&&resultsWindowNeedsTodayOnly())renderRoute('results');
+        // Speculative failure is retryable when the user opens Today.
+        const visible=state.route==='results'&&resultsWindowNeedsTodayOnly();
+        todayResultsError=visible?(error?.message||'Today Results unavailable.'):'';
+        if(visible)renderRoute('results');
       }
     }).finally(()=>{if(todayResultsFlight===operation)todayResultsFlight=null;});
     todayResultsFlight=operation;
@@ -9827,8 +9829,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }
     })().catch(error=>{
       if(version===resultsLoadVersion&&generation===feedGeneration&&nonce===recentResultsNonce){
-        recentResultsError=error?.message||'30-day Results unavailable.';
-        if(state.route==='results'&&!resultsWindowNeedsFullHistory())renderRoute('results');
+        // A failed background stage must not strand the 30-day route.
+        const visible=state.route==='results'&&!resultsWindowNeedsFullHistory()
+          &&!resultsWindowNeedsTodayOnly();
+        recentResultsError=visible?(error?.message||'30-day Results unavailable.'):'';
+        if(visible)renderRoute('results');
       }
     }).finally(()=>{if(recentResultsFlight===operation)recentResultsFlight=null;});
     recentResultsFlight=operation;
