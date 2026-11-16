@@ -60,10 +60,12 @@ def current_report(repo: str = DATA_REPOSITORY, *, directory: Path | None = None
         "publication_ledger_sha256": _sha(path),
         "window_days": 30,
         "overall": summary,
+        "issued_probability_reliability": result["issued_probability_reliability"],
         "value": {
             "status": ("DESCRIPTIVE_ISSUED_COHORT" if value_result["overall"]["settled"] >= 30
                        else "INSUFFICIENT_CURRENT_MODEL_SETTLED_VALUE"),
             "overall": value_result["overall"],
+            "issued_probability_reliability": value_result["issued_probability_reliability"],
             "diagnostics": value_result["diagnostics"],
             "coverage": value_result["coverage"],
             "subgroups": {
@@ -95,6 +97,7 @@ def current_report(repo: str = DATA_REPOSITORY, *, directory: Path | None = None
             "claim that losing picks could have been profitably replaced.",
             "Evaluation uses the private settled publication result; canonical "
             "settlement identity and missing outcomes are audited separately.",
+            "Five-point confidence bands and Wilson intervals are descriptive only; no calibrator is fitted.",
         ],
         "provider_requests": 0,
         "CDB_mutated": False,
@@ -137,6 +140,7 @@ def main():
         "top_70_75": result["subgroups"]["confidence_70_75"].get("70_to_75"),
         "top_itf_m15": result["subgroups"]["itf_grade"].get("ITF_M15"),
         "top_itf_m25": result["subgroups"]["itf_grade"].get("ITF_M25"),
+        "top_5pp_ece_descriptive": result["issued_probability_reliability"]["ece_5pp_descriptive"],
         "top_serve_return_evidence": result["subgroups"]["serve_return_evidence"],
         "top_market_disagreement": result["subgroups"]["market_disagreement"],
         "provider_requests": 0,
