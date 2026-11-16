@@ -76,15 +76,25 @@ jobs:
           c7098f76a704da7738ae5147f8c0f99817ef8bc972ca9634a0886a6c118964d4  csv/3_match_stats/match_stats_2022.csv
           SHA256
           echo ATP_PINNED_BYTES_VERIFIED
-      - name: Check writer lock before obtaining canonical snapshot
+      - name: Wait bounded for active daily CDB writer before authoritative snapshot
         run: |
           set -euo pipefail
-          python - <<'PY'
+          for i in $(seq 1 80); do
+            if python - <<'PY'
           from cdb_global_writer_lock import _remote_lock
+          import sys
           if _remote_lock("BackstageTalks/tbt-data"):
-              raise SystemExit("CDB_WRITER_ACTIVE__ABORT_READONLY")
-          print("CDB_WRITER_LOCK_ABSENT")
+              print("CDB_WRITER_BUSY_WAITING_FOR_OWNER_TO_RELEASE", flush=True)
+              sys.exit(1)
+          print("CDB_WRITER_LOCK_ABSENT", flush=True)
           PY
+            then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo CDB_WRITER_STILL_BUSY__NO_RETRY_OR_FORCE
+          exit 1
       - name: Download one stable SHA-verified current 78-year CDB snapshot
         run: |
           set -euo pipefail
