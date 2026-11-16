@@ -98,4 +98,65 @@ for(const [reason,field] of [
   assert.equal(accepts({...localMostAces,...field}),false,'Rejected '+reason);
 }
 
+// The live-feed scheduler must behave like a quiet app, not a page reload.
+const signatureContext={};
+vm.runInNewContext(frontendHelper('feedVisualSignature'),signatureContext);
+const signature=signatureContext.feedVisualSignature;
+assert.equal(signature({upcoming:[1],__blinq_feed_stage_ms:{fetch:3}}),
+  signature({upcoming:[1],__blinq_feed_stage_ms:{fetch:123}}),
+  'backend timings must not cause a visual refresh');
+assert.notEqual(signature({upcoming:[1]}),signature({upcoming:[2]}),
+  'a changed prediction must trigger a visual refresh');
+const autoCode=app.slice(app.indexOf('  async function loadFeed('),
+  app.indexOf('  async function refreshWorkspace('));
+assert.ok(autoCode.indexOf('if(skipUnchanged&&lastFeedVisualSignature===feedSignature')>=0,
+  'unchanged live feed must bypass the UI rebuild');
+assert.ok(autoCode.indexOf('if(skipUnchanged&&lastFeedVisualSignature===feedSignature') <
+  autoCode.indexOf('cancelResultsPreload();'),
+  'unchanged live feed must leave the staged Results loader running');
+
+(async()=>{
+  let clock=0;
+  const intervals=[],listeners={},calls=[];
+  const document={
+    hidden:false,activeElement:null,
+    querySelector:()=>null,
+    addEventListener:(name,callback)=>{listeners['document:'+name]=callback;},
+  };
+  const nav={onLine:true};
+  const context={
+    Date:{now:()=>clock}, document,navigator:nav,Promise,console,
+    feedLoading:false,state:{route:'predictions',demoMode:false}, 
+    $:()=>({hidden:false}),
+    window:{addEventListener:(name,callback)=>{listeners['window:'+name]=callback;}},
+    setInterval:(callback,ms)=>intervals.push({callback,ms}),
+    refreshWorkspace:()=>{calls.push('config+feed');return Promise.resolve();},
+    loadFeed:(_show,options)=>{calls.push(options?.skipUnchanged?'silent-feed':'feed');return Promise.resolve();},
+    refreshPrivateUpdates:()=>Promise.resolve(),
+    renderSystemFooterStatus:()=>{},
+    pollAdminModelFactory:()=>Promise.resolve(),
+    handleSessionStorageEvent:()=>{},
+    setRoute:()=>{},
+    location:{hash:'#predictions'},
+  };
+  vm.runInNewContext(frontendHelper('setupLiveRefresh')+'\nsetupLiveRefresh();',context);
+  const timer=intervals.find(x=>x.ms===60000);
+  assert.ok(timer,'visible workspace must check for a live update at one-minute scheduler ticks');
+  clock=119000;timer.callback();assert.equal(calls.length,0,'no early refresh while the UI settles');
+  clock=120000;timer.callback();timer.callback();assert.deepEqual(calls,['silent-feed'],
+    'first two-minute sync must be silent and single-flight');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  clock=300000;timer.callback();assert.deepEqual(calls,['silent-feed','config+feed'],
+    'published UI configuration must still be refreshed every five minutes');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  clock=450000;document.hidden=true;timer.callback();assert.equal(calls.length,2,
+    'no background polling in a hidden tab');
+  document.hidden=false;listeners['document:visibilitychange']();
+  assert.equal(calls.length,3,'resume sync on tab visibility');
+  await Promise.resolve();await Promise.resolve();await Promise.resolve();
+  clock=700000;nav.onLine=false;timer.callback();assert.equal(calls.length,3,'offline must not fetch');
+  nav.onLine=true;listeners['window:online']();
+  assert.equal(calls.length,4,'reconnection must trigger one catch-up sync');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+
 console.log(`frontend runtime contract: PASS (736-r${p})`);
