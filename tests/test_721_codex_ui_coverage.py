@@ -12,7 +12,7 @@ def test_full_top_page_is_not_limited_to_dashboard_preview():
     assert "detailCards(marketRows('top_daily'),'top_daily')" in source
     assert "return `<div class=\"detail-picks-grid\">" in source
     rules = json.loads(Path("web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]["top_daily"]
-    assert rules["limit"] == 3 and rules["target_count"] == 3
+    assert rules["limit"] == 5 and rules["target_count"] == 3
     assert rules["presentation_preview_limit"] == 10
 
 
@@ -64,9 +64,9 @@ def test_unlimited_v21_top_survives_serving_entitlement_without_legacy_three_pic
     published = select_market_sections(candidates)
     original_ids = [x["event_id"] for x in published["top_daily_picks"]]
     assert original_ids == [
-        "high-80", "high-75", "high-70",
+        "high-80", "high-75", "high-70", "eligible-66", "eligible-65",
     ]
-    assert published["market_selection"]["top_daily_rule"]["policy"] == "sports_top3_60_v22"
+    assert published["market_selection"]["top_daily_rule"]["policy"] == "sports_tiered_top5_60_v23"
     assert published["market_selection"]["top_daily_rule"]["fallback_only_if_core_count_below"] is None
     assert [x["event_id"] for x in _daily_rows(published)] == original_ids
     # The old 3-pick tier rule must remain isolated from the new policy.
