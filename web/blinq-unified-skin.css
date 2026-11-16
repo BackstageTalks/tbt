@@ -370,14 +370,14 @@ body#blinqPremium.blinq-admin .admin-accounts-simple .admin-simple-stats>span {
     box-shadow:none!important;
   }
   body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs-v685 .admin-nav-entry>button[data-admin-tab] {
-    border-color:rgba(107,176,148,.12)!important;
-    border-radius:8px!important;
-    background:rgba(4,29,25,.22)!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
     box-shadow:none!important;
   }
   body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs-v685 .admin-nav-entry>button[data-admin-tab].active {
-    border-color:rgba(105,210,159,.23)!important;
-    background:rgba(16,65,47,.34)!important;
+    border:0!important;
+    background:transparent!important;
     color:#f0faf5!important;
   }
   body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-entry>button.active .admin-nav-mark {
