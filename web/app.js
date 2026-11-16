@@ -9596,7 +9596,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function clearPrivateWorkspaceState(){
     cancelResultsPreload();
-    resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';todayResultsSnapshot='';completeResultsSnapshot='';recentResultsSnapshot='';
+    resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';todayResultsSnapshot='';completeResultsSnapshot='';recentResultsSnapshot='';todayResultsDay='';recentResultsDay='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
@@ -9636,7 +9636,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
-  let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='';
+  let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='', todayResultsDay='', recentResultsDay='';
   function cancelResultsPreload(){
     if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
     resultsPreloadTimer=null;
@@ -9653,12 +9653,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       &&nextFeed?.results_boot_partial===true&&nextFeed?.entitlements?.results===true
       &&!nextFeed?.results_archive_unavailable&&!nextFeed?.results_exclusions_unavailable);
     const digest=String(nextFeed?.results_snapshot||'');
+    const day=bratislavaBettingDayKey(Date.now(),6);
     const full=Boolean(allowed&&completeResultsSnapshot&&!current?.results_boot_partial
       &&digest===completeResultsSnapshot);
-    const recent=Boolean(allowed&&recentResultsSnapshot&&current?.results_recent_ready===true
-      &&digest===recentResultsSnapshot);
-    const today=Boolean(allowed&&todayResultsSnapshot&&current?.results_today_ready===true
-      &&digest===todayResultsSnapshot);
+    const recent=Boolean(allowed&&recentResultsSnapshot&&recentResultsDay===day
+      &&current?.results_recent_ready===true&&digest===recentResultsSnapshot);
+    const today=Boolean(allowed&&todayResultsSnapshot&&todayResultsDay===day
+      &&current?.results_today_ready===true&&digest===todayResultsSnapshot);
     if(full||recent||today){
       nextFeed.results=current.results;
       nextFeed.results_today_ready=true;
@@ -9668,6 +9669,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       todayResultsSnapshot='';
       completeResultsSnapshot='';
       recentResultsSnapshot='';
+      todayResultsDay='';
+      recentResultsDay='';
     }
     return full||recent||today;
   }
@@ -9759,6 +9762,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               normalizeFeedAceOdds(state.feed);
               state.feed.results_today_ready=true;
               todayResultsSnapshot=snapshot;
+              todayResultsDay=bratislavaBettingDayKey(Date.now(),6);
               todayResultsError='';
               if(state.route==='results'&&resultsWindowNeedsTodayOnly())renderRoute('results');
               else if(state.route==='predictions')renderDashboardResultsPreview();
@@ -9813,6 +9817,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               state.feed.results_today_ready=true;
               todayResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
+              todayResultsDay=recentResultsDay=bratislavaBettingDayKey(Date.now(),6);
               recentResultsError='';
               if(state.route==='results'&&!resultsWindowNeedsFullHistory())renderRoute('results');
               else if(state.route==='predictions')renderDashboardResultsPreview();
@@ -9872,6 +9877,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               completeResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
               todayResultsSnapshot=snapshot;
+              todayResultsDay=recentResultsDay=bratislavaBettingDayKey(Date.now(),6);
               state.feed.results_recent_ready=true;
               state.feed.results_today_ready=true;
               fullResultsError='';
