@@ -72,7 +72,13 @@ jobs:
           assert report["api_requests"] == 0
           assert report["quote_linkage"]["outcomes_used_for_quote_join"] is False
           assert report["replay"]["status"] == "RESEARCH_REPLAY_NOT_NATIVE_ISSUED_TOP"
-          print('Exact private score/quote readback + aggregate-only replay verified')
+          # A zero-join or zero-qualified artifact is a provenance/evidence
+          # failure for this comparison, not a successful TOP evaluation.
+          assert report["quote_linkage"]["exact_time_verified_quotes"] > 0, (
+              "No verified exact-source quotes; inspect aggregate rejection counts")
+          assert any(v["qualified"] > 0 for v in report["replay"]["comparison"].values()), (
+              "No 1.50+ eligible picks; do not claim a TOP ranking comparison")
+          print('Exact private score/quote readback + nonempty aggregate replay verified')
           PY
       - name: Publish aggregate only - no raw scorer or price files
         if: always()
