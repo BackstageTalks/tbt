@@ -186,10 +186,34 @@
     height:58px !important;
     font-size:13px !important;
     font-weight:700 !important;
-    color:#d1e2d8 !important;
+    color:#82968d !important;
+    text-shadow:none !important;
   }
-  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active {
+  /* Selected market is readable at a glance; inactive markets recede. */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active,
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab:first-child.active {
     color:#f7fff9 !important;
+    text-shadow:0 0 9px rgba(105,216,172,.42) !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .daily-hub-tab.active::after {
+    display:block !important;
+    width:28px !important;
+    height:1px !important;
+    background:#69d8ac !important;
+    box-shadow:0 0 6px rgba(105,216,172,.22) !important;
+  }
+  /* Thin horizontal scroll runner; do not alter swipe or tab sizing. */
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub #dailyHubTabs {
+    scrollbar-width:thin !important;
+    scrollbar-color:rgba(105,216,172,.55) transparent !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub #dailyHubTabs::-webkit-scrollbar {
+    display:block !important;
+    height:2px !important;
+  }
+  body#blinqPremium#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub #dailyHubTabs::-webkit-scrollbar-thumb {
+    background:rgba(105,216,172,.55) !important;
+    border-radius:2px !important;
   }
 
 }
