@@ -122,3 +122,45 @@ def expand_pair(row: dict, source_sha256: str, source_map: dict) -> tuple[dict, 
     enriched["home_name"] = home
     enriched["away_name"] = away
     return enriched, "two_source_names_verified"
+
+# Curated from the owner's independently compared, SHA-identical TennisData
+# and TML+ season sources (4,336 row-level matches across 2021-2026).
+# Each corroboration required the same winner/loser, ordered initials, exact
+# round + surface, a bounded forward tournament window, 4 equal ace/DF counts,
+# both consistent service percentages, and at least one matching BP rate.
+# These are source-local display-name translations, NEVER canonical identity.
+# The strict CDB linker STILL requires exact canonical event, date, winner,
+# unique player pair and round/surface. Avoid ambiguous Challenger numbering.
+VERIFIED_EVENT_ALIASES = {
+    ("atp", "French Open ATP"): "Roland Garros",
+    ("wta", "French Open WTA"): "Roland Garros",
+    ("atp", "Miami ATP"): "Miami Masters",
+    ("atp", "Indian Wells ATP"): "Indian Wells Masters",
+    ("atp", "Rome ATP"): "Rome Masters",
+    ("atp", "Madrid ATP"): "Madrid Masters",
+    ("atp", "Cincinnati ATP"): "Cincinnati Masters",
+    ("atp", "Paris ATP (indoor)"): "Paris Masters",
+    ("atp", "Monte Carlo ATP"): "Monte Carlo Masters",
+    ("atp", "Shanghai ATP"): "Shanghai Masters",
+    ("atp", "Toronto ATP"): "Canada Masters",
+    ("atp", "Montreal ATP"): "Canada Masters",
+}
+
+
+def expand_verified_event(row: dict, source_sha256: str, source_map: dict) -> tuple[dict, str]:
+    """Optional exact-source event-name expansion, never an identity shortcut."""
+    if source_sha256 not in source_map["sha_files"]:
+        return row, "source_sha_not_in_pinned_batch"
+    tour_label = re.sub(r"[^a-z0-9]", "", str(row.get("tour_type_human") or "").lower())
+    # Explicitly exclude Challenger events; their numbered editions are
+    # not safely interchangeable even if their city names agree.
+    if tour_label not in ("atptour", "wtatour"):
+        return row, "not_main_tour"
+    tour = TOUR_LABELS[tour_label]
+    tournament = row.get("tournament")
+    alias = VERIFIED_EVENT_ALIASES.get((tour, tournament))
+    if alias is None:
+        return row, "not_whitelisted"
+    expanded = dict(row)
+    expanded["tournament"] = alias
+    return expanded, "exact_whitelist_hit"

@@ -18,7 +18,7 @@ from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from tennisdata_source_aliases import expand_pair, load_map
+from tennisdata_source_aliases import expand_pair, expand_verified_event, load_map
 from tml_uploaded_archive import (
     OUTER_SHA256 as TML_USER_ARCHIVE_SHA,
     SOURCE_NAME as TML_USER_ARCHIVE_NAME,
@@ -499,7 +499,8 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
         drive_manifest_path: Path | None = None,
         source_alias_map_path: Path | None = None,
         expected_source_alias_sha256: str = "",
-        tml_archive_exact_sha256: str = ""):
+        tml_archive_exact_sha256: str = "",
+        tennisdata_verified_event_aliases: bool = False):
     if tml_archive_exact_sha256 and tml_archive_exact_sha256 != TML_USER_ARCHIVE_SHA:
         raise ValueError("TML user archive requires its preverified exact SHA-256")
     source_hints = _drive_source_hints(drive_manifest_path, input_dir)
@@ -507,6 +508,8 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
         raise ValueError("Source alias file and exact SHA must be supplied together")
     source_aliases = (load_map(source_alias_map_path, expected_source_alias_sha256)
                       if source_alias_map_path is not None else None)
+    if tennisdata_verified_event_aliases and source_aliases is None:
+        raise ValueError("Verified event aliases require SHA-pinned player source mapping")
     out_dir.mkdir(parents=True, exist_ok=True)
     normalized = out_dir / "normalized"
     normalized.mkdir(exist_ok=True)
@@ -641,6 +644,9 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                         # source-local full names; raw content remains untouched.
                         raw, alias_result = expand_pair(raw, sha, source_aliases)
                         counts["tennisdata_alias_" + alias_result] += 1
+                        if tennisdata_verified_event_aliases and alias_result == "two_source_names_verified":
+                            raw, event_result = expand_verified_event(raw, sha, source_aliases)
+                            counts["tennisdata_event_alias_" + event_result] += 1
                     row, reason = normalize(raw, member_name, index,
                                             source_tour=folder_tour)
                     if reason:
@@ -699,12 +705,14 @@ def main():
                         help="Optional private SHA-pinned TennisData full-name source mapping")
     parser.add_argument("--source-alias-map-sha256", default="",
                         help="SHA256 digest required when source map is provided")
+    parser.add_argument("--tennisdata-verified-event-aliases", action="store_true",
+                        help="Operator-only SHA-pinned main-tour event synonyms; no canonical identity assertion")
     parser.add_argument("--tml-archive-exact-sha256", default="",
                         help="Explicit exact-byte TML archive upload gate, no other sources allowed")
     args = parser.parse_args()
     report = run(args.input_dir, args.out_dir, args.max_files, args.drive_manifest,
                  args.source_alias_map, args.source_alias_map_sha256,
-                 args.tml_archive_exact_sha256)
+                 args.tml_archive_exact_sha256, args.tennisdata_verified_event_aliases)
     print(json.dumps({"state": report["state"], "counts": report["counts"],
                       "normalized_files": len(report["normalized"])}))
 if __name__ == "__main__":

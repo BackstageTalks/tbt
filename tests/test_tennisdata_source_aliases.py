@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from scripts.tennisdata_source_aliases import compact_matches_full, expand_pair, load_map
+from scripts.tennisdata_source_aliases import compact_matches_full, expand_pair, expand_verified_event, load_map
 from scripts.cdb_inbox_adapter import run
 
 
@@ -123,3 +123,56 @@ def test_cross_tour_id_and_partial_alias_are_not_inferred(tmp_path):
     assert expand_pair(raw, "a" * 64, m)[1] == "not_both_uniquely_named"
     raw = dict(sample(), home_id="102", away_id="102")
     assert expand_pair(raw, "a" * 64, m)[1] == "missing_or_equal_player_ids"
+
+
+def test_event_translation_is_explicit_opt_in_and_preserves_raw_stats(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    row = dict(sample(), tournament="French Open ATP", round="1/8-finals")
+    path = source / "2026-atp-season(1).csv"
+    with path.open("w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=row)
+        writer.writeheader()
+        writer.writerow(row)
+    original_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    p, digest = map_file(tmp_path, original_sha)
+    first = run(source, tmp_path / "regular", source_alias_map_path=p,
+                expected_source_alias_sha256=digest)
+    extra = run(source, tmp_path / "translated", source_alias_map_path=p,
+                expected_source_alias_sha256=digest,
+                tennisdata_verified_event_aliases=True)
+    a = next(csv.DictReader(open(first["normalized"][0]["path"])))
+    b = next(csv.DictReader(open(extra["normalized"][0]["path"])))
+    assert a["tourney_name"] == "French Open"
+    assert b["tourney_name"] == "Roland Garros"
+    assert extra["counts"]["tennisdata_event_alias_exact_whitelist_hit"] == 1
+    assert {k: v for k, v in a.items() if k != "tourney_name"} == {
+        k: v for k, v in b.items() if k != "tourney_name"}
+    assert original_sha == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert extra["production_mutated"] is False
+    assert extra["api_requests"] == 0
+
+
+def test_event_translation_rejects_untrusted_source_and_challenger_or_unknown_event(tmp_path):
+    p, digest = map_file(tmp_path, "a" * 64)
+    alias_map = load_map(p, digest)
+    row = dict(sample(), tournament="French Open ATP")
+    assert expand_verified_event(row, "1" * 64, alias_map) == (
+        row, "source_sha_not_in_pinned_batch")
+    challenger = dict(row, tour_type_human="ATP Chall")
+    assert expand_verified_event(challenger, "a" * 64, alias_map) == (
+        challenger, "not_main_tour")
+    unsupported = dict(row, tournament="Milan ATP")
+    assert expand_verified_event(unsupported, "a" * 64, alias_map) == (
+        unsupported, "not_whitelisted")
+    expanded, status = expand_verified_event(row, "a" * 64, alias_map)
+    assert status == "exact_whitelist_hit"
+    assert expanded["tournament"] == "Roland Garros"
+    assert row["tournament"] == "French Open ATP"
+
+
+def test_event_translation_needs_exact_private_mapping(tmp_path):
+    source = tmp_path / "input"
+    source.mkdir()
+    with pytest.raises(ValueError, match="require SHA-pinned"):
+        run(source, tmp_path / "output", tennisdata_verified_event_aliases=True)
