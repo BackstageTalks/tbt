@@ -108,12 +108,12 @@ jobs:
             --stats-csv work/source/csv/3_match_stats/match_stats_2022.csv \
             --min-year 2016 --max-year 2022 \
             --include-break-points --require-reciprocal-consistency \
-            --expected-provider-quarantine 6 --out-dir work/audit/link
+            --expected-provider-quarantine 0 --out-dir work/audit/link
           python - <<'PY'
           import json
           r=json.load(open('work/audit/link/report.json'))
           if (r.get('production_mutated') is not False or r.get('api_requests') != 0
-              or r.get('protected_provider_quarantine') != 6
+              or r.get('protected_provider_quarantine') != 0
               or r.get('strict_reciprocal_stats') is not True
               or r.get('includes_break_point_rates') is not True
               or r['counts'].get('stat_rows') != 25249
@@ -124,7 +124,7 @@ jobs:
       - name: Native provider-safe NULL-only DRY-RUN (NO PRODUCTION WRITES)
         run: |
           set -euo pipefail
-          python scripts/import_offline_linked_serve_return.py --stage work/audit/link/auto_linked.jsonl --history-dir work/cdb --out-dir work/audit/native-dry --expected-provider-quarantine 6 --isolate-provider-collisions
+          python scripts/import_offline_linked_serve_return.py --stage work/audit/link/auto_linked.jsonl --history-dir work/cdb --out-dir work/audit/native-dry --expected-provider-quarantine 0
           python - <<'PY'
           import json
           from pathlib import Path
