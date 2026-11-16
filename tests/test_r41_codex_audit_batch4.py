@@ -82,8 +82,15 @@ def test_b19_pending_profile_has_reload_and_signin_recovery():
 def test_b20_popout_uses_external_csp_safe_runtime_and_asset_fallbacks():
     app = _text("web/app.js")
     popout = app.split("function openMatchPopout()", 1)[1].split("function openMatch(", 1)[0]
-    assert 'src="/match-popout.js?v=7360&p=61"' in popout
+    assert "window.open('/match-popout.html'" in popout
+    assert "w.document.write(" not in popout
     assert "document.addEventListener('click',function" not in popout
+    # CSP-safe runtime and stylesheet links now live in a real same-origin
+    # HTML document, not in an about:blank document.write string.
+    html = _text("web/match-popout.html")
+    assert 'src="/match-popout.js?v=7360&p=61"' in html
+    assert 'href="/blinq-detail.css?' in html
+    assert "<script>" not in html
     runtime = _text("web/match-popout.js")
     assert "[data-match-tab]" in runtime
     assert "[data-player-photo]" in runtime
