@@ -18,6 +18,8 @@ from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+from tennisdata_source_aliases import expand_pair, load_map
+
 MAX_FILE_BYTES = 64 * 1024 * 1024
 MAX_MEMBER_BYTES = 32 * 1024 * 1024
 MAX_ROWS = 200_000
@@ -475,8 +477,14 @@ def pieces(name, blob):
                 raise ValueError("Oversized or encrypted ZIP member")
             yield info.filename, archive.read(info)
 def run(input_dir: Path, out_dir: Path, max_files: int = 100,
-        drive_manifest_path: Path | None = None):
+        drive_manifest_path: Path | None = None,
+        source_alias_map_path: Path | None = None,
+        expected_source_alias_sha256: str = ""):
     source_hints = _drive_source_hints(drive_manifest_path, input_dir)
+    if bool(source_alias_map_path) != bool(expected_source_alias_sha256):
+        raise ValueError("Source alias file and exact SHA must be supplied together")
+    source_aliases = (load_map(source_alias_map_path, expected_source_alias_sha256)
+                      if source_alias_map_path is not None else None)
     out_dir.mkdir(parents=True, exist_ok=True)
     normalized = out_dir / "normalized"
     normalized.mkdir(exist_ok=True)
@@ -551,6 +559,11 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                             counts["reason_" + tml_reason] += 1
                             table_rejections[tml_reason] += 1
                             continue
+                    if source_aliases is not None and isinstance(raw, dict):
+                        # Only the exact twelve source SHA files may receive
+                        # source-local full names; raw content remains untouched.
+                        raw, alias_result = expand_pair(raw, sha, source_aliases)
+                        counts["tennisdata_alias_" + alias_result] += 1
                     row, reason = normalize(raw, member_name, index,
                                             source_tour=folder_tour)
                     if reason:
@@ -593,6 +606,8 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
     report = {"schema": 1, "state": "SOURCE_ONLY", "production_mutated": False,
               "api_requests": 0, "counts": dict(counts),
               "normalized": outputs, "review": review,
+              "source_alias_map_sha256": (expected_source_alias_sha256
+                                           if source_aliases else None),
         "source_diagnostics": source_diagnostics}
     (out_dir / "report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
@@ -603,8 +618,13 @@ def main():
     parser.add_argument("--max-files", type=int, default=100)
     parser.add_argument("--drive-manifest", type=Path,
                         help="SHA-verified same-run Drive source provenance")
+    parser.add_argument("--source-alias-map", type=Path,
+                        help="Optional private SHA-pinned TennisData full-name source mapping")
+    parser.add_argument("--source-alias-map-sha256", default="",
+                        help="SHA256 digest required when source map is provided")
     args = parser.parse_args()
-    report = run(args.input_dir, args.out_dir, args.max_files, args.drive_manifest)
+    report = run(args.input_dir, args.out_dir, args.max_files, args.drive_manifest,
+                 args.source_alias_map, args.source_alias_map_sha256)
     print(json.dumps({"state": report["state"], "counts": report["counts"],
                       "normalized_files": len(report["normalized"])}))
 if __name__ == "__main__":
