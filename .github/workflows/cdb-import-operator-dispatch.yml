@@ -106,3 +106,4 @@ jobs:
 # Existing guarded Drive importer exclusively; source IDs are not CDB identities.
 # Operator replay 2026-11-16: exact 12 TennisData raw CSVs after verified fractional-round normalization; source-only alias map, no paid API.
 # Exact operator replay after PR #1648 stale CLI tag-view fallback: TML 44 source-member archive, full CAS/backup/readback; no API spend.
+# One-shot 2026-11-16 TennisData verified-event-name operator replay. Original 12 Drive CSV IDs only; source SHA-256, full-name evidence, CDB global lock/CAS and remote readback mandatory.
