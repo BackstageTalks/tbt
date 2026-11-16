@@ -45,7 +45,9 @@ jobs:
         (startsWith(github.event.head_commit.message,
          'feat(721): one-shot candidate-only tour calibration study') ||
          startsWith(github.event.head_commit.message,
-         'feat(722): one-shot PIT evidence calibration study'))))
+         'feat(722): one-shot PIT evidence calibration study') ||
+         startsWith(github.event.head_commit.message,
+         'feat(721): one-shot sport ranking experiment'))))
     runs-on: ubuntu-latest
     # A separate read-only gate waits for prior owners; the full six-hour
     # training budget starts only AFTER this job reports observed idle.
@@ -85,7 +87,10 @@ jobs:
       # Stream long-running training logs rather than losing output on runner exit.
       PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
-      BLINQ_SPORTS_WEIGHT_PROFILE: "${{ inputs.sports_weight_profile || 'none' }}"
+      # This exact, reviewed one-shot merge marker can launch the protected
+      # experimental fit without bypassing frozen inputs or new backup checks.
+      # All other push commits retain the normal unweighted/no-fit behavior.
+      BLINQ_SPORTS_WEIGHT_PROFILE: "${{ inputs.sports_weight_profile || (startsWith(github.event.head_commit.message, 'feat(721): one-shot sport ranking experiment') && 'main_tour_2x') || 'none' }}"
       BLINQ_TRAINING_PROFILE: "${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}"
     steps:
       - uses: actions/checkout@v4
