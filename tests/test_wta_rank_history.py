@@ -45,9 +45,14 @@ def test_sackmann_player_id_join_and_candidate_governance(tmp_path):
     assert history.features_for_match(match)["wta_hist_known_both"]==1.0
     assert not (set(WTA_RANK_HISTORY_FEATURE_NAMES)&set(PRODUCTION_FEATURE_NAMES))
     assert not (set(WTA_RANK_HISTORY_FEATURE_NAMES)&set(_candidate_feature_names()))
-    assert set(WTA_RANK_HISTORY_FEATURE_NAMES).issubset(
-        _candidate_feature_names(wta_rank_history=history)
-    )
+    legacy = set(_candidate_feature_names(wta_rank_history=history))
+    protected = set(_candidate_feature_names(
+        wta_rank_history=history, pit_rank_aligned=True))
+    inherited = set(WTA_RANK_HISTORY_FEATURE_NAMES) - {
+        "wta_hist_best_rank_log", "wta_hist_worst_rank_log"}
+    assert inherited.issubset(legacy)
+    assert set(WTA_RANK_HISTORY_FEATURE_NAMES).issubset(protected)
+    assert not {"wta_hist_best_rank_log", "wta_hist_worst_rank_log"} & legacy
 
 
 
