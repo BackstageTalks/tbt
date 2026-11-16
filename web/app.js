@@ -9637,13 +9637,29 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null,lastFeedVisualSignature='',lastFeedBettingDay='';
-  let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, resultsPreloadEpoch=0, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='', todayResultsDay='', recentResultsDay='';
+  let resultsLoadVersion=0, resultsPreloadFlight=null, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, resultsPreloadEpoch=0, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='', todayResultsDay='', recentResultsDay='';
   function cancelResultsPreload(){
     resultsPreloadEpoch++; // Also cancel already-running staged background pipelines.
+    resultsPreloadFlight=null;
     if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
     resultsPreloadTimer=null;
     if(resultsPreloadAfterLoad!==null)window.removeEventListener('load',resultsPreloadAfterLoad);
     resultsPreloadAfterLoad=null;
+  }
+  function canKeepResultsPreloadOnFeedUpdate(nextFeed,day){
+    const previous=state.feed;
+    const oldAccount=String(previous?.account?.id||previous?.account?.email||'').trim().toLowerCase();
+    const newAccount=String(nextFeed?.account?.id||nextFeed?.account?.email||'').trim().toLowerCase();
+    // The server snapshot binds the entire authorized ledger, not just today's
+    // page. An unrelated prediction change must not restart a matching read.
+    return Boolean(oldAccount&&oldAccount===newAccount
+      &&previous?.entitlements?.results===true&&nextFeed?.entitlements?.results===true
+      &&previous?.results_boot_partial===true&&nextFeed?.results_boot_partial===true
+      &&previous?.results_snapshot&&previous.results_snapshot===nextFeed.results_snapshot
+      &&!nextFeed.results_archive_unavailable&&!nextFeed.results_exclusions_unavailable
+      &&lastFeedBettingDay===day
+      &&(resultsPreloadTimer!==null||resultsPreloadAfterLoad!==null||resultsPreloadFlight
+        ||todayResultsFlight||recentResultsFlight||fullResultsFlight));
   }
   function reuseHydratedResultsOnRefresh(nextFeed){
     // The server snapshot covers the complete *authorized* ledger for every
@@ -9726,9 +9742,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         resultsPreloadTimer=null;
         if(generation!==feedGeneration||$('appShell')?.hidden
            ||!state.feed?.results_boot_partial||!resultsAccessAllowed())return;
-        preloadResultsStages(generation,epoch).catch(error=>{
+        const operation=preloadResultsStages(generation,epoch).catch(error=>{
           console.warn('[BlinQ Results] background hydration failed.',error);
-        });
+        }).finally(()=>{if(resultsPreloadFlight===operation)resultsPreloadFlight=null;});
+        resultsPreloadFlight=operation;
       },5000);
     };
     if(document.readyState==='complete')afterPageLoad();
@@ -9950,9 +9967,14 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
         return;
       }
-      cancelResultsPreload();
+      const keepResultsWork=skipUnchanged&&canKeepResultsPreloadOnFeedUpdate(feed,day);
+      if(!keepResultsWork)cancelResultsPreload();
       reuseHydratedResultsOnRefresh(feed);
-      resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';
+      if(!keepResultsWork){
+        resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;
+        todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;
+        todayResultsError='';fullResultsError='';recentResultsError='';
+      }
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
@@ -9986,7 +10008,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; markBootTiming('Dashboard odkrytý'); if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
-      scheduleResultsPreload(generation);
+      if(!keepResultsWork)scheduleResultsPreload(generation);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(showLoading&&state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
   function uiVisualSignature(){
