@@ -148,9 +148,13 @@ def _candidate_feature_names(
     if atp_leaderboards is not None:
         names += list(ATP_LEADERBOARD_FEATURE_NAMES)
     if atp_rank_history is not None:
-        names += list(ATP_RANK_HISTORY_FEATURE_NAMES)
+        names += [name for name in ATP_RANK_HISTORY_FEATURE_NAMES
+                  if pit_rank_aligned or name not in {
+                      "atp_hist_best_rank_log", "atp_hist_worst_rank_log"}]
     if wta_rank_history is not None:
-        names += list(WTA_RANK_HISTORY_FEATURE_NAMES)
+        names += [name for name in WTA_RANK_HISTORY_FEATURE_NAMES
+                  if pit_rank_aligned or name not in {
+                      "wta_hist_best_rank_log", "wta_hist_worst_rank_log"}]
     if wta_season_stats is not None:
         names += list(WTA_SEASON_FEATURE_NAMES)
     return names
