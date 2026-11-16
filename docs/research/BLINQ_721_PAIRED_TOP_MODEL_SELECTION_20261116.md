@@ -54,3 +54,11 @@ Product goal: ideally at least three high-quality TOP winner picks per day, **no
 ### Final replay fail-closed gate
 
 The subsequent research-only workflow now explicitly rejects a "successful" private TOP comparison when zero exact time-verified quotes were joined or when neither model has any sport/price-qualified winner pick. The aggregate diagnostic remains uploadable with `if: always()` for troubleshooting. Preflight-only workflow code was removed after its successful readback; normal production and training push restrictions are restored. The historic quote replay itself has **not been executed** on scored candidate rows because the baseline candidate has not finished its PIT audit and asset publication.
+
+### Research-only sports confidence sensitivity: 60% vs 65%
+
+At the user's request, the private same-fixture TOP replay now treats **60% sports-only probability** as the primary experimental confidence eligibility threshold; **65%** is retained as the unchanged reference arm. The independently time-verified, selected-side winner **odds >= 1.50** filter remains exactly the same and comes *after* the sports gate. Neither odds nor market-implied probability enters sports scoring, training, or ranking. No maximum TOP or forced fill is introduced.
+
+Both arms use the same frozen model probabilities, fixture identities, prestart quote observations, sport-depth/surface gates and betting-day clock. The new private aggregate-only output reports separate champion/candidate qualification counts, day-level >=3 coverage, top-3/5/7 accuracy, and additional 60-65%-only price-eligible picks and their correctness. A candidate is not promoted for higher count alone. The live production selector and champion remain unchanged until prospective, actually-issued TOP evidence validates the policy. **Mathematical caution:** 60% true win probability at decimal odds 1.50 is below the ~66.7% stake break-even threshold; 60/40 is a possible sports-confidence cut, not independent evidence of a worthwhile 1.50 bet.
+
+At this decision the completed protected baseline candidate scores and the real historic quote join remain pending. The experiment is IMPLEMENTED, not yet VERIFIED on real matched TOP outcomes.
