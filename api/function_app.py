@@ -1633,6 +1633,16 @@ def feed(req):
 
 
 def _authorized_feed_payload(req, *, bootstrap=False):
+    # Preserve the public feed builder and its tracing/return contract.
+    return _build_authorized_feed_payload(req, bootstrap=bootstrap)
+
+
+def _authorized_results_payload(req):
+    # Only Results uses the lean internal mode; never infer this from user input.
+    return _build_authorized_feed_payload(req, results_only=True)
+
+
+def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
     try:
         # Explicit authenticated diagnostics only: relative durations, no account
         # fields, IDs, prices, or private payloads. Ordinary feed stays identical.
@@ -1708,7 +1718,7 @@ def _authorized_feed_payload(req, *, bootstrap=False):
             # A shallow dict snapshot is safe because runtime settlement
             # returns new Results rows rather than mutating authorized rows.
             fallback_kpi_source = dict(data)
-            if is_admin(user, settings):
+            if not results_only and is_admin(user, settings):
                 data["member_result_rules"] = {
                     plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
                     for plan in ("rookie", "pro", "elite", "legend", "goat")
@@ -1716,14 +1726,17 @@ def _authorized_feed_payload(req, *, bootstrap=False):
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         trace_stage("access_filter")
-        try:
-            project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False, joined_only=True)
-            account_data["project_groups"] = [
-                item for item in project_payload.get("items", []) if bool(item.get("joined"))
-            ]
-        except AdminStorageUnavailable:
-            account_data["project_groups"] = []
-        trace_stage("project_groups")
+        # The Results endpoint returns only authorized settled rows. Group
+        # membership is presentation data, never used in the access gate above.
+        if not results_only:
+            try:
+                project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False, joined_only=True)
+                account_data["project_groups"] = [
+                    item for item in project_payload.get("items", []) if bool(item.get("joined"))
+                ]
+            except AdminStorageUnavailable:
+                account_data["project_groups"] = []
+            trace_stage("project_groups")
         data["account"] = account_data
         data["entitlements"] = entitlements
         # Match outcomes are a tiny runtime overlay. They never mutate the
@@ -1777,6 +1790,10 @@ def _authorized_feed_payload(req, *, bootstrap=False):
                 if not exclusions_available:
                     data["results"] = []
                     data["results_exclusions_unavailable"] = True
+            # Results-only exits after the complete authorization/settlement
+            # boundary, before unrelated dashboard/KPI/storage work.
+            if results_only:
+                return data
             # Results-based dashboard scalars must observe exactly the same
             # category, position and per-account grants as the Results table.
             # ADMIN retains the unrestricted global operational KPI universe.
@@ -1797,8 +1814,7 @@ def _authorized_feed_payload(req, *, bootstrap=False):
             )
             trace_stage("kpi_cards")
             kpi_finalized = True
-            # Response-only schedule corrections for rows this member can already
-            # see; the published feed/ledger and betting odds remain untouched.
+            # Response-only schedule corrections for published offer cards.
             data = apply_verified_schedule_overlay(
                 data, status_snapshot.get("schedule_updates"),
             )
@@ -1810,18 +1826,20 @@ def _authorized_feed_payload(req, *, bootstrap=False):
             if not kpi_finalized:
                 data["dashboard_kpi_cards"] = selected_dashboard_cards(
                     fallback_kpi_source, runtime_ui
-                )
+                ) if not results_only else None
             data["match_statuses"] = {}
             data["match_status_updated_at"] = None
         trace_stage("results_kpis")
         # Presentation-only history is joined AFTER entitlement filtering. Never
         # mutate the immutable publication or expand the member's visible picks.
-        try:
-            data = attach_offer_clv(data)
-        except AdminStorageUnavailable:
-            logging.exception("CLV historical odds overlay unavailable")
-            data["clv_history_unavailable"] = True
-        trace_stage("clv_complete")
+        # CLV only enriches current TOP/VALUE offer cards, not Results rows.
+        if not results_only:
+            try:
+                data = attach_offer_clv(data)
+            except AdminStorageUnavailable:
+                logging.exception("CLV historical odds overlay unavailable")
+                data["clv_history_unavailable"] = True
+            trace_stage("clv_complete")
         if trace_started is not None:
             data["__blinq_feed_stage_ms"] = trace_marks
         # Full authorized Results have already passed every entitlement,
@@ -1863,7 +1881,7 @@ def results_page(req):
 
     # Returning the private in-process payload avoids a wasteful serialize +
     # decode of the entire ledger before selecting this page.
-    authorized = _authorized_feed_payload(req)
+    authorized = _authorized_results_payload(req)
     if not isinstance(authorized, dict) or "error" in authorized:
         return authorized  # Existing 401/403/503 path; never bypass auth.
     rows = authorized.get("results") or []
