@@ -142,11 +142,15 @@ def choose(frame, parent, labels, split):
                 anchor = np.maximum(np.maximum(public_old, 1-public_old),
                                     np.maximum(public_new, 1-public_new)) >= threshold
                 n = int(anchor.sum())
-                if n < 100:
-                    # Sparse evidence never licenses an upward correction.
+                minimum = 250 if threshold >= .80 else 100
+                if n < minimum:
+                    # At 80%+ we need a larger independent cohort than the
+                    # old 100-row gate before increasing published certainty.
+                    # Unsupported confidence may shrink, but never be boosted.
                     safe = bool(np.all(np.maximum(public_new[anchor], 1-public_new[anchor])
                                        <= np.maximum(public_old[anchor], 1-public_old[anchor]) + 1e-12))
-                    bands[str(threshold)] = {'n': n, 'status': 'INSUFFICIENT_EVIDENCE',
+                    bands[str(threshold)] = {'n': n, 'minimum_rows': minimum,
+                                             'status': 'INSUFFICIENT_EVIDENCE',
                                              'no_boost': safe}
                 else:
                     base_band = scores(public_old[anchor], target[anchor])
