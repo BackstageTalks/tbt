@@ -88,7 +88,10 @@ def make_paired_holdout(
             x = float(values[name])
             if not math.isfinite(x):
                 raise ValueError(f"Nonfinite frozen feature: {name}")
-            feature_values[name] = x
+            # Archive weather is post-match observation, explicitly masked by
+            # the existing ensemble. Preserve the actual zeroed model input.
+            feature_values[name] = 0. if name in {
+                "weather_serve_interaction", "weather_known"} else x
         digest = sha256(json.dumps(feature_values, sort_keys=True,
                                   separators=(",", ":"), allow_nan=False).encode()).hexdigest()
         rows.append({
