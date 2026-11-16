@@ -355,6 +355,7 @@ def predict(
     # exact persisted numeric feature schema (no unexpected extra columns).
     if getattr(model, 'context_calibrators', None):
         inference_frame['competition'] = [match.tournament_level or 'unknown' for match in future]
+        inference_frame['tournament'] = [match.tournament or 'unknown' for match in future]
     probabilities = model.predict_proba(inference_frame)
     rows = []
     for match, f, probability in zip(future, features, probabilities):
