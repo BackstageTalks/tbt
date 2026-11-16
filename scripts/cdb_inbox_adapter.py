@@ -19,6 +19,13 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from tennisdata_source_aliases import expand_pair, load_map
+from tml_uploaded_archive import (
+    OUTER_SHA256 as TML_USER_ARCHIVE_SHA,
+    SOURCE_NAME as TML_USER_ARCHIVE_NAME,
+    is_approved_member as tml_uploaded_member,
+    member_year as tml_uploaded_member_year,
+    source_members as tml_uploaded_source_members,
+)
 
 MAX_FILE_BYTES = 64 * 1024 * 1024
 MAX_MEMBER_BYTES = 32 * 1024 * 1024
@@ -491,7 +498,10 @@ def pieces(name, blob):
 def run(input_dir: Path, out_dir: Path, max_files: int = 100,
         drive_manifest_path: Path | None = None,
         source_alias_map_path: Path | None = None,
-        expected_source_alias_sha256: str = ""):
+        expected_source_alias_sha256: str = "",
+        tml_archive_exact_sha256: str = ""):
+    if tml_archive_exact_sha256 and tml_archive_exact_sha256 != TML_USER_ARCHIVE_SHA:
+        raise ValueError("TML user archive requires its preverified exact SHA-256")
     source_hints = _drive_source_hints(drive_manifest_path, input_dir)
     if bool(source_alias_map_path) != bool(expected_source_alias_sha256):
         raise ValueError("Source alias file and exact SHA must be supplied together")
@@ -501,6 +511,20 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
     normalized = out_dir / "normalized"
     normalized.mkdir(exist_ok=True)
     files = sorted(p for p in input_dir.iterdir() if p.is_file())
+    if tml_archive_exact_sha256:
+        # The Drive reader prefixes the local name with its file ID and
+        # replaces spaces/plus signs. Trust only the same-run Drive inventory
+        # source path or, for local regression tests, the literal filename.
+        if len(files) != 1:
+            raise ValueError("TML replay must contain exactly one archive")
+        original_source_path = source_hints.get(
+            str(files[0].resolve()), ("", "")
+        )[1]
+        if not (
+            files[0].name == TML_USER_ARCHIVE_NAME
+            or original_source_path.endswith("/" + TML_USER_ARCHIVE_NAME)
+        ):
+            raise ValueError("Unrecognized uploaded TML source path")
     if len(files) > max_files:
         raise ValueError("Unbounded inbox: file count exceeds configured limit")
     counts = Counter()
@@ -522,9 +546,17 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
             counts["unsupported_or_oversized_files"] += 1
             review.append({"sha256": sha, "reason": "unsupported_or_oversized"})
             continue
+        is_tml_archive = bool(tml_archive_exact_sha256)
         try:
-            components = list(pieces(path.name, blob))
-        except (ValueError, zipfile.BadZipFile, RuntimeError):
+            if is_tml_archive:
+                components = tml_uploaded_source_members(blob)
+            else:
+                components = list(pieces(path.name, blob))
+        except (ValueError, zipfile.BadZipFile, RuntimeError) as exc:
+            if is_tml_archive:
+                # An explicitly authorized, checksum-pinned replay MUST fail
+                # closed, not silently finish with zero source matches.
+                raise ValueError("Exact TML archive source failed verification") from exc
             counts["invalid_archives"] += 1
             review.append({"sha256": sha, "reason": "invalid_archive"})
             continue
@@ -540,6 +572,21 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
             counts["source_tables"] += 1
             try:
                 rows = read_rows(part, member_name)
+                # Validate native event key multiplicity for this exact uploaded
+                # TML member; quarantine *both* occurrences, not first-wins.
+                duplicate_tml_native_events = set()
+                if is_tml_archive:
+                    if not tml_uploaded_member(member_name):
+                        raise ValueError("TML member not in immutable allowlist")
+                    rows = list(rows)
+                    native_counts = Counter(
+                        (str(r.get("tourney_id") or ""), str(r.get("match_num") or ""))
+                        for r in rows if isinstance(r, dict)
+                    )
+                    duplicate_tml_native_events = {
+                        pair for pair, count in native_counts.items()
+                        if count != 1 or not all(pair)
+                    }
                 tables = {"atp": [], "wta": []}
                 table_rejections = Counter()
                 non_object_types = Counter()
@@ -555,8 +602,26 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                     table_seen += 1
                     if not isinstance(raw, dict):
                         non_object_types[type(raw).__name__] += 1
-                    if is_pinned_tml:
+                    if is_pinned_tml or is_tml_archive:
                         tml_reason = _pinned_tml_safety_reason(raw)
+                        if is_tml_archive and not tml_reason:
+                            # A source year is the tournament's season, not
+                            # an observed match-day: never promote its date.
+                            from prepare_tml_atp_cdb import (
+                                complete_winner_score,
+                                valid_tourney_season_start,
+                            )
+                            if (str(raw.get("tourney_id") or ""),
+                                    str(raw.get("match_num") or "")) in duplicate_tml_native_events:
+                                tml_reason = "tml_duplicate_native_tournament_match"
+                            elif not valid_tourney_season_start(
+                                raw, tml_uploaded_member_year(member_name)
+                            ):
+                                tml_reason = "tml_invalid_tournament_season_date"
+                            elif not complete_winner_score(
+                                raw.get("score"), raw.get("best_of")
+                            ):
+                                tml_reason = "tml_unfinished_or_invalid_final_score"
                         if (not tml_reason and
                                 (str(raw.get("tourney_id") or ""),
                                  str(raw.get("match_num") or "")) in TML_ATP_2026_QUARANTINE
@@ -634,9 +699,12 @@ def main():
                         help="Optional private SHA-pinned TennisData full-name source mapping")
     parser.add_argument("--source-alias-map-sha256", default="",
                         help="SHA256 digest required when source map is provided")
+    parser.add_argument("--tml-archive-exact-sha256", default="",
+                        help="Explicit exact-byte TML archive upload gate, no other sources allowed")
     args = parser.parse_args()
     report = run(args.input_dir, args.out_dir, args.max_files, args.drive_manifest,
-                 args.source_alias_map, args.source_alias_map_sha256)
+                 args.source_alias_map, args.source_alias_map_sha256,
+                 args.tml_archive_exact_sha256)
     print(json.dumps({"state": report["state"], "counts": report["counts"],
                       "normalized_files": len(report["normalized"])}))
 if __name__ == "__main__":
