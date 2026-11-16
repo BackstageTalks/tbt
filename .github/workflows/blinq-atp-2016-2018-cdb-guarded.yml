@@ -148,6 +148,187 @@ jobs:
           Path('work/audit/summary.json').write_text(json.dumps(summary,indent=2)+'\n')
           print('ATP_NATIVE_CDB_NULL_DELTA_DRYRUN',json.dumps(summary,sort_keys=True))
           PY
+
+      - name: Gate exact prior-audited positive NULL-only scope
+        id: source_gate
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p=Path('work/audit/link/auto_linked.jsonl')
+          stage=[json.loads(v) for v in p.read_text().splitlines() if v.strip()]
+          report=json.loads(Path('work/audit/summary.json').read_text())
+          cells=sum(len(row['incoming_stats']) for row in stage)
+          if (report['matches']!=len(stage)
+                  or report['new_nullable_fields']!=cells
+                  or len(stage)>930 or cells>3410
+                  or (len(stage)==0)!=(cells==0)):
+              raise SystemExit('SOURCE_SCOPE_CHANGED__WRITER_DISABLED')
+          allowed={p+'_'+k for p in ('p1','p2')
+                   for k in ('aces','double_faults','first_serve_win','second_serve_win',
+                             'service_points_won','return_points_won',
+                             'break_point_serve_win','break_point_return_win')}
+          if any(row.get('schema')!=1 or row.get('import_ready') is not True
+                 or not row.get('sources')
+                 or not set(row.get('incoming_stats',{})).issubset(allowed)
+                 for row in stage):
+              raise SystemExit('SOURCE_STAGE_NOT_IMPORTABLE')
+          if cells and not any('break_point' in key
+                 for row in stage for key in row['incoming_stats']):
+              raise SystemExit('SOURCE_BP_SCOPE_MISSING')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('positive='+('true' if cells else 'false')+'\n')
+          print('ATP_GUARDED_SCOPE_CHECK',len(stage),cells,'positive',bool(cells))
+          PY
+
+      - name: Private immutable backup, existing CDB writer, CAS and independent remote readback
+        if: steps.source_gate.outputs.positive == 'true'
+        timeout-minutes: 90
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() {
+            python scripts/cdb_global_writer_lock.py release --if-held
+          }
+          trap cleanup EXIT
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+          python scripts/cdb_global_writer_lock.py verify
+
+          python - <<'PY'
+          import hashlib, json, os, shutil
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          verify(os.environ['CDB_REPO'],Path('.cdb-global-writer-lock.json'))
+          source=Path('work/cdb')
+          baseline=json.loads((source/'_tbt_bundle_manifest.json').read_text())['files']
+          if ReleaseStore(os.environ['CDB_REPO'],'tbt-data-v1',source)._remote_bundle_files()!=baseline:
+              raise SystemExit('CDB_CAS_DRIFT_AFTER_LOCK__NO_WRITE')
+          stage=[json.loads(x) for x in Path('work/audit/link/auto_linked.jsonl').read_text().splitlines() if x.strip()]
+          years=sorted({int(x['canonical']['scheduled_date_utc'][:4]) for x in stage})
+          if not years or not set(years).issubset(set(range(2016,2023))):
+              raise SystemExit('STAGED_CDB_YEAR_OUT_OF_SCOPE')
+          Path('work/audit/changed-years.json').write_text(json.dumps(years))
+          shutil.copytree(source,'work/before')
+          shutil.copytree(source,'work/after')
+          backup=Path('work/backup'); backup.mkdir(parents=True)
+          for name in ['history_manifest.json','_tbt_bundle_manifest.json',*(f'history-{y}.parquet' for y in years)]:
+              shutil.copy2(source/name,backup/name)
+          print('ATP_PRIVATE_BACKUP_PREPARED',years)
+          PY
+
+          tar -czf work/backup/atp-source-sha-pinned-2016-2022.tar.gz -C work/source csv
+          cp work/audit/link/auto_linked.jsonl work/backup/
+          cp work/audit/link/report.json work/backup/
+          cp work/audit/link/quarantine.jsonl work/backup/
+          cp work/audit/summary.json work/backup/
+          cp work/audit/source-snapshot.json work/backup/
+          (cd work/backup && sha256sum -- * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-atp-native-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" work/backup/* -R "$CDB_REPO" --target main \
+            --title "ATP 2016-2022 verified CDB NULL-only prewrite backup $GITHUB_RUN_ID" \
+            --notes "Private immutable original CDB years and manifests, pinned public source bytes, full stage and QA. Restore only with an independent integrity/CAS review."
+          mkdir -p work/backup-readback
+          gh release download "$tag" -R "$CDB_REPO" -D work/backup-readback
+          (cd work/backup-readback && sha256sum --check SHA256SUMS)
+          echo ATP_CDB_PRIVATE_SOURCE_AND_BACKUP_SHA_READBACK_VERIFIED
+
+          python scripts/cdb_global_writer_lock.py verify
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/audit/link/auto_linked.jsonl --history-dir work/after \
+            --out-dir work/audit/local-write --write-partitions --write-history-dir work/after \
+            --exact-stats-only --expected-provider-quarantine 0
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from offline_exact_cdb_write import verify_persisted
+          stage=[json.loads(x) for x in Path('work/audit/link/auto_linked.jsonl').read_text().splitlines() if x.strip()]
+          dry=json.loads(Path('work/audit/native-dry/report.json').read_text())
+          write=json.loads(Path('work/audit/local-write/report.json').read_text())
+          years=json.loads(Path('work/audit/changed-years.json').read_text())
+          actual=verify_persisted(Path('work/before'),Path('work/after'),stage,years)
+          expected=sum(len(x['incoming_stats']) for x in stage)
+          if (actual['added_values']!=expected or actual['enriched_matches']!=len(stage)
+                  or actual['existing_values_overwritten']!=0
+                  or write['counts'].get('stat_fields_added')!=expected
+                  or write['counts'].get('updated')!=len(stage)
+                  or dry['counts'].get('stat_fields_added')!=expected
+                  or sorted(map(int,write.get('changed_years') or []))!=years):
+              raise SystemExit('NATIVE_LOCAL_WRITE_READBACK_DELTA_MISMATCH')
+          Path('work/audit/local-readback.json').write_text(json.dumps(actual,indent=2))
+          print('ATP_NATIVE_LOCAL_FULL_YEAR_READBACK_VERIFIED',len(stage),expected)
+          PY
+
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from cdb_global_writer_lock import verify
+          from release_store import ReleaseStore
+          repo=os.environ['CDB_REPO']
+          before=Path('work/before'); after=Path('work/after')
+          baseline=json.loads((before/'_tbt_bundle_manifest.json').read_text())['files']
+          years=json.loads(Path('work/audit/changed-years.json').read_text())
+          store=ReleaseStore(repo,'tbt-data-v1',after)
+          def cas():
+              verify(repo,Path('.cdb-global-writer-lock.json'))
+              if store._remote_bundle_files()!=baseline:
+                  raise ValueError('CDB_MANIFEST_CAS_CHANGED_BEFORE_UPLOAD')
+          cas()
+          store.upload_bundle([*(after/f'history-{y}.parquet' for y in years),
+                               after/'history_manifest.json'],before_upload=cas)
+          print('ATP_CANONICAL_MANIFEST_CAS_PUBLICATION',years)
+          PY
+
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          from offline_exact_cdb_write import verify_persisted
+          verify(os.environ['CDB_REPO'],Path('.cdb-global-writer-lock.json'))
+          before=Path('work/before')
+          after=Path('work/after')
+          remote=Path('work/remote-readback')
+          ReleaseStore(os.environ['CDB_REPO'],'tbt-data-v1',remote).download(require_bundle_manifest=True)
+          years=json.loads(Path('work/audit/changed-years.json').read_text())
+          stage=[json.loads(x) for x in Path('work/audit/link/auto_linked.jsonl').read_text().splitlines() if x.strip()]
+          verified=verify_persisted(before,remote,stage,years)
+          expected=sum(len(x['incoming_stats']) for x in stage)
+          if (verified['added_values']!=expected or verified['enriched_matches']!=len(stage)
+                  or verified['existing_values_overwritten']!=0):
+              raise SystemExit('CDB_REMOTE_VALUES_DIFFER_EXPECTED')
+          for year in years:
+              file=f'history-{year}.parquet'
+              if hashlib.sha256((after/file).read_bytes()).digest()!=hashlib.sha256((remote/file).read_bytes()).digest():
+                  raise SystemExit('CDB_REMOTE_YEAR_SHA_DIFFERENT '+file)
+          result={'schema':1,'status':'PRODUCTION_CDB_INDEPENDENT_REMOTE_READBACK_VERIFIED',
+                  'added_values':verified['added_values'],'enriched_matches':verified['enriched_matches'],
+                  'existing_values_overwritten':verified['existing_values_overwritten'],
+                  'affected_years':years,'backup_release_tag':'blinq-atp-native-prewrite-'+os.environ['GITHUB_RUN_ID']+'-'+os.environ['GITHUB_RUN_ATTEMPT'],
+                  'source':'serve-and-volley pinned ATP 2016-2022','provider_api_requests':0}
+          Path('work/audit/production-verified.json').write_text(json.dumps(result,indent=2)+'\n')
+          print('ATP_CDB_PRODUCTION_READBACK_VERIFIED',json.dumps(result,sort_keys=True))
+          PY
+
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/audit/link/auto_linked.jsonl --history-dir work/remote-readback \
+            --out-dir work/audit/idempotence --expected-provider-quarantine 0
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result=json.loads(Path('work/audit/idempotence/report.json').read_text())
+          counts=result.get('counts') or {}
+          if (result.get('production_mutated') is not False
+                  or result.get('local_partitions_written') is not False
+                  or counts.get('updated',0)!=0
+                  or counts.get('stat_fields_added',0)!=0):
+              raise SystemExit('POSTWRITE_IDEMPOTENCE_FAILED')
+          print('ATP_CDB_POSTWRITE_IDEMPOTENCE_ZERO_DELTA')
+          PY
+          gh release upload "$tag" work/audit/production-verified.json -R "$CDB_REPO"
+          echo ATP_CDB_GUARDED_WRITE_COMPLETE
       - uses: actions/upload-artifact@v4
         if: always()
         with:
