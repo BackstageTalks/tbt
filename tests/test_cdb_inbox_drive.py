@@ -439,3 +439,46 @@ def test_all_pinned_tml_checkpoint_replays_leave_unrelated_sources_unchanged():
     generic = {"id": "generic-source-id", "name": "atp_matches_2019.csv",
                "path": "/DIL_REBUILD_CDB_CANONICAL_20261023/Sackmann/BAL/atp_matches_2019.csv"}
     assert _candidate_priority(tml)[0] < _candidate_priority(generic)[0]
+
+
+def test_exact_replay_only_never_downloads_unrelated_pending_sources(tmp_path):
+    drive = Drive()
+    checkpoint = tmp_path / "checkpoint.json"
+    # Only an earlier source was processed; two other files remain pending.
+    fetch(ROOT, tmp_path / "first", session=drive, max_files=1,
+          next_state_path=checkpoint)
+    before = json.loads(checkpoint.read_text())
+    assert set(before["processed"]) == {ID1}
+    drive.file_reads.clear()
+
+    after = tmp_path / "after.json"
+    result = fetch(ROOT, tmp_path / "replay", session=drive,
+                   state_path=checkpoint, next_state_path=after,
+                   replay_ids={ID2}, max_files=1, replay_only=True)
+    assert drive.file_reads == [ID2]
+    assert result["explicit_replay_requested"] == 1
+    assert result["explicit_replay_completed"] == 1
+    assert result["fetched"] == 1
+    assert len(result["files"]) == 1
+    assert {x["id"] for x in result["files"]} == {ID2}
+    updated = json.loads(after.read_text())
+    assert updated["processed"][ID1] == before["processed"][ID1]
+    assert set(updated["processed"]) == {ID1, ID2}
+    assert ID3 not in updated["processed"]
+
+
+def test_exact_replay_only_refuses_missing_scope_and_duplicate_source_bytes(tmp_path):
+    drive = Drive()
+    with pytest.raises(ValueError, match="fully bounded"):
+        fetch(ROOT, tmp_path / "missing", session=drive,
+              replay_only=True, max_files=1)
+    assert drive.file_reads == []
+
+    drive.blobs[ID2] = drive.blobs[ID1]
+    dest = tmp_path / "duplicate"
+    with pytest.raises(ValueError, match="Exact replay incomplete or duplicate"):
+        fetch(ROOT, dest / "input", session=drive,
+              replay_ids={ID1, ID2}, max_files=2, replay_only=True,
+              next_state_path=dest / "next.json")
+    assert set(drive.file_reads) == {ID1, ID2}
+    assert not (dest / "next.json").exists()
