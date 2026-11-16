@@ -552,7 +552,11 @@ def run(input_dir: Path, out_dir: Path, max_files: int = 100,
                 components = tml_uploaded_source_members(blob)
             else:
                 components = list(pieces(path.name, blob))
-        except (ValueError, zipfile.BadZipFile, RuntimeError):
+        except (ValueError, zipfile.BadZipFile, RuntimeError) as exc:
+            if is_tml_archive:
+                # An explicitly authorized, checksum-pinned replay MUST fail
+                # closed, not silently finish with zero source matches.
+                raise ValueError("Exact TML archive source failed verification") from exc
             counts["invalid_archives"] += 1
             review.append({"sha256": sha, "reason": "invalid_archive"})
             continue
