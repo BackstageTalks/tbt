@@ -80,6 +80,7 @@ def test_rank_2500_original_issued_cohort_is_not_merged_with_rank_1200():
     row = {"player1": {"id": "p1", "rank": 2500},
            "player2": {"id": "p2", "rank": 1200}}
     assert picked_player_rank_2000_band(row, "p1") == "pick_2000_plus"
+    assert picked_player_rank_2000_band(row, "p1", publication={}) == "rank_unknown"
     assert picked_player_rank_2000_band(row, "p2") == "pick_below_2000"
     assert picked_player_rank_2000_band(row, "unknown") == "rank_unknown"
     row["player1"].pop("rank")
