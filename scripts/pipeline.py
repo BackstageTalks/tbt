@@ -975,8 +975,16 @@ def main():
             from verified_training_frame import load as load_verified_frame
             verified_frame = load_verified_frame(
                 args.verified_feature_cache, args.training_profile, matches)
+        # Research flag never applies to serving or the normal production fit.
+        weight_profile = os.getenv("BLINQ_SPORTS_WEIGHT_PROFILE", "none").strip()
+        if weight_profile not in {"none", "main_tour_2x"}:
+            raise ValueError("Unsupported sports-only training profile")
+        if weight_profile != "none" and (not frozen or args.training_profile != "top-7.2.1"
+                                         or args.promote):
+            raise RuntimeError("Sports weighting requires protected nonpromoting TOP research")
         result = train_from_matches(
             matches,
+            sports_weight_profile=weight_profile,
             production_model=champion,
             promotion_history=promotion_history,
             atp_leaderboards=atp_leaderboards,
