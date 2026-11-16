@@ -407,6 +407,12 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
                 "ranking_1000": rank_band(row, selected_id, cutoff=1000, publication=pub),
                 "picked_rank": picked_rank,
                 "picked_rank_2000": picked_rank_2000,
+                "picked_rank_2000_confidence": (
+                    f"{picked_rank_2000}/{probability_band(p)}"),
+                "picked_rank_2000_80": (
+                    f"{picked_rank_2000}/"
+                    + ("issued_80_plus" if p is not None and p >= .80
+                       else "issued_below_80" if p is not None else "confidence_unknown")),
                 "stats": stats,
                 "rank_and_stats": f"{picked_rank}/{stats}",
                 "confidence_band": probability_band(p),
@@ -436,7 +442,9 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
     for dimension in ("competition", "itf_grade", "serve_return_evidence",
                       "market_disagreement", "confidence_70_75",
                       "ranking", "ranking_500", "ranking_1000",
-                      "picked_rank", "picked_rank_2000", "stats", "rank_and_stats", "confidence_band",
+                      "picked_rank", "picked_rank_2000",
+                      "picked_rank_2000_confidence", "picked_rank_2000_80",
+                      "stats", "rank_and_stats", "confidence_band",
                       "surface_evidence", "rank_and_surface"):
         groups = defaultdict(list)
         for entry in entries:
