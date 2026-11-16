@@ -27,7 +27,7 @@ from ..data.wta_season_stats import (
 )
 from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
-from ..models.metrics import evaluate_probabilities
+from ..models.metrics import evaluate_probabilities, wilson_interval
 from ..schemas import MatchRecord
 from .data_quality import audit_history
 from .prediction_quality import subgroup_report, history_band
@@ -1071,6 +1071,113 @@ def paired_evidence_holdout_diagnostics(test, candidate_p, champion_p=None):
             }}
 
 
+
+def paired_rank_reliability_holdout(test, candidate_p, champion_p=None):
+    """Read-only accuracy of *published* confidence by verified absolute rank.
+
+    Unlike raw rank_advantage, the weekly worst-rank magnitude distinguishes
+    #50/#100 from #2500/#5000. No post-match ranking refresh, bookmaker quote,
+    or publication outcome is used to select model parameters here.
+    """
+    if test.empty:
+        return {"status": "NO_HOLDOUT", "groups": {}}
+    required = {"tour_atp", "data_depth", "rank_known_both",
+                "atp_hist_worst_rank_log", "wta_hist_worst_rank_log", "target"}
+    missing = required - set(test.columns)
+    if missing:
+        raise ValueError("Missing PIT rank audit columns: " + ", ".join(sorted(missing)))
+    n = len(test)
+    candidate = np.asarray(candidate_p, dtype=float)
+    champion = None if champion_p is None else np.asarray(champion_p, dtype=float)
+    if (candidate.shape != (n,) or not np.isfinite(candidate).all()
+            or (champion is not None
+                and (champion.shape != (n,) or not np.isfinite(champion).all()))):
+        raise ValueError("Rank reliability audit needs paired finite fixture probabilities")
+    labels = test.target.to_numpy(dtype=int)
+    if not np.isin(labels, (0, 1)).all():
+        raise ValueError("Rank reliability labels must be binary")
+    tour = test.tour_atp.to_numpy(dtype=float)
+    depth = test.data_depth.to_numpy(dtype=float)
+    known = test.rank_known_both.to_numpy(dtype=float)
+    if (not np.isin(tour, (0., 1.)).all()
+            or not np.isin(known, (0., 1.)).all()
+            or not np.isfinite(depth).all()
+            or not ((depth >= 0.) & (depth <= 1.)).all()):
+        raise ValueError("Rank reliability requires valid PIT tour/depth evidence")
+    log_rank = np.where(tour == 1.,
+                        test.atp_hist_worst_rank_log.to_numpy(dtype=float),
+                        test.wta_hist_worst_rank_log.to_numpy(dtype=float))
+    if not np.isfinite(log_rank).all() or (log_rank[known == 1.] <= 0).any():
+        raise ValueError("Invalid point-in-time absolute rank evidence")
+    # Original rank value is preserved only as a logarithm of a pre-match
+    # snapshot. Neither player-side order nor post-match ranking is used.
+    worst_rank = np.expm1(np.clip(log_rank, 0., np.log1p(100000.)))
+    groups = {
+        "all": np.ones(n, dtype=bool),
+        "weekly_rank_pair_missing": known == 0.,
+        "weekly_rank_pair_known": known == 1.,
+        "atp_rank_2000plus": (tour == 1.) & (known == 1.) & (worst_rank >= 2000.),
+        "atp_rank_below_2000": (tour == 1.) & (known == 1.) & (worst_rank < 2000.),
+        "wta_rank_1000plus": (tour == 0.) & (known == 1.) & (worst_rank >= 1000.),
+        "wta_rank_below_1000": (tour == 0.) & (known == 1.) & (worst_rank < 1000.),
+    }
+    candidate_public = .5 + (candidate - .5) * depth
+    champion_public = (.5 + (champion - .5) * depth) if champion is not None else None
+
+    def scored(mask, raw, public):
+        if raw is None:
+            return None
+        actual = labels[mask]
+        if not len(actual):
+            return None
+        p, shown = raw[mask], public[mask]
+        correct = (p >= .5) == actual
+        confidence = np.maximum(shown, 1-shown)
+        wins = int(correct.sum())
+        return {
+            "n": int(len(actual)), "wins": wins,
+            "accuracy": float(correct.mean()),
+            "mean_published_confidence": float(confidence.mean()),
+            "published_calibration_gap": float(correct.mean() - confidence.mean()),
+            "published_brier": float(np.mean((shown-actual)**2)),
+            "accuracy_wilson95": wilson_interval(wins, len(actual)),
+        }
+
+    report = {}
+    for key, mask in groups.items():
+        count = int(mask.sum())
+        if not count:
+            report[key] = {"n": 0, "status": "INSUFFICIENT_EVIDENCE"}
+            continue
+        floor_rows = {}
+        for threshold in (.60, .70, .80):
+            published = np.maximum(candidate_public, 1-candidate_public)
+            if champion_public is not None:
+                published = np.maximum(published,
+                                       np.maximum(champion_public, 1-champion_public))
+            anchor = mask & (published >= threshold)
+            size = int(anchor.sum())
+            floor_rows[str(threshold)] = {
+                "selection": "union_published_confidence_no_threshold_escape",
+                "candidate": scored(anchor, candidate, candidate_public),
+                "champion": scored(anchor, champion, champion_public),
+                "status": ("DESCRIPTIVE" if size >= 100 else "SMALL_SAMPLE"),
+            }
+        report[key] = {
+            "n": count, "status": ("DESCRIPTIVE" if count >= 100 else "SMALL_SAMPLE"),
+            "candidate": scored(mask, candidate, candidate_public),
+            "champion": scored(mask, champion, champion_public),
+            "thresholds": floor_rows,
+        }
+    return {
+        "status": "READ_ONLY_RANK_STRATIFIED_HOLDOUT_NOT_TOP_BET_VALIDATION",
+        "rank_source": "weekly_strictly_pre_match",
+        "absolute_rank_thresholds_are_diagnostics_not_probability_caps": True,
+        "model_selection_uses_no_holdout_labels": True,
+        "actual_issued_TOP_and_odds_not_verified_by_this_report": True,
+        "groups": report,
+    }
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -1374,6 +1481,9 @@ def train_from_matches(
         "rank_alignment": rank_alignment,
         "paired_champion_rank_feature_source": (champion_rank_source or "legacy"),
         "paired_baseline_rank_features_preserved": context_flag == "true",
+        "rank_reliability_holdout": (
+            paired_rank_reliability_holdout(test, test_p, production_probabilities)
+            if context_flag == "true" else None),
         "training_profile": training_profile,
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
