@@ -213,8 +213,19 @@ jobs:
         run: |
           echo '::error::Complete the existing protected staged import before explicit source replay.'
           exit 1
+      - name: Download operator SHA-pinned TennisData source aliases (private, source-only)
+        if: env.SOURCE_MODE == 'drive' && inputs.request_id == 'tennisdata-aliases-20261116'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/private-source
+          gh api "repos/$CDB_REPO/contents/research/tennisdata-20261116/source-alias-map.json" --jq .content \
+            | base64 --decode > work/private-source/tennisdata-source-alias-map.json
+          echo "24c721ea73a88e36794630fb47d07249cba560cd1cd2b5d2c3888eda85af250f  work/private-source/tennisdata-source-alias-map.json" | sha256sum -c -
       - name: Read all BlinQ_data descendants; ingest bounded new/changed files
         if: env.SOURCE_MODE == 'drive' && steps.prepared.outputs.restored != 'true'
+        env:
+          SOURCE_ALIAS_REQUEST: ${{ inputs.request_id || '' }}
         run: |
           set -euo pipefail
           mkdir -p work/input
@@ -222,8 +233,13 @@ jobs:
             --output work/input --state-file work/private-state/current.json \
             --next-state work/private-state/next.json --max-files 100 \
             --replay-ids "$REPLAY_DRIVE_IDS"
+          alias_args=()
+          if [[ "$SOURCE_ALIAS_REQUEST" == "tennisdata-aliases-20261116" ]]; then
+            alias_args=(--source-alias-map work/private-source/tennisdata-source-alias-map.json
+                        --source-alias-map-sha256 24c721ea73a88e36794630fb47d07249cba560cd1cd2b5d2c3888eda85af250f)
+          fi
           python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100 \
-            --drive-manifest work/drive_manifest.json
+            --drive-manifest work/drive_manifest.json "${alias_args[@]}"
       - name: Retrieve verified MoviOdds final days (no tennis API quota)
         if: env.SOURCE_MODE == 'moviodds'
         shell: bash
