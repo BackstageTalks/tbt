@@ -1,0 +1,151 @@
+name: BlinQ ATP 2016-2018 exact-CDB NULL audit (read-only)
+'on':
+  pull_request:
+    paths:
+      - scripts/link_atpworldtour_stats.py
+      - tests/test_atpworldtour_stats_strict.py
+      - .github/workflows/blinq-atp-2016-2018-cdb-guarded.yml
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/blinq-atp-2016-2018-cdb-guarded.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-atp-2016-2018-pinned-readonly
+  cancel-in-progress: false
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: .:api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test strict linker and existing defaults
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy pytest
+          python -m pytest -q tests/test_atpworldtour_stats_linker.py tests/test_atpworldtour_stats_strict.py
+
+  source-to-current-CDB:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: .:api:scripts
+      CDB_REPO: BackstageTalks/tbt-data
+      ATP_SHA: a92c6192c5e775df9d6be81d3ef978052b012cd9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install read-only CDB dependencies
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh api "repos/$CDB_REPO" --jq .private)" = true
+          python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy
+          mkdir -p work/source/csv/1_tournaments work/source/csv/2_match_scores work/source/csv/3_match_stats work/audit
+      - name: Acquire pinned public ATP 2016-2018 CSVs and verify 5 source hashes
+        run: |
+          set -euo pipefail
+          base="https://raw.githubusercontent.com/serve-and-volley/atp-world-tour-tennis-data/$ATP_SHA"
+          for path in csv/1_tournaments/tournaments_2010-2019.csv csv/2_match_scores/match_scores_2010-2019.csv csv/3_match_stats/match_stats_2016.csv csv/3_match_stats/match_stats_2017.csv csv/3_match_stats/match_stats_2018.csv; do
+            curl --fail --silent --show-error --location --retry 3 --max-time 180 "$base/$path" -o "work/source/$path"
+          done
+          cd work/source
+          sha256sum -c <<'SHA256'
+          8f9ffbeaf169d88cee77874410cc524669f2e5a23d0da663a7b663ff62c9ef74  csv/1_tournaments/tournaments_2010-2019.csv
+          3b89a81ea3a19c7bf14a03c8392350b04708ef5b672bd5f54074a99d1271dfa0  csv/2_match_scores/match_scores_2010-2019.csv
+          75c06a344a39b53645b237941f5b17c7d4a136c920633a34ba94f8549ee86bd0  csv/3_match_stats/match_stats_2016.csv
+          9716c5caf02c92f678ecaa1b589aad31599aebb11077ff5a8c5ca09627139968  csv/3_match_stats/match_stats_2017.csv
+          886757b4bc0a1cdd9f82e20a488029adba471a1772e75a54f9afe2455b362d5c  csv/3_match_stats/match_stats_2018.csv
+          SHA256
+          echo ATP_PINNED_BYTES_VERIFIED
+      - name: Check writer lock before obtaining canonical snapshot
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from cdb_global_writer_lock import _remote_lock
+          if _remote_lock("BackstageTalks/tbt-data"):
+              raise SystemExit("CDB_WRITER_ACTIVE__ABORT_READONLY")
+          print("CDB_WRITER_LOCK_ABSENT")
+          PY
+      - name: Download one stable SHA-verified current 78-year CDB snapshot
+        run: |
+          set -euo pipefail
+          python scripts/download_stable_cdb.py --repository "$CDB_REPO" --tag tbt-data-v1 --out work/cdb --report work/audit/source-snapshot.json
+          test "$(find work/cdb -maxdepth 1 -name 'history-*.parquet' | wc -l)" -eq 78
+      - name: Link and quarantine ATP 2016-2018 with exact provider isolation
+        run: |
+          set -euo pipefail
+          python scripts/link_atpworldtour_stats.py \
+            --history-dir work/cdb \
+            --tournaments-csv work/source/csv/1_tournaments/tournaments_2010-2019.csv \
+            --scores-csv work/source/csv/2_match_scores/match_scores_2010-2019.csv \
+            --stats-csv work/source/csv/3_match_stats/match_stats_2016.csv \
+            --stats-csv work/source/csv/3_match_stats/match_stats_2017.csv \
+            --stats-csv work/source/csv/3_match_stats/match_stats_2018.csv \
+            --min-year 2016 --max-year 2018 \
+            --include-break-points --require-reciprocal-consistency \
+            --expected-provider-quarantine 6 --out-dir work/audit/link
+          python - <<'PY'
+          import json
+          r=json.load(open('work/audit/link/report.json'))
+          if (r.get('production_mutated') is not False or r.get('api_requests') != 0
+              or r.get('protected_provider_quarantine') != 6
+              or r.get('strict_reciprocal_stats') is not True
+              or r.get('includes_break_point_rates') is not True
+              or r['counts'].get('stat_rows') != 11836
+              or r['counts'].get('stat_bad_width',0)):
+              raise SystemExit('LINKER_SOURCE_EVIDENCE_CONTRACT_FAILED')
+          print('ATP_CDB_LINKER_REPORT',r['counts'])
+          PY
+      - name: Native provider-safe NULL-only DRY-RUN (NO PRODUCTION WRITES)
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py --stage work/audit/link/auto_linked.jsonl --history-dir work/cdb --out-dir work/audit/native-dry --expected-provider-quarantine 6 --isolate-provider-collisions
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          stage=[json.loads(x) for x in Path('work/audit/link/auto_linked.jsonl').read_text().splitlines() if x.strip()]
+          r=json.loads(Path('work/audit/native-dry/report.json').read_text())
+          c=r['counts']; expected=sum(len(x['incoming_stats']) for x in stage)
+          if r.get('production_mutated') is not False or r.get('local_partitions_written') is not False:
+              raise SystemExit('DRYRUN_UNEXPECTED_WRITE')
+          if c.get('stat_fields_added',0)!=expected or c.get('updated',0)!=len(stage):
+              raise SystemExit('NATIVE_DRYRUN_DELTA_MISMATCH')
+          if any(c.get(k,0) for k in ('identity_missing','identity_changed','invalid_stats','stat_conflicts')):
+              raise SystemExit('NATIVE_DRYRUN_REJECTED')
+          link=json.loads(Path('work/audit/link/report.json').read_text())
+          summary={'schema':1,'status':'CURRENT_PRODUCTION_CDB_NATIVE_DRYRUN_ONLY',
+                   'matches':len(stage),'new_nullable_fields':expected,
+                   'source_stat_rows':link['counts'].get('stat_rows',0),
+                   'linked_source_matches':link['counts'].get('identity_linked',0),
+                   'quarantined_source_conflicts':link['counts'].get('stat_conflict_matches',0),
+                   'field_counts':link.get('staged_field_counts',{}),
+                   'production_mutated':False,'api_calls':0,'native_counts':c}
+          Path('work/audit/summary.json').write_text(json.dumps(summary,indent=2)+'\n')
+          print('ATP_NATIVE_CDB_NULL_DELTA_DRYRUN',json.dumps(summary,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atp-2016-18-pinned-current-cdb-readonly
+          path: |
+            work/audit/source-snapshot.json
+            work/audit/summary.json
+            work/audit/link/report.json
+            work/audit/link/review.jsonl
+            work/audit/link/quarantine.jsonl
+            work/audit/native-dry/report.json
+          if-no-files-found: ignore
+          retention-days: 14
