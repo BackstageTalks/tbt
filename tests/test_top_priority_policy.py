@@ -31,17 +31,17 @@ def test_main_tours_reach_70_before_using_itf_to_fill_target():
     rows=[pick("itf",.93,"ITF Men"),pick("wta",.70,"WTA"),
           pick("atp",.75),pick("challenger",.85,"Challenger")]
     out=select_market_sections(rows)
-    assert ids(out)==["atp","wta","challenger"]
+    assert ids(out)==["challenger","atp","wta"]
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==0
 
 
 def test_itf_is_last_resort_not_entirely_removed():
     out=select_market_sections([pick("a",.78),pick("b",.75,"WTA"),verified_w35("i",.80)])
-    assert ids(out)==["a","b","i"]
+    assert ids(out)==["i","a","b"]
 
 
-@pytest.mark.parametrize("p",[.60,.64,.6499])
-def test_no_target_filling_below_65(p):
+@pytest.mark.parametrize("p",[.55,.59,.5999])
+def test_no_target_filling_below_60(p):
     out=select_market_sections([pick("low",p)])
     assert not ids(out)
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==3
@@ -98,7 +98,7 @@ def test_main_then_challenger_then_verified_w35_with_wta125_excluded():
     rows = [verified_w35("itf", .95), pick("secondary-low", .71, "Challenger"),
             pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
     result = select_market_sections(rows)
-    assert ids(result) == ["main", "secondary-low", "itf"]
+    assert ids(result) == ["itf", "secondary-low", "main"]
     assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
@@ -228,9 +228,9 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     ]
     before = deepcopy(rows)
     result = select_market_sections(rows)
-    assert ids(result) == ["atp70", "wta68", "atp65", "challenger", "itf"]
+    assert ids(result) == ["itf", "challenger", "atp70"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "main_0.65", "main_0.65", "main_0.65", "challenger_0.65", "women_itf_0.65"
+        "sports_0.60", "sports_0.60", "sports_0.60"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
@@ -240,17 +240,17 @@ def test_65_floor_applies_to_challenger_and_proven_w35_only():
     atp = pick("atp", .65, "ATP")
     challenger = pick("challenger", .66, "Challenger")
     w35 = verified_w35("w35", .655)
-    rejected = pick("under-floor", .649, "Challenger")
+    rejected = pick("under-floor", .599, "Challenger")
     result = select_market_sections([atp, challenger, w35, rejected])
-    assert ids(result) == ["atp", "challenger", "w35"]
+    assert ids(result) == ["challenger", "w35", "atp"]
     assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
-        "main_0.65", "challenger_0.65", "women_itf_0.65"
+        "sports_0.60", "sports_0.60", "sports_0.60"
     ]
     snap = build_selection_candidate_snapshot(
         [atp, challenger, w35, rejected],
         generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
-    assert snap["selection_policy"] == "evidence_unlimited_top_v21"
+    assert snap["selection_policy"] == "sports_top3_60_v22"
     assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
 
 
@@ -339,7 +339,7 @@ def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
     over = verified_w35("over", .95, odds=1.7001)
     qualifying = verified_w35("qualifying", .651, odds=1.70)
     output = select_market_sections([over, qualifying, main, challenger])
-    assert ids(output) == ["atp65", "ch65", "qualifying"]
+    assert ids(output) == ["qualifying", "atp65", "ch65"]
     assert output["market_selection"]["top_rejection_counts"]["itf_odds_above_1_70"] == 1
 
 
@@ -347,6 +347,6 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
     assert verify() == {
-        "status": "PASS", "policy": "evidence_unlimited_top_v21",
+        "status": "PASS", "policy": "sports_top3_60_v22",
         "provider_requests": 0,
     }

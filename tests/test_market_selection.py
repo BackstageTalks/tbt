@@ -76,7 +76,7 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     }
     rows = {item['event_id']: item for item in snap['rows']}
     assert rows['selected-top']['selected_section'] == 'top_daily'
-    assert rows['selected-top']['selection_tier'] == 'main_0.65'
+    assert rows['selected-top']['selection_tier'] == 'sports_0.60'
     assert rows['unpriced']['priced'] is False
     assert rows['unpriced']['selected_section'] is None
     serialized = str(snap).lower()
@@ -161,7 +161,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'evidence_unlimited_top_v21'
+    assert meta['selection_policy'] == 'sports_top3_60_v22'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
@@ -173,8 +173,8 @@ def test_retired_top200_never_steals_from_ranked_three_top():
     sections = select_market_sections(rows)
     assert sections['top200_picks'] == []
     assert [x['event_id'] for x in sections['top_daily_picks']] == [
-        f'ranked-{i}' for i in range(7)]
-    assert sections['market_selection']['selection_counts']['top_daily'] == 7
+        f'ranked-{i}' for i in range(3)]
+    assert sections['market_selection']['selection_counts']['top_daily'] == 3
 
 def test_probability_first_odds_buckets_match_product_policy():
     rows = [
@@ -188,7 +188,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'evidence_unlimited_top_v21'
+    assert meta['selection_policy'] == 'sports_top3_60_v22'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
@@ -207,9 +207,9 @@ def test_prime_and_value_floors_unchanged_while_top_ranks_full_slate():
     sections = select_market_sections(rows, prime_min_probability=.50,
                                      top_min_probability=.50, value_min_probability=.50)
     assert [x['event_id'] for x in sections['value_picks']] == ['v650']
-    assert {x['event_id'] for x in sections['top_daily_picks']} == {'p650'}
+    assert {x['event_id'] for x in sections['top_daily_picks']} == {'p650', 'p649-top', 'v600'}
     assert sections['prime_picks'] == []
-    assert sections['market_selection']['selection_counts']['top_daily_shortfall'] == 2
+    assert sections['market_selection']['selection_counts']['top_daily_shortfall'] == 0
     assert all(x['odds'] >= 1.50 for x in sections['top_daily_picks'])
 
 def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
@@ -252,7 +252,7 @@ def test_top_ranks_all_four_valid_choices_not_first_arbitrary_confidence_tier():
     rows = [row(f'core{i}', .80+i*.01, 1.60+i*.01, 2.60, depth=1.0)
             for i in range(3)]
     rows.append(row('another-eligible', .75, 1.70, 2.50, depth=1.0))
-    sections = select_market_sections(rows)
+    sections = select_market_sections(rows, top_limit=None)
     assert {x['event_id'] for x in sections['top_daily_picks']} == {
         'core0','core1','core2','another-eligible'}
     assert len(sections['top_daily_picks']) == 4
@@ -343,11 +343,11 @@ def test_morning_odds_discovery_prices_entire_new_top_60pct_slate_with_existing_
         item.pop('betting', None); item.pop('match_winner_market', None)
     enriched, report = enrich_current_betting_day_odds(
         provider, rows, now=datetime(2026,9,7,8,0,tzinfo=timezone.utc))
-    assert provider.called == [('eligible', 1)]
-    assert report['candidate_gate']['min_probability'] == .65
+    assert provider.called == [('eligible', 1), ('top60', 1)]
+    assert report['candidate_gate']['min_probability'] == .60
     assert report['candidate_gate']['min_data_depth'] == .75
     assert report['candidate_gate']['min_surface_matches_each'] == 3
-    assert report['odds_available'] == 1
+    assert report['odds_available'] == 2
     assert all(next(x for x in enriched if x['event_id'] == k).get('betting')
                for k in ('eligible',))
     assert not next(x for x in enriched if x['event_id'] == 'weak').get('betting')
@@ -355,14 +355,14 @@ def test_morning_odds_discovery_prices_entire_new_top_60pct_slate_with_existing_
 def test_ranked_top_uses_only_real_pre_start_prices_without_cap():
     rows = [row(f'core{i}', .80-i*.02, 1.60, 2.60, depth=1.0) for i in range(7)]
     rows.append(row('too-short', .90, 1.49, 3.00, depth=1.0))
-    sections = select_market_sections(rows)
+    sections = select_market_sections(rows, top_limit=None)
     assert len(sections['top_daily_picks']) == 7
     assert {x['event_id'] for x in sections['top_daily_picks']} == {
         f'core{i}' for i in range(7)}
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
-    assert rule['probability_tiers'] == [.65]
+    assert rule['probability_tiers'] == [.60]
     assert rule['min_odds'] == 1.50
     assert rule['daily_preferred_count'] == 3
 
@@ -446,7 +446,7 @@ def test_top_has_no_cap_and_preserves_model_adjusted_probability():
     rows = [row(f'strong{i}', .91-.01*i, 1.60, 2.60, depth=1.0)
             for i in range(6)]
     rows.append(row("fallback78", .78, 1.75, 3.00, depth=1.0))
-    selection = select_market_sections(rows)
+    selection = select_market_sections(rows, top_limit=None)
     picks = selection['top_daily_picks']
     assert len(picks) == 7
     assert any(x['event_id'] == 'fallback78' for x in picks)
@@ -459,9 +459,9 @@ def test_all_four_quality_qualified_selections_are_ordered_in_top():
             row("b78", .78, 1.60, 3.00, depth=1.0),
             row("c78", .79, 1.60, 3.00, depth=1.0),
             row("d75", .75, 1.60, 3.00, depth=1.0)]
-    result = select_market_sections(rows)
+    result = select_market_sections(rows, top_limit=None)
     assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78','d75']
-    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .65
+    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .60
 
 
 def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
@@ -469,11 +469,11 @@ def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
             row("b78", .78, 1.60, 3.00, depth=1.0),
             row("c75", .75, 1.60, 3.00, depth=1.0),
             row("d70", .70, 1.60, 3.00, depth=1.0)]
-    result = select_market_sections(rows)
+    result = select_market_sections(rows, top_limit=None)
     assert [x["event_id"] for x in result["top_daily_picks"]] == ['a80','b78','c75','d70']
     rows[2] = row("c69", .69, 1.60, 3.00, depth=1.0)
     rows[3] = row("d59", .59, 1.60, 3.00, depth=1.0)
-    result = select_market_sections(rows)
+    result = select_market_sections(rows, top_limit=None)
     assert [x["event_id"] for x in result["top_daily_picks"]] == ['a80','b78','c69']
     assert result['market_selection']['selection_counts']['top_daily_shortfall'] == 0
 
@@ -547,7 +547,7 @@ def test_morning_same_original_top_offer_across_feed_and_publication_without_oth
     ledger = annotate_market_publication_candidates(rows, ace_picks=aces)
     rendered = attach_market_sections_to_feed({'upcoming': []}, ledger, ace_picks=aces)
     top_ids = [x['event_id'] for x in rendered['top_daily_picks']]
-    assert len(top_ids) == 8
+    assert len(top_ids) == 3
     for source in ledger:
         pubs = [p for p in source.get('market_publication_candidates', [])
                 if p.get('market') == 'match_winner' and p.get('section') == 'top_daily']
@@ -582,7 +582,6 @@ def test_public_offer_day_filters_before_top_limit_and_aligns_publication_audit(
     unscoped = select_market_sections(candidates)
     assert {x['event_id'] for x in unscoped['top_daily_picks']} == {
         'tomorrow-0', 'tomorrow-1', 'tomorrow-2',
-        'today-0', 'today-1', 'today-2',
     }
 
     scoped = select_market_sections(candidates, public_offer_day='2026-09-07')

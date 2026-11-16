@@ -907,6 +907,9 @@ def _daily_rows(payload: dict) -> list[dict]:
         # Preserve the selector's competition/tier order. Old publications and
         # settled results are not mutated by this active-board filter.
         return out
+    if rule.get("policy") == "sports_top3_60_v22":
+        return sorted((row for row in out if _row_probability(row) >= .60),
+                      key=lambda row: (-_row_probability(row), str(row.get("event_id") or "")))[:3]
     if rule.get("policy") == "evidence_unlimited_top_v21":
         # The selector already proved eligibility for ALL published >=65% rows.
         # The legacy three-core threshold below would silently discard valid
