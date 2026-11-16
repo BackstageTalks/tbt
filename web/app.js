@@ -9929,7 +9929,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function feedVisualSignature(feed){
     // Ignore server-side timings: they change on every request without changing the UI.
-    return JSON.stringify(feed,(key,value)=>key.startsWith('__blinq_')?undefined:value);
+    return JSON.stringify(feed,(key,value)=>(key.startsWith('__blinq_')||key==='generated_at')?undefined:value);
   }
   async function loadFeed(showLoading=true,{skipUnchanged=false}={}){
     if(feedLoading)return;feedLoading=true;const generation=feedGeneration;
@@ -9942,7 +9942,14 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const feedSignature=feedVisualSignature(feed),day=bratislavaBettingDayKey(Date.now(),6);
       // The background history pipeline must not restart for unchanged data.
       if(skipUnchanged&&lastFeedVisualSignature===feedSignature&&lastFeedBettingDay===day
-         &&state.feed?.account&&!$('appShell').hidden)return;
+         &&state.feed?.account&&!$('appShell').hidden){
+        // The server can advance its generation timestamp without changing a pick.
+        // Update the freshness label only; never rebuild cards or reset Results.
+        state.feed.generated_at=feed.generated_at;
+        $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—';
+        window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
+        return;
+      }
       cancelResultsPreload();
       reuseHydratedResultsOnRefresh(feed);
       resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';
