@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 
 from ..models.feature_builder import FeatureBuilder
+from ..data.history_snapshot import _provider_event_id
 
 
 FIELDS = (
@@ -104,6 +105,11 @@ def make_paired_holdout(
             "tour": str(values["tour"]),
             "competition": str(values["competition"]),
             "tournament": str(values["tournament"]),
+            "tournament_id": str(match.tournament_id or ""),
+            "round_name": str(match.round_name or ""),
+            # Provider event ID is only a potential deterministic crosswalk,
+            # never a substitute for exact tournament/pair/time validation.
+            "provider_event_id": _provider_event_id(match),
             "surface": str(values["surface"]),
             "feature_vector_sha256": digest,
             "pre_match_features": feature_values,
