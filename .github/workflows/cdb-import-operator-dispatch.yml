@@ -108,3 +108,4 @@ jobs:
 # Exact operator replay after PR #1648 stale CLI tag-view fallback: TML 44 source-member archive, full CAS/backup/readback; no API spend.
 # One-shot 2026-11-16 TennisData verified-event-name operator replay. Original 12 Drive CSV IDs only; source SHA-256, full-name evidence, CDB global lock/CAS and remote readback mandatory.
 # Operator source replay ref-dispatch 2026-11-16: explicit 12 CSV TennisData event synonyms; fail-closed guarded importer and remote readback.
+# Operator replay 2026-11-16 after SHA-exact source-only scope fix: authorized 12 pinned TennisData CSVs; no quota, native CDB writer, strict NULL-only, CAS/readback.
