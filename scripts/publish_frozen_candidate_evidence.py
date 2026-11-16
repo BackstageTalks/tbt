@@ -181,6 +181,33 @@ def main():
                 or any("odds" in str(k).lower() or "market" in str(k).lower()
                        for row in rows["rows"] for k in row)):
             raise RuntimeError("Private paired holdout row-level readback mismatch")
+        identities = set()
+        for row in rows["rows"]:
+            key = row.get("match_id")
+            if not isinstance(key, str) or not key or key in identities:
+                raise RuntimeError("Duplicate or missing scored match identity")
+            identities.add(key)
+            p1, p2, winner = (row.get(field) for field in
+                              ("player1_id", "player2_id", "winner_id"))
+            if not p1 or not p2 or p1 == p2 or winner not in (p1, p2):
+                raise RuntimeError("Scored player/winner orientation invalid")
+            if int(row.get("target_player1_win", -1)) != int(winner == p1):
+                raise RuntimeError("Scored label does not match oriented winner")
+            from datetime import datetime
+            clock = datetime.fromisoformat(str(row.get("scheduled_at", "")).replace("Z", "+00:00"))
+            if clock.tzinfo is None or clock.utcoffset() is None:
+                raise RuntimeError("Scored fixture timestamp is not timezone-aware")
+            features = row.get("pre_match_features")
+            if not isinstance(features, dict) or not features:
+                raise RuntimeError("No rescorable PIT model features")
+            encoded = json.dumps(features, sort_keys=True, separators=(",", ":"),
+                                 allow_nan=False).encode()
+            if hashlib.sha256(encoded).hexdigest() != row.get("feature_vector_sha256"):
+                raise RuntimeError("PIT feature vector hash mismatch")
+            if any(any(term in str(name).lower() for term in
+                       ("odds", "bookmaker", "market_", "roi", "ev_", "price_"))
+                   for name in features):
+                raise RuntimeError("Market-derived feature in sports model evidence")
         evidence["paired_holdout"] = {
             "status": "PRIVATE_ROW_LEVEL_READBACK_VERIFIED",
             "rows": len(rows["rows"]), "sha256": digest,
