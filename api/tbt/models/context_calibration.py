@@ -167,7 +167,50 @@ def choose(frame, parent, labels, split):
                         'n': n, 'baseline': base_band, 'candidate': new_band,
                         'accepted': bool(safe), 'ece_gate_applied': n >= 250}
                 accepted = accepted and safe
-            details = {'baseline': old, 'candidate': new,
+            # Ranking tail and unknown ranking evidence must not inherit a
+            # pooled high-confidence boost from mostly top-ranked fixtures.
+            # Compare *published* probabilities in the same later calibration
+            # rows, with no selection on final holdout or issued results.
+            rank_checks = {}
+            tour = key.rsplit('_', 1)[-1]
+            known_column = f'{tour}_hist_known_both'
+            worst_column = f'{tour}_hist_worst_rank_log'
+            if known_column in frame.columns and worst_column in frame.columns:
+                known = frame[known_column].iloc[check].to_numpy(dtype=float)
+                worst = frame[worst_column].iloc[check].to_numpy(dtype=float)
+                if (not np.isfinite(known).all() or not np.isin(known, [0., 1.]).all()
+                        or not np.isfinite(worst).all()):
+                    raise ValueError('Invalid weekly rank-tail calibration evidence')
+                tail_cutoff = 2000 if tour == 'atp' else 1000
+                rank_cohorts = {
+                    'weekly_rank_missing': known == 0.,
+                    'tail_rank': (known == 1.) & (worst >= np.log1p(tail_cutoff)),
+                }
+                for cohort, cohort_mask in rank_cohorts.items():
+                    count = int(cohort_mask.sum())
+                    if count == 0:
+                        rank_checks[cohort] = {'n': 0, 'status': 'NO_EVIDENCE'}
+                        continue
+                    before_conf = np.maximum(public_old[cohort_mask], 1-public_old[cohort_mask])
+                    after_conf = np.maximum(public_new[cohort_mask], 1-public_new[cohort_mask])
+                    if count < 250:
+                        safe = bool(np.all(after_conf <= before_conf + 1e-12))
+                        rank_checks[cohort] = {
+                            'n': count, 'minimum_rows': 250,
+                            'status': 'INSUFFICIENT_EVIDENCE',
+                            'no_boost': safe}
+                    else:
+                        base_rank = scores(public_old[cohort_mask], target[cohort_mask])
+                        new_rank = scores(public_new[cohort_mask], target[cohort_mask])
+                        safe = all(new_rank[m] <= base_rank[m] + 1e-12 for m in (
+                            'brier', 'log_loss', 'confidence_gap', 'confidence_ece_10'))
+                        rank_checks[cohort] = {
+                            'n': count, 'status': 'EVALUATED',
+                            'baseline': base_rank, 'candidate': new_rank,
+                            'accepted': safe}
+                    accepted = accepted and safe
+            details = {'rank_tail_validation': rank_checks,
+                       'baseline': old, 'candidate': new,
                        'public_baseline': old_public, 'public_candidate': new_public,
                        'validation_bands': bands, 'shrink_weight': fitted.weight,
                        'accepted': bool(accepted)}
