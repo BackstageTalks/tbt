@@ -67,7 +67,7 @@ def make_paired_holdout(
         if match is None or not match.is_completed:
             raise ValueError("Missing completed source match for paired evaluation")
         oriented, target = FeatureBuilder.orient_for_training(match)
-        if (str(target) != str(values["target"]) or
+        if (float(values["target"]) not in (0., 1.) or target != int(values["target"]) or
                 _utc(oriented.scheduled_at) != _utc(values["scheduled_at"]) or
                 str(oriented.surface) != str(values["surface"]) or
                 str(oriented.tour) != str(values["tour"]) or
