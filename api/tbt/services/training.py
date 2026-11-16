@@ -1153,6 +1153,13 @@ def train_from_matches(
         training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     )
     evaluation_model.smooth_calibration_only = training_profile == "top-7.2.1"
+    import os
+    context_flag = os.environ.get("BLINQ_CONTEXT_CALIBRATION", "false").lower()
+    if context_flag not in {"true", "false"}:
+        raise ValueError("Invalid BLINQ_CONTEXT_CALIBRATION flag")
+    if context_flag == "true" and training_profile != "top-7.2.1":
+        raise ValueError("Context calibration is candidate-only top-7.2.1")
+    evaluation_model.context_calibration_selection = context_flag == "true"
     evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
@@ -1165,6 +1172,14 @@ def train_from_matches(
             test
         )
     )
+
+    context_holdout = None
+    if evaluation_model.context_calibration_selection:
+        from copy import copy
+        from ..models.context_calibration import holdout_report
+        parent_model = copy(evaluation_model)
+        parent_model.context_calibrators = {}
+        context_holdout = holdout_report(test, parent_model.predict_proba(test), test_p)
 
     elo_p = (
         test[
@@ -1251,6 +1266,7 @@ def train_from_matches(
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
     report = {
+        "context_calibration_holdout": context_holdout,
         "training_profile": training_profile,
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
@@ -1391,6 +1407,8 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
+            "context_calibration_validation": (evaluation_model.metadata or {}).get("context_calibration_validation"),
+            "context_calibration_methods": (evaluation_model.metadata or {}).get("context_calibration_methods"),
             "smooth_high_confidence_validation": (evaluation_model.metadata or {}).get("smooth_high_confidence_validation"),
             "calibration_refit_on_selection": (evaluation_model.metadata or {}).get("calibration_refit_on_selection"),
             "accuracy_blend_validation": (evaluation_model.metadata or {}).get("accuracy_blend_validation"),
