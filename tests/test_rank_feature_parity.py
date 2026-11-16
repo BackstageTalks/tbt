@@ -10,7 +10,7 @@ import pytest
 from tbt.data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES, ATPRankHistory
 from tbt.data.wta_rank_history import WTARankHistory
 from tbt.services.engine import predict
-from tbt.services.training import _pit_rank_frame_inplace, _pit_rank_snapshot, _candidate_feature_names
+from tbt.services.training import _pit_rank_frame_inplace, _pit_rank_snapshot, _candidate_feature_names, paired_rank_reliability_holdout
 from tbt.models.symmetry import swap_frame
 
 
@@ -166,6 +166,41 @@ def test_new_absolute_rank_features_remain_opt_in_for_protected_candidates():
     assert "rank_advantage" in legacy
     assert "rank_advantage" not in protected  # no duplicate relative rank
     assert "rank_known_both" in protected      # evidence-gate parity retained
+
+
+def test_rank_tail_holdout_reports_published_accuracy_without_threshold_escape():
+    frame = pd.DataFrame({
+        "tour_atp": [1., 1., 1., 0.],
+        "data_depth": [1., 1., .7, 1.],
+        "rank_known_both": [1., 1., 0., 1.],
+        "atp_hist_worst_rank_log": [math.log1p(2500), math.log1p(80), 0., 0.],
+        "wta_hist_worst_rank_log": [0., 0., 0., math.log1p(1100)],
+        "target": [1, 0, 1, 0],
+    })
+    candidate = np.array([.78, .85, .76, .70])
+    champion = np.array([.90, .65, .75, .65])
+    report = paired_rank_reliability_holdout(frame, candidate, champion)
+    assert report["status"].startswith("READ_ONLY")
+    assert report["groups"]["atp_rank_2000plus"]["n"] == 1
+    assert report["groups"]["atp_rank_below_2000"]["n"] == 1
+    assert report["groups"]["weekly_rank_pair_missing"]["n"] == 1
+    assert report["groups"]["wta_rank_1000plus"]["n"] == 1
+    anchored = report["groups"]["atp_rank_2000plus"]["thresholds"]["0.8"]
+    assert anchored["candidate"]["n"] == anchored["champion"]["n"] == 1
+    assert anchored["candidate"]["mean_published_confidence"] == pytest.approx(.78)
+    assert anchored["champion"]["mean_published_confidence"] == pytest.approx(.90)
+    assert anchored["status"] == "SMALL_SAMPLE"
+    assert report["model_selection_uses_no_holdout_labels"] is True
+
+
+def test_rank_tail_holdout_rejects_unproved_weekly_snapshot():
+    frame = pd.DataFrame({
+        "tour_atp": [1.], "data_depth": [1.], "rank_known_both": [1.],
+        "atp_hist_worst_rank_log": [0.], "wta_hist_worst_rank_log": [0.],
+        "target": [1],
+    })
+    with pytest.raises(ValueError, match="Invalid point-in-time absolute rank evidence"):
+        paired_rank_reliability_holdout(frame, [.8], [.7])
 
 def test_pipeline_wires_rank_history_into_train_backtest_and_serving():
     source = (ROOT / "scripts" / "pipeline.py").read_text(encoding="utf-8")
