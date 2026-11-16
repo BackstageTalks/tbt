@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from scripts.release_store import ReleaseStore
+from scripts import release_store
 
 
 def test_release_not_found_uses_authenticated_asset_id_fallback(tmp_path):
