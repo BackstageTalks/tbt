@@ -6,6 +6,7 @@ promote, train, modify canonical data, or overwrite model release artifacts.
 from __future__ import annotations
 
 import base64
+import gzip
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -147,15 +148,44 @@ def main():
     from tbt.models.artifact import load_model
     remote=base/"training-backup/candidate-persisted-readback"
     store=ReleaseStore(DATA_REPO,cert["candidate_tag"],remote)
+    paired_meta = (report.get("paired_top_holdout") or {})
+    paired_name = paired_meta.get("asset") if isinstance(paired_meta, dict) else None
+    if paired_name not in (None, "paired_top_holdout.json.gz"):
+        raise RuntimeError("Unrecognized paired holdout asset name")
+    required = ("model.joblib", "training_report.json", "promotion_history.json")
+    if paired_name:
+        required += (paired_name,)
     store.download(
-        extra_names=("model.joblib","training_report.json","promotion_history.json"),
-        required_names=("model.joblib","training_report.json","promotion_history.json"),
+        extra_names=required,
+        required_names=required,
         require_bundle_manifest=True,
     )
     if hashlib.sha256((remote/"model.joblib").read_bytes()).hexdigest()!=evidence["candidate_sha256"]:
         raise RuntimeError("Published candidate binary differs from fitted local artifact")
     if (remote/"training_report.json").read_bytes()!=(base/"model/training_report.json").read_bytes():
         raise RuntimeError("Published candidate training report differs from local results")
+    if paired_name:
+        paired_file = remote / paired_name
+        digest = hashlib.sha256(paired_file.read_bytes()).hexdigest()
+        if digest != paired_meta.get("sha256"):
+            raise RuntimeError("Private paired holdout artifact digest mismatch")
+        with gzip.open(paired_file, "rt", encoding="utf-8") as handle:
+            rows = json.load(handle)
+        if (rows.get("schema") != 1
+                or rows.get("holdout_fingerprint") != evidence["holdout_fingerprint"]
+                or rows.get("candidate_version") != evidence["candidate_version"]
+                or rows.get("champion_version") != evidence["champion_version"]
+                or len(rows.get("rows", [])) != evidence["comparison"]["sample_size"]
+                or len(rows["rows"]) != paired_meta.get("rows")
+                or rows.get("historical_prices_included") is not False
+                or any("odds" in str(k).lower() or "market" in str(k).lower()
+                       for row in rows["rows"] for k in row)):
+            raise RuntimeError("Private paired holdout row-level readback mismatch")
+        evidence["paired_holdout"] = {
+            "status": "PRIVATE_ROW_LEVEL_READBACK_VERIFIED",
+            "rows": len(rows["rows"]), "sha256": digest,
+            "asset": paired_name, "market_inputs_excluded": True,
+        }
     loaded=load_model(str(remote/"model.joblib"))
     if not loaded.fitted or loaded.version!=evidence["candidate_version"]:
         raise RuntimeError("Published candidate model is unfitted or has wrong version")
