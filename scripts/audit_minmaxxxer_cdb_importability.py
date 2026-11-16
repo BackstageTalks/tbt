@@ -185,6 +185,30 @@ def audit(source, index_file, history, out):
                     continue
                 counts["indexed_current_cdb_matches"] += 1
                 when = utc(src.get("start_time_utc"))
+                indexed_time = utc(ix.get("start_utc"))
+                canonical_time = utc(m.scheduled_at)
+                if when is None or indexed_time is None or canonical_time is None:
+                    counts["missing_or_unparseable_time"] += 1
+                else:
+                    if when == indexed_time:
+                        counts["time_source_index_exact"] += 1
+                    if when == canonical_time:
+                        counts["time_source_cdb_exact"] += 1
+                    if indexed_time == canonical_time:
+                        counts["time_index_cdb_exact"] += 1
+                    if when.date() == indexed_time.date():
+                        counts["time_source_index_same_utc_date"] += 1
+                    if when.date() == canonical_time.date():
+                        counts["time_source_cdb_same_utc_date"] += 1
+                    if indexed_time.date() == canonical_time.date():
+                        counts["time_index_cdb_same_utc_date"] += 1
+                    if when.date() == indexed_time.date() == canonical_time.date():
+                        counts["time_all_three_same_utc_date"] += 1
+                    if (max(when, indexed_time, canonical_time)
+                            - min(when, indexed_time, canonical_time)).total_seconds() <= 86400:
+                        counts["time_all_three_within_24h"] += 1
+                    if str(ix.get("tour")).upper() == tour == str(m.tour).upper():
+                        counts["tour_all_three_same"] += 1
                 if (str(m.tour).upper() != tour or str(ix.get("tour")).upper() != tour
                         or when is None or when != utc(ix.get("start_utc"))
                         or when != utc(m.scheduled_at)):
