@@ -57,6 +57,58 @@ WTA_CANDIDATE_FEATURE_NAMES = (
 )
 
 
+
+def _pit_rank_snapshot(features: dict, tour: str) -> dict:
+    """Same verified weekly ranking signal for research train and live serving.
+
+    This does not guess an absolute rank or infer missing rankings from event
+    metadata. Both tour-specific sources use snapshots strictly prior to play.
+    """
+    tour = str(tour or "").lower()
+    if tour not in {"atp", "wta"}:
+        raise ValueError("Invalid tour for point-in-time ranking")
+    known_key = f"{tour}_hist_known_both"
+    diff_key = f"{tour}_hist_rank_advantage"
+    if known_key not in features or diff_key not in features:
+        raise ValueError("Missing frozen weekly ranking source for model")
+    known, diff = float(features[known_key]), float(features[diff_key])
+    if known not in (0., 1.) or not np.isfinite(diff):
+        raise ValueError("Invalid pre-match weekly rank evidence")
+    features["rank_known_both"] = known
+    features["rank_advantage"] = diff if known else 0.
+    return features
+
+
+def _pit_rank_frame_inplace(frame: pd.DataFrame) -> dict:
+    """Apply identical ranking semantics from immutable weekly feature columns.
+
+    The source features were built strictly from prior ranking release dates.
+    Never backfill the raw historical rank field with today's rank.
+    """
+    required = {"tour_atp", "atp_hist_known_both", "wta_hist_known_both",
+                "atp_hist_rank_advantage", "wta_hist_rank_advantage"}
+    if missing := (required - set(frame.columns)):
+        raise ValueError(f"Missing point-in-time weekly rank columns: {sorted(missing)}")
+    tour = frame["tour_atp"].to_numpy(dtype=float)
+    if not np.isfinite(tour).all() or not np.isin(tour, (0., 1.)).all():
+        raise ValueError("Point-in-time rank alignment requires known ATP/WTA tour")
+    atp = tour == 1.
+    known = np.where(atp, frame["atp_hist_known_both"].to_numpy(dtype=float),
+                     frame["wta_hist_known_both"].to_numpy(dtype=float))
+    difference = np.where(atp, frame["atp_hist_rank_advantage"].to_numpy(dtype=float),
+                          frame["wta_hist_rank_advantage"].to_numpy(dtype=float))
+    if not np.isfinite(known).all() or not np.isin(known, (0., 1.)).all():
+        raise ValueError("Invalid weekly known-both rank signal")
+    if not np.isfinite(difference).all():
+        raise ValueError("Invalid weekly rank differences")
+    frame["rank_known_both"] = known
+    frame["rank_advantage"] = np.where(known == 1., difference, 0.)
+    return {"status": "PIT_WEEKLY_ALIGNED",
+            "rows": int(len(frame)),
+            "known_both_rows": int(known.sum()),
+            "previous_unverified_rank_data_ignored": True,
+            "provider_requests": 0}
+
 def _training_progress(phase: str, rows: int) -> None:
     """Stream low-cardinality fit progress and peak RSS to private Actions logs."""
     from time import monotonic
@@ -418,6 +470,8 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
         "production_train_matches": int(len(serving_train)),
         "production_calibration_matches": int(len(serving_calibration)),
         "rank_provenance": selected_metadata.get("rank_provenance"),
+        "rank_feature_source": selected_metadata.get("rank_feature_source"),
+        "rank_alignment": selected_metadata.get("rank_alignment"),
         "independent_serve_return": bool(selected_metadata.get("independent_serve_return", False)),
         "independent_direct_rates": bool(selected_metadata.get("independent_direct_rates", False)),
         "point_weighted_quality": bool(selected_metadata.get("point_weighted_quality", False)),
@@ -1102,6 +1156,21 @@ def train_from_matches(
     replay_rows = len(frame)
     frame = _candidate_learning_window(frame, training_profile)
 
+    import os
+    context_flag = os.environ.get("BLINQ_CONTEXT_CALIBRATION", "false").lower()
+    if context_flag not in {"true", "false"}:
+        raise ValueError("Invalid BLINQ_CONTEXT_CALIBRATION flag")
+    if context_flag == "true" and training_profile != "top-7.2.1":
+        raise ValueError("Context calibration is candidate-only top-7.2.1")
+    rank_alignment = {"status": "LEGACY_ARTIFACT_SEMANTICS_UNCHANGED"}
+    if context_flag == "true":
+        # Existing current-rank fields have very different provenance and
+        # availability across train, holdout and live. Use only pinned weekly
+        # archives already replayed before the match for this research model.
+        if atp_rank_history is None or wta_rank_history is None:
+            raise ValueError("Context candidate requires both historical weekly rank archives")
+        rank_alignment = _pit_rank_frame_inplace(frame)
+
     # -------------------------------------------------
     # Strict out-of-time evaluation. The smooth candidate reclaims history
     # before the final eligible holdout instead of keeping a stale cal cutoff.
@@ -1164,14 +1233,11 @@ def train_from_matches(
         training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     )
     evaluation_model.smooth_calibration_only = training_profile == "top-7.2.1"
-    import os
-    context_flag = os.environ.get("BLINQ_CONTEXT_CALIBRATION", "false").lower()
-    if context_flag not in {"true", "false"}:
-        raise ValueError("Invalid BLINQ_CONTEXT_CALIBRATION flag")
-    if context_flag == "true" and training_profile != "top-7.2.1":
-        raise ValueError("Context calibration is candidate-only top-7.2.1")
     evaluation_model.context_calibration_selection = context_flag == "true"
     evaluation_model.fit(train, calibration)
+    if context_flag == "true":
+        evaluation_model.metadata["rank_feature_source"] = "point_in_time_weekly"
+        evaluation_model.metadata["rank_alignment"] = rank_alignment
 
     _training_progress("fit_estimators_complete", len(train))
     if training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
@@ -1278,6 +1344,7 @@ def train_from_matches(
     }
     report = {
         "context_calibration_holdout": context_holdout,
+        "rank_alignment": rank_alignment,
         "training_profile": training_profile,
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
