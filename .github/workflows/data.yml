@@ -658,6 +658,10 @@ jobs:
           set -euo pipefail
           [[ "$FALLBACK_MAX_REQUESTS" =~ ^[0-9]+$ ]] || exit 1
           (( FALLBACK_MAX_REQUESTS >= 1 && FALLBACK_MAX_REQUESTS <= 5000 )) || exit 1
+          # The native extras importer reuses download_report.json. Preserve
+          # the primary, independently verified statistics audit first.
+          cp .cache/tbt/history/download_report.json \
+             .cache/tbt/history/hourly_primary_statistics_report.json
           # The primary importer already consumed MAX_REQUESTS - FALLBACK_MAX_REQUESTS
           # attempts. This second native importer can spend only the remainder
           # and independently checks the same Azure CAS ledger, provider header,
@@ -884,6 +888,7 @@ jobs:
             .cache/tbt/history/adaptive_cdb_evidence.json
             .cache/tbt/history/adaptive_cdb_evidence.md
             .cache/tbt/history/hourly_extras_fallback_plan.json
+            .cache/tbt/history/hourly_primary_statistics_report.json
             .cache/tbt/history/extras_expected.json
             .cache/tbt/history/extras_readback.json
             .cache/tbt/history/identity_readback.json
