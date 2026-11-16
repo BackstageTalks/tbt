@@ -95,15 +95,21 @@ def main():
                   const kpis=document.getElementById('dashboardKpis').textContent;
                   // Mobile: let the background timer hydrate without opening
                   // Results. Desktop: navigate immediately to cover the race.
-                  if(window.innerWidth===390)t.scheduleResultsPreload();
-                  else t.setRoute('results',false);
+                  if(window.innerWidth===390){
+                    // Exercise the real page-load gate even though goto()
+                    // already waited for networkidle in the test harness.
+                    Object.defineProperty(document,'readyState',{configurable:true,get:()=> 'loading'});
+                    t.scheduleResultsPreload();
+                    delete document.readyState;
+                  }else t.setRoute('results',false);
                   return {kpis,partial:t.state.feed.results_boot_partial};
                 }""", full[0])
                 assert before["partial"] is True, before
                 assert before["kpis"].strip(), (width, before)
                 if width == 390:
                     page.wait_for_timeout(350)
-                    assert len(requests) == 0, "Background history started before the delay"
+                    assert len(requests) == 0, "Background history started before the page load event"
+                    page.evaluate("window.dispatchEvent(new Event('load'))")
                 page.wait_for_function(
                     "window.lazyResultsTest.state.feed.results_boot_partial === false",
                     timeout=15000,
