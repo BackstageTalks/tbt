@@ -150,3 +150,4 @@ jobs:
           if-no-files-found: ignore
           retention-days: 21
 # 2026-11-16 repeat READ-ONLY audit: separate calendar-day/actual-clock mismatches; no CDB import permission changed.
+# 2026-11-16 additional READ-ONLY proof: bounded 24-hour clock with full score, native event and four count corroboration; no publisher.
