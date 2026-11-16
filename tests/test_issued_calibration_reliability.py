@@ -63,3 +63,13 @@ def test_invalid_row_shape_fails_closed():
         pass
     else:
         raise AssertionError("invalid record must be rejected")
+
+
+def test_mixed_model_legacy_cannot_claim_exact_issued_reliability():
+    from datetime import datetime, timezone
+    from audit_top_reliability import analyze
+    now = datetime(2026, 11, 16, 12, tzinfo=timezone.utc)
+    legacy = analyze([], now=now)
+    assert "issued_probability_reliability" not in legacy
+    exact = analyze([], now=now, model_version="v7.2.1-test")
+    assert exact["issued_probability_reliability"]["settled_with_original_confidence"] == 0
