@@ -47,11 +47,11 @@ def main():
     thread.start()
     origin = f"http://127.0.0.1:{http.server_address[1]}"
     try:
-      _run_browser(origin)
+        _run_browser(origin)
     finally:
-      http.shutdown()
-      http.server_close()
-      thread.join(timeout=5)
+        http.shutdown()
+        http.server_close()
+        thread.join(timeout=5)
 
 
 def _run_browser(origin):
