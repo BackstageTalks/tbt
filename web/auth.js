@@ -660,7 +660,7 @@
     const sessionEpoch = epoch(), token = s.access_token;
     const params = new URLSearchParams({page:String(page),limit:String(limit)});
     if (snapshot) params.set('snapshot',snapshot);
-    if (windowDays === 30) params.set('window_days','30');
+    if (windowDays === 1 || windowDays === 30) params.set('window_days',String(windowDays));
     const result = await json('/api/v1/results?'+params.toString(), {
       timeoutMs:16000, headers:{'X-Blinq-Access-Token':token},
     });
