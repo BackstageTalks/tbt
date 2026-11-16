@@ -50,3 +50,7 @@ Product goal: ideally at least three high-quality TOP winner picks per day, **no
 - **Production untouched**: private release `tbt-model-production-v1` still serves pinned `model.joblib` SHA256 `c1e761ccc3e530c600abc8559031869071dddef99e9a5fffb78ed602cb933c91`. Research PR remains draft, never merged; no market features, CDB mutations, forced TOP, or provider requests were introduced in the evaluation runner.
 
 **Open decision gate**: First complete the baseline scored release and independent private read-back; run the read-only price crosswalk, report exact joined/missing/ambiguous fixtures, then independently compare sports-weighted and baseline model on compatible time-frozen cohorts, including meaningful day-level uncertainty. No model activation without prospective actually-issued TOP gain.
+
+### Final replay fail-closed gate
+
+The subsequent research-only workflow now explicitly rejects a "successful" private TOP comparison when zero exact time-verified quotes were joined or when neither model has any sport/price-qualified winner pick. The aggregate diagnostic remains uploadable with `if: always()` for troubleshooting. Preflight-only workflow code was removed after its successful readback; normal production and training push restrictions are restored. The historic quote replay itself has **not been executed** on scored candidate rows because the baseline candidate has not finished its PIT audit and asset publication.
