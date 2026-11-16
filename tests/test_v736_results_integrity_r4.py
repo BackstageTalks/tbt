@@ -35,8 +35,11 @@ def test_all_surfaces_does_not_hide_unknown_surface_results():
     assert 'Unknown/missing' in APP and 'surface metadata must never hide' in APP
 
 
-def test_live_results_default_to_recent_30_days_with_explicit_current_betting_day_option():
-    assert "resultsFilters:{category:'all',tour:'',surface:'',window:'30'" in APP
+def test_live_results_default_to_today_with_explicit_older_history_options():
+    assert "resultsFilters:{category:'all',tour:'',surface:'',window:'today'" in APP
+    assert "function resultsWindowNeedsTodayOnly()" in APP
+    assert "function loadRecentResults()" in APP
+    assert "function loadCompleteResults(" in APP
     assert "function resultPublicationBettingDay(row,publication)" in APP
     assert "publication?.betting_day" in APP
     assert "window==='today'" in APP
