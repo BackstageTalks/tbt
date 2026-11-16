@@ -250,7 +250,7 @@ def test_65_floor_applies_to_challenger_and_proven_w35_only():
         [atp, challenger, w35, rejected],
         generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
-    assert snap["selection_policy"] == "sports_top3_60_v22"
+    assert snap["selection_policy"] == "sports_tiered_top5_60_v23"
     assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
 
 
