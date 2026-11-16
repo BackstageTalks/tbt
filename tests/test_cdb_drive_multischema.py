@@ -197,3 +197,34 @@ def test_home_away_full_pipeline_is_staged_dryrun_and_local_exact_only(tmp_path)
     assert proof["added_values"] == staged["eligible_new_values"]
     assert proof["existing_values_overwritten"] == 0
 
+
+@pytest.mark.parametrize("tour_label,expected_tour,tournament", [
+    ("ATP Chall", "atp", "Canberra Chall. Men - Qualification"),
+    ("WTA Chall", "wta", "Canberra Chall. Women - Qualification"),
+])
+def test_season_challenger_preserves_tour_and_exact_event_identity(tour_label, expected_tour, tournament):
+    # Challenger is an explicit ATP/WTA tour level, not a guessed filename hint.
+    # Source home/away must still be oriented by winner_code, and native IDs
+    # are provenance only; an exact CDB linker decides canonical identity.
+    row, reason = normalize(
+        season_source(tour_type_human=tour_label, tournament=tournament),
+        "2026-atp-season.csv", 1,
+    )
+    assert reason == ""
+    assert row["league"] == expected_tour
+    assert row["tourney_name"] == tournament
+    assert row["source_winner_id"] == "untrusted-22"
+    assert row["source_loser_id"] == "untrusted-11"
+    assert row["winner_name"] == "Beta Two"
+    assert row["loser_name"] == "Alpha One"
+    assert row["w_ace"] == "4"
+    assert row["l_ace"] == "3"
+    assert row["source_date_kind"] == "match_exact"
+
+
+@pytest.mark.parametrize("tour_label", ["ATP Exhibition", "WTA ITF", "ATP Chall Extra"])
+def test_season_unknown_level_remains_quarantined(tour_label):
+    row, reason = normalize(season_source(tour_type_human=tour_label),
+                            "2026-atp-season.csv", 1)
+    assert row is None
+    assert reason == "tour_missing_or_unsupported"

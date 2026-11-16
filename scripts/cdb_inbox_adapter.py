@@ -141,7 +141,10 @@ def _season_match(lookup):
                 "datetimestamp", "status", "tournament")
     if any(not str(lookup.get(field) or "").strip() for field in required):
         return None, "season_schema_missing"
-    tour = {"atptour": "atp", "wtatour": "wta"}.get(key(lookup["tourtypehuman"]))
+    # A Challenger event is still ATP/WTA for CDB, but its original event
+    # name and source IDs remain evidence, never canonical identity.
+    tour = {"atptour": "atp", "wtatour": "wta",
+            "atpchall": "atp", "wtachall": "wta"}.get(key(lookup["tourtypehuman"]))
     if not tour:
         return None, "tour_missing_or_unsupported"
     if (key(lookup["status"]) != "finished" or
