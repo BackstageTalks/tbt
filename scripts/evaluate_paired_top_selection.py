@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 import gzip
 import json
 import math
+import random
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -78,6 +79,45 @@ def statistics(rows, model):
     }
 
 
+def paired_day_bootstrap(production, candidate, repetitions=1000):
+    """Paired candidate-minus-champion accuracy, resampling local betting days.
+
+    Only fixtures qualified by BOTH sports+price selection arms are compared.
+    A selection-volume difference is reported separately rather than silently
+    counting missing/unpriced fixtures as losses.
+    """
+    left = {r["match_id"]: r for r in production}
+    right = {r["match_id"]: r for r in candidate}
+    common = sorted(set(left) & set(right))
+    by_day = defaultdict(list)
+    for key in common:
+        a, b = left[key], right[key]
+        if a["day"] != b["day"]:
+            raise ValueError("Paired betting-day mismatch")
+        by_day[a["day"]].append(
+            b["predictions"]["candidate"]["correct"] -
+            a["predictions"]["production"]["correct"])
+    days = sorted(by_day)
+    deltas = [d for day in days for d in by_day[day]]
+    observed = sum(deltas)/len(deltas) if deltas else None
+    if len(days) < 3:
+        return {"common_n": len(common), "days": len(days),
+                "delta_accuracy": observed, "day_bootstrap_ci95": None}
+    rng = random.Random(721)
+    distribution = []
+    for _ in range(repetitions):
+        chosen = [rng.choice(days) for _ in days]
+        differences = [d for day in chosen for d in by_day[day]]
+        distribution.append(sum(differences)/len(differences))
+    distribution.sort()
+    return {"common_n": len(common), "days": len(days),
+            "delta_accuracy": observed,
+            "day_bootstrap_ci95": [
+                distribution[int(.025*(repetitions-1))],
+                distribution[int(.975*(repetitions-1))],
+            ]}
+
+
 def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
              min_surface_matches=5):
     if (holdout.get("schema") != 1 or
@@ -100,7 +140,9 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
     considered = defaultdict(list)
     totals = {"paired_rows": len(scores), "price_missing": 0,
               "price_after_start": 0, "sports_ineligible": 0,
-              "price_below_minimum": 0, "qualified_per_model": {}}
+              "market_qualified_per_model": {"production": 0, "candidate": 0},
+              "below_sports_confidence_per_model": {"production": 0, "candidate": 0},
+              "below_price_floor_per_model": {"production": 0, "candidate": 0}}
     for row in scores:
         key = row["match_id"]
         if key in seen:
@@ -142,9 +184,13 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
                 raise ValueError("Degenerate probability")
             selected = int(p < .5)
             confidence = max(p, 1-p)
-            if confidence + 1e-12 < confidence_floor or odds[selected] < 1.5:
-                totals["price_below_minimum"] += int(confidence + 1e-12 >= confidence_floor)
+            if confidence + 1e-12 < confidence_floor:
+                totals["below_sports_confidence_per_model"][model] += 1
                 continue
+            if odds[selected] < 1.5:
+                totals["below_price_floor_per_model"][model] += 1
+                continue
+            totals["market_qualified_per_model"][model] += 1
             predictions[model] = {
                 "confidence": confidence,
                 "player1_probability": p,
@@ -199,6 +245,8 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
                         "Native TOP rejection rules and actual issued snapshot require separate replay.",
                         "No sports model was fitted or tuned by this script."],
         "counts": totals, "comparison": result,
+        "paired_common_qualifiers": paired_day_bootstrap(
+            considered["production"], considered["candidate"]),
     }
 
 
