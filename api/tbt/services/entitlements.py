@@ -907,6 +907,9 @@ def _daily_rows(payload: dict) -> list[dict]:
         # Preserve the selector's competition/tier order. Old publications and
         # settled results are not mutated by this active-board filter.
         return out
+    if rule.get("policy") == "sports_tiered_top5_60_v23":
+        # Preserve ATP/WTA -> Challenger -> ITF order from the selector.
+        return [row for row in out if _row_probability(row) >= .60][:5]
     if rule.get("policy") == "sports_top3_60_v22":
         return sorted((row for row in out if _row_probability(row) >= .60),
                       key=lambda row: (-_row_probability(row), str(row.get("event_id") or "")))[:3]
