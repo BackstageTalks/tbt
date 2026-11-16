@@ -1,5 +1,6 @@
 """Contract for opt-in bootstrap and complete, member-authorized Results pages."""
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, time
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 
 import function_app as api
@@ -138,7 +139,36 @@ def test_recent_results_scope_does_not_bypass_member_auth(monkeypatch):
     monkeypatch.setattr(api, "_verified_user",
                         lambda req: {"id": "user-1", "email_verified": False})
     assert api.results_page(request(window_days="30")) == {"error": "email_not_verified"}
+    assert api.results_page(request(window_days="1")) == {"error": "email_not_verified"}
     assert api.results_page(request(window_days="31")) == {"error": "invalid_results_page"}
+
+
+
+def test_today_scope_is_exact_bratislava_betting_day_and_snapshot_safe(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    zone = ZoneInfo("Europe/Bratislava")
+    betting_day = (datetime.now(zone) - timedelta(hours=6)).date()
+    start = datetime.combine(betting_day, time(hour=6), tzinfo=zone)
+    next_start = datetime.combine(betting_day + timedelta(days=1), time(hour=6), tzinfo=zone)
+    rows = [
+        {"event_id": "before", "scheduled_at": (start-timedelta(seconds=1)).isoformat()},
+        {"event_id": "start", "scheduled_at": start.isoformat()},
+        {"event_id": "today", "scheduled_at": (start+timedelta(hours=6)).isoformat()},
+        {"event_id": "end", "scheduled_at": next_start.isoformat()},
+    ]
+    monkeypatch.setattr(api, "runtime_settled_results", lambda *_args, **_kwargs: rows)
+    full = api.results_page(request(page="0", limit="500"))
+    today = api.results_page(request(page="0", limit="500", window_days="1"))
+    assert [r["event_id"] for r in today["results"]] == ["start", "today"]
+    assert today["scope_days"] == 1
+    assert today["total"] == 2
+    assert today["snapshot"] == full["snapshot"]
+    assert api.results_page(request(window_days="1", snapshot="stale")) == {
+        "error": "results_snapshot_changed"
+    }
+    assert api.results_page(request(window_days="2")) == {
+        "error": "invalid_results_page"
+    }
 
 
 

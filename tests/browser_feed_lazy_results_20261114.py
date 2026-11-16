@@ -6,14 +6,17 @@ import json
 import os
 import time
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import sync_playwright
 from browser_runtime_r43 import ORIGIN, WEB, browser_path, static_route
 
 
 def result_row(event_id, days_ago):
-    from datetime import datetime, timedelta, timezone
-    scheduled = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    from datetime import datetime, timedelta, timezone, time as dt_time
+    zone = ZoneInfo('Europe/Bratislava')
+    betting_day = (datetime.now(zone) - timedelta(hours=6)).date()
+    scheduled = datetime.combine(betting_day - timedelta(days=days_ago), dt_time(hour=12), tzinfo=zone).astimezone(timezone.utc)
     issued = scheduled - timedelta(hours=5)
     return {
         "event_id": event_id,
@@ -32,7 +35,7 @@ def result_row(event_id, days_ago):
 
 
 def main():
-    full = [result_row("recent", 1), result_row("history", 40)]
+    full = [result_row("today", 0), result_row("recent", 1), result_row("history", 40)]
     for width in (390, 1440):
         requests = []
         def intercept(route):
@@ -49,16 +52,17 @@ def main():
                 return
             if path == "/api/v1/results":
                 params = parse_qs(urlparse(route.request.url).query)
-                recent = params.get("window_days") == ["30"]
-                requests.append((route.request, time.monotonic(), recent))
+                scope = params.get("window_days", [""])[0]
+                assert scope in ("1", "30", ""), scope
+                requests.append((route.request, time.monotonic(), scope))
                 assert params.get("limit") == ["500"], params
                 assert params.get("page") == ["0"], params
                 assert route.request.headers.get("x-blinq-access-token") == "fixture-token"
-                rows = full[:1] if recent else full
+                rows = full[:1] if scope == "1" else full[:2] if scope == "30" else full
                 route.fulfill(status=200, content_type="application/json", body=json.dumps({
                     "results": rows, "page": 0, "limit": 500,
                     "total": len(rows), "has_more": False, "snapshot": "fixture-snapshot",
-                    **({"scope_days": 30} if recent else {}),
+                    **({"scope_days": int(scope)} if scope else {}),
                 }))
                 return
             static_route(route)
@@ -114,14 +118,14 @@ def main():
                     assert len(requests) == 0, "Background history started before the page load event"
                     page.evaluate("window.dispatchEvent(new Event('load'))")
                 page.wait_for_function(
-                    "window.lazyResultsTest.state.feed.results_recent_ready === true",
+                    "window.lazyResultsTest.state.feed.results_today_ready === true",
                     timeout=15000,
                 )
-                assert len(requests) == 1 and requests[0][2] is True, (width, requests)
+                assert len(requests) == 1 and requests[0][2] == "1", (width, requests)
                 assert page.evaluate("window.lazyResultsTest.state.feed.results_boot_partial") is True
                 if width == 390:
                     elapsed = requests[0][1] - scheduled_at
-                    assert elapsed >= 6.8, ("Results preloaded before page-load delay", elapsed)
+                    assert elapsed >= 4.8, ("Today Results preloaded before page-load delay", elapsed)
                 if width == 390:
                     page.evaluate("window.lazyResultsTest.setRoute('results',false)")
                     assert len(requests) == 1, "Opening preloaded Results fetched history again"
@@ -130,7 +134,7 @@ def main():
                   rendered: document.getElementById('routePanel').textContent,
                   overflow: document.documentElement.scrollWidth-window.innerWidth
                 })""")
-                assert hydrated["rows"] == ["recent"], (width, hydrated)
+                assert hydrated["rows"] == ["today"], (width, hydrated)
                 # A fresh authorized bootstrap with the same ledger reuses
                 # hydrated rows; revocation or changed revision fails closed.
                 reuse = page.evaluate("""() => {
@@ -141,7 +145,7 @@ def main():
                   };
                   const retained=t.reuseHydratedResultsOnRefresh(next);
                   const reused=next.results===old.results&&next.results_boot_partial===true
-                    &&next.results_recent_ready===true;
+                    &&next.results_today_ready===true&&next.results_recent_ready===false;
                   const denied={
                     account:{...old.account},entitlements:{results:false},
                     results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot'
@@ -151,26 +155,61 @@ def main():
                 }""")
                 assert reuse == {"retained": True, "reused": True,
                                  "refused": False, "deniedEmpty": True}, (width, reuse)
-                # Older history must only be requested after choosing All time.
-                page.evaluate("""() => {
-                  const t=window.lazyResultsTest;
-                  t.state.resultsFilters.window='all';
-                  t.setRoute('results',false);
-                }""")
-                page.wait_for_function(
-                    "window.lazyResultsTest.state.feed.results_boot_partial === false",
-                    timeout=15000,
-                )
-                assert len(requests) == 2 and requests[1][2] is False, (width, requests)
+                # Mobile: verify the staged background progression without
+                # touching the period filter. Desktop: verify immediate
+                # on-demand wider navigation and in-flight deduplication.
+                if width == 390:
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_recent_ready === true",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 2 and requests[1][2] == "30", (width, requests)
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 3 and requests[2][2] == "", (width, requests)
+                    page.evaluate("""() => {
+                      const t=window.lazyResultsTest;
+                      t.state.resultsFilters.window='30';
+                      t.setRoute('results',false);
+                      t.state.resultsFilters.window='all';
+                      t.setRoute('results',false);
+                    }""")
+                    assert len(requests) == 3, "Hydrated history fetched again"
+                else:
+                    page.evaluate("""() => {
+                      const t=window.lazyResultsTest;
+                      t.state.resultsFilters.window='30';
+                      t.setRoute('results',false);
+                    }""")
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_recent_ready === true",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 2 and requests[1][2] == "30", (width, requests)
+                    assert page.evaluate(
+                        "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
+                    ) == ["today", "recent"], width
+                    page.evaluate("""() => {
+                      const t=window.lazyResultsTest;
+                      t.state.resultsFilters.window='all';
+                      t.setRoute('results',false);
+                    }""")
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 3 and requests[2][2] == "", (width, requests)
                 assert page.evaluate(
                     "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
-                ) == ["recent", "history"], width
+                ) == ["today", "recent", "history"], width
                 assert hydrated["overflow"] <= 2, (width, hydrated["overflow"])
                 assert not errors, (width, errors)
                 context.close()
             finally:
                 browser.close()
-    print("BlinQ recent-30 first, full history only on demand, 7s preload and session-safe reuse: PASS")
+    print("BlinQ today-first 5s preload, on-demand 30/full, and session-safe reuse: PASS")
 
 
 if __name__ == "__main__":

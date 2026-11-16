@@ -50,7 +50,7 @@ def main():
             page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
             page.wait_for_function("window.bettingDayTest && bettingDayTest.state.ui")
             initial = page.evaluate("() => bettingDayTest.state.resultsFilters.window")
-            assert initial == "30", initial  # Fast default; historical tests below set custom explicitly.
+            assert initial == "today", initial  # Default to today; historical tests set their own scope.
             rows = [
                 ("before", "2026-09-27T03:59:59Z"),
                 ("start", "2026-09-27T04:00:00Z"),

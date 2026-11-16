@@ -1876,7 +1876,7 @@ def results_page(req):
     except (TypeError, ValueError):
         return response({"error": "invalid_results_page"}, 400)
     window_days = str(params.get("window_days") or "")
-    if not 0 <= page <= 100000 or not 1 <= size <= 500 or window_days not in ("", "30"):
+    if not 0 <= page <= 100000 or not 1 <= size <= 500 or window_days not in ("", "1", "30"):
         return response({"error": "invalid_results_page"}, 400)
 
     # Returning the private in-process payload avoids a wasteful serialize +
@@ -1891,12 +1891,12 @@ def results_page(req):
     requested_revision = str(params.get("snapshot") or "")
     if requested_revision and requested_revision != revision:
         return response({"error": "results_snapshot_changed"}, 409)
-    if window_days == "30":
+    if window_days in ("1", "30"):
         # Filter only AFTER the existing auth, settlement, exclusion and tier
         # gates. The unscoped endpoint still returns complete authorized rows.
         zone = ZoneInfo("Europe/Bratislava")
         betting_day = (datetime.now(zone) - timedelta(hours=6)).date()
-        first = betting_day - timedelta(days=29)
+        first = betting_day - timedelta(days=29 if window_days == "30" else 0)
         lower = datetime.combine(first, datetime.min.time().replace(hour=6), tzinfo=zone).timestamp()
         upper = datetime.combine(betting_day + timedelta(days=1),
                                  datetime.min.time().replace(hour=6), tzinfo=zone).timestamp()
@@ -1922,7 +1922,7 @@ def results_page(req):
         "total": len(rows),
         "has_more": start + size < len(rows),
         "snapshot": revision,
-        **({"scope_days": 30} if window_days else {}),
+        **({"scope_days": int(window_days)} if window_days else {}),
     })
 
 
