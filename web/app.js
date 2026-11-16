@@ -8923,7 +8923,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         :valueIds.has(event)?'VALUE'
         :primeIds.has(event)?'PRIME'
         :!hasPrediction?lcopy('No verified model prediction in board','Bez overenej modelovej predikcie v prehľade','Bez ověřené modelové predikce v přehledu')
-        :probability<.65?lcopy('Below the TOP 65% floor','Pod hranicou TOP 65 %','Pod hranicí TOP 65 %')
+        :probability<.60?lcopy('Below the TOP 60% floor','Pod hranicou TOP 60 %','Pod hranicí TOP 60 %')
         :lcopy('Not confirmed in your visible TOP selection','Nepotvrdené vo vašej zobrazenej TOP ponuke','Nepotvrzeno ve vaší zobrazené TOP nabídce');
       const summary=hasPrediction?`${escapeHtml(m.pick)} · ${Math.round(probability*1000)/10}%`:
         escapeHtml(lcopy('No score','Bez skóre','Bez skóre'));

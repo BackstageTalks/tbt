@@ -8,14 +8,14 @@ from tbt.services.sports_prediction_audit import sports_prediction_audit
 from tbt.services.prediction_quality import coverage
 
 
-def test_unlimited_top_and_no_forced_fill():
+def test_three_top_and_no_forced_fill():
     rows = [pick(str(i), .80-i*.001) for i in range(12)]
-    rows.append(pick('weak', .60))
+    rows.append(pick('weak', .59))
     out = select_market_sections(rows)
-    assert len(ids(out)) == 12 and 'weak' not in ids(out)
+    assert len(ids(out)) == 5 and 'weak' not in ids(out)
     assert out['market_selection']['selection_counts']['top_daily_shortfall'] == 0
     assert len(ids(select_market_sections(rows, top_limit=5))) == 5
-    assert select_market_sections([pick('weak', .60)])['top_daily_picks'] == []
+    assert select_market_sections([pick('weak', .59)])['top_daily_picks'] == []
 
 
 def test_top_tie_order_does_not_depend_on_odds():

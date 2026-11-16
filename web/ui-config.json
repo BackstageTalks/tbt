@@ -974,13 +974,13 @@
     "top_daily": {
       "label": "TOP Predictions",
       "internal_key": "top_daily",
-      "limit": null,
+      "limit": 5,
       "markets": [
         "match_winner"
       ],
       "requires_odds": true,
-      "objective": "competition_then_probability",
-      "min_probability": 0.65,
+      "objective": "competition_tier_then_probability_desc",
+      "min_probability": 0.6,
       "itf_min_probability_exclusive": 0.65,
       "itf_max_odds_inclusive": 1.7,
       "min_data_depth": 0.8,
@@ -991,35 +991,24 @@
       "min_expected_value": null,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "sort": "competition_then_probability_then_history_counts",
+      "sort": "competition_tier_then_probability_desc_then_event_id",
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "All qualifying candidates, no count cap; minimum daily objective 3 without forced fill. ATP/WTA first, then Challenger, then verified women ITF W35+. Existing probability, data and subsequent price eligibility checks remain; count depth is not calibrated confidence.",
+      "cascade": "Target three, publish up to five eligible TOP picks at 60% or above. ATP/WTA first, then Challenger, then verified ITF; M15/M25 and unverified ITF stay blocked. No forced fill.",
       "confidence_tiers": [
-        0.65
+        0.6
       ],
       "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.65,
+      "fallback_min_probability": 0.6,
       "fallback_only_if_core_count_below": null,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
       "backup_min_data_depth": 0.8,
       "backup_min_surface_matches": 5,
-      "competition_priority": [
-        [
-          "ATP",
-          "WTA"
-        ],
-        [
-          "Challenger"
-        ],
-        [
-          "ITF"
-        ]
-      ],
+      "competition_priority": [["ATP", "WTA"], ["Challenger"], ["ITF"]],
       "quality_fallback": false,
-      "policy": "evidence_unlimited_top_v21"
+      "policy": "sports_tiered_top5_60_v23"
     },
     "value": {
       "label": "Value Predictions",
