@@ -105,6 +105,9 @@ const signature=signatureContext.feedVisualSignature;
 assert.equal(signature({upcoming:[1],__blinq_feed_stage_ms:{fetch:3}}),
   signature({upcoming:[1],__blinq_feed_stage_ms:{fetch:123}}),
   'backend timings must not cause a visual refresh');
+assert.equal(signature({upcoming:[1],generated_at:'2026-11-16T20:00:00Z'}),
+  signature({upcoming:[1],generated_at:'2026-11-16T20:02:00Z'}),
+  'generation timestamps alone must not cause card rerenders');
 assert.notEqual(signature({upcoming:[1]}),signature({upcoming:[2]}),
   'a changed prediction must trigger a visual refresh');
 const autoCode=app.slice(app.indexOf('  async function loadFeed('),
