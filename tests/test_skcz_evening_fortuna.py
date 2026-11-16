@@ -235,6 +235,40 @@ class EveningFortunaTests(unittest.TestCase):
                            sleep_seconds=0, now=late_now, get=old_get)
         self.assertEqual(report['observed_prematch_priced_pairs'], 0)
 
+    def test_same_day_capture_requires_explicit_opt_in(self):
+        observed = datetime(2026, 11, 10, 8, tzinfo=timezone.utc)
+        with self.assertRaisesRegex(ValueError, 'explicit opt-in'):
+            f.collect(date(2026, 11, 10), max_events=2, sleep_seconds=0,
+                      now=observed, get=lambda _: INDEX)
+        with self.assertRaisesRegex(ValueError, 'already ended'):
+            f.collect(date(2026, 11, 10), max_events=2, sleep_seconds=0,
+                      now=datetime(2026, 11, 11, 8, tzinfo=timezone.utc),
+                      allow_same_day=True, get=lambda _: INDEX)
+
+    def test_same_day_research_accepts_only_future_prematch_quote(self):
+        observed = datetime(2026, 11, 10, 8, tzinfo=timezone.utc)
+        def get(url):
+            return INDEX if url == f.INDEX else page()
+        report = f.collect(date(2026, 11, 10), max_events=2, sleep_seconds=0,
+                           now=observed, allow_same_day=True, get=get)
+        self.assertEqual(report['exact_aces_pairs'], 1)
+        self.assertEqual(report['already_started_target_events'], 0)
+        self.assertEqual(report['observed_prematch_priced_pairs'], 1)
+        self.assertEqual(len(report['events_in_target_window']), 1)
+        self.assertEqual(report['events_in_target_window'][0]['captured_at'], observed.isoformat())
+
+    def test_same_day_research_never_exposes_started_match_quote(self):
+        observed = datetime(2026, 11, 10, 8, tzinfo=timezone.utc)
+        def get(url):
+            return INDEX if url == f.INDEX else page(scheduled='10. 11. 2026 07:00')
+        report = f.collect(date(2026, 11, 10), max_events=2, sleep_seconds=0,
+                           now=observed, allow_same_day=True, get=get)
+        self.assertEqual(report['exact_aces_pairs'], 0)
+        self.assertEqual(report['already_started_target_events'], 1)
+        self.assertEqual(report['events_in_target_window'], [])
+        self.assertEqual(report['observed_prematch_priced_events'], [])
+        self.assertEqual(report['observed_prematch_priced_pairs'], 0)
+
     def test_refuse_stale_evening(self):
         with self.assertRaises(ValueError):
             f.collect(date(2026, 11, 8), now=NOW, get=lambda _: INDEX)
