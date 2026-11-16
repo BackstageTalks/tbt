@@ -9598,6 +9598,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     cancelResultsPreload();
     resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';todayResultsSnapshot='';completeResultsSnapshot='';recentResultsSnapshot='';todayResultsDay='';recentResultsDay='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
+    lastFeedVisualSignature='';lastFeedBettingDay='';
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
@@ -9635,7 +9636,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     $('profileButton')?.setAttribute('aria-expanded',opening?'true':'false');
   }
 
-  let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
+  let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null,lastFeedVisualSignature='',lastFeedBettingDay='';
   let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, resultsPreloadEpoch=0, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='', todayResultsDay='', recentResultsDay='';
   function cancelResultsPreload(){
     resultsPreloadEpoch++; // Also cancel already-running staged background pipelines.
@@ -9926,13 +9927,30 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(event.storageArea!==localStorage||event.key!==epochKey)return;
     clearTimeout(externalSessionTimer);externalSessionTimer=setTimeout(()=>{syncExternalSession().catch(error=>console.warn('[BlinQ auth] cross-tab session sync failed.',error));},40);
   }
-  async function loadFeed(showLoading=true){
-    if(feedLoading)return;feedLoading=true;cancelResultsPreload();const generation=feedGeneration;window.BlinqUI.sync('loading');
+  function feedVisualSignature(feed){
+    // Ignore server-side timings: they change on every request without changing the UI.
+    return JSON.stringify(feed,(key,value)=>(key.startsWith('__blinq_')||key==='generated_at')?undefined:value);
+  }
+  async function loadFeed(showLoading=true,{skipUnchanged=false}={}){
+    if(feedLoading)return;feedLoading=true;const generation=feedGeneration;
+    if(showLoading||$('appShell').hidden)window.BlinqUI.sync('loading');
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML=`<div class="state-card">${escapeHtml(publicText('Loading current model predictions…'))}</div>`;
     try{
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
       const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);if(generation!==feedGeneration)return;
+      const feedSignature=feedVisualSignature(feed),day=bratislavaBettingDayKey(Date.now(),6);
+      // The background history pipeline must not restart for unchanged data.
+      if(skipUnchanged&&lastFeedVisualSignature===feedSignature&&lastFeedBettingDay===day
+         &&state.feed?.account&&!$('appShell').hidden){
+        // The server can advance its generation timestamp without changing a pick.
+        // Update the freshness label only; never rebuild cards or reset Results.
+        state.feed.generated_at=feed.generated_at;
+        $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—';
+        window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
+        return;
+      }
+      cancelResultsPreload();
       reuseHydratedResultsOnRefresh(feed);
       resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
@@ -9941,6 +9959,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // only if this session generation is still current when news arrives.
       loadNewsPool().then(()=>{if(generation===feedGeneration&&state.route==='predictions')renderHeroBanner();}).catch(()=>{});
       loadAdminDraft(); renderAllUiContent(); populateFilters(); markBootTiming('Dashboard vykreslený');
+      lastFeedVisualSignature=feedSignature;lastFeedBettingDay=day;
       const a=feed.account||{};
       $('profileName').textContent=a.name||a.email||publicText('BlinQ User');
       const resolvedPlan=accountPlan();
@@ -9968,12 +9987,18 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; markBootTiming('Dashboard odkrytý'); if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
       scheduleResultsPreload(generation);
-    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
+    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(showLoading&&state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
-  async function refreshWorkspace(showLoading=false){
+  function uiVisualSignature(){
+    return JSON.stringify([state.ui,state.presentationConfig,state.uiPublishedRevision,
+      state.uiStorageAvailable,state.uiRuntimeNotice]);
+  }
+  async function refreshWorkspace(showLoading=false,{skipUnchanged=false}={}){
+    const prior=skipUnchanged?uiVisualSignature():null;
     try{await loadUiConfig();}
     catch(error){console.warn('[BlinQ UI] runtime UI refresh failed; keeping last known UI config.',error);}
-    return loadFeed(showLoading);
+    // Published CMS/config can change independently of the prediction feed.
+    return loadFeed(showLoading,{skipUnchanged:skipUnchanged&&prior===uiVisualSignature()});
   }
 
   function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
@@ -10073,14 +10098,28 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   function setupLiveRefresh(){
-    let lastAttempt=Date.now();
-    const refresh=()=>{if(document.hidden||!navigator.onLine||document.activeElement?.matches('input,select,textarea')||$('appShell').hidden||state.route==='admin'||state.demoMode||document.querySelector('dialog[open]')||Date.now()-lastAttempt<60000)return;lastAttempt=Date.now();refreshWorkspace(false).catch(()=>{});};
+    let lastAttempt=Date.now(),lastUiRefresh=Date.now(),refreshing=false;
+    const refresh=()=>{
+      const now=Date.now();
+      // Refresh only the active workspace; never interrupt an edit or start overlapping reads.
+      if(document.hidden||!navigator.onLine||document.activeElement?.matches('input,select,textarea')
+         ||$('appShell').hidden||state.route==='admin'||state.demoMode
+         ||document.querySelector('dialog[open]')||feedLoading||refreshing||now-lastAttempt<120000)return;
+      lastAttempt=now;refreshing=true;
+      // Keep the existing five-minute runtime configuration freshness, while
+      // checking prediction/results changes every two minutes without a full UI rebuild.
+      const withUi=now-lastUiRefresh>=5*60*1000;
+      if(withUi)lastUiRefresh=now;
+      const operation=withUi?refreshWorkspace(false,{skipUnchanged:true}):loadFeed(false,{skipUnchanged:true});
+      Promise.resolve(operation).catch(()=>{}).finally(()=>{refreshing=false;});
+    };
     const privateRefresh=()=>{if(!document.hidden&&navigator.onLine&&!$('appShell')?.hidden)refreshPrivateUpdates(false).catch(()=>{});};
-    setInterval(refresh,5*60*1000);setInterval(privateRefresh,30*1000);
+    setInterval(refresh,60*1000);setInterval(privateRefresh,30*1000);
     // Update footer health on elapsed time without extra provider/API calls.
     setInterval(renderSystemFooterStatus,30*1000);
     setInterval(()=>{pollAdminModelFactory().catch(()=>{});},30*1000);
     document.addEventListener('visibilitychange',()=>{refresh();if(!document.hidden)refreshPrivateUpdates(true).catch(()=>{});});
+    window.addEventListener('focus',refresh);
     window.addEventListener('online',()=>{lastAttempt=0;refresh();refreshPrivateUpdates(true).catch(()=>{});});
     window.addEventListener('offline',()=>window.BlinqUI.sync('offline'));
     window.addEventListener('storage',handleSessionStorageEvent);
