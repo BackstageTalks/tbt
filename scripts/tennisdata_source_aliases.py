@@ -90,7 +90,7 @@ def load_map(path: Path, expected_sha256: str) -> dict:
                 or not re.fullmatch(r"[0-9]{1,16}", local_id)
                 or not isinstance(name, str)
                 or not 3 <= len(name) <= 120
-                or len(_norm(name)) < 2):
+                or not _norm(name)):
             raise ValueError("Invalid source player identity")
         key = (tour, local_id)
         if key in by_id:
