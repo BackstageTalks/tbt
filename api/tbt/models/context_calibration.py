@@ -24,15 +24,30 @@ def masks(frame):
     groups = {'main': np.isin(level, [.45, .6, .8, 1.]),
               'challenger': level == .25, 'itf': level == .1}
     if 'competition' in frame.columns:
-        # Training and serving pass the same original MatchRecord category.
-        # Explicit metadata takes precedence over the lossy numeric encoding.
+        # A generic ATP/WTA level is not sufficient when the actual tournament
+        # says ITF, UTR, Challenger or WTA 125. Use original pre-match metadata;
+        # this is the same precedence principle as the separate TOP gate.
         names = frame.competition.fillna('').astype(str).str.lower().str.strip()
-        itf = names.str.contains('itf|futures', regex=True).to_numpy()
-        challenger = names.str.contains('challenger', regex=False).to_numpy() & ~itf
+        events = (frame.tournament.fillna('').astype(str).str.lower().str.strip()
+                  if 'tournament' in frame.columns else names * 0)
+        combined = names + ' ' + events
+        itf = combined.str.contains(r'\bitf\b|\bfutures?\b', regex=True).to_numpy()
+        utr = combined.str.contains(r'\butr\b', regex=True).to_numpy()
+        challenger = combined.str.contains('challenger', regex=False).to_numpy() & ~itf & ~utr
+        wta125 = combined.str.contains(r'\bwta\s*125\b', regex=True).to_numpy()
+        other = combined.str.contains(
+            r'\bdoubles?\b|\bwheelchair\b|\bjunior\b|\bexhibition\b',
+            regex=True).to_numpy()
         main = names.isin({'atp', 'wta', 'atp 250', 'atp 500', 'atp 1000',
                            'wta 250', 'wta 500', 'wta 1000', 'masters 1000',
                            'atp finals', 'wta finals', 'grand slam', 'grand slams'}).to_numpy()
-        groups = {'main': main, 'challenger': challenger, 'itf': itf}
+        main &= ~(itf | utr | challenger | wta125 | other)
+        # An incorrect gender/competition label is not calibration evidence.
+        incompatible = ((tour == 1.) & names.str.startswith('wta').to_numpy()) | (
+            (tour == 0.) & names.str.startswith('atp').to_numpy())
+        main &= ~incompatible
+        groups = {'main': main, 'challenger': challenger & ~other,
+                  'itf': itf & ~other}
     return {f'{name}_{sex}': group & (tour == value)
             for name, group in groups.items() for sex, value in [('atp', 1.), ('wta', 0.)]}
 
@@ -54,9 +69,21 @@ class ContextMap:
 
 
 def scores(p, y):
+    """Proper scores and confidence reliability on exactly the same rows."""
+    p, y = np.asarray(p, dtype=float), np.asarray(y, dtype=int)
+    confidence = np.maximum(p, 1-p)
+    correct = ((p >= .5) == y).astype(float)
+    # Ten equal-width confidence bins [0.50, 1.00]. A mean confidence
+    # gap can cancel overconfidence in one bin with underconfidence in another.
+    bucket = np.clip(np.floor((confidence-.5)*20).astype(int), 0, 9)
+    ece = sum(float(np.sum(bucket == b)) / len(p) *
+              abs(float(np.mean(confidence[bucket == b])) -
+                  float(np.mean(correct[bucket == b])))
+              for b in range(10) if np.any(bucket == b))
     return {'brier': float(np.mean((p-y)**2)),
             'log_loss': float(log_loss(y, p, labels=[0, 1])),
-            'confidence_gap': float(abs(np.mean(np.maximum(p, 1-p)) - np.mean((p >= .5) == y)))}
+            'confidence_gap': float(abs(np.mean(confidence) - np.mean(correct))),
+            'confidence_ece_10': float(ece)}
 
 
 def choose(frame, parent, labels, split):
@@ -82,48 +109,83 @@ def choose(frame, parent, labels, split):
         if len(fit) < 250 or len(check) < 120 or len(np.unique(labels[fit])) < 2:
             audit['status'] = 'INSUFFICIENT_EVIDENCE'
             continue
-        # Symmetric positive-slope map preserves player orientation and winner.
+        # Fit only on earlier days; a later disjoint period may select between
+        # two predefined shrinkages, never refit on selection or final holdout.
         x, y = np.r_[parent[fit], 1-parent[fit]], np.r_[labels[fit], 1-labels[fit]]
         model = LogisticRegression(C=1., fit_intercept=False, max_iter=1000).fit(logits(x), y)
         if not np.isfinite(model.coef_).all() or model.coef_[0, 0] <= 0:
             audit['status'] = 'NONMONOTONE_REJECTED'
             continue
-        fitted = ContextMap(model, len(fit)/(len(fit)+500.))
+        fitted_weight = len(fit)/(len(fit)+500.)
         baseline, target = parent[check], labels[check]
-        alternative = fitted.predict(baseline)
-        old, new = scores(baseline, target), scores(alternative, target)
-        accepted = (new['log_loss'] + .001 < old['log_loss']
-                    and new['brier'] <= old['brier'] + 1e-12
-                    and new['confidence_gap'] <= old['confidence_gap'] + 1e-12)
-        # Validate the actual existing publication transform, not just a hidden
-        # intermediate probability. Do not change old model serving semantics.
-        public_old = .5 + (baseline-.5)*depth[check]
-        public_new = .5 + (alternative-.5)*depth[check]
-        old_public, new_public = scores(public_old, target), scores(public_new, target)
-        accepted = accepted and all(new_public[m] <= old_public[m] + 1e-12
-                                    for m in ('brier', 'log_loss', 'confidence_gap'))
-        baseline, alternative = public_old, public_new
-        bands = {}
-        for threshold in (.60, .70, .80):
-            # Union prevents an override hiding its mistakes below a threshold.
-            anchor = np.maximum(np.maximum(baseline, 1-baseline),
-                                np.maximum(alternative, 1-alternative)) >= threshold
-            n = int(anchor.sum())
-            if n < 100:
-                # Sparse evidence may reduce unsupported confidence, never boost it.
-                safe = bool(np.all(np.maximum(alternative[anchor], 1-alternative[anchor])
-                                   <= np.maximum(baseline[anchor], 1-baseline[anchor]) + 1e-12))
-                bands[str(threshold)] = {'n': n, 'status': 'INSUFFICIENT_EVIDENCE', 'no_boost': safe}
-            else:
-                a, b = scores(baseline[anchor], target[anchor]), scores(alternative[anchor], target[anchor])
-                safe = all(b[m] <= a[m] + 1e-12 for m in ('brier', 'log_loss', 'confidence_gap'))
-                bands[str(threshold)] = {'n': n, 'baseline': a, 'candidate': b, 'accepted': safe}
-            accepted = accepted and safe
-        audit.update(status='SELECTED' if accepted else 'PARENT_RETAINED',
-                     baseline=old, candidate=new, public_baseline=old_public,
-                     public_candidate=new_public, validation_bands=bands, shrink_weight=fitted.weight)
-        if accepted:
-            selected[key] = fitted
+        depth_check = depth[check]
+        public_old = .5 + (baseline-.5)*depth_check
+        old, old_public = scores(baseline, target), scores(public_old, target)
+        options = []
+        for factor in (.5, 1.):
+            fitted = ContextMap(model, fitted_weight * factor)
+            alternative = fitted.predict(baseline)
+            new = scores(alternative, target)
+            public_new = .5 + (alternative-.5)*depth_check
+            new_public = scores(public_new, target)
+            # All proper scores, global reliability, and real displayed
+            # confidence ECE must not regress on later calibration days.
+            accepted = (new['log_loss'] + .001 < old['log_loss']
+                        and all(new[m] <= old[m] + 1e-12
+                                for m in ('brier', 'confidence_gap', 'confidence_ece_10'))
+                        and all(new_public[m] <= old_public[m] + 1e-12
+                                for m in ('brier', 'log_loss', 'confidence_gap',
+                                          'confidence_ece_10')))
+            bands = {}
+            for threshold in (.60, .70, .80):
+                # Union prevents a map from hiding mistakes below a threshold.
+                anchor = np.maximum(np.maximum(public_old, 1-public_old),
+                                    np.maximum(public_new, 1-public_new)) >= threshold
+                n = int(anchor.sum())
+                if n < 100:
+                    # Sparse evidence never licenses an upward correction.
+                    safe = bool(np.all(np.maximum(public_new[anchor], 1-public_new[anchor])
+                                       <= np.maximum(public_old[anchor], 1-public_old[anchor]) + 1e-12))
+                    bands[str(threshold)] = {'n': n, 'status': 'INSUFFICIENT_EVIDENCE',
+                                             'no_boost': safe}
+                else:
+                    base_band = scores(public_old[anchor], target[anchor])
+                    new_band = scores(public_new[anchor], target[anchor])
+                    safe = all(new_band[m] <= base_band[m] + 1e-12
+                               for m in ('brier', 'log_loss', 'confidence_gap'))
+                    # ECE is too unstable on very small subsets. Require
+                    # non-regression only when a full calibration-bin audit
+                    # has at least 250 independent outcomes.
+                    if n >= 250:
+                        safe = safe and (new_band['confidence_ece_10']
+                                         <= base_band['confidence_ece_10'] + 1e-12)
+                    bands[str(threshold)] = {
+                        'n': n, 'baseline': base_band, 'candidate': new_band,
+                        'accepted': bool(safe), 'ece_gate_applied': n >= 250}
+                accepted = accepted and safe
+            details = {'baseline': old, 'candidate': new,
+                       'public_baseline': old_public, 'public_candidate': new_public,
+                       'validation_bands': bands, 'shrink_weight': fitted.weight,
+                       'accepted': bool(accepted)}
+            options.append((fitted, details))
+        eligible = [(candidate, details) for candidate, details in options
+                    if details['accepted']]
+        # Optimize only on disjoint calibration days. Ties prefer less change.
+        chosen, details = min(
+            eligible if eligible else options,
+            key=lambda entry: (entry[1]['public_candidate']['log_loss'],
+                               entry[0].weight))
+        audit.update({**details,
+                      'status': 'SELECTED' if eligible else 'PARENT_RETAINED',
+                      'validated_shrink_options': [
+                          {'weight': candidate.weight,
+                           'accepted': check_result['accepted'],
+                           'public_log_loss': check_result['public_candidate']['log_loss'],
+                           'public_ece_10': check_result['public_candidate']['confidence_ece_10']}
+                          for candidate, check_result in options],
+                      'choice_never_uses_final_holdout': True})
+        if eligible:
+            selected[key] = chosen
     return selected, report
 
 
