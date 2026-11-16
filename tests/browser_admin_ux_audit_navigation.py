@@ -42,17 +42,31 @@ def test_width(browser,width):
       s.adminInsightsLoading=false;s.adminInfoResultsLoading=false;s.adminLiveResultsLoading=false;
       host.innerHTML=h.renderAdminRoute();h.wireAdmin();
     }""")
-    # Admin SEKCIE navigation must paint the same dark tennis artwork,
-    # not only an opaque gradient that hides the existing background.
-    menu_style=page.locator(".admin-side-nav").evaluate("""el => {
-        const s=getComputedStyle(el);
-        return {background:s.backgroundImage,color:s.backgroundColor,
-                size:s.backgroundSize,display:s.display};
+    # Mobile Admin no longer has two framed wallpaper cards stacked above
+    # Accounts. Desktop's deliberately framed navigation is unchanged.
+    panel_style=page.evaluate("""() => {
+      const css=sel => getComputedStyle(document.querySelector(sel));
+      const nav=css('.admin-side-nav'),work=css('.admin-workarea');
+      const content=css('.admin-panel-v685');
+      return {
+        navImage:nav.backgroundImage,navBorder:nav.borderTopWidth,navShadow:nav.boxShadow,
+        workImage:work.backgroundImage,workBorder:work.borderTopWidth,
+        workShadow:work.boxShadow,contentBorder:content.borderTopWidth
+      };
     }""")
-    assert "linear-gradient" in menu_style["background"],(width,menu_style)
-    assert "url(" in menu_style["background"],(width,menu_style)
-    if width<=600:
-        assert "blinq_mobile_court.webp" in menu_style["background"],(width,menu_style)
+    if width<=900:
+        assert panel_style["navImage"]=="none",(width,panel_style)
+        assert panel_style["navBorder"]=="0px",(width,panel_style)
+        assert panel_style["navShadow"]=="none",(width,panel_style)
+        assert panel_style["workImage"]=="none",(width,panel_style)
+        assert panel_style["workBorder"]=="0px",(width,panel_style)
+        assert panel_style["workShadow"]=="none",(width,panel_style)
+        assert panel_style["contentBorder"]=="0px",(width,panel_style)
+    else:
+        assert "linear-gradient" in panel_style["navImage"],(width,panel_style)
+        assert "url(" in panel_style["navImage"],(width,panel_style)
+    # A real runtime/publishing alert must not be hidden by visual cleanup.
+    assert page.locator('.admin-runtime-note.is-error[role="alert"]').is_visible()
     assert page.locator(".admin-nav-toolbar [data-admin-nav-expand]").count()==1
     assert page.locator(".admin-nav-entry.is-active").count()==1
     if os.getenv("BLINQ_SCREENSHOTS") and width in (390,1440):
