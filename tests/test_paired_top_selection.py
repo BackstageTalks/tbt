@@ -8,7 +8,7 @@ import pytest
 from tbt.schemas import MatchRecord
 from tbt.models.feature_builder import FeatureBuilder
 from tbt.services.paired_top_evaluation import make_paired_holdout
-from scripts.evaluate_paired_top_selection import evaluate, auc
+from scripts.evaluate_paired_top_selection import evaluate, auc, compare_confidence_floors
 
 
 def match(i="f1", winner="A", date="2026-10-29T10:00:00+00:00"):
@@ -121,3 +121,56 @@ def test_missing_price_never_manufactures_qualified_picks():
     assert result["counts"]["price_missing"] == 1
     assert result["comparison"]["candidate"]["qualified"] == 0
     assert result["comparison"]["production"]["qualified"] == 0
+
+
+def test_research_60_percent_is_inclusive_with_fixed_150_price_and_65_reference():
+    """60% widens the sports cohort; prices are unchanged and applied later."""
+    exported, _ = export_fixture()
+    template = exported["rows"][0]
+    scored = deepcopy(exported)
+    scored["rows"] = []
+    quotes = []
+    # First two are only in the added 60-65% confidence range.
+    # Third was already 65+; last is rejected by the 1.50 quote floor.
+    for i, (confidence, price) in enumerate([
+        (.60, 1.50), (.62, 1.52), (.70, 1.50), (.61, 1.49)
+    ]):
+        row = deepcopy(template)
+        row["match_id"] = f"sample-{i}"
+        row["player1_id"] = f"player1-{i}"
+        row["player2_id"] = f"player2-{i}"
+        row["winner_id"] = row["player1_id"]
+        row["target_player1_win"] = 1
+        row["production_player1_probability"] = confidence
+        row["candidate_player1_probability"] = confidence
+        scored["rows"].append(row)
+        quotes.append(quote(row, p1=price))
+
+    paired = compare_confidence_floors(scored, quotes)
+    primary, reference = paired["primary"], paired["reference_65"]
+    assert primary["conditions"]["sports_confidence_floor"] == .60
+    assert reference["conditions"]["sports_confidence_floor"] == .65
+    assert primary["conditions"]["subsequent_verified_odds"] == 1.5
+    assert reference["conditions"]["subsequent_verified_odds"] == 1.5
+    for model in ("production", "candidate"):
+        assert primary["comparison"][model]["qualified"] == 3
+        assert reference["comparison"][model]["qualified"] == 1
+        assert primary["comparison"][model]["days_with_3plus"] == 1
+        assert reference["comparison"][model]["days_with_3plus"] == 0
+        diff = paired["increment_from_65_to_60"]["by_model"][model]
+        assert diff["new_price_qualified_picks"] == 2
+        assert diff["correct_among_new"] == 2
+        assert diff["accuracy_among_new"] == 1
+        assert diff["new_top3_daily_slots"] == 2
+        assert diff["days_with_3plus_delta"] == 1
+    assert primary["counts"]["below_price_floor_per_model"]["candidate"] == 1
+
+
+def test_60_percent_does_not_force_picks_if_real_quotes_missing():
+    exported, _ = export_fixture()
+    paired = compare_confidence_floors(exported, [])
+    for report in (paired["primary"], paired["reference_65"]):
+        assert report["comparison"]["production"]["qualified"] == 0
+        assert report["comparison"]["candidate"]["qualified"] == 0
+    for model in ("production", "candidate"):
+        assert paired["increment_from_65_to_60"]["by_model"][model]["accuracy_among_new"] is None
