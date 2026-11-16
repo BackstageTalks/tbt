@@ -133,7 +133,7 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
     for quote in quotes:
         key = quote["match_id"]
         if key in quote_by_id:
-            raise ValueError("Ambiguous duplicated market evidence")
+            raise ValueError("Duplicate or ambiguous market quote identity")
         quote_by_id[key] = quote
     seen = set()
     all_days = set()
