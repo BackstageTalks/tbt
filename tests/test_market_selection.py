@@ -161,7 +161,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'sports_top3_60_v22'
+    assert meta['selection_policy'] == 'sports_tiered_top5_60_v23'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
@@ -173,8 +173,8 @@ def test_retired_top200_never_steals_from_ranked_three_top():
     sections = select_market_sections(rows)
     assert sections['top200_picks'] == []
     assert [x['event_id'] for x in sections['top_daily_picks']] == [
-        f'ranked-{i}' for i in range(3)]
-    assert sections['market_selection']['selection_counts']['top_daily'] == 3
+        f'ranked-{i}' for i in range(5)]
+    assert sections['market_selection']['selection_counts']['top_daily'] == 5
 
 def test_probability_first_odds_buckets_match_product_policy():
     rows = [
@@ -547,7 +547,7 @@ def test_morning_same_original_top_offer_across_feed_and_publication_without_oth
     ledger = annotate_market_publication_candidates(rows, ace_picks=aces)
     rendered = attach_market_sections_to_feed({'upcoming': []}, ledger, ace_picks=aces)
     top_ids = [x['event_id'] for x in rendered['top_daily_picks']]
-    assert len(top_ids) == 3
+    assert len(top_ids) == 5
     for source in ledger:
         pubs = [p for p in source.get('market_publication_candidates', [])
                 if p.get('market') == 'match_winner' and p.get('section') == 'top_daily']
@@ -581,7 +581,7 @@ def test_public_offer_day_filters_before_top_limit_and_aligns_publication_audit(
     candidates = tomorrow + today
     unscoped = select_market_sections(candidates)
     assert {x['event_id'] for x in unscoped['top_daily_picks']} == {
-        'tomorrow-0', 'tomorrow-1', 'tomorrow-2',
+        'tomorrow-0', 'tomorrow-1', 'tomorrow-2', 'today-0', 'today-1',
     }
 
     scoped = select_market_sections(candidates, public_offer_day='2026-09-07')
