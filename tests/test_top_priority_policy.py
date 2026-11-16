@@ -31,13 +31,13 @@ def test_main_tours_reach_70_before_using_itf_to_fill_target():
     rows=[pick("itf",.93,"ITF Men"),pick("wta",.70,"WTA"),
           pick("atp",.75),pick("challenger",.85,"Challenger")]
     out=select_market_sections(rows)
-    assert ids(out)==["challenger","atp","wta"]
+    assert ids(out)==["atp","wta","challenger"]
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==0
 
 
 def test_itf_is_last_resort_not_entirely_removed():
     out=select_market_sections([pick("a",.78),pick("b",.75,"WTA"),verified_w35("i",.80)])
-    assert ids(out)==["i","a","b"]
+    assert ids(out)==["a","b","i"]
 
 
 @pytest.mark.parametrize("p",[.55,.59,.5999])
@@ -98,7 +98,7 @@ def test_main_then_challenger_then_verified_w35_with_wta125_excluded():
     rows = [verified_w35("itf", .95), pick("secondary-low", .71, "Challenger"),
             pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
     result = select_market_sections(rows)
-    assert ids(result) == ["itf", "secondary-low", "main"]
+    assert ids(result) == ["main", "secondary-low", "itf"]
     assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
@@ -228,9 +228,9 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     ]
     before = deepcopy(rows)
     result = select_market_sections(rows)
-    assert ids(result) == ["itf", "challenger", "atp70"]
+    assert ids(result) == ["atp70", "wta68", "atp65", "challenger", "itf"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "sports_0.60", "sports_0.60", "sports_0.60"
+        "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
@@ -242,7 +242,7 @@ def test_65_floor_applies_to_challenger_and_proven_w35_only():
     w35 = verified_w35("w35", .655)
     rejected = pick("under-floor", .599, "Challenger")
     result = select_market_sections([atp, challenger, w35, rejected])
-    assert ids(result) == ["challenger", "w35", "atp"]
+    assert ids(result) == ["atp", "challenger", "w35"]
     assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
         "sports_0.60", "sports_0.60", "sports_0.60"
     ]
@@ -339,7 +339,7 @@ def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
     over = verified_w35("over", .95, odds=1.7001)
     qualifying = verified_w35("qualifying", .651, odds=1.70)
     output = select_market_sections([over, qualifying, main, challenger])
-    assert ids(output) == ["qualifying", "atp65", "ch65"]
+    assert ids(output) == ["atp65", "ch65", "qualifying"]
     assert output["market_selection"]["top_rejection_counts"]["itf_odds_above_1_70"] == 1
 
 
@@ -347,6 +347,6 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
     assert verify() == {
-        "status": "PASS", "policy": "sports_top3_60_v22",
+        "status": "PASS", "policy": "sports_tiered_top5_60_v23",
         "provider_requests": 0,
     }
