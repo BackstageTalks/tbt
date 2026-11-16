@@ -974,12 +974,12 @@
     "top_daily": {
       "label": "TOP Predictions",
       "internal_key": "top_daily",
-      "limit": 3,
+      "limit": 5,
       "markets": [
         "match_winner"
       ],
       "requires_odds": true,
-      "objective": "probability_desc",
+      "objective": "competition_tier_then_probability_desc",
       "min_probability": 0.6,
       "itf_min_probability_exclusive": 0.65,
       "itf_max_odds_inclusive": 1.7,
@@ -991,11 +991,11 @@
       "min_expected_value": null,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "sort": "probability_desc_then_event_id",
+      "sort": "competition_tier_then_probability_desc_then_event_id",
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "At most three eligible sports-ranked picks at 60% or above; no forced fill. Existing ITF evidence and price safeguards remain.",
+      "cascade": "Target three, publish up to five eligible TOP picks at 60% or above. ATP/WTA first, then Challenger, then verified ITF; M15/M25 and unverified ITF stay blocked. No forced fill.",
       "confidence_tiers": [
         0.6
       ],
@@ -1006,9 +1006,9 @@
       "dynamic_fallback_tiers": [],
       "backup_min_data_depth": 0.8,
       "backup_min_surface_matches": 5,
-      "competition_priority": [],
+      "competition_priority": [["ATP", "WTA"], ["Challenger"], ["ITF"]],
       "quality_fallback": false,
-      "policy": "sports_top3_60_v22"
+      "policy": "sports_tiered_top5_60_v23"
     },
     "value": {
       "label": "Value Predictions",
