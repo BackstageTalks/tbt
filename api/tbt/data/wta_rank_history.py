@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 WTA_RANK_HISTORY_FEATURE_NAMES = [
     "wta_hist_rank_advantage",
+    "wta_hist_best_rank_log",
+    "wta_hist_worst_rank_log",
     "wta_hist_points_advantage",
     "wta_hist_rank_momentum_4w_diff",
     "wta_hist_rank_momentum_12w_diff",
@@ -433,6 +435,12 @@ class WTARankHistory:
             return out
 
         out["wta_hist_known_both"] = 1.0
+        # Absolute, point-in-time ranking strength: rank ratios alone cannot
+        # distinguish a #50 vs #100 matchup from #2500 vs #5000. These
+        # side-invariant covariates are unavailable when either identity/rank
+        # lacks a strictly pre-match weekly snapshot.
+        out["wta_hist_best_rank_log"] = math.log1p(min(p1["rank"], p2["rank"]))
+        out["wta_hist_worst_rank_log"] = math.log1p(max(p1["rank"], p2["rank"]))
         out["wta_hist_rank_advantage"] = math.log1p(p2["rank"]) - math.log1p(p1["rank"])
         if p1.get("points") is not None and p2.get("points") is not None:
             out["wta_hist_points_advantage"] = (
