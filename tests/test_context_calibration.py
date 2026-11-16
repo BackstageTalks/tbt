@@ -90,6 +90,42 @@ def test_confidence_ece_detects_misleading_zero_overall_confidence_gap():
     assert result['confidence_ece_10'] == pytest.approx(.2)
 
 
+
+def test_tail_rank_cannot_receive_unproved_confidence_boost():
+    frame, probabilities, _ = evidence(2400)
+    probabilities[:] = .7
+    y = (np.arange(2400) % 20 < 17).astype(int)  # 85% wins, true base underconfidence
+    # Without a tail-specific evidence gate, the broad main-tour map would be
+    # allowed to boost all fixtures because the disjoint validation is strong.
+    general, _ = choose(frame, probabilities, y, 1200)
+    assert 'main_atp' in general
+
+    frame['atp_hist_known_both'] = 1.
+    frame['atp_hist_worst_rank_log'] = np.log1p(50.)
+    frame.loc[1200:1249, 'atp_hist_worst_rank_log'] = np.log1p(2500.)
+    protected, report = choose(frame, probabilities, y, 1200)
+    assert protected == {}
+    tail = report['main_atp']['rank_tail_validation']['tail_rank']
+    assert tail['n'] == 50
+    assert tail['status'] == 'INSUFFICIENT_EVIDENCE'
+    assert tail['no_boost'] is False
+    assert report['main_atp']['status'] == 'PARENT_RETAINED'
+
+
+def test_missing_weekly_ranks_need_separate_evidence_for_confidence_boost():
+    frame, probabilities, _ = evidence(2400)
+    probabilities[:] = .7
+    y = (np.arange(2400) % 20 < 17).astype(int)
+    frame['atp_hist_known_both'] = 1.
+    frame['atp_hist_worst_rank_log'] = np.log1p(50.)
+    frame.loc[1200:1239, 'atp_hist_known_both'] = 0.
+    frame.loc[1200:1239, 'atp_hist_worst_rank_log'] = 0.
+    protected, report = choose(frame, probabilities, y, 1200)
+    assert protected == {}
+    missing = report['main_atp']['rank_tail_validation']['weekly_rank_missing']
+    assert missing['n'] == 40
+    assert missing['no_boost'] is False
+
 def test_context_selection_reports_only_chronologically_validated_shrinkage():
     frame, p, y = evidence(2400)
     chosen, audit = choose(frame, p, y, 1200)
