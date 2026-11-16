@@ -15,6 +15,7 @@ import subprocess
 from zoneinfo import ZoneInfo
 
 from _bootstrap import ROOT
+from issued_calibration_reliability import issued_reliability
 
 
 def timestamp(value):
@@ -428,6 +429,7 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
         for entry in entries:
             groups[entry[dimension]].append(entry)
         report["subgroups"][dimension] = {key: summarize(group) for key, group in sorted(groups.items())}
+    report["issued_probability_reliability"] = issued_reliability(entries)
     return report
 
 
