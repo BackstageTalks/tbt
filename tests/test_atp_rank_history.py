@@ -62,7 +62,12 @@ def test_sqlite_loader_and_candidate_governance(tmp_path):
     default_names = _candidate_feature_names()
     enabled_names = _candidate_feature_names(atp_rank_history=history)
     assert not (set(ATP_RANK_HISTORY_FEATURE_NAMES) & set(default_names))
-    assert set(ATP_RANK_HISTORY_FEATURE_NAMES).issubset(enabled_names)
+    protected_names = _candidate_feature_names(atp_rank_history=history, pit_rank_aligned=True)
+    inherited = set(ATP_RANK_HISTORY_FEATURE_NAMES) - {
+        "atp_hist_best_rank_log", "atp_hist_worst_rank_log"}
+    assert inherited.issubset(enabled_names)
+    assert set(ATP_RANK_HISTORY_FEATURE_NAMES).issubset(protected_names)
+    assert not {"atp_hist_best_rank_log", "atp_hist_worst_rank_log"} & set(enabled_names)
 
 
 def test_sackmann_csv_loader(tmp_path):
