@@ -51,6 +51,8 @@ class TennisEnsemble:
         if objective not in {"accuracy", "log_loss"}:
             raise ValueError("objective must be accuracy or log_loss")
         self.objective = objective
+        # Opt-in sports-only experiment; defaults preserve serving behavior.
+        self.sports_sample_weight_profile = "none"
         # Archive weather is an observation, not a forecast known before kickoff.
         # Re-enable only after storing point-in-time forecast provenance.
         self.excluded_features = {"weather_serve_interaction", "weather_known"}
@@ -520,6 +522,30 @@ class TennisEnsemble:
             "holdout_or_issued_outcomes_used": False,
         }
 
+    def _sports_fit_weights(self, frame):
+        """Predeclared competition-only reweighting for a protected study.
+
+        No result labels, prices, markets, probabilities or later statistics
+        influence this array. Do not infer actual TOP gains from fitting alone.
+        """
+        profile = getattr(self, "sports_sample_weight_profile", "none")
+        if profile == "none":
+            return None
+        if profile != "main_tour_2x":
+            raise ValueError("Unknown sports-only sample weighting experiment")
+        if "competition" not in frame or "tour" not in frame:
+            raise ValueError("Competition evidence missing for sports reweighting")
+        levels = frame["competition"].fillna("").astype(str).str.lower()
+        tours = frame["tour"].fillna("").astype(str).str.lower()
+        major = (~levels.str.contains("itf|utr|futures", regex=True)) & (
+            levels.str.contains("challenger|wta ?125|atp|wta", regex=True)
+            | (levels.eq("main_tour") & tours.isin(("atp", "wta")))
+        )
+        weights = np.where(major.to_numpy(), 2., 1.)
+        if len(weights) != len(frame) or not np.isfinite(weights).all():
+            raise ValueError("Invalid sports weighting")
+        return weights
+
     def fit(self, train_frame, calibration_frame):
         self.fitted = False
         if len(train_frame) < 300:
@@ -549,8 +575,14 @@ class TennisEnsemble:
         x[len(train):] = self._matrix(swap_frame(train))
         target = train.target.to_numpy(dtype=int)
         y = np.concatenate((target, 1 - target), axis=0)
-        self.linear.fit(x, y)
-        self.boost.fit(x, y)
+        weights = self._sports_fit_weights(train)
+        if weights is None:
+            self.linear.fit(x, y)
+            self.boost.fit(x, y)
+        else:
+            paired_weights = np.concatenate([weights, weights])
+            self.linear.fit(x, y, model__sample_weight=paired_weights)
+            self.boost.fit(x, y, sample_weight=paired_weights)
         self.blend_weight, self.elo_weight = .5, 0.
         self.atp_blend_weight, self.atp_elo_weight = None, None
         self.calibrator = ProbabilityCalibrator()
@@ -558,6 +590,8 @@ class TennisEnsemble:
         self.evidence_calibrators = {}
         split = calibration_split(cal) if len(cal) >= 120 else None
         self.metadata = {"objective": self.objective, "feature_names": self.feature_names,
+                         "sports_sample_weight_profile": self.sports_sample_weight_profile,
+                         "sports_train_weight_sum": float(weights.sum()) if weights is not None else None,
                          "excluded_features": sorted(self.excluded_features),
                          "symmetric_inference": True, "training_matches": len(train)}
         if split is not None:
