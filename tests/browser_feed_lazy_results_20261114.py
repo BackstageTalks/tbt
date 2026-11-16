@@ -155,34 +155,52 @@ def main():
                 }""")
                 assert reuse == {"retained": True, "reused": True,
                                  "refused": False, "deniedEmpty": True}, (width, reuse)
-                # Today is the only initially transferred report; a broader
-                # filter explicitly requests 30 days before full history.
-                page.evaluate("""() => {
-                  const t=window.lazyResultsTest;
-                  t.state.resultsFilters.window='30';
-                  t.setRoute('results',false);
-                }""")
-                page.wait_for_function(
-                    "window.lazyResultsTest.state.feed.results_recent_ready === true",
-                    timeout=15000,
-                )
-                assert len(requests) == 2 and requests[1][2] == "30", (width, requests)
-                assert page.evaluate(
-                    "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
-                ) == ["today", "recent"], width
-
-                # All time remains complete and must never be inferred from
-                # the day-only or 30-day scoped payload.
-                page.evaluate("""() => {
-                  const t=window.lazyResultsTest;
-                  t.state.resultsFilters.window='all';
-                  t.setRoute('results',false);
-                }""")
-                page.wait_for_function(
-                    "window.lazyResultsTest.state.feed.results_boot_partial === false",
-                    timeout=15000,
-                )
-                assert len(requests) == 3 and requests[2][2] == "", (width, requests)
+                # Mobile: verify the staged background progression without
+                # touching the period filter. Desktop: verify immediate
+                # on-demand wider navigation and in-flight deduplication.
+                if width == 390:
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_recent_ready === true",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 2 and requests[1][2] == "30", (width, requests)
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 3 and requests[2][2] == "", (width, requests)
+                    page.evaluate("""() => {
+                      const t=window.lazyResultsTest;
+                      t.state.resultsFilters.window='30';
+                      t.setRoute('results',false);
+                      t.state.resultsFilters.window='all';
+                      t.setRoute('results',false);
+                    }""")
+                    assert len(requests) == 3, "Hydrated history fetched again"
+                else:
+                    page.evaluate("""() => {
+                      const t=window.lazyResultsTest;
+                      t.state.resultsFilters.window='30';
+                      t.setRoute('results',false);
+                    }""")
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_recent_ready === true",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 2 and requests[1][2] == "30", (width, requests)
+                    assert page.evaluate(
+                        "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
+                    ) == ["today", "recent"], width
+                    page.evaluate("""() => {
+                      const t=window.lazyResultsTest;
+                      t.state.resultsFilters.window='all';
+                      t.setRoute('results',false);
+                    }""")
+                    page.wait_for_function(
+                        "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                        timeout=15000,
+                    )
+                    assert len(requests) == 3 and requests[2][2] == "", (width, requests)
                 assert page.evaluate(
                     "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
                 ) == ["today", "recent", "history"], width
