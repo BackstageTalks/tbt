@@ -364,6 +364,17 @@ def _split_serving_refit_by_date(
 def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     """Refit only after promotion approval, consuming the already-used holdout."""
     selected = result.model
+    # A selected context map is part of the validated probability model.
+    # fit_frozen() refits the estimator and legacy calibrators but cannot yet
+    # carry forward its sports-context maps. Never deploy an apparently
+    # approved model with those maps silently dropped or apply a stale map to
+    # a newly fitted estimator. A separate validated serving-refit contract is
+    # required before enabling promotion of context-calibrated candidates.
+    if getattr(selected, "context_calibrators", None):
+        raise ValueError(
+            "Context-calibrated candidate requires independently verified "
+            "serving refit; refusing to discard validated probability maps"
+        )
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
     serving = _new_production_ensemble()
@@ -1283,7 +1294,7 @@ def train_from_matches(
         "input_diagnostics": diagnostics,
         "top_market_validation": {
             "status": "NOT_EVALUATED",
-            "required": "Independent pre-match odds >=1.50, at most 10 picks/day, no forced fill",
+            "required": "Independent pre-match odds >=1.50, at most 5 picks/day, no forced fill",
             "promotion_ready_for_top": False,
         },
         "production_holdout": production_metrics,
