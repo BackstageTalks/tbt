@@ -14,6 +14,8 @@ from typing import Iterable
 
 ATP_RANK_HISTORY_FEATURE_NAMES = [
     "atp_hist_rank_advantage",
+    "atp_hist_best_rank_log",
+    "atp_hist_worst_rank_log",
     "atp_hist_points_advantage",
     "atp_hist_rank_momentum_4w_diff",
     "atp_hist_rank_momentum_12w_diff",
@@ -240,6 +242,12 @@ class ATPRankHistory:
             return out
 
         out["atp_hist_known_both"] = 1.0
+        # Absolute, point-in-time ranking strength: rank ratios alone cannot
+        # distinguish a #50 vs #100 matchup from #2500 vs #5000. These
+        # side-invariant covariates are unavailable when either identity/rank
+        # lacks a strictly pre-match weekly snapshot.
+        out["atp_hist_best_rank_log"] = math.log1p(min(p1["rank"], p2["rank"]))
+        out["atp_hist_worst_rank_log"] = math.log1p(max(p1["rank"], p2["rank"]))
         out["atp_hist_rank_advantage"] = (
             math.log1p(p2["rank"]) - math.log1p(p1["rank"])
         )
