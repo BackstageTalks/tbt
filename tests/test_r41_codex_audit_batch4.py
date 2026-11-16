@@ -103,6 +103,8 @@ def test_b20_popout_uses_external_csp_safe_runtime_and_asset_fallbacks():
     routes = {row.get("route"): row for row in swa["routes"]}
     assert "/match-popout.js" in routes
     assert "no-store" in routes["/match-popout.js"]["headers"]["Cache-Control"]
+    assert "/match-popout.html" in routes
+    assert "no-store" in routes["/match-popout.html"]["headers"]["Cache-Control"]
 
 
 def test_b12_durable_throttle_claim_is_atomic(monkeypatch):
