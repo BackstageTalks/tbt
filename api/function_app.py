@@ -1790,36 +1790,35 @@ def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
                 if not exclusions_available:
                     data["results"] = []
                     data["results_exclusions_unavailable"] = True
-            # Results-only requests still enforce ALL the same auth, exclusion,
-            # settlement, category, membership and issued-day gates above.
-            # Skip unrelated KPI (including duplicate admin settlement),
-            # dashboard schedule and presentation work. None modifies Results.
-            if not results_only:
-                # Results-based dashboard scalars must observe exactly the same
-                # category, position and per-account grants as the Results table.
-                # ADMIN retains the unrestricted global operational KPI universe.
-                kpi_source = dict(source_feed)
-                if is_admin(user, settings):
-                    kpi_source["results"] = runtime_settled_results(
-                        source_feed, raw_statuses
-                    )
-                    kpi_source = apply_result_exclusions(
-                        kpi_source, excluded_result_ids
-                    )
-                else:
-                    kpi_source["results"] = data.get("results") or []
-                if not exclusions_available:
-                    kpi_source["results"] = []
-                data["dashboard_kpi_cards"] = selected_dashboard_cards(
-                    kpi_source, runtime_ui
+            # Results-only exits after the complete authorization/settlement
+            # boundary, before unrelated dashboard/KPI/storage work.
+            if results_only:
+                return data
+            # Results-based dashboard scalars must observe exactly the same
+            # category, position and per-account grants as the Results table.
+            # ADMIN retains the unrestricted global operational KPI universe.
+            kpi_source = dict(source_feed)
+            if is_admin(user, settings):
+                kpi_source["results"] = runtime_settled_results(
+                    source_feed, raw_statuses
                 )
-                trace_stage("kpi_cards")
-                kpi_finalized = True
-                # Response-only schedule corrections for published offer cards.
-                data = apply_verified_schedule_overlay(
-                    data, status_snapshot.get("schedule_updates"),
+                kpi_source = apply_result_exclusions(
+                    kpi_source, excluded_result_ids
                 )
-                data["match_status_updated_at"] = status_snapshot.get("updated_at")
+            else:
+                kpi_source["results"] = data.get("results") or []
+            if not exclusions_available:
+                kpi_source["results"] = []
+            data["dashboard_kpi_cards"] = selected_dashboard_cards(
+                kpi_source, runtime_ui
+            )
+            trace_stage("kpi_cards")
+            kpi_finalized = True
+            # Response-only schedule corrections for published offer cards.
+            data = apply_verified_schedule_overlay(
+                data, status_snapshot.get("schedule_updates"),
+            )
+            data["match_status_updated_at"] = status_snapshot.get("updated_at")
         except AdminStorageUnavailable:
             # Preserve the exact pre-settlement, membership-filtered KPI source
             # if a required Results overlay failed before final KPI computation.
