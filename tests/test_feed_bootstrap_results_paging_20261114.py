@@ -139,3 +139,56 @@ def test_recent_results_scope_does_not_bypass_member_auth(monkeypatch):
                         lambda req: {"id": "user-1", "email_verified": False})
     assert api.results_page(request(window_days="30")) == {"error": "email_not_verified"}
     assert api.results_page(request(window_days="31")) == {"error": "invalid_results_page"}
+
+
+
+def test_results_only_matches_full_authorized_ledger_without_auxiliary_reads(monkeypatch):
+    """Per-page Results must never recompute dashboard KPI or query UI-only storage."""
+    computed = _stub_authenticated_feed(monkeypatch)
+    complete = api.feed(request())
+    assert computed == [("settled",)]
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Unrelated dashboard work ran on results-only request")
+
+    for name in (
+        "selected_dashboard_cards", "list_project_groups",
+        "apply_verified_schedule_overlay", "attach_offer_clv",
+        "entitlement_manifest",
+    ):
+        monkeypatch.setattr(api, name, forbidden)
+
+    recent = api.results_page(request(window_days="30", page="0", limit="500"))
+    all_time = api.results_page(request(page="0", limit="500"))
+    assert recent["results"] == []  # Fake settled row has no timestamp.
+    assert all_time["results"] == complete["results"]
+    assert computed == [("settled",)]  # Only the normal /v1/feed computed KPI.
+    assert recent["snapshot"] == all_time["snapshot"]
+    assert not recent["has_more"]
+    assert "global" not in str(all_time)
+
+
+def test_results_only_admin_does_not_repeat_global_runtime_settlement(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    monkeypatch.setattr(api, "is_admin", lambda *_args: True)
+    count = []
+    def settle(_feed, _statuses, **_kwargs):
+        count.append(_kwargs)
+        return [{"event_id": "settled"}]
+    monkeypatch.setattr(api, "runtime_settled_results", settle)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Admin-only KPI or tier presentation was evaluated")
+    monkeypatch.setattr(api, "entitlement_manifest", forbidden)
+    monkeypatch.setattr(api, "selected_dashboard_cards", forbidden)
+    page = api.results_page(request(page="0", limit="500"))
+    assert page["results"] == [{"event_id": "settled"}]
+    assert len(count) == 1 and count[0].get("already_detached") is True
+
+
+def test_results_only_fail_closed_and_does_not_fallback_to_dashboard_kpi(monkeypatch):
+    calls = _stub_authenticated_feed(monkeypatch, fail_at="before_final")
+    page = api.results_page(request(page="0", limit="500"))
+    assert calls == []
+    assert page["results"] == [{"event_id": "authorized"}]
+    assert page["snapshot"] == api._authorized_results_revision(page["results"])
