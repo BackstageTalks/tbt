@@ -23,7 +23,7 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
-from tbt.data.history_safety import sanitize_history_identities
+from tbt.data.history_safety import select_exact_provider_quarantine
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.offline_odds import legacy_name_matches, norm_surface, norm_text, tournament_score
 from tbt.models.feature_builder import FeatureBuilder
@@ -135,7 +135,7 @@ def _rate(numerator: object, denominator: object) -> float | None:
     return n / d
 
 
-def _player_stats(prefix: str, row: dict[str, str]) -> dict[str, float] | None:
+def _player_stats(prefix: str, row: dict[str, str], *, include_break_points: bool = False) -> dict[str, float] | None:
     aces = _num(row.get(f"{prefix}_aces"))
     dfs = _num(row.get(f"{prefix}_double_faults"))
     if (
@@ -161,7 +161,7 @@ def _player_stats(prefix: str, row: dict[str, str]) -> dict[str, float] | None:
     )
     if any(value is None for value in (first, second, service, ret)):
         return None
-    return {
+    stats = {
         "aces": float(aces),
         "double_faults": float(dfs),
         "first_serve_win": float(first),
@@ -169,6 +169,50 @@ def _player_stats(prefix: str, row: dict[str, str]) -> dict[str, float] | None:
         "service_points_won": float(service),
         "return_points_won": float(ret),
     }
+    if include_break_points:
+        # Zero opportunities are missing data, NOT a zero-percent rate.
+        for key, numerator, denominator in (
+            ("break_point_serve_win", f"{prefix}_break_points_saved",
+             f"{prefix}_break_points_serve_total"),
+            ("break_point_return_win", f"{prefix}_break_points_converted",
+             f"{prefix}_break_points_return_total"),
+        ):
+            value = _rate(row.get(numerator), row.get(denominator))
+            if value is not None:
+                stats[key] = float(value)
+    return stats
+
+
+def _reciprocal_stats_valid(row: dict[str, str]) -> bool:
+    """Require both sides' service, return and BP event totals to reconcile."""
+    fields = (
+        "winner_service_points_won", "winner_service_points_total",
+        "winner_return_points_won", "winner_return_points_total",
+        "loser_service_points_won", "loser_service_points_total",
+        "loser_return_points_won", "loser_return_points_total",
+        "winner_break_points_saved", "winner_break_points_serve_total",
+        "winner_break_points_converted", "winner_break_points_return_total",
+        "loser_break_points_saved", "loser_break_points_serve_total",
+        "loser_break_points_converted", "loser_break_points_return_total",
+    )
+    values = {k: _num(row.get(k)) for k in fields}
+    if any(v is None or v < 0 or not v.is_integer() for v in values.values()):
+        return False
+    v = values
+    return all((
+        v["winner_service_points_total"] == v["loser_return_points_total"],
+        v["loser_service_points_total"] == v["winner_return_points_total"],
+        v["winner_return_points_won"] ==
+        v["loser_service_points_total"] - v["loser_service_points_won"],
+        v["loser_return_points_won"] ==
+        v["winner_service_points_total"] - v["winner_service_points_won"],
+        v["winner_break_points_serve_total"] == v["loser_break_points_return_total"],
+        v["loser_break_points_serve_total"] == v["winner_break_points_return_total"],
+        v["winner_break_points_saved"] + v["loser_break_points_converted"] ==
+        v["winner_break_points_serve_total"],
+        v["loser_break_points_saved"] + v["winner_break_points_converted"] ==
+        v["loser_break_points_serve_total"],
+    ))
 
 
 def _url_key(value: object) -> tuple[str, str, str] | None:
@@ -225,6 +269,8 @@ def _load_sources(
     counts: Counter,
     min_year: int,
     max_year: int,
+    *, include_break_points: bool = False,
+    require_reciprocal_consistency: bool = False,
 ) -> list[SourceMatch]:
     tournaments: dict[str, dict[str, str]] = {}
     for path in tournament_paths:
@@ -271,10 +317,13 @@ def _load_sources(
                 counts["invalid_tournament_window"] += 1
                 continue
 
-            winner_stats = _player_stats("winner", row)
-            loser_stats = _player_stats("loser", row)
+            winner_stats = _player_stats("winner", row, include_break_points=include_break_points)
+            loser_stats = _player_stats("loser", row, include_break_points=include_break_points)
             if winner_stats is None or loser_stats is None:
                 counts["incomplete_quality_stats"] += 1
+                continue
+            if require_reciprocal_consistency and not _reciprocal_stats_valid(row):
+                counts["inconsistent_reciprocal_stats"] += 1
                 continue
 
             tournament_id = str(score.get("tourney_year_id") or "").strip().lower()
@@ -414,6 +463,9 @@ def main() -> None:
     ap.add_argument("--stats-csv", action="append", required=True)
     ap.add_argument("--min-year", type=int, default=2019)
     ap.add_argument("--max-year", type=int, default=2022)
+    ap.add_argument("--include-break-points", action="store_true")
+    ap.add_argument("--require-reciprocal-consistency", action="store_true")
+    ap.add_argument("--expected-provider-quarantine", type=int, default=0)
     ap.add_argument("--out-dir", required=True)
     args = ap.parse_args()
 
@@ -422,9 +474,11 @@ def main() -> None:
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    matches, safety = sanitize_history_identities(load_partitions(args.history_dir))
-    if safety.get("quarantined_rows"):
-        raise SystemExit("Canonical history has identity quarantine; refusing ATP archive linking")
+    matches, safety, protected_ids = select_exact_provider_quarantine(
+        load_partitions(args.history_dir),
+        expected_rows=args.expected_provider_quarantine,
+        preserve_quarantined=False,
+    )
 
     counts = Counter()
     sources = _load_sources(
@@ -434,6 +488,8 @@ def main() -> None:
         counts,
         args.min_year,
         args.max_year,
+        include_break_points=args.include_break_points,
+        require_reciprocal_consistency=args.require_reciprocal_consistency,
     )
 
     by_pair = defaultdict(list)
@@ -580,6 +636,9 @@ def main() -> None:
         "production_mutated": False,
         "api_requests": 0,
         "source_policy": f"serve-and-volley pinned archive {args.min_year}-{args.max_year}",
+        "protected_provider_quarantine": len(protected_ids),
+        "strict_reciprocal_stats": args.require_reciprocal_consistency,
+        "includes_break_point_rates": args.include_break_points,
         "link_policy": "pair+tournament_window+winner+surface+round+tournament",
     }
     (out / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
