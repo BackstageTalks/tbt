@@ -285,6 +285,13 @@ def predict(
         if return_context:
             return empty, {"builder": builder, "cutoff": cutoff, "replay_history": replay_history}
         return empty
+    if rank_feature_source == "point_in_time_weekly":
+        # A FeatureBuilder snapshot contains zero placeholders for unloaded
+        # archives. Never mistake those placeholders for a verified source
+        # when a model explicitly promises point-in-time ranking evidence.
+        if ((atp_rank_history is None and any(m.tour.lower() == "atp" for m in future))
+                or (wta_rank_history is None and any(m.tour.lower() == "wta" for m in future))):
+            raise ValueError("Missing frozen weekly rank source for calibrated candidate")
     persisted_feature_names = getattr(model, "feature_names", None)
     feature_names = list(
         persisted_feature_names
