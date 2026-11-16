@@ -218,13 +218,16 @@ def fetch(url):
     return html
 
 
-def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch):
+def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch,
+            allow_same_day=False):
     injected_clock = now is not None
     now = now or datetime.now(timezone.utc)
     start = datetime.combine(target_day, time(6), TZ).astimezone(timezone.utc)
     end = datetime.combine(target_day + timedelta(days=1), time(6), TZ).astimezone(timezone.utc)
-    if now >= start:
-        raise ValueError('evening capture must occur before next betting day')
+    if now >= end:
+        raise ValueError('target betting day has already ended')
+    if now >= start and not allow_same_day:
+        raise ValueError('same-day research requires explicit opt-in')
     directory = Links()
     directory.feed(get(INDEX))
     # The main tennis index may expose just one tournament, e.g. Stockholm.
@@ -258,6 +261,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
               }),
               'probed_urls': len(urls), 'events_in_target_window': [],
               'out_of_target_window_events': 0,
+              'already_started_target_events': 0,
               'market_labels_observed_sample': [],
               'prematch_aces_market_diagnostics': [],
               # Full pre-start market evidence is archived even when the
@@ -324,8 +328,12 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
                     report['observed_prematch_priced_pairs'] += n
                     if not in_target:
                         report['observed_priced_pairs_outside_target'] += n
-            if in_target:
+            # Same-day research must NEVER expose an already started event
+            # to the guarded morning quote consumer, even if it has prices.
+            if in_target and event_start > observed_at:
                 report['events_in_target_window'].append(parsed)
+            elif in_target:
+                report['already_started_target_events'] += 1
             else:
                 report['out_of_target_window_events'] += 1
         except (OSError, ValueError, RuntimeError) as exc:
@@ -341,7 +349,7 @@ def collect(target_day, *, max_events=20, sleep_seconds=0.8, now=None, get=fetch
 
 
 
-def collect_rendered(target_day, *, max_events=20):
+def collect_rendered(target_day, *, max_events=20, allow_same_day=False):
     """Render publicly available Fortuna match cards using a normal browser.
 
     Fortuna's bare HTTP 200 is a client-side shell without match detail links;
@@ -423,7 +431,8 @@ def collect_rendered(target_day, *, max_events=20):
                     raise RuntimeError("oversized rendered HTML")
                 return html
 
-            return collect(target_day, max_events=max_events, get=rendered)
+            return collect(target_day, max_events=max_events, get=rendered,
+                           allow_same_day=allow_same_day)
         finally:
             browser.close()
 
@@ -433,17 +442,21 @@ def main():
     parser.add_argument('--target-day', type=date.fromisoformat,
                         default=(datetime.now(TZ) + timedelta(days=1)).date())
     parser.add_argument('--max-events', type=int, default=60)
+    parser.add_argument('--allow-same-day', action='store_true',
+                        help='Opt-in pre-start research after 06:00 local; no retrospective quotes')
     parser.add_argument('--out', default='reports/skcz-evening/fortuna.json')
     args = parser.parse_args()
     if not 1 <= args.max_events <= 60:
         parser.error('max-events must be 1..60')
-    report = collect_rendered(args.target_day, max_events=args.max_events)
+    report = collect_rendered(args.target_day, max_events=args.max_events,
+                              allow_same_day=args.allow_same_day)
     dest = Path(args.out)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + '\n')
     print(json.dumps({k: report[k] for k in ('status', 'target_betting_day', 'probed_urls',
                'candidate_tournaments', 'probed_tournaments',
-               'exact_aces_pairs', 'aces_market_groups', 'cdb_writes')}, sort_keys=True))
+               'exact_aces_pairs', 'aces_market_groups',
+               'already_started_target_events', 'cdb_writes')}, sort_keys=True))
     if report['status'] == 'source_unavailable':
         raise SystemExit(2)
 
