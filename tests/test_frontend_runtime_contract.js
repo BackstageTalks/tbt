@@ -194,7 +194,7 @@ assert.equal(keep({...baseNext,entitlements:{results:false}}),false,
 assert.equal(keep({...baseNext,results_archive_unavailable:true}),false,
   'unavailable archive must not reuse stale results');
 assert.equal(keep(baseNext,'2026-11-18'),false,
-  'new betting day must restart today's Results scope');
+  "new betting day must restart today's Results scope");
 hydrationContext.resultsPreloadFlight=null;
 assert.equal(keep(),false,'completed work should not suppress future speculative retries');
 hydrationContext.todayResultsFlight=Promise.resolve();
