@@ -17,6 +17,11 @@ on:
         required: false
         type: number
         default: 60
+      allow_same_day:
+        description: "Research only: capture still-upcoming matches on target betting day after 06:00"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -34,7 +39,8 @@ jobs:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DATA_REPO: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       MAX_EVENTS: ${{ inputs.max_events || 60 }}
-      INPUT_TARGET_DAY: ${{ inputs.target_day || '' }}
+      INPUT_TARGET_DAY: ${{ github.event.client_payload.target_day || inputs.target_day || '' }}
+      INPUT_ALLOW_SAME_DAY: ${{ github.event.client_payload.allow_same_day || inputs.allow_same_day || false }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,9 +83,12 @@ jobs:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
           set -euo pipefail
-          python scripts/skcz_evening_fortuna.py \
-            --target-day "$BETTING_DAY" --max-events "$MAX_EVENTS" \
-            --out reports/skcz-evening/fortuna.json
+          args=(--target-day "$BETTING_DAY" --max-events "$MAX_EVENTS"
+                --out reports/skcz-evening/fortuna.json)
+          if [[ "${INPUT_ALLOW_SAME_DAY,,}" == "true" ]]; then
+            args+=(--allow-same-day)
+          fi
+          python scripts/skcz_evening_fortuna.py "${args[@]}"
       - name: Validate audit and create-only store in separate private research path
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
