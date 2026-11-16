@@ -1,0 +1,67 @@
+"""Offline regression checks: no providers, model training, or database writes."""
+import unittest
+from audit_top_721_funnel import analyze_archive, analyze_snapshot
+
+
+def row(*, p=0.72, priced=False, surface=8, depth=0.90,
+        reasons=(), start="2026-11-16T14:00:00Z", section=None):
+    return {
+        "scheduled_at": start, "competition": "ATP",
+        "blinq_probability": p, "data_depth": depth, "priced": priced,
+        "samples": {"player1_surface_matches": surface,
+                    "player2_surface_matches": surface},
+        "top_rejection_reasons": list(reasons), "selected_section": section,
+    }
+
+
+def archive(*rows):
+    return {"schema": 1, "snapshots": [
+        {"generated_at": "2026-11-16T05:01:00Z", "rows": list(rows)},
+        {"generated_at": "2026-11-16T07:00:00Z", "rows": list(rows)},
+    ]}
+
+
+class TestReadonlyFunnel(unittest.TestCase):
+    def test_unpriced_is_not_counted_as_issued_or_top_qualified(self):
+        data = archive(row(), row(priced=True, reasons=("insufficient_evidence",)),
+                       row(priced=True, reasons=(), section="top_daily"))
+        result = analyze_archive(data, "2026-11-16")["first_snapshot"]
+        at65 = result["confidence_floor_funnel"]["65"]
+        self.assertEqual(at65["model_probability_at_least"], 3)
+        self.assertEqual(at65["unpriced_after_depth_and_surface"], 1)
+        self.assertEqual(at65["passes_recorded_top_gates"], 1)
+        self.assertEqual(result["selected_sections"]["top_daily"], 1)
+        self.assertEqual(result["top_rejection_reasons_nonexclusive"]["insufficient_evidence"], 1)
+
+    def test_timezone_boundary_and_wrong_day_rejected(self):
+        result = analyze_snapshot({"rows": [
+            row(), row(start="2026-11-17T12:00:00Z"),
+            row(start="2026-11-16T03:30:00Z"),
+            row(start="invalid"), row(start="2026-11-16T05:30:00Z"),
+        ]}, "2026-11-16")
+        self.assertEqual(result["today_singles"], 2)
+
+    def test_poor_evidence_is_not_eligible_even_when_confident(self):
+        result = analyze_snapshot({"rows": [
+            row(p=.82, surface=1), row(p=.82, depth=.2, priced=True),
+            row(p=.649, priced=True),
+        ]}, "2026-11-16")
+        self.assertEqual(result["confidence_floor_funnel"]["65"]["also_top_depth_and_surface"], 0)
+        self.assertEqual(result["selected_sections"]["unselected"], 3)
+
+    def test_no_valid_publication_time_fails_closed(self):
+        with self.assertRaises(ValueError):
+            analyze_archive({"snapshots": [
+                {"generated_at": "2026-11-16T04:59:00Z", "rows": [row()]},
+            ]}, "2026-11-16")
+
+    def test_earliest_and_latest_snapshots_stay_separate(self):
+        data = archive(row())
+        data["snapshots"][1]["rows"].append(row())
+        report = analyze_archive(data, "2026-11-16")
+        self.assertEqual(report["first_snapshot"]["today_singles"], 1)
+        self.assertEqual(report["last_snapshot"]["today_singles"], 2)
+
+
+if __name__ == "__main__":
+    unittest.main()
