@@ -3845,14 +3845,21 @@
     const d=new Date(Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3])+Number(days||0)));
     return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
   }
+  // The Results filters call these repeatedly while scanning the same ledger.
+  // Keep formatters stable; both use the original Bratislava timezone/options.
+  const bratislavaBoundaryFormatter=new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+  });
+  const bratislavaBettingDayFormatter=new Intl.DateTimeFormat('en-GB',{
+    timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',hourCycle:'h23'
+  });
   function bratislavaBoundaryTimestamp(value,hour=6){
     const match=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value||'').trim());
     if(!match)return NaN;
     const target=Date.UTC(Number(match[1]),Number(match[2])-1,Number(match[3]),Number(hour)||0,0,0,0);
-    const formatter=new Intl.DateTimeFormat('en-GB',{
-      timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit',
-      hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
-    });
+    const formatter=bratislavaBoundaryFormatter;
     let guess=target;
     for(let pass=0;pass<3;pass++){
       const parts=Object.fromEntries(formatter.formatToParts(new Date(guess)).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
@@ -3866,10 +3873,7 @@
   function bratislavaBettingDayKey(value=Date.now(),hour=6){
     const date=value instanceof Date?value:new Date(value);
     if(Number.isNaN(date.getTime()))return '';
-    const formatter=new Intl.DateTimeFormat('en-GB',{
-      timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit',
-      hour:'2-digit',hourCycle:'h23'
-    });
+    const formatter=bratislavaBettingDayFormatter;
     const parts=Object.fromEntries(formatter.formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
     let key=`${parts.year}-${parts.month}-${parts.day}`;
     if(Number(parts.hour)<Number(hour||0))key=dateOnlyAddDays(key,-1);
@@ -3928,7 +3932,7 @@
     });
     return keys;
   }
-  function resultPublicationMatchesWindow(row,publication,filters,now=Date.now(),todayKeys=null){
+  function resultPublicationMatchesWindow(row,publication,filters,now=Date.now(),todayKeys=null,recentBounds=null){
     const window=String(filters?.window||'all');
     if(window==='today'&&filters?.bettingDay===false){
       const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
@@ -3963,8 +3967,8 @@
     const windowDays=Number(window);
     if(Number.isFinite(windowDays)&&windowDays>0&&filters?.bettingDay!==false){
       const day=bratislavaBettingDayKey(now,6);
-      const from=bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1-Math.ceil(windowDays)),6);
-      const until=bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1),6);
+      const from=recentBounds?recentBounds[0]:bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1-Math.ceil(windowDays)),6);
+      const until=recentBounds?recentBounds[1]:bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1),6);
       return Number.isFinite(ts)&&ts>=from&&ts<until;
     }
     return !(Number.isFinite(windowDays)&&windowDays>0)
@@ -3974,6 +3978,14 @@
     const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
     const category=normalizedResultsCategory(filters.category||'all');
     const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
+    // Resolve the identical 06:00-to-06:00 range once per filter pass,
+    // not once per result/publication (especially the default 30 days).
+    const windowDays=Number(filters?.window);
+    const recentBounds=Number.isFinite(windowDays)&&windowDays>0&&filters?.bettingDay!==false
+      ?(()=>{const day=bratislavaBettingDayKey(now,6);
+        return [bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1-Math.ceil(windowDays)),6),
+          bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1),6)];})()
+      :null;
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
       // "All surfaces" really means all settled published rows. Unknown/missing
@@ -3981,7 +3993,7 @@
       if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}
       const pubs=publicResultPublications(row)
         .filter(authorizedResultPublication)
-        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
+        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now,todayKeys,recentBounds))
         .filter(p=>publicationOutcome(p).kind!=='pending');
       if(!pubs.length)return false;
       return category==='all'||pubs.some(p=>publicationMatchesResultCategory(p,category));
