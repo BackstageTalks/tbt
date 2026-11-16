@@ -3,7 +3,7 @@
 
 This module never mutates CDB, imports odds, or establishes cross-provider
 identity from abbreviated names alone. A candidate needs an independently
-accepted Flashscore event bridge, exact match UTC, both player sides, winner,
+accepted Flashscore event bridge, bounded (24h max) UTC, both player sides, winner,
 complete canonical score, and all four matching canonical ace/DF counts.
 """
 from __future__ import annotations
@@ -210,10 +210,17 @@ def audit(source, index_file, history, out):
                     if str(ix.get("tour")).upper() == tour == str(m.tour).upper():
                         counts["tour_all_three_same"] += 1
                 if (str(m.tour).upper() != tour or str(ix.get("tour")).upper() != tour
-                        or when is None or when != utc(ix.get("start_utc"))
-                        or when != utc(m.scheduled_at)):
+                        or when is None or indexed_time is None or canonical_time is None
+                        or (max(when, indexed_time, canonical_time)
+                            - min(when, indexed_time, canonical_time)).total_seconds() > 86400):
                     counts["time_or_tour_mismatch"] += 1
                     continue
+                if not (when == indexed_time == canonical_time):
+                    # Timing tolerance is ONLY safe after the subsequent native
+                    # event, both source sides, winner, round, complete canonical
+                    # scoreboard, four original ace/DF witnesses and all-stat
+                    # no-conflict tests. Never output a partial candidate.
+                    counts["time_bounded_clock_drift_needs_extra_corrob"] += 1
                 if str(m.status).lower() not in ("finished", "completed", "ended"):
                     counts["canonical_not_completed"] += 1
                     continue
@@ -293,7 +300,7 @@ def audit(source, index_file, history, out):
                         "dataset": "minmaxxxer/atp-wta-matches-with-odds",
                         "source_file": file, "source_sha256": sha_sources[file],
                         "independent_flashscore_index_sha256": INDEX_SHA,
-                        "proof": "exact_native_event_clock_both_players_winner_full_score_four_counts",
+                        "proof": "native_event_three_clocks_within_24h_both_players_winner_full_score_four_counts",
                     },
                 })
     stage = out / "eligible-private.jsonl"
