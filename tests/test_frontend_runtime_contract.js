@@ -114,6 +114,8 @@ const autoCode=app.slice(app.indexOf('  async function loadFeed('),
   app.indexOf('  async function refreshWorkspace('));
 assert.ok(autoCode.indexOf('if(skipUnchanged&&lastFeedVisualSignature===feedSignature')>=0,
   'unchanged live feed must bypass the UI rebuild');
+assert.ok(app.includes('skipUnchanged:skipUnchanged&&prior===uiVisualSignature()'),
+  'unchanged published config must not force a dashboard rebuild');
 assert.ok(autoCode.indexOf('if(skipUnchanged&&lastFeedVisualSignature===feedSignature') <
   autoCode.indexOf('cancelResultsPreload();'),
   'unchanged live feed must leave the staged Results loader running');
