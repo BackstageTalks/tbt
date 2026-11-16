@@ -9636,8 +9636,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
-  let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='', todayResultsDay='', recentResultsDay='';
+  let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, resultsPreloadEpoch=0, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='', todayResultsDay='', recentResultsDay='';
   function cancelResultsPreload(){
+    resultsPreloadEpoch++; // Also cancel already-running staged background pipelines.
     if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
     resultsPreloadTimer=null;
     if(resultsPreloadAfterLoad!==null)window.removeEventListener('load',resultsPreloadAfterLoad);
@@ -9692,8 +9693,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     return f.window==='custom'&&f.dateFrom===day
       &&(f.dateTo||f.dateFrom)===day;
   }
-  async function preloadResultsStages(generation){
-    const active=()=>generation===feedGeneration&&!$('appShell')?.hidden
+  async function preloadResultsStages(generation,epoch){
+    const active=()=>epoch===resultsPreloadEpoch&&generation===feedGeneration&&!$('appShell')?.hidden
       &&resultsAccessAllowed()&&state.feed?.results_boot_partial;
     if(!active())return;
     // Predictions and dashboard are already visible before this runs.
@@ -9711,6 +9712,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function scheduleResultsPreload(generation){
     cancelResultsPreload();
+    const epoch=resultsPreloadEpoch;
     // Preserve fast authenticated dashboard: start only after page load,
     // with five seconds of breathing room for its first useful paint.
     if(generation!==feedGeneration||!state.feed?.results_boot_partial
@@ -9723,7 +9725,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         resultsPreloadTimer=null;
         if(generation!==feedGeneration||$('appShell')?.hidden
            ||!state.feed?.results_boot_partial||!resultsAccessAllowed())return;
-        preloadResultsStages(generation).catch(error=>{
+        preloadResultsStages(generation,epoch).catch(error=>{
           console.warn('[BlinQ Results] background hydration failed.',error);
         });
       },5000);
