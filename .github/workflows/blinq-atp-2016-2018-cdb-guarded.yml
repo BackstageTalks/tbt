@@ -70,10 +70,10 @@ jobs:
           75c06a344a39b53645b237941f5b17c7d4a136c920633a34ba94f8549ee86bd0  csv/3_match_stats/match_stats_2016.csv
           9716c5caf02c92f678ecaa1b589aad31599aebb11077ff5a8c5ca09627139968  csv/3_match_stats/match_stats_2017.csv
           886757b4bc0a1cdd9f82e20a488029adba471a1772e75a54f9afe2455b362d5c  csv/3_match_stats/match_stats_2018.csv
-          4760be22960e4e157db40627077425e80a7ac23d0b68318545f69d9352f5dc11  csv/3_match_stats/match_stats_2019.csv
-          74c588e3d3567c375a5424e21fd7c2ec41ba9c851c627257a5d8e159743a8  csv/3_match_stats/match_stats_2020.csv
-          d7d3fda1c8ff21a62307db7910dbc8e4fb8240a1184c04840dd16db05191a822  csv/3_match_stats/match_stats_2021.csv
-          49608dabfb76f1c349eb8f9c34f96b5db621a214312ded9c766c5d0696e74bea  csv/3_match_stats/match_stats_2022.csv
+          d59dbec207a2d289f2a90de43d14f5c0a35c75a1b628dca831b9ed24a39df789  csv/3_match_stats/match_stats_2019.csv
+          b4dbad8d0bbe16ec457d4f2a123afbd091cc5eeb3faaec1bd23f7384b62fb952  csv/3_match_stats/match_stats_2020.csv
+          0db0782d48e6cc880127c686b58d287a9041f853fbdd96d9a23481944bb92b53  csv/3_match_stats/match_stats_2021.csv
+          c7098f76a704da7738ae5147f8c0f99817ef8bc972ca9634a0886a6c118964d4  csv/3_match_stats/match_stats_2022.csv
           SHA256
           echo ATP_PINNED_BYTES_VERIFIED
       - name: Check writer lock before obtaining canonical snapshot
