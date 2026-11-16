@@ -1,5 +1,5 @@
 """Contract for opt-in bootstrap and complete, member-authorized Results pages."""
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from types import SimpleNamespace
 
 import function_app as api
@@ -111,3 +111,31 @@ def test_empty_authorized_bootstrap_has_empty_revision(monkeypatch):
     feed = api.feed(request(blinq_feed_view="bootstrap"))
     assert feed["results_boot_partial"] is False
     assert feed["results_snapshot"] == api._authorized_results_revision([])
+
+
+def test_recent_results_scope_only_transfers_30_betting_days(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    fresh = {"event_id": "recent", "scheduled_at": (datetime.now(timezone.utc)-timedelta(days=2)).isoformat()}
+    old = {"event_id": "old", "scheduled_at": (datetime.now(timezone.utc)-timedelta(days=50)).isoformat()}
+    monkeypatch.setattr(api, "runtime_settled_results", lambda *_args, **_kwargs: [fresh, old])
+    full = api.results_page(request(page="0", limit="500"))
+    recent = api.results_page(request(page="0", limit="500", window_days="30"))
+    bootstrap = api.feed(request(blinq_feed_view="bootstrap"))
+    assert full["results"] == [fresh, old]
+    assert recent["results"] == [fresh]
+    assert recent["scope_days"] == 30
+    assert recent["total"] == 1
+    assert recent["snapshot"] == full["snapshot"] == bootstrap["results_snapshot"]
+    assert api.results_page(request(page="0", limit="500", window_days="30", snapshot="stale")) == {
+        "error": "results_snapshot_changed"
+    }
+
+
+def test_recent_results_scope_does_not_bypass_member_auth(monkeypatch):
+    _stub_authenticated_feed(monkeypatch)
+    monkeypatch.setattr(api, "_verified_user", lambda req: None)
+    assert api.results_page(request(window_days="30")) == {"error": "unauthorized"}
+    monkeypatch.setattr(api, "_verified_user",
+                        lambda req: {"id": "user-1", "email_verified": False})
+    assert api.results_page(request(window_days="30")) == {"error": "email_not_verified"}
+    assert api.results_page(request(window_days="31")) == {"error": "invalid_results_page"}
