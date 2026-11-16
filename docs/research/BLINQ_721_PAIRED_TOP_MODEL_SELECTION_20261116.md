@@ -29,3 +29,14 @@ Product goal: ideally at least three high-quality TOP winner picks per day, **no
 - Measure uncertainty by betting day, identical fixtures, real publication eligibility and later prospective shadow TOP issuance. Decide champion switch only when measurable gain and rollback requirements are met.
 
 **Decision:** keep production champion; opt-in weighted fit and paired evaluator remain research-only until price-qualified improvement is demonstrated and independently reproduced.
+
+## Execution evidence — current state
+
+- Protected research fit was **dispatched and entered `frozen-candidate`** on run [43872914492](https://github.com/BackstageTalks/tbt/actions/runs/43872914492), exact pinned code SHA `1d57e7d0793f89dbc2efc2064f7a965cb5e3457d`. `await-cdb-idle` completed successfully; last independently checked active stage was `Freeze ALL current source inputs and independently restore champion`. Do not claim backup restore, completed fitting, new scores, or a successful candidate release before the exact run proves them.
+- The branch-specific training push trigger was removed immediately after the one-shot run started. Normal protected workflow policy is main-only or explicit manual dispatch; the public release remains unchanged.
+- Read-only exact-price linkage is implemented in `scripts/prepare_paired_top_quotes.py`. It chooses the **first** snapshot generated at or after 06:00 local betting-day time, matches only unique provider event ID + exact unordered player IDs + tour, checks the original and actual scheduled timestamps within 45 minutes, validates two real winner quotes and source/capture times, and handles swapped side orientation. It never joins from names or after observing winners. Duplicate or uncertain records are discarded.
+- `.github/workflows/blinq-private-paired-top-replay.yml` is prepared to read the exact verified private candidate release and the pinned October/November private selector assets, run regression tests and upload **aggregate-only** evidence. No quote-matched numbers may be claimed before that separate workflow completes.
+- PR [#1652](https://github.com/BackstageTalks/tbt/pull/1652) remains **draft**, protecting main and production from unvalidated model changes. Previous evaluation-layer CI passed on [run 43869755090](https://github.com/BackstageTalks/tbt/actions/runs/43869755090); that does not prove the latest quote matcher/weighting tests or future training.
+- Provider API requests for this research are intended to be **zero** and are disabled in the protected workflow. This is not a CDB import or new public offer, and no Telegram messages are sent.
+
+**Decision remains unchanged:** candidate is research-only; keep production champion, no forced TOP count or odds floor change. New price-qualified accuracy/ranking and prospective issued-TOP evidence are still required.
