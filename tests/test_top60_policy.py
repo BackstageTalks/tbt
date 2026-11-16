@@ -23,8 +23,48 @@ def test_top60_global_sports_order_cap_and_odds_independence():
             for i, p in enumerate((.61, .62, .63, .64, .64))]
     rows[3]['competition'] = 'Challenger'
     out = select_market_sections(rows)
-    assert [r['event_id'] for r in out['top_daily_picks']] == ['3', '4', '2']
-    assert [r['event_id'] for r in _daily_rows(out)] == ['3', '4', '2']
+    assert [r['event_id'] for r in out['top_daily_picks']] == ['4', '2', '1', '0', '3']
+    assert [r['event_id'] for r in _daily_rows(out)] == ['4', '2', '1', '0', '3']
     changed = deepcopy(rows)
     changed[0]['betting']['odds'] = 1.75
-    assert [r['event_id'] for r in select_market_sections(changed)['top_daily_picks']] == ['3', '4', '2']
+    assert [r['event_id'] for r in select_market_sections(changed)['top_daily_picks']] == ['4', '2', '1', '0', '3']
+
+
+def test_tiered_five_honors_atp_wta_then_challenger_then_verified_itf():
+    from test_top_priority_policy import verified_w35, pick
+    rows = [
+        verified_w35("itf", .99),
+        pick("challenger", .94, "Challenger"),
+        pick("wta", .60, "WTA"),
+        pick("atp", .61, "ATP"),
+        pick("extra", .62, "ATP"),
+        pick("last", .63, "Challenger"),
+    ]
+    before = deepcopy(rows)
+    out = select_market_sections(rows)
+    expected = ["extra", "atp", "wta", "challenger", "last"]
+    assert [r["event_id"] for r in out["top_daily_picks"]] == expected
+    assert [r["event_id"] for r in _daily_rows(out)] == expected
+    assert out["market_selection"]["top_daily_rule"]["limit"] == 5
+    assert out["market_selection"]["top_daily_rule"]["daily_minimum_target"] == 3
+    assert out["market_selection"]["top_daily_rule"]["no_forced_fill"] is True
+    assert rows == before
+
+
+def test_low_itf_m15_w15_remain_protected_pending_evidence():
+    from test_top_priority_policy import pick
+    m15 = pick("m15", .99, "ITF Men")
+    m15["tournament"] = "ITF M15 Monastir"
+    w15 = pick("w15", .99, "ITF Women")
+    w15["tournament"] = "ITF W15 Monastir"
+    for row in (m15, w15):
+        row["quality"]["feature_evidence"] = {
+            "serve_return_known_both": True,
+            "surface_serve_return_known_both": True,
+        }
+    out = select_market_sections([m15, w15])
+    assert out["top_daily_picks"] == []
+    assert out["market_selection"]["top_daily_rule"]["competition_priority"] == [
+        ["ATP", "WTA"], ["Challenger"], ["ITF"]
+    ]
+    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
