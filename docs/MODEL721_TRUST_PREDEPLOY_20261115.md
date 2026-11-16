@@ -73,3 +73,28 @@ update requests the existing explicit Azure UI/API deployment workflow;
 it must pass the workflow's stamped SHA and exact live-asset hash read-back.
 No model training, promotion, PROMO change, provider calls or CDB writes
 are authorized by this deployment note.
+
+## Verified quote-identity coverage fix #1644 — 2026-11-16
+
+Merge `a56a96dfb770f36acc30c907dabc384adfee8c06` only improves
+full-pair surname-first initial matching with ±45-minute time validation,
+unique event identities and fail-closed ambiguity. It preserves the 7.2.1
+production model, untouched probabilities, TOP >=65%, min actual odds 1.50,
+ITF/identity/evidence guards, other markets, CDB and PROMO. Its focused
+tests, PR-wide backend/browser checks (run 43828556737) and morning safety
+check (run 43828556788) succeeded. A fresh production watchdog (run
+43829830191) independently detected the stale Azure serving copy of
+`api/tbt/services/propline_live.py`; live deployment of the merged fix is
+therefore still required.
+
+Today's immutable morning refresh report (run 43802991954, generated
+2026-11-16 UTC) contains 786 upcoming matches, 1 TOP, 0 VALUE. The primary
+match-winner odds cache returned no quotes for 82 candidates. The separate
+PropLine read-only audit logged 438 events on board, 263 matches and 253
+valid two-way Match Winner quotes. These are distinct populations and cannot
+be added. Improved odds coverage does not establish new TOP picks or better
+sports prediction accuracy; future production read-back must measure gain.
+
+**Deployment gate:** request existing Azure UI/API release with exact SHA
+and live hash check; source-only note triggers no provider calls, training,
+model promotion, CDB writes, TOP-rule change, UI redesign or offer rebuild.
