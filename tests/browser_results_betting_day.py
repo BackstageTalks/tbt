@@ -198,6 +198,31 @@ def main():
               };
             }""")
             assert ranges=={'before':False,'start':True,'end':False,'rolling':True,'aligned':False,'threeStart':True,'threeBefore':False,'winterBefore':False,'winterStart':True},ranges
+            # The optimized 30-day bulk filter must match the independent
+            # per-publication Bratislava boundary calculation.
+            recent_parity=page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const originalResults=s.feed.results,originalFilters=s.resultsFilters;
+                const now=Date.now(),sample=originalResults[0];
+                const days=[0,1,6,15,28,29,30,31,60,90];
+                const rows=days.map(n=>({...structuredClone(sample),
+                    event_id:'day-'+n,
+                    scheduled_at:new Date(now-n*86400000).toISOString()
+                }));
+                try{
+                    s.feed.results=rows;
+                    s.resultsFilters={...originalFilters,category:'all',tour:'',surface:'',
+                      window:'30',dateFrom:'',dateTo:'',bettingDay:true};
+                    const actual=t.filteredResults().map(r=>r.event_id);
+                    const expected=rows.filter(r=>t.resultPublicationMatchesWindow(
+                      r,r.market_publications[0],s.resultsFilters,now))
+                      .map(r=>r.event_id);
+                    return {actual,expected};
+                }finally{s.feed.results=originalResults;s.resultsFilters=originalFilters;}
+            }""")
+            assert recent_parity["actual"]==recent_parity["expected"],recent_parity
+            assert 0<len(recent_parity["actual"])<10,recent_parity
+
             # An empty Today selection must not silently display all time.
             empty_today=page.evaluate("""() => {
                 const t=bettingDayTest,s=t.state;
