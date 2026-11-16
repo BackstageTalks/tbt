@@ -164,4 +164,48 @@ assert.ok(autoCode.indexOf('if(skipUnchanged&&lastFeedVisualSignature===feedSign
   assert.equal(calls.length,4,'reconnection must trigger one catch-up sync');
 })().catch(error=>{console.error(error);process.exitCode=1;});
 
+// Changing only predictions must not cancel a matching authorized Results
+// download. Check the runtime predicate itself with independent snapshots.
+const hydrationContext={
+  state:{feed:{
+    account:{id:'member-a'},entitlements:{results:true},
+    results_boot_partial:true,results_snapshot:'ledger-42'
+  }},
+  lastFeedBettingDay:'2026-11-17',
+  resultsPreloadTimer:null,resultsPreloadAfterLoad:null,
+  resultsPreloadFlight:Promise.resolve(),todayResultsFlight:null,
+  recentResultsFlight:null,fullResultsFlight:null,
+};
+vm.createContext(hydrationContext);
+vm.runInContext(frontendHelper('canKeepResultsPreloadOnFeedUpdate'),hydrationContext);
+const baseNext={
+  account:{id:'member-a'},entitlements:{results:true},
+  results_boot_partial:true,results_snapshot:'ledger-42'
+};
+const keep=(next=baseNext,day='2026-11-17')=>
+  hydrationContext.canKeepResultsPreloadOnFeedUpdate(next,day);
+assert.equal(keep(),true,'matching in-flight Results must survive a prediction update');
+assert.equal(keep({...baseNext,results_snapshot:'ledger-43'}),false,
+  'new authorized snapshot must invalidate the old Results read');
+assert.equal(keep({...baseNext,account:{id:'member-b'}}),false,
+  'cross-account Results work must be discarded');
+assert.equal(keep({...baseNext,entitlements:{results:false}}),false,
+  'revoked Results entitlement must invalidate in-flight reads');
+assert.equal(keep({...baseNext,results_archive_unavailable:true}),false,
+  'unavailable archive must not reuse stale results');
+assert.equal(keep(baseNext,'2026-11-18'),false,
+  "new betting day must restart today's Results scope");
+hydrationContext.resultsPreloadFlight=null;
+assert.equal(keep(),false,'completed work should not suppress future speculative retries');
+hydrationContext.todayResultsFlight=Promise.resolve();
+assert.equal(keep(),true,'an active Today request must remain single-flight');
+const feedRead=app.slice(app.indexOf('  async function loadFeed('),
+  app.indexOf('  function uiVisualSignature('));
+assert.ok(feedRead.includes('const keepResultsWork=skipUnchanged&&canKeepResultsPreloadOnFeedUpdate(feed,day)'),
+  'automatic feed updates must use authorized snapshot matching');
+assert.ok(feedRead.includes('if(!keepResultsWork)cancelResultsPreload();'),
+  'do not cancel matching background archive stages');
+assert.ok(feedRead.includes('if(!keepResultsWork)scheduleResultsPreload(generation);'),
+  'do not reschedule the same staged background pipeline');
+
 console.log(`frontend runtime contract: PASS (736-r${p})`);

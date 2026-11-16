@@ -46,7 +46,9 @@ def main():
                 source = source.replace("  boot();", """
   window.lazyResultsTest={state,setRoute,loadRecentResults,loadCompleteResults,renderDashboardKpis,
     scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration),
-    reuseHydratedResultsOnRefresh};
+    reuseHydratedResultsOnRefresh,loadFeed,
+    setResultDay:()=>{lastFeedBettingDay=bratislavaBettingDayKey(Date.now(),6);},
+    hasStagedFlight:()=>Boolean(resultsPreloadFlight)};
   boot();""")
                 route.fulfill(content_type="application/javascript", body=source)
                 return
@@ -93,6 +95,7 @@ def main():
                     account:{id:'fixture-user',email:'user@example.test',plan:'admin',role:'admin',is_admin:true,status:'active'},
                     entitlements:{results:true,result_categories:['top_daily']},
                     upcoming:[],results:[row],results_boot_partial:true,
+                    results_snapshot:'fixture-snapshot',
                     dashboard_kpi_cards:[],performance:{},model:{}
                   };
                   document.getElementById('appShell').hidden=false;
@@ -135,6 +138,27 @@ def main():
                   overflow: document.documentElement.scrollWidth-window.innerWidth
                 })""")
                 assert hydrated["rows"] == ["today"], (width, hydrated)
+                # Exercise the live refresh before the synthetic revoked-feed
+                # probe below clears stored snapshot identities.
+                if width == 390:
+                    # A prediction-only live refresh must preserve the running
+                    # Today -> 30d -> Full archive stage, not restart at 5s.
+                    resumed = page.evaluate("""async () => {
+                      const t=window.lazyResultsTest, auth=window.BlinqAuth;
+                      t.setResultDay();
+                      const activeBefore=t.hasStagedFlight();
+                      const source=t.state.feed;
+                      const next={...source,upcoming:[{event_id:'fresh-prediction'}],
+                        results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot',
+                        results_today_ready:false,results_recent_ready:false};
+                      const original=auth.feed;
+                      auth.feed=async()=>next;
+                      try{await t.loadFeed(false,{skipUnchanged:true});}
+                      finally{auth.feed=original;}
+                      return {activeBefore,activeAfter:t.hasStagedFlight(),
+                        todayReady:t.state.feed.results_today_ready};
+                    }""")
+                    assert resumed == {"activeBefore": True, "activeAfter": True, "todayReady": True}, resumed
                 # A fresh authorized bootstrap with the same ledger reuses
                 # hydrated rows; revocation or changed revision fails closed.
                 reuse = page.evaluate("""() => {
