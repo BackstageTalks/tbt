@@ -118,7 +118,7 @@ def paired_day_bootstrap(production, candidate, repetitions=1000):
             ]}
 
 
-def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
+def evaluate(holdout, quotes, *, confidence_floor=.60, min_depth=.8,
              min_surface_matches=5):
     if (holdout.get("schema") != 1 or
             holdout.get("historical_prices_included") is not False or
@@ -247,6 +247,50 @@ def evaluate(holdout, quotes, *, confidence_floor=.65, min_depth=.8,
         "counts": totals, "comparison": result,
         "paired_common_qualifiers": paired_day_bootstrap(
             considered["production"], considered["candidate"]),
+    }
+
+
+
+def compare_confidence_floors(holdout, quotes, *, lower=.60, higher=.65):
+    """Compare predeclared 60% vs 65% sports gates on the SAME priced rows.
+
+    Historical odds >=1.50 remain a separate, later eligibility check.
+    Neither the odds nor any model correctness is used to rank candidates.
+    Additional outcomes are observed research diagnostics, not a sports
+    model fitting objective and not an approval to lower the live TOP gate.
+    """
+    if not (.5 <= lower < higher < 1.):
+        raise ValueError("Expected two ordered sports confidence floors")
+    primary = evaluate(holdout, quotes, confidence_floor=lower)
+    reference = evaluate(holdout, quotes, confidence_floor=higher)
+    increments = {}
+    for model in ("production", "candidate"):
+        lo = primary["comparison"][model]
+        hi = reference["comparison"][model]
+        extra = lo["all_qualified"]["n"] - hi["all_qualified"]["n"]
+        wins = lo["all_qualified"]["wins"] - hi["all_qualified"]["wins"]
+        top3_extra = lo["top_3"]["n"] - hi["top_3"]["n"]
+        top3_wins = lo["top_3"]["wins"] - hi["top_3"]["wins"]
+        if not (0 <= wins <= extra and 0 <= top3_wins <= top3_extra):
+            raise ValueError("Lower sports threshold did not yield monotonic picks")
+        increments[model] = {
+            "new_price_qualified_picks": extra,
+            "correct_among_new": wins,
+            "accuracy_among_new": wins / extra if extra else None,
+            "new_top3_daily_slots": top3_extra,
+            "correct_among_new_top3_slots": top3_wins,
+            "days_with_3plus_delta": lo["days_with_3plus"] - hi["days_with_3plus"],
+            "days_with_3plus_at_60": lo["days_with_3plus"],
+            "days_with_3plus_at_65": hi["days_with_3plus"],
+        }
+    return {
+        "primary": primary, "reference_65": reference,
+        "increment_from_65_to_60": {
+            "lower_sports_floor": lower, "reference_sports_floor": higher,
+            "verified_minimum_odds_unchanged": 1.5,
+            "predeclared_evidence_not_betting_ev": True,
+            "by_model": increments,
+        },
     }
 
 
