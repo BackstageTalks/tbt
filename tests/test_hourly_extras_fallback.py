@@ -120,6 +120,13 @@ def test_rejects_late_dispatch_and_provider_reset(now):
     assert result["max_requests"] == 0
 
 
+def test_initial_provider_day_is_reserved_for_primary_statistics():
+    early = datetime(2026, 11, 15, 20, 0, tzinfo=timezone.utc)
+    result = select(now=early)
+    assert result["allowed"] is False
+    assert result["reason"] == "reserve_early_provider_day_for_primary_statistics"
+
+
 def test_rejects_stale_or_naive_utc_cutoff():
     assert select(cutoff=CUTOFF - timedelta(days=1))["reason"] == (
         "cutoff_not_current_provider_day"
