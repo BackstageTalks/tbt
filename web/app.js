@@ -9989,10 +9989,16 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       scheduleResultsPreload(generation);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
-  async function refreshWorkspace(showLoading=false){
+  function uiVisualSignature(){
+    return JSON.stringify([state.ui,state.presentationConfig,state.uiPublishedRevision,
+      state.uiStorageAvailable,state.uiRuntimeNotice]);
+  }
+  async function refreshWorkspace(showLoading=false,{skipUnchanged=false}={}){
+    const prior=skipUnchanged?uiVisualSignature():null;
     try{await loadUiConfig();}
     catch(error){console.warn('[BlinQ UI] runtime UI refresh failed; keeping last known UI config.',error);}
-    return loadFeed(showLoading);
+    // Published CMS/config can change independently of the prediction feed.
+    return loadFeed(showLoading,{skipUnchanged:skipUnchanged&&prior===uiVisualSignature()});
   }
 
   function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
@@ -10104,7 +10110,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // checking prediction/results changes every two minutes without a full UI rebuild.
       const withUi=now-lastUiRefresh>=5*60*1000;
       if(withUi)lastUiRefresh=now;
-      const operation=withUi?refreshWorkspace(false):loadFeed(false,{skipUnchanged:true});
+      const operation=withUi?refreshWorkspace(false,{skipUnchanged:true}):loadFeed(false,{skipUnchanged:true});
       Promise.resolve(operation).catch(()=>{}).finally(()=>{refreshing=false;});
     };
     const privateRefresh=()=>{if(!document.hidden&&navigator.onLine&&!$('appShell')?.hidden)refreshPrivateUpdates(false).catch(()=>{});};
