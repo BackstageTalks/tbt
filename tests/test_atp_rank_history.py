@@ -70,6 +70,44 @@ def test_sqlite_loader_and_candidate_governance(tmp_path):
     assert not {"atp_hist_best_rank_log", "atp_hist_worst_rank_log"} & set(enabled_names)
 
 
+
+def test_same_normalized_name_different_source_ids_is_quarantined(tmp_path):
+    players = tmp_path / "players.csv"
+    players.write_text(
+        "player_id,name_first,name_last\n"
+        "1,Same,Name\n"
+        "2,Beta,Two\n"
+        "3,Same,Name\n")
+    ranks = tmp_path / "rankings.csv"
+    ranks.write_text(
+        "ranking_date,rank,player,points\n"
+        "20241230,2500,1,7\n"
+        "20241230,90,2,900\n"
+        "20241230,50,3,3000\n")
+    archive = ATPRankHistory.from_sackmann(players, [ranks])
+    assert "same name" in archive._ambiguous_names
+    fixture = SimpleNamespace(
+        tour="atp", scheduled_at=datetime(2025, 1, 2, 12, tzinfo=timezone.utc),
+        player1_name="Same Name", player2_name="Beta Two")
+    # Never let a player's low-rank history masquerade as a namesake #50.
+    features = archive.features_for_match(fixture)
+    assert features["atp_hist_known_both"] == 0.
+    assert features["atp_hist_best_rank_log"] == 0.
+
+
+def test_conflicting_same_week_name_rank_is_quarantined_without_id():
+    day = datetime(2024, 12, 30).date()
+    archive = ATPRankHistory([
+        {"date": day, "rank": 2500, "name": "Same Name", "points": 7},
+        {"date": day, "rank": 50, "name": "Same Name", "points": 3000},
+        {"date": day, "rank": 90, "name": "Beta Two", "points": 900},
+    ])
+    fixture = SimpleNamespace(
+        tour="atp", scheduled_at=datetime(2025, 1, 2, 12, tzinfo=timezone.utc),
+        player1_name="Same Name", player2_name="Beta Two")
+    assert archive.features_for_match(fixture)["atp_hist_known_both"] == 0.
+    assert "same name" in archive._ambiguous_names
+
 def test_sackmann_csv_loader(tmp_path):
     players = tmp_path / "atp_players.csv"
     players.write_text(
