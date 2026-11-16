@@ -202,6 +202,10 @@ def picked_player_rank_band(row, selection_id, publication=None):
 
 def picked_player_rank_2000_band(row, selection_id, publication=None):
     """Strictly original-issued selected-player rank, not a refreshed profile."""
+    if publication is not None and issued_snapshot(publication) is None:
+        # Unlike legacy descriptive rank buckets, this new reliability cohort
+        # is never populated from a mutable current player profile.
+        return "rank_unknown"
     players = ranking_players(row, publication)
     selected = next((p for p in players if isinstance(p, dict) and
                      str(p.get("id")) == selection_id), None)
