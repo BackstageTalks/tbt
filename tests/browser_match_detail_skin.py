@@ -112,8 +112,32 @@ def main():
                     with page.expect_popup() as popup_info:
                         page.locator("[data-match-popout]").click()
                     popup = popup_info.value
-                    popup.wait_for_load_state("domcontentloaded")
-                    popup.wait_for_function("document.styleSheets.length >= 2")
+                    # window.open('', name) starts at about:blank. An
+                    # immediate stylesheet count can inspect that initial
+                    # document instead of the document.write() pop-out.
+                    popup.locator(".match-detail-tabs button.active").wait_for(
+                        state="visible", timeout=12000
+                    )
+                    try:
+                        popup.wait_for_function(
+                            """() => {
+                              const el=document.querySelector('.match-detail-tabs button.active');
+                              return el && getComputedStyle(el,'::after').height==='1px';
+                            }""",
+                            timeout=12000,
+                        )
+                    except Exception:
+                        diagnostic = popup.evaluate("""() => ({
+                          hrefs:Array.from(document.querySelectorAll('link[rel=stylesheet]'),
+                            el=>el.href),
+                          sheets:document.styleSheets.length,
+                          body:document.body?.innerHTML.slice(0,300),
+                          state:document.readyState,
+                          runner:getComputedStyle(
+                            document.querySelector('.match-detail-tabs button.active'),
+                            '::after').height
+                        })""")
+                        raise AssertionError(("popout detail CSS not loaded", diagnostic))
                     popout_runner = popup.locator(".match-detail-tabs button.active").evaluate(
                         '(el)=>getComputedStyle(el,"::after").height'
                     )
