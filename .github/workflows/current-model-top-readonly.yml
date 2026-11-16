@@ -6,6 +6,7 @@ on:
     paths:
       - 'scripts/audit_current_model_top.py'
       - 'scripts/audit_top_reliability.py'
+      - 'scripts/issued_calibration_reliability.py'
       - 'scripts/audit_production_predictions.py'
   workflow_dispatch:
 
@@ -47,7 +48,7 @@ jobs:
       - name: Install offline read-only analysis
         run: python -m pip install -r api/requirements-train.txt pytest
       - name: Verify exact issuance and model-version tests
-        run: python -m pytest -q tests/test_top_reliability_audit.py
+        run: python -m pytest -q tests/test_top_reliability_audit.py tests/test_issued_calibration_reliability.py
       - name: Inspect original TOP and VALUE offers for actual production binary
         run: |
           python scripts/audit_current_model_top.py \
