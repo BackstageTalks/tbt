@@ -85,3 +85,4 @@ jobs:
 
 # One-shot owner-authorized 2026-10-22 metadata/date QA replay after PR #953/#955.
 # Existing guarded Drive importer exclusively; source IDs are not CDB identities.
+# Operator replay 2026-11-16: exact 12 TennisData raw CSVs after verified fractional-round normalization; source-only alias map, no paid API.
