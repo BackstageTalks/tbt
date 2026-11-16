@@ -350,7 +350,11 @@ def predict(
     if missing:
         raise ValueError(f"Model artifact requests unavailable features: {missing}")
     inference_frame = pd.DataFrame(features, columns=feature_names)
-    inference_frame['competition'] = [match.tournament_level or 'unknown' for match in future]
+    # Only artifacts with an accepted context map consume original competition
+    # metadata. Legacy estimators and unmodified champions must receive their
+    # exact persisted numeric feature schema (no unexpected extra columns).
+    if getattr(model, 'context_calibrators', None):
+        inference_frame['competition'] = [match.tournament_level or 'unknown' for match in future]
     probabilities = model.predict_proba(inference_frame)
     rows = []
     for match, f, probability in zip(future, features, probabilities):
