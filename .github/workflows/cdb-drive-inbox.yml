@@ -244,14 +244,46 @@ jobs:
           # Explicit single-source TML replay. No other Drive file is loaded
           # and no unrelated checkpoint is reset or touched.
           fetch_limit=100
+          replay_only_args=()
           if [[ "$SOURCE_ALIAS_REQUEST" == "tml-upload-20261116" ]]; then
             test "$REPLAY_DRIVE_IDS" = '1WG00xLC6DaaiCI4U6n6ceqp6vcWRI-aq'
             fetch_limit=1
           fi
+          if [[ "$SOURCE_ALIAS_REQUEST" == "tennisdata-verified-event-aliases-20261116" ]]; then
+            # Restrict the one-shot source replay to the exact reviewed 12 IDs.
+            # Ordinary inbox intake and other operator requests stay unchanged.
+            test "$REPLAY_DRIVE_IDS" = '1LqiYRtVeNgcCUq71em5ILmzbe_rksZj3,1v-hyb3kzyYjA5NYBV_6Rw0pDzIUMpcgK,1OQDvg7Xu16lfV29BWpL7jssBm-f9IzOw,15Uhy3qKzikP4lNsRXpm1fx_gW6B4LM14,1iVCT0ngvXgAfP9gqQvJJ3cMXPi_wBpsX,1Q0CI6YGySNzCUmvw4DmvSLesG6R0u1Ga,1IUsW7OqA4HTE9pmogZyWpuP_U076U7f_,1WWh5NexicqX7oA05YwuWseeJB7E6cE7u,1tgwu-4TCvcew3CwjDT3S6pV15bs8i1A4,1DtYRJsrLX9FBMtROru0qytvfl0xGlI12,1TlrRKXqCv_GIGvATjB-ow82W9LLCeZxA,1tbgeDIEBt251imJJ_dPKtvKfI_Pci7xD'
+            fetch_limit=12
+            replay_only_args=(--replay-only)
+          fi
           python scripts/cdb_inbox_drive.py --folder-id "$INBOX_FOLDER_ID" \
             --output work/input --state-file work/private-state/current.json \
             --next-state work/private-state/next.json --max-files "$fetch_limit" \
-            --replay-ids "$REPLAY_DRIVE_IDS"
+            --replay-ids "$REPLAY_DRIVE_IDS" "${replay_only_args[@]}"
+          if [[ "$SOURCE_ALIAS_REQUEST" == "tennisdata-verified-event-aliases-20261116" ]]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          from tennisdata_source_aliases import load_map
+          manifest=json.loads(Path("work/drive_manifest.json").read_text())
+          aliases=load_map(
+              Path("work/private-source/tennisdata-source-alias-map.json"),
+              "24c721ea73a88e36794630fb47d07249cba560cd1cd2b5d2c3888eda85af250f"
+          )
+          entries=manifest["files"]
+          expected=set(aliases["sha_files"])
+          actual={entry["sha256"] for entry in entries if entry.get("status")=="fetched"}
+          if not (len(entries)==len(actual)==len(expected)==12
+                  and all(item.get("status")=="fetched" for item in entries)
+                  and manifest["explicit_replay_requested"]==12
+                  and manifest["explicit_replay_completed"]==12
+                  and manifest["fetched"]==12
+                  and manifest["duplicate_bytes"]==0
+                  and actual==expected):
+              raise SystemExit("Exact TennisData 12-source SHA replay validation failed")
+          print("TENNISDATA_EXACT_12_SHA_PINNED_SOURCES_VERIFIED")
+          PY
+          fi
           alias_args=()
           if [[ "$SOURCE_ALIAS_REQUEST" == "tml-upload-20261116" ]]; then
             alias_args=(--tml-archive-exact-sha256 77c3aa3fe4cf89b7d850f8155e6cc4dade53fc31b8c89b1917b54a7aeb59aaec)
