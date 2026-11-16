@@ -135,8 +135,14 @@ def _candidate_feature_names(
     wta_rank_history=None,
     wta_season_stats=None,
     atp_surface_opponent_form=False,
+    pit_rank_aligned=False,
 ):
     names = list(PRODUCTION_FEATURE_NAMES)
+    if pit_rank_aligned:
+        # The verified weekly ATP/WTA relative-rank columns are already in the
+        # feature set; including rank_advantage again would count the same
+        # historical rank signal twice, particularly for ITF tail players.
+        names.remove("rank_advantage")
     if atp_surface_opponent_form:
         names.append("atp_surface_opponent_form_diff")
     if atp_leaderboards is not None:
@@ -1169,6 +1175,11 @@ def train_from_matches(
         # archives already replayed before the match for this research model.
         if atp_rank_history is None or wta_rank_history is None:
             raise ValueError("Context candidate requires both historical weekly rank archives")
+        # Keep the original verifier-cleaned MatchRecord ranks ONLY for the
+        # champion baseline, which must be scored under its own frozen feature
+        # contract on these very same fixtures.
+        frame["legacy_rank_advantage"] = frame["rank_advantage"].to_numpy(copy=True)
+        frame["legacy_rank_known_both"] = frame["rank_known_both"].to_numpy(copy=True)
         rank_alignment = _pit_rank_frame_inplace(frame)
 
     # -------------------------------------------------
@@ -1196,6 +1207,7 @@ def train_from_matches(
             atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history, wta_season_stats=wta_season_stats,
             atp_surface_opponent_form=True,
+            pit_rank_aligned=context_flag == "true",
         )
         diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
         require_informative_inputs(diagnostics)
@@ -1210,6 +1222,7 @@ def train_from_matches(
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
                     atp_surface_opponent_form=(training_profile in {"top-7.2.1", "accuracy-7.2.2"}),
+                    pit_rank_aligned=context_flag == "true",
                 ), objective=objective,
             )
             if (
@@ -1326,8 +1339,18 @@ def train_from_matches(
         ),
     }
 
+    production_frame = test
+    champion_rank_source = ((getattr(production_model, "metadata", None) or {})
+                            .get("rank_feature_source") if production_model is not None else None)
+    if production_model is not None and len(test) and context_flag == "true":
+        if champion_rank_source in (None, ""):
+            production_frame = test.copy()
+            production_frame["rank_advantage"] = production_frame["legacy_rank_advantage"]
+            production_frame["rank_known_both"] = production_frame["legacy_rank_known_both"]
+        elif champion_rank_source != "point_in_time_weekly":
+            raise ValueError("Unknown champion rank provenance in paired holdout")
     production_probabilities = (
-        production_model.predict_proba(test)
+        production_model.predict_proba(production_frame)
         if production_model is not None and len(test) else None
     )
     production_metrics = (
@@ -1345,6 +1368,8 @@ def train_from_matches(
     report = {
         "context_calibration_holdout": context_holdout,
         "rank_alignment": rank_alignment,
+        "paired_champion_rank_feature_source": (champion_rank_source or "legacy"),
+        "paired_baseline_rank_features_preserved": context_flag == "true",
         "training_profile": training_profile,
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
