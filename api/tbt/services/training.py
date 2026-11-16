@@ -1363,6 +1363,8 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
+            "smooth_high_confidence_validation": (evaluation_model.metadata or {}).get("smooth_high_confidence_validation"),
+            "calibration_refit_on_selection": (evaluation_model.metadata or {}).get("calibration_refit_on_selection"),
             "accuracy_blend_validation": (evaluation_model.metadata or {}).get("accuracy_blend_validation"),
             "evidence_calibration_methods": dict(
                 (evaluation_model.metadata or {}).get("evidence_calibration_methods") or {}
