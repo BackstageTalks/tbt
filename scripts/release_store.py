@@ -195,22 +195,12 @@ class ReleaseStore:
         return digest.hexdigest()
 
     def _asset_names(self) -> set[str]:
-        payload = json.loads(
-            gh(
-                "release",
-                "view",
-                self.tag,
-                "--repo",
-                self.repository,
-                "--json",
-                "assets",
-            )
-        )
-        return {
-            str(asset.get("name"))
-            for asset in payload.get("assets", [])
-            if asset.get("name")
-        }
+        # gh release view can return a stale "release not found" for a
+        # private existing tag. The same authenticated REST release-ID
+        # inventory below is already used by our guarded asset publisher.
+        # It paginates and fails closed on API errors instead of treating
+        # a transient CLI miss as an empty CDB release.
+        return set(self._release_asset_inventory())
 
     def _download_current_asset_after_stale_404(self, name: str) -> None:
         """Recover when tag-based GitHub release metadata points to a deleted asset.
