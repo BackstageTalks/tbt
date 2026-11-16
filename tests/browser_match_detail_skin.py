@@ -31,8 +31,15 @@ def route_request(route):
 
 
 class StaticWebHandler(SimpleHTTPRequestHandler):
+    requested_paths = []
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(WEB), **kwargs)
+
+    def do_GET(self):
+        if ".css" in self.path:
+            self.requested_paths.append(self.path)
+        super().do_GET()
 
     def log_message(self, *_args):
         pass
@@ -68,6 +75,18 @@ def _run_browser(origin):
                 context.route("**/app.js*", route_request)
                 context.route("**/api/**", static_route)
                 context.route("https://**", lambda route: route.abort())
+                css_events = []
+                context.on("request", lambda req: (
+                    css_events.append(("request", req.url)) if ".css" in req.url else None
+                ))
+                context.on("response", lambda res: (
+                    css_events.append(("response", res.status, res.url))
+                    if ".css" in res.url else None
+                ))
+                context.on("requestfailed", lambda req: (
+                    css_events.append(("failure", req.url, req.failure))
+                    if ".css" in req.url else None
+                ))
                 page = context.new_page()
                 errors = []
                 page.on("pageerror", lambda err: errors.append(str(err)))
@@ -160,7 +179,8 @@ def _run_browser(origin):
                     except Exception:
                         diagnostic = popup.evaluate("""() => ({
                           hrefs:Array.from(document.querySelectorAll('link[rel=stylesheet]'),
-                            el=>el.href),
+                            el=>({href:el.href,loaded:!!el.sheet,
+                                  disabled:el.disabled,rel:el.rel})),
                           sheets:document.styleSheets.length,
                           body:document.body?.innerHTML.slice(0,300),
                           state:document.readyState,
@@ -168,6 +188,13 @@ def _run_browser(origin):
                             document.querySelector('.match-detail-tabs button.active'),
                             '::after').height
                         })""")
+                        diagnostic["css_events"] = css_events[-24:]
+                        diagnostic["server_gets"] = StaticWebHandler.requested_paths[-24:]
+                        diagnostic["popup_url"] = popup.url
+                        if os.getenv("BLINQ_SCREENSHOTS"):
+                            out = Path(os.environ["BLINQ_SCREENSHOTS"])
+                            out.mkdir(parents=True, exist_ok=True)
+                            popup.screenshot(path=str(out / "detail-popup-css-failure-1440.png"))
                         raise AssertionError(("popout detail CSS not loaded", diagnostic))
                     popout_runner = popup.locator(".match-detail-tabs button.active").evaluate(
                         '(el)=>getComputedStyle(el,"::after").height'
