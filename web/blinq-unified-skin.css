@@ -291,3 +291,47 @@ body#blinqPremium.blinq-admin .admin-accounts-simple .admin-activity-panel {
   background:linear-gradient(145deg,rgba(5,33,29,.67),rgba(2,19,21,.76))!important;
   border-color:var(--bq-admin-edge)!important;
 }
+
+/* Admin navigation polish – remove leftover heavy green tiles without
+   weakening actions, section selection or operational warnings. */
+body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-toolbar button {
+  background:rgba(5,29,25,.40)!important;
+  border-color:rgba(113,174,148,.22)!important;
+  border-radius:8px!important;
+  box-shadow:none!important;
+  color:#c2d9cf!important;
+}
+body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-toolbar button:hover:not(:disabled),
+body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-toolbar button[aria-pressed="true"] {
+  background:rgba(14,57,43,.48)!important;
+  border-color:rgba(113,197,159,.43)!important;
+  color:#ebfaf2!important;
+}
+body#blinqPremium.blinq-admin .admin-console-v687 .admin-tabs-v685 .admin-nav-entry>button[data-admin-tab] {
+  background:rgba(5,31,27,.30)!important;
+  border-color:transparent!important;
+  box-shadow:none!important;
+}
+body#blinqPremium.blinq-admin .admin-console-v687 .admin-tabs-v685 .admin-nav-entry>button[data-admin-tab].active {
+  background:rgba(22,74,51,.34)!important;
+  border-color:rgba(106,194,151,.18)!important;
+  box-shadow:none!important;
+}
+body#blinqPremium.blinq-admin .admin-workarea-head .admin-account-direct-note {
+  background:rgba(5,30,25,.22)!important;
+  border-color:rgba(112,185,151,.17)!important;
+  border-radius:8px!important;
+  box-shadow:none!important;
+  color:#a6c2b5!important;
+}
+body#blinqPremium.blinq-admin .admin-workarea-head .admin-account-direct-note>span {
+  width:5px!important;
+  height:5px!important;
+  box-shadow:none!important;
+}
+body#blinqPremium.blinq-admin .admin-accounts-simple .admin-simple-stats>span {
+  background:rgba(5,29,25,.32)!important;
+  border-color:rgba(112,185,151,.19)!important;
+  border-radius:8px!important;
+  box-shadow:none!important;
+}
