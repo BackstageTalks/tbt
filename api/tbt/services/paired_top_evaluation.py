@@ -49,9 +49,12 @@ def make_paired_holdout(
         raise ValueError("No evaluated holdout rows")
     if not frame["match_id"].is_unique:
         raise ValueError("Duplicate match identity in holdout")
+    forbidden = ("odds", "bookmaker", "market_", "implied_probability", "ev_", "roi", "value_bet", "price_")
     for names in (candidate_feature_names, champion_feature_names):
         if not names or len(set(names)) != len(names) or not set(names).issubset(frame.columns):
             raise ValueError("Model feature contract differs from frozen evaluation frame")
+        if any(any(fragment in str(name).lower() for fragment in forbidden) for name in names):
+            raise ValueError("Sports model feature contract contains market-derived data")
     cp = np.asarray(champion_probabilities, dtype=float)
     np_ = np.asarray(candidate_probabilities, dtype=float)
     if cp.shape != (len(frame),) or np_.shape != cp.shape:
@@ -75,6 +78,10 @@ def make_paired_holdout(
             value = float(values[field])
             if not math.isfinite(value) or value < 0:
                 raise ValueError(f"Invalid frozen feature evidence: {field}")
+            if field in {"data_depth", "stats_known_both", "surface_stats_known_both", "rank_known_both"} and value > 1:
+                raise ValueError(f"Out-of-range frozen evidence: {field}")
+            if field in {"stats_known_both", "surface_stats_known_both", "rank_known_both"} and value not in (0., 1.):
+                raise ValueError(f"Nonbinary frozen evidence: {field}")
             feature_evidence[field] = value
         feature_values = {}
         for name in sorted(set(candidate_feature_names) | set(champion_feature_names)):
@@ -96,6 +103,7 @@ def make_paired_holdout(
             "tournament": str(values["tournament"]),
             "surface": str(values["surface"]),
             "feature_vector_sha256": digest,
+            "pre_match_features": feature_values,
             "pre_match_feature_evidence": feature_evidence,
             "production_player1_probability": _finite_probability(cp[idx]),
             "candidate_player1_probability": _finite_probability(np_[idx]),
@@ -110,5 +118,7 @@ def make_paired_holdout(
         "champion_feature_names": list(champion_feature_names),
         "market_inputs": "forbidden_in_sports_score",
         "historical_prices_included": False,
+        "feature_provenance": "FeatureBuilder point-in-time day-batched historical replay",
+        "sample_count_is_not_model_reliability": True,
         "rows": rows,
     }
