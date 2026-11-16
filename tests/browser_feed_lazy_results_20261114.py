@@ -4,6 +4,7 @@ Only deterministic local fixtures, no production credentials or CDB writes.
 """
 import json
 import os
+import time
 from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import sync_playwright
@@ -47,7 +48,7 @@ def main():
                 route.fulfill(content_type="application/javascript", body=source)
                 return
             if path == "/api/v1/results":
-                requests.append(route.request)
+                requests.append((route.request, time.monotonic()))
                 params = parse_qs(urlparse(route.request.url).query)
                 assert params.get("limit") == ["500"], params
                 assert params.get("page") == ["0"], params
@@ -73,6 +74,7 @@ def main():
                 page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
                 page.wait_for_function("window.lazyResultsTest && window.lazyResultsTest.state.ui")
                 assert page.locator("#bootSplash img[src*='blinq-loader.gif']").count() in (0, 1)
+                scheduled_at = time.monotonic()
                 before = page.evaluate("""(row) => {
                   const t=window.lazyResultsTest;
                   localStorage.setItem('blinq_v4_session_epoch','fixture-epoch');
@@ -108,6 +110,9 @@ def main():
                 )
                 assert len(requests) == 1, (width, len(requests))
                 if width == 390:
+                    elapsed = requests[0][1] - scheduled_at
+                    assert elapsed >= 6.8, ("Results preloaded before page-load delay", elapsed)
+                if width == 390:
                     page.evaluate("window.lazyResultsTest.setRoute('results',false)")
                     assert len(requests) == 1, "Opening preloaded Results fetched history again"
                 hydrated = page.evaluate("""() => ({
@@ -140,7 +145,7 @@ def main():
                 context.close()
             finally:
                 browser.close()
-    print("BlinQ 390px background preload + 1440px immediate Results navigation: PASS")
+    print("BlinQ 390px 7s-after-page-load preload + 1440px immediate Results navigation: PASS")
 
 
 if __name__ == "__main__":

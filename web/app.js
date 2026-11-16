@@ -9619,10 +9619,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
-  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='', resultsPreloadTimer=null, completeResultsSnapshot='';
+  let resultsLoadVersion=0, fullResultsFlight=null, fullResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, completeResultsSnapshot='';
   function cancelResultsPreload(){
     if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
     resultsPreloadTimer=null;
+    if(resultsPreloadAfterLoad!==null)window.removeEventListener('load',resultsPreloadAfterLoad);
+    resultsPreloadAfterLoad=null;
   }
   function reuseHydratedResultsOnRefresh(nextFeed){
     // The server fingerprint is computed AFTER all membership, settlement,
@@ -9646,18 +9648,28 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function scheduleResultsPreload(generation){
     cancelResultsPreload();
-    // Preserve fast bootstrap: start authorized history only after the dashboard
-    // has been shown. A direct Results/Stats/Admin route already loads on demand.
+    // Defer large Results until both page resources and the authenticated
+    // dashboard have loaded. Direct Results/Stats/Admin navigation still
+    // starts its existing authorized single-flight loader immediately.
     if(generation!==feedGeneration||!state.feed?.results_boot_partial
        ||!resultsAccessAllowed()||['results','stats','admin'].includes(state.route))return;
-    resultsPreloadTimer=setTimeout(()=>{
-      resultsPreloadTimer=null;
+    const afterPageLoad=()=>{
+      resultsPreloadAfterLoad=null;
       if(generation!==feedGeneration||$('appShell')?.hidden
          ||!state.feed?.results_boot_partial||!resultsAccessAllowed())return;
-      // Reuse the same single-flight pagination and in-memory Results state as
-      // on-demand navigation; do not create a second cache or request path.
-      loadCompleteResults();
-    },5000);
+      resultsPreloadTimer=setTimeout(()=>{
+        resultsPreloadTimer=null;
+        if(generation!==feedGeneration||$('appShell')?.hidden
+           ||!state.feed?.results_boot_partial||!resultsAccessAllowed())return;
+        // Reuse the same pagination and Results state as direct navigation.
+        loadCompleteResults();
+      },7000);
+    };
+    if(document.readyState==='complete')afterPageLoad();
+    else{
+      resultsPreloadAfterLoad=afterPageLoad;
+      window.addEventListener('load',afterPageLoad,{once:true});
+    }
   }
   async function loadCompleteResults() {
     if (!state.feed?.results_boot_partial || !resultsAccessAllowed()) return;
