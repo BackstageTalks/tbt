@@ -32,7 +32,8 @@ jobs:
         (contains(github.event.head_commit.message, '[cdb-import-now]') ||
         contains(github.event.head_commit.message, '[cdb-drive-continue-20261024]') ||
         contains(github.event.head_commit.message, '[cdb-tennisdata-20261116]') ||
-        contains(github.event.head_commit.message, '[cdb-tennisdata-alias-20261116]'))))
+        contains(github.event.head_commit.message, '[cdb-tennisdata-alias-20261116]') ||
+        contains(github.event.head_commit.message, '[cdb-tml-full-archive-20261116]'))))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -48,7 +49,15 @@ jobs:
           # One-shot, only the 12 user-uploaded ATP/WTA 2021-2026 match CSVs.
           # Existing Drive inbox owns all QA, lock, NULL-only CAS and remote readback.
           # Never reset checkpoint or escalate to paid providers.
-          if [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tennisdata-alias-20261116]"* ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tml-full-archive-20261116]"* ]]; then
+            # Exact operator-uploaded private ZIP. The existing CDB Drive
+            # native single-writer still owns dry-run, CAS, backup and readback.
+            gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main \
+              -f request_id=tml-upload-20261116 \
+              -f catchup_remaining=0 \
+              -f replay_drive_ids="1WG00xLC6DaaiCI4U6n6ceqp6vcWRI-aq"
+            echo 'TML_USER_44_SOURCE_ARCHIVE_GUARDED_DISPATCHED_NOT_IMPORT_VERIFIED'
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tennisdata-alias-20261116]"* ]]; then
             # Same twelve raw CSV SHA-pinned inputs, with source-native full
             # player names recovered only from private, independently checked
             # performance-file local IDs. Canonical pair/event checks unchanged.
