@@ -17,7 +17,7 @@ from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surfac
 from ..models.metrics import evaluate_probabilities
 from .prediction_quality import coverage, subgroup_report
 from .data_quality import audit_history
-from .training import _enforce_rank_provenance
+from .training import _enforce_rank_provenance, _pit_rank_snapshot
 from .publication import confirm_publication
 from .countries import normalize_country_code
 
@@ -269,6 +269,9 @@ def predict(
         raise ValueError("Unknown model feature semantics: independent_direct_rates")
     if type(point_weighted_quality) is not bool:
         raise ValueError("Unknown model feature semantics: point_weighted_quality")
+    rank_feature_source = semantics.get("rank_feature_source")
+    if rank_feature_source not in (None, "point_in_time_weekly"):
+        raise ValueError("Unknown model rank feature provenance")
     builder = FeatureBuilder(
         independent_serve_return=independent,
         independent_direct_rates=direct_rates,
@@ -342,6 +345,8 @@ def predict(
             values.update(
                 wta_season_stats.features_for_match(match, current=True)
             )
+        if rank_feature_source == "point_in_time_weekly":
+            _pit_rank_snapshot(values, match.tour)
         features.append(values)
     # Serving is artifact-schema driven. This keeps an already-deployed legacy
     # champion usable while the repository evolves to a richer feature schema;
