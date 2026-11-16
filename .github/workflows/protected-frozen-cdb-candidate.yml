@@ -104,6 +104,7 @@ jobs:
             tests/test_training_inputs.py \
             tests/test_verified_training_frame.py \
             tests/test_calibration_override_guard.py \
+            tests/test_calibration_freshness.py \
             tests/test_721_smooth_confidence_gate.py \
             tests/test_721_evidence_recalibration.py \
             tests/test_candidate_721_tour_calibration.py \

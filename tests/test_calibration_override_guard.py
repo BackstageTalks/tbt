@@ -85,4 +85,3 @@ def test_smooth_fit_never_refits_global_map_on_selection_outcomes(monkeypatch):
     model.fit(train, cal)
     assert lengths and max(lengths) == calibration_split(cal)
     assert model.metadata["calibration_refit_on_selection"] is False
-

@@ -6,6 +6,17 @@ fixtures, accuracy was 69.38% versus champion 69.51%, Brier
 0.195830 versus 0.195656, and log loss 0.573814 versus 0.573626.
 It did not qualify for promotion. No improvement is established.
 
+That report also shows calibration ending 2026-06-10 while the eligible
+holdout begins 2026-10-27. The initial 70/15/15 calendar split was followed
+by an eligibility filter only on the test set; the intervening pre-holdout
+history was never returned to learning. For the smooth candidate, retain
+the exact eligible holdout and split ALL earlier history in the same 70:15
+train/calibration ratio. Boundaries use dates and existing provenance only,
+not outcomes. Use the frozen audit timestamp for current-day exclusion.
+Unknown eligibility does not expand training, and other profiles retain
+their existing splits. Tests prove unchanged holdout membership, absence of
+day overlap, inclusion of recent earlier data, and outcome-independent splits.
+
 The 65% confidence guard applied only to the global mapping. Subsequent
 tour and evidence overrides could improve their overall scores while
 regressing the high-confidence slice. This patch applies that same

@@ -711,6 +711,31 @@ def _eligible_evaluation(test, production_model=None, promotion_history=(), *, a
     return test, None
 
 
+def _candidate_time_partitions(frame, training_profile, production_model=None,
+                               promotion_history=(), *, as_of=None):
+    """Keep the eligible holdout fixed and use all earlier candidate history.
+
+    Filtering the last 15% for champion/promotion cutoffs can move its start
+    forward by months. Leaving the original calibration boundary in place
+    discarded those intervening rows. Partition by dates/provenance only;
+    neither labels nor holdout performance select a boundary.
+    """
+    train, calibration, proposed_test = _split_by_date(frame, .70, .15)
+    test, reason = _eligible_evaluation(
+        proposed_test, production_model, promotion_history, as_of=as_of)
+    if training_profile == "top-7.2.1" and reason is None and not test.empty:
+        first_test_day = pd.to_datetime(test.scheduled_at, utc=True).min().normalize()
+        days = pd.to_datetime(frame.scheduled_at, utc=True).dt.normalize()
+        earlier = frame.loc[days < first_test_day].copy()
+        if len(earlier) > len(train) + len(calibration):
+            # Preserve the original 70:15 train/calibration ratio, now ending
+            # immediately before the SAME eligible holdout. Never reclaim
+            # current/future days or rows from within/after that holdout.
+            train, calibration = _split_serving_refit_by_date(
+                earlier, calibration_fraction=.15 / .85)
+    return train, calibration, test, reason
+
+
 def _augment_feature_columns(
     frame: pd.DataFrame,
     matches: Iterable[MatchRecord],
@@ -1067,21 +1092,20 @@ def train_from_matches(
     frame = _candidate_learning_window(frame, training_profile)
 
     # -------------------------------------------------
-    # Strict out-of-time evaluation
-    # 70% train / 15% calibration / 15% holdout
+    # Strict out-of-time evaluation. The smooth candidate reclaims history
+    # before the final eligible holdout instead of keeping a stale cal cutoff.
     # -------------------------------------------------
 
     (
         train,
         calibration,
         test,
-    ) = _split_by_date(
-        frame,
-        0.70,
-        0.15,
+        eligibility_reason,
+    ) = _candidate_time_partitions(
+        frame, training_profile, production_model, promotion_history,
+        as_of=cutoff,
     )
 
-    test, eligibility_reason = _eligible_evaluation(test, production_model, promotion_history)
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
     diagnostics = None
@@ -1233,7 +1257,11 @@ def train_from_matches(
             "historical_replay_rows": replay_rows,
             "eligible_learning_rows": len(frame),
             "context_only_rows": replay_rows - len(frame),
-            "split_policy": "70/15/15 chronological whole UTC days within learning window",
+            "split_policy": (
+                "fixed eligible holdout; all earlier UTC days split 70:15 train/calibration"
+                if training_profile == "top-7.2.1" else
+                "70/15/15 chronological whole UTC days within learning window"
+            ),
         },
         "optimization_objective": objective,
         "input_diagnostics": diagnostics,
