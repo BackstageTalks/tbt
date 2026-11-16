@@ -118,6 +118,26 @@ def test_legacy_model_has_no_context_layer():
     np.testing.assert_allclose(model._predict_with_tour_calibration(frame, p), p)
 
 
+
+def test_context_calibration_cannot_vanish_during_serving_refit():
+    # Previously fit_frozen() reset context_calibrators={} without warning,
+    # so a subsequently promoted model could silently lose its approved map.
+    from types import SimpleNamespace
+    from tbt.services.training import TrainingResult, refit_serving_model
+    selected = SimpleNamespace(context_calibrators={"main_atp": object()})
+    result = TrainingResult(model=selected, report={}, feature_frame=pd.DataFrame())
+    with pytest.raises(ValueError, match="refusing to discard validated probability maps"):
+        refit_serving_model(result)
+
+
+def test_pit_rank_source_is_not_inferred_from_current_tournament_label():
+    from tbt.services.training import _pit_rank_snapshot
+    # A generic ATP label or present-day rank cannot recover a missing
+    # previous-week source: this would fake evidence at the exact 2500-rank
+    # edge where the user reported bad confidence.
+    with pytest.raises(ValueError, match="Missing frozen weekly"):
+        _pit_rank_snapshot({"tour": "ATP", "player1_rank": 2500}, "atp")
+
 def test_candidate_fit_and_serialization_preserve_inference():
     import pickle
     from test_721_evidence_recalibration import _frames
