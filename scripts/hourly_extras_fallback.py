@@ -49,7 +49,7 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
         return skip("cutoff_not_current_provider_day")
     # The second native importer bootstraps local history from private CDB.
     # Refuse starts too near rollover, never borrow the next provider day.
-    if cutoff - now < timedelta(minutes=12):
+    if cutoff - now <= timedelta(minutes=12):
         return skip("insufficient_time_before_utc_cutoff")
     if (readback.get("status") not in ("VERIFIED", "VERIFIED_NO_NEW_FIELDS")
             or evidence.get("status") not in ("VERIFIED_CDB_GAIN", "VERIFIED_NO_GAIN")
