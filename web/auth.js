@@ -654,12 +654,13 @@
       if (pendingFeed?.promise === operation) pendingFeed = null;
     }
   }
-  async function resultsPage(page = 0, limit = 250, snapshot = '') {
+  async function resultsPage(page = 0, limit = 250, snapshot = '', windowDays = 0) {
     const s = await restore();
     if (!s?.access_token) throw new Error('Sign in again.');
     const sessionEpoch = epoch(), token = s.access_token;
     const params = new URLSearchParams({page:String(page),limit:String(limit)});
     if (snapshot) params.set('snapshot',snapshot);
+    if (windowDays === 30) params.set('window_days','30');
     const result = await json('/api/v1/results?'+params.toString(), {
       timeoutMs:16000, headers:{'X-Blinq-Access-Token':token},
     });
