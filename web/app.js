@@ -9657,7 +9657,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(w==='all'||w==='90'||w==='365')return true;
     if(w==='custom'){
       const from=String(f.dateFrom||'');
-      if(!from)return true;
+      if(!from||f.bettingDay===false)return true;
       return from<dateOnlyAddDays(bratislavaBettingDayKey(Date.now(),6),-29);
     }
     return w==='30'&&f.bettingDay===false;
