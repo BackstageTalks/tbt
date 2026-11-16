@@ -1011,7 +1011,12 @@ def train_from_matches(
     wta_season_stats=None,
     training_profile="standard",
     verified_frame: pd.DataFrame | None = None,
+    sports_weight_profile: str = "none",
 ) -> TrainingResult:
+    if sports_weight_profile not in {"none", "main_tour_2x"}:
+        raise ValueError("Unknown sports-only training experiment")
+    if sports_weight_profile != "none" and training_profile != "top-7.2.1":
+        raise ValueError("Sport weighting is experimental and only valid for top-7.2.1")
     if training_profile not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
         raise ValueError("Unknown training profile")
     # Do not allow future rows to become eligible while the lengthy protected
@@ -1154,11 +1159,15 @@ def train_from_matches(
         training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     )
     evaluation_model.smooth_calibration_only = training_profile == "top-7.2.1"
+    evaluation_model.sports_sample_weight_profile = sports_weight_profile
     evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
     if training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
-        evaluation_model.version = ("v7.2.2-" if training_profile == "accuracy-7.2.2" else "v7.2.1-") + evaluation_model.version
+        model_prefix = ("v7.2.2-" if training_profile == "accuracy-7.2.2"
+                        else "v7.2.1-order2x-" if sports_weight_profile == "main_tour_2x"
+                        else "v7.2.1-")
+        evaluation_model.version = model_prefix + evaluation_model.version
 
     test_p = (
         evaluation_model
@@ -1269,6 +1278,13 @@ def train_from_matches(
         )
     report = {
         "training_profile": training_profile,
+        "sports_weight_experiment": {
+            "profile": sports_weight_profile,
+            "status": "CANDIDATE_ONLY_SPORTS_TRAINING_NO_TOP_GAIN_CLAIM",
+            "competition_only_no_odds": True,
+            "candidate_holdout_is_previously_inspected": True,
+            "no_production_promotion": True,
+        },
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
             "historical_replay_rows": replay_rows,
