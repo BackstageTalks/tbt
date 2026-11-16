@@ -653,6 +653,7 @@ jobs:
         shell: bash
         env:
           FALLBACK_MAX_REQUESTS: ${{ steps.verified_extras_fallback.outputs.max_requests }}
+          BLINQ_RAPIDAPI_MAX_RPS: '6'
         run: |
           set -euo pipefail
           [[ "$FALLBACK_MAX_REQUESTS" =~ ^[0-9]+$ ]] || exit 1
