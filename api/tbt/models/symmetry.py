@@ -20,6 +20,9 @@ INVARIANT_FEATURES = {
     "tournament_level", "best_of_five", "indoor", "tour_atp", "data_depth",
     "atp_leaderboard_known_both", "atp_surface_leaderboard_known_both",
     "wta_season_stats_known_both",
+    # Absolute ranking strength is the same regardless of player orientation.
+    "atp_hist_best_rank_log", "atp_hist_worst_rank_log",
+    "wta_hist_best_rank_log", "wta_hist_worst_rank_log",
     "court_speed_prior", "court_speed_current",
     "court_speed_delta_vs_venue_history", "court_speed_known",
 }
