@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { adminGuideOpen:false,adminLayoutView:'access',adminInsightsView:'messages',adminInfoResultsExpanded:false,adminInfoRetentionDays:0,adminHistoryRetention:null,adminHistoryRetentionLoading:false,adminHistoryRetentionError:'', feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminActivity:null, adminTelemetry:null, adminTelemetryLoading:false, adminTelemetryError:'', adminTelemetryExpanded:false, adminActivityLoading:false, adminActivityError:'', adminActivityExpanded:true, adminActivityView:'tg', adminActivitySearch:'', adminActivityActionBusy:false, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'30',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { adminGuideOpen:false,adminLayoutView:'access',adminInsightsView:'messages',adminInfoResultsExpanded:false,adminInfoRetentionDays:0,adminHistoryRetention:null,adminHistoryRetentionLoading:false,adminHistoryRetentionError:'', feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminActivity:null, adminTelemetry:null, adminTelemetryLoading:false, adminTelemetryError:'', adminTelemetryExpanded:false, adminActivityLoading:false, adminActivityError:'', adminActivityExpanded:true, adminActivityView:'tg', adminActivitySearch:'', adminActivityActionBusy:false, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminCalibration:null, adminCalibrationLoading:false, adminCalibrationError:'', adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -9413,11 +9413,14 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     else if(route==='sg') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Sets / Games'))}</strong><span>${escapeHtml(lcopy('Point-in-time projections from structured historical set/game scores. Sets use long-match probability; Games use projected total versus the ATP/WTA best-of baseline. No odds/ROI are inferred yet.','Point-in-time predikcie zo štruktúrovaných historických skóre setov/hier. Sety používajú pravdepodobnosť dlhého zápasu; hry používajú projektovaný celkový počet oproti ATP/WTA baseline. Kurz/ROI sa zatiaľ neodvodzujú.','Point-in-time predikce ze strukturovaných historických skóre setů/her. Sety používají pravděpodobnost dlouhého zápasu; hry používají projektovaný celkový počet oproti ATP/WTA baseline. Kurz/ROI se zatím neodvozují.'))}</span></div>${detailCards(marketRows('sg'),'sg')}`;
     else if(route==='doubles') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Doubles model'))}</strong><span>${escapeHtml(lcopy('Separate pair/team model only. Pair identity, pair history, individual strength, surface form and pair chemistry stay isolated from singles probabilities.','Iba samostatný model dvojíc/tímov. Identita dvojice, spoločná história, individuálna sila, forma na povrchu a súhra zostávajú oddelené od pravdepodobností dvojhry.','Pouze samostatný model dvojic/týmů. Identita dvojice, společná historie, individuální síla, forma na povrchu a souhra zůstávají oddělené od pravděpodobností dvouhry.'))}</span></div>${detailCards(marketRows('doubles'),'doubles')}`;
     else if(route==='results'){
-      const needsFull=resultsWindowNeedsFullHistory();
-      if(state.feed?.results_boot_partial&&(needsFull||!state.feed?.results_recent_ready)){
-        const error=needsFull?fullResultsError:recentResultsError;
-        body='<div class="state-card">'+escapeHtml(error||(needsFull?'Načítavam úplnú históriu Results…':'Načítavam výsledky za posledných 30 dní…'))+'</div>';
-        if(!error)(needsFull?loadCompleteResults():loadRecentResults());
+      const needsFull=resultsWindowNeedsFullHistory(),needsToday=resultsWindowNeedsTodayOnly();
+      if(state.feed?.results_boot_partial
+         &&(needsFull||(needsToday?!state.feed?.results_today_ready:!state.feed?.results_recent_ready))){
+        const error=needsFull?fullResultsError:(needsToday?todayResultsError:recentResultsError);
+        const loading=needsFull?'Načítavam úplnú históriu Results…':
+          (needsToday?'Načítavam dnešné výsledky…':'Načítavam výsledky za posledných 30 dní…');
+        body='<div class="state-card">'+escapeHtml(error||loading)+'</div>';
+        if(!error)(needsFull?loadCompleteResults():needsToday?loadTodayResults():loadRecentResults());
       }else{
       // An empty Today result is a valid outcome of the selected filters.
       // Never silently switch to All time and show results from other days.
@@ -9593,7 +9596,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   function clearPrivateWorkspaceState(){
     cancelResultsPreload();
-    resultsLoadVersion++;recentResultsNonce++;fullResultsFlight=null;recentResultsFlight=null;fullResultsError='';recentResultsError='';completeResultsSnapshot='';recentResultsSnapshot='';
+    resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';todayResultsSnapshot='';completeResultsSnapshot='';recentResultsSnapshot='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
@@ -9633,7 +9636,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null,bootPrefetchedFeed=null;
-  let resultsLoadVersion=0, fullResultsFlight=null, recentResultsFlight=null, recentResultsNonce=0, fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, completeResultsSnapshot='', recentResultsSnapshot='';
+  let resultsLoadVersion=0, todayResultsFlight=null, fullResultsFlight=null, recentResultsFlight=null, todayResultsNonce=0, recentResultsNonce=0, todayResultsError='', fullResultsError='', recentResultsError='', resultsPreloadTimer=null, resultsPreloadAfterLoad=null, todayResultsSnapshot='', completeResultsSnapshot='', recentResultsSnapshot='';
   function cancelResultsPreload(){
     if(resultsPreloadTimer!==null)clearTimeout(resultsPreloadTimer);
     resultsPreloadTimer=null;
@@ -9641,8 +9644,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     resultsPreloadAfterLoad=null;
   }
   function reuseHydratedResultsOnRefresh(nextFeed){
-    // Revision is computed from the full authorized ledger by the server;
-    // it is comparable for both recent and complete Results responses.
+    // The server snapshot covers the complete *authorized* ledger for every
+    // scope. Reuse only across the same account, entitlement and revision.
     const current=state.feed;
     const a=String(current?.account?.id||current?.account?.email||'').trim().toLowerCase();
     const b=String(nextFeed?.account?.id||nextFeed?.account?.email||'').trim().toLowerCase();
@@ -9654,18 +9657,22 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       &&digest===completeResultsSnapshot);
     const recent=Boolean(allowed&&recentResultsSnapshot&&current?.results_recent_ready===true
       &&digest===recentResultsSnapshot);
-    if(full||recent){
+    const today=Boolean(allowed&&todayResultsSnapshot&&current?.results_today_ready===true
+      &&digest===todayResultsSnapshot);
+    if(full||recent||today){
       nextFeed.results=current.results;
-      nextFeed.results_recent_ready=true;
+      nextFeed.results_today_ready=true;
+      nextFeed.results_recent_ready=full||recent;
       nextFeed.results_boot_partial=!full;
     }else{
+      todayResultsSnapshot='';
       completeResultsSnapshot='';
       recentResultsSnapshot='';
     }
-    return full||recent;
+    return full||recent||today;
   }
   function resultsWindowNeedsFullHistory(){
-    const f=state.resultsFilters||{},w=String(f.window||'30');
+    const f=state.resultsFilters||{},w=String(f.window||'today');
     if(w==='all'||w==='90'||w==='365')return true;
     if(w==='custom'){
       const from=String(f.dateFrom||'');
@@ -9674,14 +9681,37 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     }
     return w==='30'&&f.bettingDay===false;
   }
+  function resultsWindowNeedsTodayOnly(){
+    const f=state.resultsFilters||{};
+    if(f.bettingDay===false)return false;
+    if(String(f.window||'today')==='today')return true;
+    const day=bratislavaBettingDayKey(Date.now(),6);
+    return f.window==='custom'&&f.dateFrom===day
+      &&(f.dateTo||f.dateFrom)===day;
+  }
+  async function preloadResultsStages(generation){
+    const active=()=>generation===feedGeneration&&!$('appShell')?.hidden
+      &&resultsAccessAllowed()&&state.feed?.results_boot_partial;
+    if(!active())return;
+    // Predictions and dashboard are already visible before this runs.
+    await loadTodayResults();
+    if(!active())return;
+    await new Promise(resolve=>setTimeout(resolve,1500));
+    if(!active())return;
+    // Widen coverage in the background; never claim that today's rows
+    // represent 30 days or all-time history.
+    await loadRecentResults();
+    if(!active())return;
+    await new Promise(resolve=>setTimeout(resolve,2500));
+    if(!active())return;
+    await loadCompleteResults(true);
+  }
   function scheduleResultsPreload(generation){
     cancelResultsPreload();
-    // Defer large Results until both page resources and the authenticated
-    // dashboard have loaded. Direct Results/Stats/Admin navigation still
-    // starts its existing authorized single-flight loader immediately.
+    // Preserve fast authenticated dashboard: start only after page load,
+    // with five seconds of breathing room for its first useful paint.
     if(generation!==feedGeneration||!state.feed?.results_boot_partial
-       ||state.feed?.results_recent_ready||!resultsAccessAllowed()
-       ||['results','stats','admin'].includes(state.route))return;
+       ||!resultsAccessAllowed()||['results','stats','admin'].includes(state.route))return;
     const afterPageLoad=()=>{
       resultsPreloadAfterLoad=null;
       if(generation!==feedGeneration||$('appShell')?.hidden
@@ -9689,10 +9719,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       resultsPreloadTimer=setTimeout(()=>{
         resultsPreloadTimer=null;
         if(generation!==feedGeneration||$('appShell')?.hidden
-           ||!state.feed?.results_boot_partial||state.feed?.results_recent_ready
-           ||!resultsAccessAllowed()||['results','stats','admin'].includes(state.route))return;
-        loadRecentResults();
-      },7000);
+           ||!state.feed?.results_boot_partial||!resultsAccessAllowed())return;
+        preloadResultsStages(generation).catch(error=>{
+          console.warn('[BlinQ Results] background hydration failed.',error);
+        });
+      },5000);
     };
     if(document.readyState==='complete')afterPageLoad();
     else{
@@ -9700,10 +9731,62 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       window.addEventListener('load',afterPageLoad,{once:true});
     }
   }
+  async function loadTodayResults(){
+    if(!state.feed?.results_boot_partial||state.feed?.results_today_ready
+       ||!resultsAccessAllowed())return;
+    if(fullResultsFlight)return fullResultsFlight;
+    if(recentResultsFlight)return recentResultsFlight;
+    if(todayResultsFlight)return todayResultsFlight;
+    const version=resultsLoadVersion,generation=feedGeneration,nonce=++todayResultsNonce;
+    const operation=(async()=>{
+      for(let restart=0;restart<2;restart++){
+        const complete=[];let snapshot='',expectedTotal=null;
+        try{
+          for(let page=0;page<10000;page++){
+            if(version!==resultsLoadVersion||generation!==feedGeneration||nonce!==todayResultsNonce)return;
+            const batch=await BlinqAuth.resultsPage(page,500,snapshot,1);
+            if(version!==resultsLoadVersion||generation!==feedGeneration||nonce!==todayResultsNonce)return;
+            if(batch.scope_days!==1||batch.page!==page||batch.limit!==500)
+              throw new Error('Invalid today Results page.');
+            if(expectedTotal===null){expectedTotal=batch.total;snapshot=batch.snapshot;}
+            if(batch.snapshot!==snapshot||batch.total!==expectedTotal)
+              throw new Error('Today Results snapshot changed.');
+            complete.push(...batch.results);
+            if(complete.length>expectedTotal)throw new Error('Today Results page has too many rows.');
+            if(!batch.has_more){
+              if(complete.length!==expectedTotal)throw new Error('Today Results history incomplete.');
+              state.feed.results=complete;
+              normalizeFeedAceOdds(state.feed);
+              state.feed.results_today_ready=true;
+              todayResultsSnapshot=snapshot;
+              todayResultsError='';
+              if(state.route==='results'&&resultsWindowNeedsTodayOnly())renderRoute('results');
+              else if(state.route==='predictions')renderDashboardResultsPreview();
+              return;
+            }
+            if(!batch.results.length)throw new Error('Today Results pagination did not advance.');
+          }
+          throw new Error('Today Results exceeds the page limit.');
+        }catch(error){
+          if(restart===0&&Number(error?.status)===409
+             &&String(error?.code||'')==='results_snapshot_changed')continue;
+          throw error;
+        }
+      }
+    })().catch(error=>{
+      if(version===resultsLoadVersion&&generation===feedGeneration&&nonce===todayResultsNonce){
+        todayResultsError=error?.message||'Today Results unavailable.';
+        if(state.route==='results'&&resultsWindowNeedsTodayOnly())renderRoute('results');
+      }
+    }).finally(()=>{if(todayResultsFlight===operation)todayResultsFlight=null;});
+    todayResultsFlight=operation;
+    return operation;
+  }
   async function loadRecentResults(){
     if(!state.feed?.results_boot_partial||state.feed?.results_recent_ready
        ||!resultsAccessAllowed()||fullResultsFlight)return;
     if(recentResultsFlight)return recentResultsFlight;
+    todayResultsNonce++;todayResultsFlight=null; // Wider scope supersedes today's in-flight view.
     const version=resultsLoadVersion,generation=feedGeneration,nonce=++recentResultsNonce;
     const operation=(async()=>{
       for(let restart=0;restart<2;restart++){
@@ -9725,6 +9808,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               state.feed.results=complete;
               normalizeFeedAceOdds(state.feed);
               state.feed.results_recent_ready=true;
+              state.feed.results_today_ready=true;
+              todayResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
               recentResultsError='';
               if(state.route==='results'&&!resultsWindowNeedsFullHistory())renderRoute('results');
@@ -9749,9 +9834,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     recentResultsFlight=operation;
     return operation;
   }
-  async function loadCompleteResults() {
+  async function loadCompleteResults(background=false) {
     if (!state.feed?.results_boot_partial || !resultsAccessAllowed()) return;
     if (fullResultsFlight) return fullResultsFlight;
+    todayResultsNonce++;todayResultsFlight=null;
     recentResultsNonce++;recentResultsFlight=null; // Full read supersedes partial read.
     const version=resultsLoadVersion, generation=feedGeneration;
     const operation=(async()=>{
@@ -9760,6 +9846,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         let snapshot='', expectedTotal=null;
         try {
           for(let page=0;page<10000;page++){
+            if(version!==resultsLoadVersion||generation!==feedGeneration)return;
+            // Yield between background pages so the visible dashboard stays responsive.
+            if(background&&page>0&&state.route==='predictions')
+              await new Promise(resolve=>setTimeout(resolve,180));
             if(version!==resultsLoadVersion||generation!==feedGeneration)return;
             const batch=await BlinqAuth.resultsPage(page,500,snapshot);
             if(version!==resultsLoadVersion||generation!==feedGeneration)return;
@@ -9776,9 +9866,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               state.feed.results_boot_partial=false;
               completeResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
+              todayResultsSnapshot=snapshot;
               state.feed.results_recent_ready=true;
+              state.feed.results_today_ready=true;
               fullResultsError='';
               if(['results','stats','admin'].includes(state.route))renderRoute(state.route);
+              else if(state.route==='predictions')renderDashboardResultsPreview();
               return;
             }
             if(!batch.results.length)throw new Error('Results pagination did not advance.');
@@ -9828,7 +9921,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
       const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);if(generation!==feedGeneration)return;
       reuseHydratedResultsOnRefresh(feed);
-      resultsLoadVersion++;recentResultsNonce++;fullResultsFlight=null;recentResultsFlight=null;fullResultsError='';recentResultsError='';
+      resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';
       state.feed=normalizeFeedAceOdds(feed); state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       // News/RSS is presentation-only. Never hold an authenticated workspace
       // behind a slow external feed. Render immediately, then refresh the hero
