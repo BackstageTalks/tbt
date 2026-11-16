@@ -3,11 +3,13 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from tbt.data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES, ATPRankHistory
 from tbt.data.wta_rank_history import WTARankHistory
 from tbt.services.engine import predict
+from tbt.services.training import _pit_rank_frame_inplace, _pit_rank_snapshot
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,6 +60,68 @@ def test_rank_enabled_artifact_receives_same_feature_at_serving(match_factory):
     assert len(rows) == 1
     assert rows[0]["model_version"] == "rank-test"
 
+
+
+def test_protected_rank_feature_parity_overrides_unverified_match_ranks():
+    # Existing canonical/current ranks may be zero, stale or today's snapshot.
+    # The candidate must use precisely the earlier weekly archive in all
+    # train/calibration/holdout and live serving frames.
+    frame = pd.DataFrame({
+        "tour_atp": [1., 1., 0., 0.],
+        "atp_hist_known_both": [1., 0., 0., 0.],
+        "atp_hist_rank_advantage": [0.75, 2.1, 0., 0.],
+        "wta_hist_known_both": [0., 0., 1., 0.],
+        "wta_hist_rank_advantage": [0., 0., -0.4, 2.5],
+        "rank_known_both": [0., 1., 1., 1.],
+        "rank_advantage": [-9., -7., 9., 7.],
+    })
+    report = _pit_rank_frame_inplace(frame)
+    assert report["status"] == "PIT_WEEKLY_ALIGNED"
+    assert report["known_both_rows"] == 2
+    np.testing.assert_allclose(frame.rank_known_both, [1., 0., 1., 0.])
+    np.testing.assert_allclose(frame.rank_advantage, [0.75, 0., -0.4, 0.])
+    features = {"atp_hist_known_both": 1., "atp_hist_rank_advantage": 0.75,
+                "rank_known_both": 0., "rank_advantage": -9.}
+    _pit_rank_snapshot(features, "atp")
+    assert features["rank_known_both"] == frame.rank_known_both.iloc[0]
+    assert features["rank_advantage"] == frame.rank_advantage.iloc[0]
+
+
+def test_protected_rank_feature_parity_rejects_absent_or_corrupt_weekly_inputs():
+    with pytest.raises(ValueError, match="Missing frozen weekly"):
+        _pit_rank_snapshot({"rank_advantage": 99.}, "atp")
+    with pytest.raises(ValueError, match="Invalid pre-match"):
+        _pit_rank_snapshot({"atp_hist_known_both": 0.5,
+                            "atp_hist_rank_advantage": 1.}, "atp")
+    missing = pd.DataFrame({"tour_atp": [1.]})
+    with pytest.raises(ValueError, match="Missing point-in-time"):
+        _pit_rank_frame_inplace(missing)
+
+
+def test_protected_rank_feature_parity_is_applied_at_live_inference(match_factory):
+    fixture = match_factory("future-weekly", "A", "B", None, tour="atp", day=3)
+    fixture.player1_rank, fixture.player2_rank = 2500, 40
+    now = fixture.scheduled_at.replace(day=2)
+
+    def predict_probabilities(frame):
+        assert list(frame.columns) == ["rank_advantage", "rank_known_both"]
+        assert float(frame.iloc[0]["rank_known_both"]) == 1.
+        assert float(frame.iloc[0]["rank_advantage"]) == pytest.approx(.75)
+        return np.array([.64])
+
+    model = SimpleNamespace(
+        version="weekly-pit-candidate",
+        metadata={"rank_feature_source": "point_in_time_weekly"},
+        feature_names=["rank_advantage", "rank_known_both"],
+        predict_proba=predict_probabilities,
+    )
+    rows = predict(model, [], [fixture], now, atp_rank_history=_ATPRankSource())
+    assert len(rows) == 1
+    assert rows[0]["confidence"] == pytest.approx(.64)
+    # A metadata-controlled candidate may not silently use refreshed provider
+    # rank fields when its signed weekly source is absent.
+    with pytest.raises(ValueError, match="Missing frozen weekly"):
+        predict(model, [], [fixture], now)
 
 def test_pipeline_wires_rank_history_into_train_backtest_and_serving():
     source = (ROOT / "scripts" / "pipeline.py").read_text(encoding="utf-8")
