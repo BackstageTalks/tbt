@@ -52,7 +52,7 @@ def test_b18_ui_requests_are_bounded_and_parallelized():
 
 def test_b18_news_does_not_block_authenticated_workspace_commit():
     app = _text("web/app.js")
-    feed_block = app.split("async function loadFeed(showLoading=true)", 1)[1].split("async function refreshWorkspace", 1)[0]
+    feed_block = app.split("async function loadFeed(", 1)[1].split("async function refreshWorkspace", 1)[0]
     assert "await loadNewsPool()" not in feed_block
     assert "loadNewsPool().then" in feed_block
     auth = _text("web/auth.js")
