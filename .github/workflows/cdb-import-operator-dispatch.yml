@@ -44,15 +44,15 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = 'BackstageTalks/tbt'
           test "$GITHUB_REF" = 'refs/heads/main'
-      # One-shot, only the 12 user-uploaded ATP/WTA 2021-2026 match CSVs.
-      # Existing Drive inbox owns all QA, lock, NULL-only CAS and remote readback.
-      # Never reset checkpoint or escalate to paid providers.
-      if [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tennisdata-20261116]"* ]]; then
-        gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main \
-          -f catchup_remaining=0 \
-          -f replay_drive_ids="1LqiYRtVeNgcCUq71em5ILmzbe_rksZj3,1v-hyb3kzyYjA5NYBV_6Rw0pDzIUMpcgK,1OQDvg7Xu16lfV29BWpL7jssBm-f9IzOw,15Uhy3qKzikP4lNsRXpm1fx_gW6B4LM14,1iVCT0ngvXgAfP9gqQvJJ3cMXPi_wBpsX,1Q0CI6YGySNzCUmvw4DmvSLesG6R0u1Ga,1IUsW7OqA4HTE9pmogZyWpuP_U076U7f_,1WWh5NexicqX7oA05YwuWseeJB7E6cE7u,1tgwu-4TCvcew3CwjDT3S6pV15bs8i1A4,1DtYRJsrLX9FBMtROru0qytvfl0xGlI12,1TlrRKXqCv_GIGvATjB-ow82W9LLCeZxA,1tbgeDIEBt251imJJ_dPKtvKfI_Pci7xD"
-        echo 'TENNISDATA_12_EXACT_DRIVE_IDS_GUARDED_DISPATCHED_NOT_VERIFIED'
-      elif [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-drive-continue-20261024]"* ]]; then
+          # One-shot, only the 12 user-uploaded ATP/WTA 2021-2026 match CSVs.
+          # Existing Drive inbox owns all QA, lock, NULL-only CAS and remote readback.
+          # Never reset checkpoint or escalate to paid providers.
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-tennisdata-20261116]"* ]]; then
+            gh workflow run cdb-drive-inbox.yml -R "$GITHUB_REPOSITORY" --ref main \
+              -f catchup_remaining=0 \
+              -f replay_drive_ids="1LqiYRtVeNgcCUq71em5ILmzbe_rksZj3,1v-hyb3kzyYjA5NYBV_6Rw0pDzIUMpcgK,1OQDvg7Xu16lfV29BWpL7jssBm-f9IzOw,15Uhy3qKzikP4lNsRXpm1fx_gW6B4LM14,1iVCT0ngvXgAfP9gqQvJJ3cMXPi_wBpsX,1Q0CI6YGySNzCUmvw4DmvSLesG6R0u1Ga,1IUsW7OqA4HTE9pmogZyWpuP_U076U7f_,1WWh5NexicqX7oA05YwuWseeJB7E6cE7u,1tgwu-4TCvcew3CwjDT3S6pV15bs8i1A4,1DtYRJsrLX9FBMtROru0qytvfl0xGlI12,1TlrRKXqCv_GIGvATjB-ow82W9LLCeZxA,1tbgeDIEBt251imJJ_dPKtvKfI_Pci7xD"
+            echo 'TENNISDATA_12_EXACT_DRIVE_IDS_GUARDED_DISPATCHED_NOT_VERIFIED'
+          elif [[ "$GITHUB_EVENT_NAME" == "push" && "$PUSH_MESSAGE" == *"[cdb-drive-continue-20261024]"* ]]; then
             # One-shot fresh checkpointed Drive inventory. Existing guarded
             # importer alone owns source QA, NULL-only CDB write, CAS and readback.
             # No exact-ID replay of four previously rejected source files.
