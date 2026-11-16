@@ -30,7 +30,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy pytest
-          python -m pytest -q tests/test_atpworldtour_stats_linker.py tests/test_atpworldtour_stats_strict.py
+          python -m pytest -q tests/test_atpworldtour_stats_linker.py tests/test_atpworldtour_stats_strict.py tests/test_offline_exact_cdb_write.py tests/test_offline_linked_serve_return_importer.py tests/test_cdb_global_writer_lock.py
 
   source-to-current-CDB:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
