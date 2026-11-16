@@ -156,13 +156,19 @@ def test_width(browser,width):
             active:Boolean(nav?.classList.contains('active')),
             accent:palette.getPropertyValue('--bq-admin-mint').trim(),
             navBg:nav?getComputedStyle(nav).backgroundColor:null,
+            selectedMarker:nav?getComputedStyle(nav.querySelector('.admin-nav-mark')).backgroundColor:null,
             guideColor:getComputedStyle(document.querySelector('.admin-nav-toolbar button')).backgroundColor
           };
         }""",tab)
         assert style["tabCount"]==14,(width,tab,style)
         assert style["heading"] and style["active"],(width,tab,style)
         assert style["accent"]=="#70dab0",(width,tab,style)
-        assert style["navBg"]!="rgba(0, 0, 0, 0)",(width,tab,style)
+        if width<=900:
+            # No original green selected-section card; active marker remains.
+            assert style["navBg"]=="rgba(0, 0, 0, 0)",(width,tab,style)
+            assert style["selectedMarker"]!="rgba(0, 0, 0, 0)",(width,tab,style)
+        else:
+            assert style["navBg"]!="rgba(0, 0, 0, 0)",(width,tab,style)
         assert style["guideColor"]!="rgba(0, 0, 0, 0)",(width,tab,style)
         if screenshots and width in (390,1440) and tab in (
             'accounts','layout','banners','insights','calibration','system'):
