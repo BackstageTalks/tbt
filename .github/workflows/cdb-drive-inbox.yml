@@ -226,7 +226,7 @@ jobs:
           echo '::error::Complete the existing protected staged import before explicit source replay.'
           exit 1
       - name: Download operator SHA-pinned TennisData source aliases (private, source-only)
-        if: env.SOURCE_MODE == 'drive' && inputs.request_id == 'tennisdata-aliases-20261116'
+        if: env.SOURCE_MODE == 'drive' && (inputs.request_id == 'tennisdata-aliases-20261116' || inputs.request_id == 'tennisdata-verified-event-aliases-20261116')
         shell: bash
         run: |
           set -euo pipefail
@@ -256,9 +256,12 @@ jobs:
           if [[ "$SOURCE_ALIAS_REQUEST" == "tml-upload-20261116" ]]; then
             alias_args=(--tml-archive-exact-sha256 77c3aa3fe4cf89b7d850f8155e6cc4dade53fc31b8c89b1917b54a7aeb59aaec)
           fi
-          if [[ "$SOURCE_ALIAS_REQUEST" == "tennisdata-aliases-20261116" ]]; then
+          if [[ "$SOURCE_ALIAS_REQUEST" == "tennisdata-aliases-20261116" || "$SOURCE_ALIAS_REQUEST" == "tennisdata-verified-event-aliases-20261116" ]]; then
             alias_args=(--source-alias-map work/private-source/tennisdata-source-alias-map.json
                         --source-alias-map-sha256 24c721ea73a88e36794630fb47d07249cba560cd1cd2b5d2c3888eda85af250f)
+            if [[ "$SOURCE_ALIAS_REQUEST" == "tennisdata-verified-event-aliases-20261116" ]]; then
+              alias_args+=(--tennisdata-verified-event-aliases)
+            fi
           fi
           python scripts/cdb_inbox_adapter.py --input-dir work/input --out-dir work/source --max-files 100 \
             --drive-manifest work/drive_manifest.json "${alias_args[@]}"
