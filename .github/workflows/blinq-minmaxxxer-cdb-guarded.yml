@@ -1,0 +1,410 @@
+name: BlinQ guarded MinMaxxxer verified NULL-only CDB import
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blinq-minmaxxxer-cdb-guarded.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-minmaxxxer-cdb-guarded
+  cancel-in-progress: false
+
+jobs:
+  guarded-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 65
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_TAG: tbt-data-v1
+      SOURCE_COMMIT: e5c7471f73cb54d06a7ecc2455b7fbb78a0bf77a
+      PYTHONPATH: .:api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Reuse existing strict Flashscore/source stat safety regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy
+          python -m compileall -q scripts/audit_minmaxxxer_cdb_importability.py scripts/link_uploaded_flashscore_verified.py scripts/verify_uploaded_2025_2026_raw_parity.py
+          python -m unittest discover -s tests -p 'test_link_uploaded_flashscore_verified.py' -v
+      - name: Download exactly four source CSVs by immutable public commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${SOURCE_COMMIT}" = e5c7471f73cb54d06a7ecc2455b7fbb78a0bf77a
+          mkdir -p work/source
+          for name in atp_matches_2025.csv wta_matches_2025.csv atp_matches_2026.csv wta_matches_2026.csv; do
+            curl --fail --silent --show-error --location --retry 3 --retry-delay 3 --max-time 120 \
+              "https://huggingface.co/datasets/minmaxxxer/atp-wta-matches-with-odds/resolve/${SOURCE_COMMIT}/${name}" \
+              --output "work/source/${name}"
+            test -s "work/source/${name}"
+          done
+          (cd work/source && sha256sum *.csv)
+          echo "HF_PINNED_FOUR_SOURCE_FILES_DOWNLOADED"
+      - name: Obtain one SHA-verified private canonical 2024–2026 snapshot and independent event index
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GH_TOKEN}" || { echo "PRIVATE_TOKEN_MISSING"; exit 1; }
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p work/cdb
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > work/release.json
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D work/cdb \
+            -p history-2024.parquet -p history-2025.parquet -p history-2026.parquet \
+            -p history_manifest.json -p _tbt_bundle_manifest.json \
+            -p blinq-flashscore-event-index-2026.jsonl.gz
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          root = Path("work/cdb")
+          assets = {x["name"]: x for x in json.load(open("work/release.json"))["assets"]}
+          for file in root.iterdir():
+              if file.is_file():
+                  h = hashlib.sha256(file.read_bytes()).hexdigest()
+                  if assets[file.name].get("digest") != "sha256:" + h:
+                      raise SystemExit("PRIVATE_CDB_DIGEST_DRIFT " + file.name)
+          print("CURRENT_CDB_AND_FLASH_INDEX_SHA_VERIFIED",len(list(root.iterdir())))
+          PY
+      - name: Check precise event, UTC, two names, winner, full score, stat witnesses and NULL-only delta
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/audit_minmaxxxer_cdb_importability.py \
+            --source-dir work/source \
+            --index work/cdb/blinq-flashscore-event-index-2026.jsonl.gz \
+            --history-dir work/cdb \
+            --out work/qa
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("work/qa/aggregate-report.json").read_text())
+          if (r.get("production_mutated") is not False or
+              r.get("writer_executed") is not False or
+              r.get("paid_api_requests") != 0 or r.get("odds_imported") != 0 or
+              r["counts"].get("source_rows") != 11364 or
+              len(r.get("pinned_source_sha256", {})) != 4):
+              raise SystemExit("HF_SOURCE_QA_AUDIT_CONTRACT_FAILED")
+          print("HF_PRIVATE_READONLY_CDB_LINK_REPORT",json.dumps(r["counts"],sort_keys=True))
+          PY
+      - name: Compare NULL-only candidate stage against the existing native importer in dry-run
+        shell: bash
+        run: |
+          set -euo pipefail
+          count="$(python -c 'import json;print(json.load(open("work/qa/aggregate-report.json"))["stage_rows"])')"
+          if [[ "$count" -eq 0 ]]; then
+            echo "HF_CURRENT_CDB_EXACT_DRYRUN_ZERO_DELTA_NO_PRODUCTION_WRITE"
+          else
+            # The native importer conservatively requires ALL 78 partitions
+            # declared in the authoritative manifest. A three-year subset is
+            # enough for read-only identity QA but not a native safety dry-run.
+            gh release download tbt-data-v1 -R "$DATA_REPO" -D work/cdb \
+              -p 'history-*.parquet' --clobber
+            python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          folder=Path("work/cdb")
+          data=json.load(open("work/release.json"))
+          assets={x["name"]:x for x in data["assets"]}
+          years=json.loads((folder/"history_manifest.json").read_text())["years"]
+          bundle=json.loads((folder/"_tbt_bundle_manifest.json").read_text())["files"]
+          count=0
+          for year,entry in years.items():
+              name=f"history-{year}.parquet"
+              path=folder/name
+              if not path.exists():
+                  raise SystemExit("MISSING_DECLARED_CDB_YEAR "+name)
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              if (entry["sha256"]!=digest or bundle[name]["sha256"]!=digest
+                      or assets[name].get("digest")!="sha256:"+digest):
+                  raise SystemExit("FULL_NATIVE_CDB_SHA_MISMATCH "+name)
+              count+=1
+          if count!=78:
+              raise SystemExit("CDB_YEAR_COUNT_DRIFT")
+          print("CDB_ALL_78_PARTITIONS_SHA_VERIFIED")
+          PY
+            python scripts/import_offline_linked_serve_return.py \
+              --stage work/qa/eligible-private.jsonl \
+              --history-dir work/cdb --out-dir work/qa/native-dryrun
+            python - <<'PY'
+          import json
+          a=json.load(open("work/qa/aggregate-report.json"))
+          b=json.load(open("work/qa/native-dryrun/report.json"))
+          if b["counts"].get("stat_fields_added") != a["counts"].get("eligible_new_cells"):
+              raise SystemExit("NATIVE_DRYRUN_FIELDS_DIFFER_SOURCE_QA")
+          if b.get("production_mutated") is not False:
+              raise SystemExit("NATIVE_DRYRUN_UNEXPECTED_WRITE")
+          print("HF_POSITIVE_NATIVE_NULL_ONLY_DRYRUN",b["counts"])
+          PY
+          fi
+      - name: Attest exact four immutable source SHA hashes and native NULL-only stage
+        id: stage
+        shell: bash
+        run: |
+          set -euo pipefail
+          (cd work/source && sha256sum --check <<'SHA256'
+          958cd93216075165895b5764d63499193a91993bb30dc00822f262713f7b31e1  atp_matches_2025.csv
+          350a90b70f15add6c279f3d7893f00a6746660367ce5dfebdce553711940e9df  atp_matches_2026.csv
+          76df7f0b9c8510f0b71e9bf2cf89e8051c3da2bf61c8d7289ee1c09909367e4a  wta_matches_2025.csv
+          ddbe50bcdf6750e09bbcdadef40bd6338142fef866c7ad5e6bb2079e  wta_matches_2026.csv
+          SHA256
+          )
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          qa=json.loads(Path("work/qa/aggregate-report.json").read_text())
+          counts=qa["counts"]
+          rows=int(qa["stage_rows"])
+          cells=int(counts.get("eligible_new_cells",0))
+          if (qa.get("production_mutated") is not False or
+              qa.get("writer_executed") is not False or
+              qa.get("paid_api_requests") != 0 or
+              counts.get("source_rows") != 11364 or
+              rows != counts.get("eligible_matches",0) or
+              not 0 <= rows <= 16 or
+              not 0 <= cells <= 64 or
+              (rows == 0) != (cells == 0)):
+              raise SystemExit("Source QA scope or evidence changed")
+          stage=[json.loads(x) for x in Path("work/qa/eligible-private.jsonl").read_text().splitlines() if x.strip()]
+          if len(stage)!=rows or len({x["match_id"] for x in stage})!=len(stage):
+              raise SystemExit("Bad exact source stage")
+          if sum(len(x["incoming_stats"]) for x in stage)!=cells:
+              raise SystemExit("Stage NULL cells differ from QA")
+          if stage and any(
+              x.get("schema")!=1 or x.get("import_ready") is not True or
+              not x.get("incoming_stats") or
+              x.get("source",{}).get("proof")!="native_event_three_clocks_within_24h_both_players_winner_full_score_four_counts"
+              for x in stage
+          ):
+              raise SystemExit("Invalid cross-source identity proof")
+          if rows:
+              native=json.loads(Path("work/qa/native-dryrun/report.json").read_text())
+              n=native["counts"]
+              if (native.get("production_mutated") is not False or
+                  native.get("local_partitions_written") is not False or
+                  n.get("updated")!=rows or n.get("stat_fields_added")!=cells or
+                  n.get("invalid_stats",0) or n.get("stat_conflicts",0) or
+                  n.get("identity_changed",0) or n.get("identity_missing",0)):
+                  raise SystemExit("Native CDB 78-year dry-run failed exact counts")
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              f.write("positive="+("true" if rows else "false")+"\n")
+          print("HF_CDB_NATIVE_DRYRUN_APPROVED",rows,cells)
+          PY
+      - name: Preserve source CSV bytes, stage, index proof and QA privately before writer
+        if: steps.stage.outputs.positive == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/evidence work/evidence-readback work/before
+          cp work/source/*.csv work/evidence/
+          cp work/qa/eligible-private.jsonl work/evidence/
+          cp work/qa/aggregate-report.json work/evidence/
+          cp work/cdb/blinq-flashscore-event-index-2026.jsonl.gz work/evidence/
+          (cd work/evidence && sha256sum -- * > SHA256SUMS && sha256sum -c SHA256SUMS)
+          tag="blinq-hf-native-source-evidence-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          gh release create "$tag" work/evidence/* -R "$CDB_REPO" --target main \
+            --title "HF SHA-native event index and 16-match CDB evidence $GITHUB_RUN_ID" \
+            --notes "Private pinned source and exact NULL-only stage, no model activation or PIT odds; no canonical mutation at this step."
+          gh release download "$tag" -R "$CDB_REPO" -D work/evidence-readback
+          (cd work/evidence-readback && sha256sum --check SHA256SUMS)
+          cp -a work/cdb/. work/before/
+          echo "HF_PRIVATE_PREWRITE_RAW_AND_STAGE_SHA_READBACK_VERIFIED"
+      - name: Acquire global single writer only for independently verified positive NULL delta
+        if: steps.stage.outputs.positive == 'true'
+        id: writer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+          python scripts/cdb_global_writer_lock.py verify
+          echo 'locked=true' >> "$GITHUB_OUTPUT"
+      - name: Atomic CAS verification and select immutable backup years
+        if: steps.stage.outputs.positive == 'true' && steps.writer.outputs.locked == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p work/backup work/after
+          python - <<'PY'
+          import hashlib,json,shutil,os
+          from pathlib import Path
+          from cdb_global_writer_lock import verify
+          from release_store import ReleaseStore
+          before=Path("work/before")
+          current=json.loads((before/"_tbt_bundle_manifest.json").read_text())["files"]
+          verify(os.environ["CDB_REPO"],Path(".cdb-global-writer-lock.json"))
+          store=ReleaseStore(os.environ["CDB_REPO"],os.environ["CDB_TAG"],before)
+          if store._remote_bundle_files() != current:
+              raise SystemExit("Canonical bundle changed between stage and global lock")
+          staged=[json.loads(s) for s in Path("work/qa/eligible-private.jsonl").read_text().splitlines() if s.strip()]
+          years=sorted({int(x["canonical"]["scheduled_date_utc"][:4]) for x in staged})
+          if not years or any(y not in range(2016,2027) for y in years):
+              raise SystemExit("Invalid staged year")
+          for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(p.name for p in before.glob("history-*.parquet"))]:
+              shutil.copy2(before/name,Path("work/after")/name)
+          for name in ["history_manifest.json","_tbt_bundle_manifest.json",*(f"history-{y}.parquet" for y in years)]:
+              shutil.copy2(before/name,Path("work/backup")/name)
+          hashes=[]
+          for p in sorted(Path("work/backup").iterdir()):
+              hashes.append(hashlib.sha256(p.read_bytes()).hexdigest()+"  "+p.name)
+          (Path("work/backup")/"SHA256SUMS").write_text("\n".join(hashes)+"\n")
+          Path("work/backup-years.json").write_text(json.dumps(years))
+          print("PREWRITE_BACKUP_PREPARED",len(years),"years")
+          PY
+          (cd work/backup && sha256sum -c SHA256SUMS)
+      - name: Persist immutable backup in PRIVATE repository and independently download
+        if: steps.stage.outputs.positive == 'true' && steps.writer.outputs.locked == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="blinq-hf-native-prewrite-${{ github.run_id }}-${{ github.run_attempt }}"
+          gh release create "$tag" work/backup/* -R "$CDB_REPO" \
+            --title "CDB Inbox original partitions $tag" \
+            --notes "Private immutable rollback of original CDB and two manifests."
+          mkdir -p work/backup-readback
+          gh release download "$tag" -R "$CDB_REPO" -D work/backup-readback
+          (cd work/backup-readback && sha256sum -c SHA256SUMS)
+      - name: Run existing additive-only importer and exhaustive local readback
+        if: steps.stage.outputs.positive == 'true' && steps.writer.outputs.locked == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/qa/eligible-private.jsonl --history-dir work/after \
+            --out-dir work/local-import --write-partitions --write-history-dir work/after --exact-stats-only
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from offline_exact_cdb_write import verify_persisted
+          report=json.load(open("work/local-import/report.json"))
+          stage=[json.loads(s) for s in Path("work/qa/eligible-private.jsonl").read_text().splitlines() if s.strip()]
+          verified=verify_persisted(Path("work/before"),Path("work/after"),stage,report["changed_years"])
+          if (verified["added_values"]!=sum(len(x["incoming_stats"]) for x in stage)
+                  or verified["enriched_matches"]!=len(stage)):
+              raise SystemExit("Local exact readback count mismatch")
+          Path("work/local-verification.json").write_text(json.dumps(verified,indent=2))
+          print("LOCAL_EXACT_READBACK_PASS",verified["enriched_matches"],verified["added_values"])
+          PY
+      - name: Publish through existing manifest CAS and global writer lock
+        if: steps.stage.outputs.positive == 'true' && steps.writer.outputs.locked == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os,json
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          repo=os.environ["CDB_REPO"]
+          verify(repo,Path(".cdb-global-writer-lock.json"))
+          before=Path("work/before")
+          after=Path("work/after")
+          initial=json.loads((before/"_tbt_bundle_manifest.json").read_text())["files"]
+          years=json.loads(Path("work/local-import/report.json").read_text())["changed_years"]
+          if not years:
+              raise SystemExit("No changed year for expected positive delta")
+          store=ReleaseStore(repo,os.environ["CDB_TAG"],after)
+          def cas():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              if store._remote_bundle_files()!=initial:
+                  raise ValueError("Canonical release changed: CAS fail-closed")
+          store.upload_bundle([*(after/f"history-{y}.parquet" for y in years),
+                               after/"history_manifest.json"],before_upload=cas)
+          print("CANONICAL_PUBLICATION_ATTEMPT",years)
+          PY
+      - name: Independent PRIVATE release readback of every changed value
+        if: steps.stage.outputs.positive == 'true' && steps.writer.outputs.locked == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/readback
+          patterns=(-p history_manifest.json -p _tbt_bundle_manifest.json)
+          for year in $(cat work/backup-years.json | python -c 'import json,sys; print(" ".join(str(y) for y in json.load(sys.stdin)))'); do
+            patterns+=(-p "history-$year.parquet")
+          done
+          gh release download "$CDB_TAG" -R "$CDB_REPO" "${patterns[@]}" -D work/readback --clobber
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          from offline_exact_cdb_write import verify_persisted
+          after,before,remote=Path("work/after"),Path("work/before"),Path("work/readback")
+          changes=json.load(open("work/local-import/report.json"))["changed_years"]
+          bundle=json.loads((remote/"_tbt_bundle_manifest.json").read_text())["files"]
+          manifest=json.loads((remote/"history_manifest.json").read_text())["years"]
+          for name in ["history_manifest.json",*(f"history-{y}.parquet" for y in changes)]:
+              if (after/name).read_bytes()!=(remote/name).read_bytes():
+                  raise SystemExit("Remote readback changed: "+name)
+              sha=hashlib.sha256((remote/name).read_bytes()).hexdigest()
+              if bundle[name]["sha256"]!=sha:
+                  raise SystemExit("Remote bundle digest mismatch")
+              if name.endswith(".parquet") and manifest[name[8:12]]["sha256"]!=sha:
+                  raise SystemExit("Remote history digest mismatch")
+          staged=[json.loads(s) for s in Path("work/qa/eligible-private.jsonl").read_text().splitlines() if s.strip()]
+          result=verify_persisted(before,remote,staged,changes)
+          local=json.load(open("work/local-verification.json"))
+          if result["added_values"]!=local["added_values"] or result["enriched_matches"]!=local["enriched_matches"]:
+              raise SystemExit("Remote CDB readback count mismatch")
+          print("CDB_PRODUCTION_READBACK_VERIFIED",result["enriched_matches"],result["added_values"],"overwritten",result["existing_values_overwritten"])
+          PY
+      - name: Verify same exact stage is idempotent after local NULL-only write
+        if: steps.stage.outputs.positive == 'true' && steps.writer.outputs.locked == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/qa/eligible-private.jsonl \
+            --history-dir work/after --out-dir work/idempotence
+          python - <<'PY'
+          import json
+          d=json.load(open("work/idempotence/report.json"))
+          if (d.get("production_mutated") is not False or
+              d.get("local_partitions_written") is not False or
+              d["counts"].get("updated",0)!=0 or
+              d["counts"].get("stat_fields_added",0)!=0):
+              raise SystemExit("Postwrite stage not idempotent")
+          print("HF_NATIVE_POSTWRITE_IDEMPOTENCE_ZERO_DELTA")
+          PY
+      - name: Persist only aggregate QA to private data repo with source SHA evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          report=work/qa/aggregate-report.json
+          file=research/source-acquisition/minmaxxxer-20261116-current-cdb-importability.json
+          encoded="$(base64 -w0 "$report")"
+          sha="$(gh api "repos/$DATA_REPO/contents/$file" --jq .sha 2> work/content-error.txt)" || {
+            if ! grep -Fq 'HTTP 404' work/content-error.txt; then
+              cat work/content-error.txt
+              exit 1
+            fi
+            sha=""
+          }
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$DATA_REPO/contents/$file" \
+              -f message="Audit pinned HF ATP/WTA current CDB cross-source importability" \
+              -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$DATA_REPO/contents/$file" \
+              -f message="Record pinned HF ATP/WTA current CDB importability" \
+              -f content="$encoded" >/dev/null
+          fi
+          gh api "repos/$DATA_REPO/contents/$file" --jq .sha > work/qa/private-report-blob-sha.txt
+          test -s work/qa/private-report-blob-sha.txt
+          echo "HF_CDB_PRIVATE_AGGREGATE_AUDIT_PERSISTED"
+      - name: Always release global writer if owned
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
+      - name: Expose counts only, never source rows, CDB rows or raw stage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hf-cdb-native-import-aggregate
+          path: work/qa/aggregate-report.json
+          if-no-files-found: ignore
+          retention-days: 21
