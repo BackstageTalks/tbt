@@ -53,7 +53,15 @@ class ATPRankHistory:
     """
 
     def __init__(self, rows: Iterable[dict[str, object]]) -> None:
+        # A normalized name is NOT a unique player identity. Two real players
+        # can share the same spelling, particularly deep in ITF qualifying.
+        # Without a verified canonical crosswalk, no rank should be inferred
+        # from a blended history of two Sackmann IDs. Conflicting same-week
+        # name snapshots also quarantine the name for ID-less SQLite inputs.
         by_player: dict[str, list[tuple]] = defaultdict(list)
+        name_source_ids: dict[str, set[str]] = defaultdict(set)
+        observed_dates: dict[tuple[str, object], tuple[int, int | None]] = {}
+        ambiguous_names: set[str] = set()
         for raw in rows:
             name = _norm_name(raw.get("name"))
             if not name:
@@ -64,19 +72,32 @@ class ATPRankHistory:
             source_date = raw.get("date")
             if source_date is None:
                 continue
-            by_player[name].append(
-                (
-                    source_date,
-                    rank,
-                    _positive_int(raw.get("points")),
-                )
-            )
+            player_id = str(raw.get("sackmann_player_id") or "").strip()
+            if player_id:
+                name_source_ids[name].add(player_id)
+                if len(name_source_ids[name]) > 1:
+                    ambiguous_names.add(name)
+            pts = _positive_int(raw.get("points"))
+            key = name, source_date
+            signature = rank, pts
+            previous = observed_dates.get(key)
+            if previous is not None:
+                if previous != signature:
+                    ambiguous_names.add(name)
+                # Exact duplicate source rows must not change evidence counts.
+                continue
+            observed_dates[key] = signature
+            by_player[name].append((source_date, rank, pts))
 
+        self._ambiguous_names = ambiguous_names
         self._dates: dict[str, list] = {}
         self._ranks: dict[str, list[int]] = {}
         self._points: dict[str, list[int | None]] = {}
         self._career_best: dict[str, list[int]] = {}
         for name, values in by_player.items():
+            if name in ambiguous_names:
+                # Fail closed for this name, never choose a rank revision or ID.
+                continue
             values.sort(key=lambda item: item[0])
             dates = []
             ranks = []
@@ -142,6 +163,7 @@ class ATPRankHistory:
                             "date": source_date,
                             "rank": row.get("rank"),
                             "name": name,
+                            "sackmann_player_id": pid,
                             "points": row.get("points"),
                         }
 
@@ -323,6 +345,7 @@ class ATPRankHistory:
         if not isinstance(state, dict) or int(state.get("schema") or 0) != 1:
             raise ValueError("Invalid ATP rank-history state")
         obj = cls.__new__(cls)
+        obj._ambiguous_names = set()
         obj._dates, obj._ranks, obj._points, obj._career_best = {}, {}, {}, {}
         for key, rows in (state.get("players") or {}).items():
             if not isinstance(rows, list):
