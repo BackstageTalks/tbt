@@ -185,7 +185,7 @@ def read_gzip_json(path):
 
 def run(args):
     from release_store import ReleaseStore
-    from evaluate_paired_top_selection import evaluate
+    from evaluate_paired_top_selection import compare_confidence_floors
 
     root = Path(args.work_dir)
     candidate_tag = args.candidate_tag
@@ -209,13 +209,16 @@ def run(args):
         sources.append({"archive": read_gzip_json(path),
                         "source_sha256": sha256(path.read_bytes()).hexdigest()})
     quotes, join = strict_first_morning_quotes(scored, sources)
-    analysis = evaluate(scored, quotes)
+    thresholds = compare_confidence_floors(scored, quotes)
+    analysis = thresholds["primary"]
     output = {
         "status": "RESEARCH_ONLY_PREVIOUSLY_INSPECTED_HOLDOUT",
         "candidate_release": candidate_tag,
         "paired_scores_sha256": sha256(score_bytes).hexdigest(),
         "quote_linkage": join,
         "replay": analysis,
+        "reference_65": thresholds["reference_65"],
+        "threshold_60_vs_65": thresholds["increment_from_65_to_60"],
         "production_swapped": False,
         "api_requests": 0,
     }
@@ -226,6 +229,7 @@ def run(args):
     print(json.dumps({
         "status": output["status"],
         "exact_time_verified_quotes": join["exact_time_verified_quotes"],
+        "incremental_60_vs_65": thresholds["increment_from_65_to_60"]["by_model"],
         "comparison": {k: {
             "qualified": v["qualified"],
             "all_qualified": v["all_qualified"],
