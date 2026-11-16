@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from tbt.models.context_calibration import apply, choose, masks
+from tbt.models.context_calibration import apply, choose, masks, scores
 
 
 def evidence(n=2000):
@@ -65,6 +65,49 @@ def test_explicit_competition_resolves_lossy_generic_level_without_gender_guess(
     assert masks(frame)['itf_atp'].tolist() == [True, True, False, False]
     assert masks(frame)['challenger_atp'].tolist() == [False, False, True, False]
 
+
+
+def test_context_rejects_generic_atp_level_when_tournament_is_lower_tier():
+    frame, _, _ = evidence(6)
+    frame['tournament_level'] = .35
+    frame['competition'] = ['ATP', 'ATP', 'ATP', 'ATP', 'WTA', 'ATP']
+    frame['tournament'] = ['ITF M15', 'UTR Men', 'Challenger Bratislava',
+                           'ATP 250 Brisbane', 'WTA 125', 'Exhibition']
+    groups = masks(frame)
+    assert groups['itf_atp'].tolist() == [True, False, False, False, False, False]
+    assert groups['challenger_atp'].tolist() == [False, False, True, False, False, False]
+    assert groups['main_atp'].tolist() == [False, False, False, True, False, False]
+
+
+def test_confidence_ece_detects_misleading_zero_overall_confidence_gap():
+    # Equal overconfidence/underconfidence in adjacent bins cancel at the
+    # aggregate mean; reliability ECE must still catch each bin separately.
+    p = np.r_[np.full(200, .65), np.full(200, .85)]
+    y = np.r_[np.r_[np.ones(170), np.zeros(30)],
+              np.r_[np.ones(130), np.zeros(70)]].astype(int)
+    result = scores(p, y)
+    assert result['confidence_gap'] == pytest.approx(0)
+    assert result['confidence_ece_10'] == pytest.approx(.2)
+
+
+def test_context_selection_reports_only_chronologically_validated_shrinkage():
+    frame, p, y = evidence(2400)
+    chosen, audit = choose(frame, p, y, 1200)
+    main = audit['main_atp']
+    assert len(main['validated_shrink_options']) == 2
+    assert main['choice_never_uses_final_holdout'] is True
+    assert all(option['weight'] > 0 for option in main['validated_shrink_options'])
+    assert ('main_atp' in chosen) == (main['status'] == 'SELECTED')
+    if 'main_atp' in chosen:
+        assert chosen['main_atp'].weight == pytest.approx(main['shrink_weight'])
+
+
+def test_conflicting_competition_gender_is_not_main_tour_evidence():
+    frame, _, _ = evidence(3)
+    frame['competition'] = ['WTA 500', 'ATP 250', 'Grand Slam']
+    frame['tournament'] = ['WTA 500', 'ATP 250', 'Australian Open']
+    groups = masks(frame)
+    assert groups['main_atp'].tolist() == [False, True, True]
 
 def test_legacy_model_has_no_context_layer():
     from tbt.models.ensemble import TennisEnsemble, ProbabilityCalibrator
