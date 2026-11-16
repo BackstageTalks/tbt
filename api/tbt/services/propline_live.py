@@ -146,9 +146,17 @@ def _initial_last(name: str) -> tuple[str, str] | None:
     opposing player and tightly compatible scheduled time must also agree.
     """
     words = _name(name).split()
-    if len(words) < 2 or len(words[-1]) < 3:
+    if len(words) < 2:
         return None
     if words[0] in {"tbd", "unknown", "winner", "qualifier"}:
+        return None
+    # Provider fixtures sometimes use surname-first abbreviations, e.g.
+    # "Alcaraz C." where the canonical player name is "Carlos Alcaraz".
+    # Require a full surname and a single trailing initial; both opponents
+    # plus the existing strict start-time/one-to-one guards must still match.
+    if len(words[-1]) == 1 and len(words[0]) >= 3:
+        return words[-1], " ".join(words[:-1])
+    if len(words[-1]) < 3:
         return None
     return words[0][0], words[-1]
 
