@@ -41,21 +41,24 @@ def main():
                 source = (WEB / "app.js").read_text(encoding="utf-8")
                 assert source.count("  boot();") == 1
                 source = source.replace("  boot();", """
-  window.lazyResultsTest={state,setRoute,loadCompleteResults,renderDashboardKpis,
+  window.lazyResultsTest={state,setRoute,loadRecentResults,loadCompleteResults,renderDashboardKpis,
     scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration),
     reuseHydratedResultsOnRefresh};
   boot();""")
                 route.fulfill(content_type="application/javascript", body=source)
                 return
             if path == "/api/v1/results":
-                requests.append((route.request, time.monotonic()))
                 params = parse_qs(urlparse(route.request.url).query)
+                recent = params.get("window_days") == ["30"]
+                requests.append((route.request, time.monotonic(), recent))
                 assert params.get("limit") == ["500"], params
                 assert params.get("page") == ["0"], params
                 assert route.request.headers.get("x-blinq-access-token") == "fixture-token"
+                rows = full[:1] if recent else full
                 route.fulfill(status=200, content_type="application/json", body=json.dumps({
-                    "results": full, "page": 0, "limit": 500,
-                    "total": len(full), "has_more": False, "snapshot": "fixture-snapshot"
+                    "results": rows, "page": 0, "limit": 500,
+                    "total": len(rows), "has_more": False, "snapshot": "fixture-snapshot",
+                    **({"scope_days": 30} if recent else {}),
                 }))
                 return
             static_route(route)
@@ -111,10 +114,11 @@ def main():
                     assert len(requests) == 0, "Background history started before the page load event"
                     page.evaluate("window.dispatchEvent(new Event('load'))")
                 page.wait_for_function(
-                    "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                    "window.lazyResultsTest.state.feed.results_recent_ready === true",
                     timeout=15000,
                 )
-                assert len(requests) == 1, (width, len(requests))
+                assert len(requests) == 1 and requests[0][2] is True, (width, requests)
+                assert page.evaluate("window.lazyResultsTest.state.feed.results_boot_partial") is True
                 if width == 390:
                     elapsed = requests[0][1] - scheduled_at
                     assert elapsed >= 6.8, ("Results preloaded before page-load delay", elapsed)
@@ -126,7 +130,7 @@ def main():
                   rendered: document.getElementById('routePanel').textContent,
                   overflow: document.documentElement.scrollWidth-window.innerWidth
                 })""")
-                assert hydrated["rows"] == ["recent", "history"], (width, hydrated)
+                assert hydrated["rows"] == ["recent"], (width, hydrated)
                 # A fresh authorized bootstrap with the same ledger reuses
                 # hydrated rows; revocation or changed revision fails closed.
                 reuse = page.evaluate("""() => {
@@ -136,7 +140,8 @@ def main():
                     results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot'
                   };
                   const retained=t.reuseHydratedResultsOnRefresh(next);
-                  const reused=next.results===old.results&&next.results_boot_partial===false;
+                  const reused=next.results===old.results&&next.results_boot_partial===true
+                    &&next.results_recent_ready===true;
                   const denied={
                     account:{...old.account},entitlements:{results:false},
                     results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot'
@@ -146,12 +151,26 @@ def main():
                 }""")
                 assert reuse == {"retained": True, "reused": True,
                                  "refused": False, "deniedEmpty": True}, (width, reuse)
+                # Older history must only be requested after choosing All time.
+                page.evaluate("""() => {
+                  const t=window.lazyResultsTest;
+                  t.state.resultsFilters.window='all';
+                  t.setRoute('results',false);
+                }""")
+                page.wait_for_function(
+                    "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                    timeout=15000,
+                )
+                assert len(requests) == 2 and requests[1][2] is False, (width, requests)
+                assert page.evaluate(
+                    "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
+                ) == ["recent", "history"], width
                 assert hydrated["overflow"] <= 2, (width, hydrated["overflow"])
                 assert not errors, (width, errors)
                 context.close()
             finally:
                 browser.close()
-    print("BlinQ 390px 7s-after-page-load preload + 1440px immediate Results navigation: PASS")
+    print("BlinQ recent-30 first, full history only on demand, 7s preload and session-safe reuse: PASS")
 
 
 if __name__ == "__main__":
