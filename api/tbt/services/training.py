@@ -1252,7 +1252,12 @@ def train_from_matches(
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
     paired_holdout = None
-    if production_probabilities is not None and len(test):
+    # Unit-test model doubles do not implement the serialized feature contract.
+    # A real protected fit requires the contract; the frozen publisher fails
+    # closed on any nonempty scored holdout without paired evidence.
+    if (production_probabilities is not None and len(test)
+            and getattr(production_model, "feature_names", None)
+            and getattr(evaluation_model, "feature_names", None)):
         from .paired_top_evaluation import make_paired_holdout
         paired_holdout = make_paired_holdout(
             test, source, production_probabilities, test_p,
