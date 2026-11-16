@@ -335,3 +335,73 @@ body#blinqPremium.blinq-admin .admin-accounts-simple .admin-simple-stats>span {
   border-radius:8px!important;
   box-shadow:none!important;
 }
+
+/* 2026-11-16 mobile Admin: the old double-card SEKCIE/workarea shell
+   survived the palette pass. Keep the navigation and genuine warnings, but
+   let the existing page artwork show through one quiet, unframed layout. */
+@media (max-width:900px) {
+  body#blinqPremium.blinq-admin .lean-admin-console {
+    gap:8px!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-side-nav {
+    position:static!important;
+    min-height:0!important;
+    padding:6px 2px 8px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:none!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-toolbar {
+    padding:0 0 7px!important;
+    gap:6px!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-toolbar button {
+    min-height:34px!important;
+    padding:6px 9px!important;
+    border-color:rgba(110,170,146,.17)!important;
+    border-radius:7px!important;
+    background:rgba(5,31,26,.28)!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs-v685 {
+    border:0!important;
+    background:none!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs-v685 .admin-nav-entry>button[data-admin-tab] {
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-tabs-v685 .admin-nav-entry>button[data-admin-tab].active {
+    border:0!important;
+    background:transparent!important;
+    color:#f0faf5!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-nav-entry>button.active .admin-nav-mark {
+    box-shadow:none!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-workarea {
+    border:0!important;
+    border-radius:0!important;
+    background:none!important;
+    box-shadow:none!important;
+    overflow:visible!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-workarea-head {
+    padding:10px 4px 12px!important;
+    border:0!important;
+    border-bottom:1px solid rgba(108,176,148,.13)!important;
+    border-radius:0!important;
+    background:none!important;
+  }
+  body#blinqPremium.blinq-admin .lean-admin-console .admin-panel-v685 {
+    padding:14px 4px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:none!important;
+    box-shadow:none!important;
+  }
+}
