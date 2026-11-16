@@ -118,6 +118,7 @@ class TrainingResult:
     model: TennisEnsemble
     report: dict
     feature_frame: pd.DataFrame
+    paired_holdout: dict | None = None
 
 
 def _candidate_learning_window(frame, training_profile):
@@ -1250,6 +1251,17 @@ def train_from_matches(
         key: _metric_delta(holdout_metrics, production_metrics, key)
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
+    paired_holdout = None
+    if production_probabilities is not None and len(test):
+        from .paired_top_evaluation import make_paired_holdout
+        paired_holdout = make_paired_holdout(
+            test, source, production_probabilities, test_p,
+            champion_version=production_model.version,
+            candidate_version=evaluation_model.version,
+            fingerprint=holdout_fingerprint,
+            candidate_feature_names=evaluation_model.feature_names,
+            champion_feature_names=production_model.feature_names,
+        )
     report = {
         "training_profile": training_profile,
         "learning_window": {
@@ -1267,7 +1279,7 @@ def train_from_matches(
         "input_diagnostics": diagnostics,
         "top_market_validation": {
             "status": "NOT_EVALUATED",
-            "required": "Independent pre-match odds >=1.50, at most 10 picks/day, no forced fill",
+            "required": "Independent timestamped pre-match odds >=1.50; no fixed pick cap or forced fill",
             "promotion_ready_for_top": False,
         },
         "production_holdout": production_metrics,
@@ -1497,4 +1509,5 @@ def train_from_matches(
         production_model,
         report,
         frame,
+        paired_holdout,
     )
