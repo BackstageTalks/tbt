@@ -228,3 +228,32 @@ def test_season_unknown_level_remains_quarantined(tour_label):
                             "2026-atp-season.csv", 1)
     assert row is None
     assert reason == "tour_missing_or_unsupported"
+
+
+@pytest.mark.parametrize("source_round,expected", [
+    ("1/8-finals", "R16"),
+    ("1/16-finals", "R32"),
+    ("1/32-finals", "R64"),
+    ("1/64-finals", "R128"),
+])
+def test_tennisdata_exact_single_elimination_round_labels(source_round, expected):
+    # Convert only exact source bracket size descriptions. No inference about
+    # disputed qualifying rounds or canonical IDs is authorized here.
+    row, reason = normalize(
+        season_source(round=source_round), "2026-atp-season.csv", 1,
+    )
+    assert reason == ""
+    assert row["round"] == expected
+    assert row["source_date_kind"] == "match_exact"
+    assert row["winner_name"] == "Beta Two"
+
+
+@pytest.mark.parametrize("source_round", [
+    "Qualifier", "", "3rd place", "1/16-finals qualification", "R16",
+])
+def test_tennisdata_ambiguous_or_already_canonical_round_untouched(source_round):
+    row, reason = normalize(
+        season_source(round=source_round), "2026-atp-season.csv", 1,
+    )
+    assert reason == ""
+    assert row["round"] == source_round

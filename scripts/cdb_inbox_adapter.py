@@ -184,6 +184,18 @@ def _season_match(lookup):
     # Only strip an explicit tour suffix. Tour remains independently required.
     tournament = re.sub(r"\s+" + tour + r"$", "", tournament, flags=re.I).strip()
     winner_side, loser_side = ("home", "away") if code == "1" else ("away", "home")
+    # TennisData uses single-elimination fraction-of-draw labels. These are
+    # exact bracket sizes, not unverified qualifying-round ordinals:
+    # 1/16-final -> round of 32, 1/8-final -> round of 16, etc.
+    # Preserve unspecified/qualifier labels unchanged and leave canonical
+    # match identity to the strict offline CDB linker.
+    round_label = str(lookup.get("round") or "").strip()
+    round_label = {
+        "1/8-finals": "R16",
+        "1/16-finals": "R32",
+        "1/32-finals": "R64",
+        "1/64-finals": "R128",
+    }.get(round_label.lower(), round_label)
     row = {field: "" for field in FIELDS}
     row.update({
         "league": tour, "tourney_date": day.strftime("%Y%m%d"),
@@ -195,7 +207,7 @@ def _season_match(lookup):
         "source_winner_id": str(lookup.get(winner_side + "id") or "").strip(),
         "source_loser_id": str(lookup.get(loser_side + "id") or "").strip(),
         "surface": str(lookup.get("surface") or "").strip(),
-        "round": str(lookup.get("round") or "").strip(),
+        "round": round_label,
     })
     for label, side in (("w", winner_side), ("l", loser_side)):
         for source_field, target in (("aces", "ace"), ("doublefaults", "df")):
