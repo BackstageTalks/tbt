@@ -70,3 +70,207 @@ body#blinqPremium .market-card .player-name .ace-leader-ball{margin-left:5px!imp
     flex-basis:12px!important;width:12px!important;height:12px!important;margin-left:0!important;
   }
 }
+
+
+/* 2026-11-17: the approved homepage market-rail visual language in every
+   match detail (winner, Aces/DF, Sets/Games and the desktop pop-out).
+   Presentation only: no access, values, markup, scroll-lock or layout modes
+   are replaced. */
+body#blinqPremium .match-detail-shell {
+  --bq-detail-accent:#6fe8b2;
+  --bq-detail-neutral:#899e95;
+  --bq-detail-border:rgba(111,172,147,.16);
+  --bq-detail-surface:rgba(5,30,25,.59);
+}
+body#blinqPremium #matchDialog {
+  border-color:rgba(111,178,149,.22)!important;
+  background:
+    radial-gradient(720px 350px at 92% 0%,rgba(43,176,119,.045),transparent 74%),
+    linear-gradient(180deg,#061c17 0%,#041711 100%)!important;
+  box-shadow:0 28px 78px rgba(0,0,0,.40)!important;
+}
+body#blinqPremium #matchDialog>.dialog-close {
+  background:rgba(9,38,30,.72)!important;
+  border-color:rgba(118,170,148,.18)!important;
+  color:#a1b8ad!important;
+  box-shadow:none!important;
+}
+body#blinqPremium #matchDialog>.dialog-close:hover {
+  background:rgba(20,68,48,.67)!important;
+  border-color:rgba(110,207,160,.35)!important;
+  color:#f0f9f4!important;
+}
+body#blinqPremium .match-detail-head {
+  border-bottom-color:rgba(108,175,147,.12)!important;
+}
+body#blinqPremium .match-detail-head .dialog-eyebrow {
+  color:#7ddab3!important;
+}
+body#blinqPremium .match-detail-head h2 {
+  color:#f2f9f5!important;
+}
+body#blinqPremium .match-popout-button {
+  background:rgba(255,255,255,.012)!important;
+  border-color:rgba(117,169,145,.15)!important;
+  color:#91aaa0!important;
+  box-shadow:none!important;
+}
+body#blinqPremium .match-popout-button:hover {
+  background:rgba(68,211,145,.035)!important;
+  border-color:rgba(116,207,166,.29)!important;
+  color:#e0f5e9!important;
+}
+body#blinqPremium .match-detail-pick,
+body#blinqPremium .ace-detail-pick,
+body#blinqPremium .sg-detail-hero {
+  border:1px solid rgba(99,194,152,.19)!important;
+  border-radius:14px!important;
+  background:linear-gradient(145deg,rgba(18,70,51,.32),rgba(4,30,24,.52))!important;
+  box-shadow:none!important;
+}
+body#blinqPremium .match-detail-pick small,
+body#blinqPremium .ace-detail-pick small,
+body#blinqPremium .sg-detail-hero small {
+  color:#92ac9f!important;
+}
+body#blinqPremium .match-detail-pick :is(.dialog-prob,.dialog-prob>small),
+body#blinqPremium .ace-detail-main b,
+body#blinqPremium .sg-detail-hero b {
+  text-shadow:none!important;
+}
+body#blinqPremium .match-detail-pick .dialog-prob,
+body#blinqPremium .ace-detail-main b,
+body#blinqPremium .sg-detail-hero b {
+  color:var(--bq-detail-accent)!important;
+}
+
+/* Quiet inactive labels; selected label and 1px mint runner take the role
+   of the former filled green tile. This is the same selection language as TOP. */
+body#blinqPremium .match-detail-tabs {
+  margin:14px 0 19px!important;
+  padding:4px 2px 7px!important;
+  border:0!important;
+  border-bottom:1px solid rgba(110,167,143,.16)!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+}
+body#blinqPremium .match-detail-tabs button {
+  position:relative!important;
+  min-height:46px!important;
+  border:0!important;
+  border-radius:8px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:var(--bq-detail-neutral)!important;
+  text-shadow:none!important;
+  font-weight:700!important;
+  transition:background .16s ease,color .16s ease!important;
+}
+body#blinqPremium .match-detail-tabs button:hover:not(.active) {
+  background:rgba(73,155,116,.045)!important;
+  color:#cce1d7!important;
+}
+body#blinqPremium .match-detail-tabs button.active {
+  border:0!important;
+  background:rgba(53,151,105,.045)!important;
+  box-shadow:none!important;
+  color:#f0fff7!important;
+  text-shadow:0 0 9px rgba(100,221,163,.32)!important;
+}
+body#blinqPremium .match-detail-tabs button.active::after {
+  content:""!important;
+  display:block!important;
+  position:absolute!important;
+  left:50%!important;
+  right:auto!important;
+  bottom:1px!important;
+  width:29px!important;
+  height:1px!important;
+  transform:translateX(-50%)!important;
+  border-radius:99px!important;
+  background:var(--bq-detail-accent)!important;
+  box-shadow:0 0 6px rgba(105,227,175,.20)!important;
+}
+body#blinqPremium .match-detail-tabs button.is-locked:not(.active) {
+  color:#89998f!important;
+}
+body#blinqPremium .match-detail-tabs button small {
+  color:#8caa9c!important;
+}
+
+/* Same quiet card hierarchy for every market and all detail subpanels. */
+body#blinqPremium .match-detail-shell :is(
+  .insight-player-card,.match-history-card,.match-h2h-summary,
+  .dialog-section,.match-history-wrap
+) {
+  border-color:var(--bq-detail-border)!important;
+  background:linear-gradient(155deg,rgba(6,32,26,.77),rgba(3,21,18,.84))!important;
+  box-shadow:none!important;
+}
+body#blinqPremium .match-detail-overview .insight-player-card.picked {
+  border-color:rgba(98,216,160,.30)!important;
+  box-shadow:inset 0 0 0 1px rgba(100,211,156,.025)!important;
+}
+body#blinqPremium .match-detail-shell :is(
+  .insight-player-metrics>span,.match-history-grid>span,.ace-detail-metric,
+  .sg-detail-grid>article,.dialog-signal,.context-signal
+) {
+  border-color:rgba(110,169,145,.14)!important;
+  border-radius:10px!important;
+  background:rgba(4,27,23,.46)!important;
+  box-shadow:none!important;
+}
+body#blinqPremium .match-detail-shell :is(
+  .insight-player-metrics small,.match-history-grid small,.ace-detail-metric small,
+  .sg-detail-grid small
+) {
+  color:#9aafa4!important;
+}
+body#blinqPremium .match-detail-shell :is(
+  .insight-player-metrics strong,.match-history-grid b,.ace-detail-metric strong,
+  .sg-detail-grid strong
+) {
+  color:#e5f2e9!important;
+}
+body#blinqPremium .match-detail-shell .match-stat-row {
+  border-color:rgba(107,169,146,.13)!important;
+}
+body#blinqPremium .match-detail-shell :is(.ace-detail-note,.match-detail-note,.match-h2h-summary p) {
+  color:#9cb7a9!important;
+}
+body#blinqPremium .match-detail-shell :is(.ace-detail-main,.sg-detail-hero>div:last-child) {
+  min-width:0;
+}
+@media(max-width:760px) {
+  body#blinqPremium .match-detail-tabs {
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:3px 6px!important;
+    margin-bottom:17px!important;
+  }
+  body#blinqPremium .match-detail-tabs button {
+    min-height:43px!important;
+    padding:8px 5px!important;
+    font-size:12px!important;
+    line-height:1.35!important;
+  }
+  body#blinqPremium .match-detail-tabs button.active::after {
+    bottom:0!important;
+  }
+  body#blinqPremium .match-detail-pick,
+  body#blinqPremium .ace-detail-pick,
+  body#blinqPremium .sg-detail-hero {
+    padding:13px!important;
+    gap:10px!important;
+  }
+  body#blinqPremium .match-detail-shell :is(.ace-detail-pick strong,.sg-detail-hero strong) {
+    overflow-wrap:anywhere;
+  }
+}
+@media(min-width:761px) {
+  body#blinqPremium .match-detail-tabs {
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    gap:8px!important;
+  }
+}
