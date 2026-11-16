@@ -3966,7 +3966,7 @@
     }
     const windowDays=Number(window);
     if(Number.isFinite(windowDays)&&windowDays>0&&filters?.bettingDay!==false){
-      const day=bratislavaBettingDayKey(now,6);
+      const day=recentBounds?null:bratislavaBettingDayKey(now,6);
       const from=recentBounds?recentBounds[0]:bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1-Math.ceil(windowDays)),6);
       const until=recentBounds?recentBounds[1]:bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1),6);
       return Number.isFinite(ts)&&ts>=from&&ts<until;
