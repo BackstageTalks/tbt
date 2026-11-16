@@ -1632,7 +1632,17 @@ def feed(req):
     return response(data)
 
 
-def _authorized_feed_payload(req, *, bootstrap=False, results_only=False):
+def _authorized_feed_payload(req, *, bootstrap=False):
+    # Preserve the public feed builder and its tracing/return contract.
+    return _build_authorized_feed_payload(req, bootstrap=bootstrap)
+
+
+def _authorized_results_payload(req):
+    # Only Results uses the lean internal mode; never infer this from user input.
+    return _build_authorized_feed_payload(req, results_only=True)
+
+
+def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
     try:
         # Explicit authenticated diagnostics only: relative durations, no account
         # fields, IDs, prices, or private payloads. Ordinary feed stays identical.
@@ -1707,7 +1717,7 @@ def _authorized_feed_payload(req, *, bootstrap=False, results_only=False):
             # they are recomputed below after verified runtime settlement.
             # A shallow dict snapshot is safe because runtime settlement
             # returns new Results rows rather than mutating authorized rows.
-            fallback_kpi_source = dict(data) if not results_only else None
+            fallback_kpi_source = dict(data)
             if not results_only and is_admin(user, settings):
                 data["member_result_rules"] = {
                     plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
@@ -1814,10 +1824,10 @@ def _authorized_feed_payload(req, *, bootstrap=False, results_only=False):
             # Preserve the exact pre-settlement, membership-filtered KPI source
             # if a required Results overlay failed before final KPI computation.
             # If the final cards were already computed, keep them unchanged.
-            if not results_only and not kpi_finalized:
+            if not kpi_finalized:
                 data["dashboard_kpi_cards"] = selected_dashboard_cards(
                     fallback_kpi_source, runtime_ui
-                )
+                ) if not results_only else None
             data["match_statuses"] = {}
             data["match_status_updated_at"] = None
         trace_stage("results_kpis")
@@ -1872,7 +1882,7 @@ def results_page(req):
 
     # Returning the private in-process payload avoids a wasteful serialize +
     # decode of the entire ledger before selecting this page.
-    authorized = _authorized_feed_payload(req, results_only=True)
+    authorized = _authorized_results_payload(req)
     if not isinstance(authorized, dict) or "error" in authorized:
         return authorized  # Existing 401/403/503 path; never bypass auth.
     rows = authorized.get("results") or []

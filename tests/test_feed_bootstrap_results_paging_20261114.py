@@ -186,9 +186,11 @@ def test_results_only_admin_does_not_repeat_global_runtime_settlement(monkeypatc
     assert len(count) == 1 and count[0].get("already_detached") is True
 
 
-def test_results_only_fail_closed_and_does_not_fallback_to_dashboard_kpi(monkeypatch):
+def test_results_only_preserves_existing_settlement_fallback_without_kpi(monkeypatch):
     calls = _stub_authenticated_feed(monkeypatch, fail_at="before_final")
     page = api.results_page(request(page="0", limit="500"))
     assert calls == []
-    assert page["results"] == [{"event_id": "authorized"}]
+    # Existing feed fallback retains the already-settled authorized row; the
+    # result-only path must not accidentally apply new exclusion semantics.
+    assert page["results"] == [{"event_id": "settled"}]
     assert page["snapshot"] == api._authorized_results_revision(page["results"])
