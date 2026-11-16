@@ -298,7 +298,9 @@ def compare(
     if missing:
         raise ComparatorCoverageError("model feature sources unavailable: " + ", ".join(missing))
 
-    probability = float(model.predict_proba(pd.DataFrame([features], columns=feature_names))[0])
+    inference_frame = pd.DataFrame([features], columns=feature_names)
+    inference_frame['competition'] = synthetic.tournament_level or 'unknown'
+    probability = float(model.predict_proba(inference_frame)[0])
     if not math.isfinite(probability) or not 0.0 < probability < 1.0:
         raise ComparatorError("model returned invalid probability")
     p1 = probability

@@ -51,10 +51,19 @@ def test_odds_and_outcome_columns_cannot_affect_calibration():
     selected, report = choose(frame, p, y, 1200)
     frame['odds'] = 100
     frame['future_result'] = 1-y
-    frame['competition'] = 'invented metadata'
     again, report2 = choose(frame, p, y, 1200)
     assert report == report2
     np.testing.assert_array_equal(apply(frame, p, selected), apply(frame, p, again))
+
+
+def test_explicit_competition_resolves_lossy_generic_level_without_gender_guess():
+    frame, _, _ = evidence(4)
+    frame['tournament_level'] = .35
+    frame['competition'] = ['ATP', 'UTR Men', 'WTA 125', 'unknown']
+    assert masks(frame)['main_atp'].tolist() == [True, False, False, False]
+    frame['competition'] = ['ITF Men', 'ITF Women', 'Challenger', 'ATP Finals']
+    assert masks(frame)['itf_atp'].tolist() == [True, True, False, False]
+    assert masks(frame)['challenger_atp'].tolist() == [False, False, True, False]
 
 
 def test_legacy_model_has_no_context_layer():

@@ -23,6 +23,16 @@ def masks(frame):
     # Never infer main-tour membership from that fallback or the gender alone.
     groups = {'main': np.isin(level, [.45, .6, .8, 1.]),
               'challenger': level == .25, 'itf': level == .1}
+    if 'competition' in frame.columns:
+        # Training and serving pass the same original MatchRecord category.
+        # Explicit metadata takes precedence over the lossy numeric encoding.
+        names = frame.competition.fillna('').astype(str).str.lower().str.strip()
+        itf = names.str.contains('itf|futures', regex=True).to_numpy()
+        challenger = names.str.contains('challenger', regex=False).to_numpy() & ~itf
+        main = names.isin({'atp', 'wta', 'atp 250', 'atp 500', 'atp 1000',
+                           'wta 250', 'wta 500', 'wta 1000', 'masters 1000',
+                           'atp finals', 'wta finals', 'grand slam', 'grand slams'}).to_numpy()
+        groups = {'main': main, 'challenger': challenger, 'itf': itf}
     return {f'{name}_{sex}': group & (tour == value)
             for name, group in groups.items() for sex, value in [('atp', 1.), ('wta', 0.)]}
 

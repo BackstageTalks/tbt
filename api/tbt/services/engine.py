@@ -349,7 +349,9 @@ def predict(
     missing = [name for name in feature_names if name not in features[0]]
     if missing:
         raise ValueError(f"Model artifact requests unavailable features: {missing}")
-    probabilities = model.predict_proba(pd.DataFrame(features, columns=feature_names))
+    inference_frame = pd.DataFrame(features, columns=feature_names)
+    inference_frame['competition'] = [match.tournament_level or 'unknown' for match in future]
+    probabilities = model.predict_proba(inference_frame)
     rows = []
     for match, f, probability in zip(future, features, probabilities):
         p = float(probability)
