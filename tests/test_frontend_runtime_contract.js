@@ -208,4 +208,35 @@ assert.ok(feedRead.includes('if(!keepResultsWork)cancelResultsPreload();'),
 assert.ok(feedRead.includes('if(!keepResultsWork)scheduleResultsPreload(generation);'),
   'do not reschedule the same staged background pipeline');
 
+// Execute the real refresh function: UI configuration refresh must not render
+// before the refreshed feed is known, even if the configuration changed.
+(async()=>{
+  const begin=app.indexOf('  async function refreshWorkspace(');
+  const end=app.indexOf('\n  }\n',begin);
+  assert.ok(begin>=0&&end>begin,'refreshWorkspace source missing');
+  let revision='same';const calls=[];
+  const context={
+    console,
+    uiVisualSignature:()=>revision,
+    loadUiConfig:async defer=>{
+      calls.push('config:'+defer);
+      assert.equal(defer,true,'config loader must defer premature dashboard repaint');
+    },
+    loadFeed:async (show,options)=>calls.push('feed:'+show+':'+options.skipUnchanged),
+  };
+  vm.runInNewContext(app.slice(begin,end+5),context);
+  await context.refreshWorkspace(false,{skipUnchanged:true});
+  assert.deepEqual(calls,['config:true','feed:false:true'],
+    'unchanged periodic refresh must remain completely silent');
+  calls.length=0;
+  context.loadUiConfig=async defer=>{calls.push('config:'+defer);revision='new';};
+  await context.refreshWorkspace(false,{skipUnchanged:true});
+  assert.deepEqual(calls,['config:true','feed:false:false'],
+    'changed published config must still force a single feed/UI update');
+  calls.length=0;
+  await context.refreshWorkspace(true);
+  assert.deepEqual(calls,['config:true','feed:true:false'],
+    'manual refresh must still update the workspace');
+})().catch(error=>{console.error(error);process.exitCode=1;});
+
 console.log(`frontend runtime contract: PASS (736-r${p})`);

@@ -10035,7 +10035,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   }
   async function refreshWorkspace(showLoading=false,{skipUnchanged=false}={}){
     const prior=skipUnchanged?uiVisualSignature():null;
-    try{await loadUiConfig();}
+    // Keep the existing dashboard mounted until the new feed/config is compared.
+    // loadFeed performs the single necessary render only if something changed.
+    try{await loadUiConfig(true);}
     catch(error){console.warn('[BlinQ UI] runtime UI refresh failed; keeping last known UI config.',error);}
     // Published CMS/config can change independently of the prediction feed.
     return loadFeed(showLoading,{skipUnchanged:skipUnchanged&&prior===uiVisualSignature()});
