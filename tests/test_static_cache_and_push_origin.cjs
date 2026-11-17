@@ -7,11 +7,13 @@ const sw = fs.readFileSync('web/blinq-sw.js', 'utf8');
 const config = JSON.parse(fs.readFileSync('web/staticwebapp.config.json', 'utf8'));
 const cache = Object.fromEntries(config.routes.map(route => [route.route, route.headers?.['Cache-Control'] || '']));
 
-// Existing critical-asset no-store contract must remain in force.
-for (const path of ['/app.js', '/blinq-app.css']) {
-  assert.equal(cache[path], 'no-store, max-age=0, must-revalidate');
+// Only deploy-stamped public assets can be reused; no private state is cached.
+const html = fs.readFileSync('web/index.html', 'utf8');
+for (const path of ['/app.js', '/auth.js', '/responsive.js', '/blinq-app.css']) {
+  assert.equal(cache[path], 'public, max-age=300, must-revalidate');
+  assert.ok(html.includes(path + '?v='), path + ' must have a release URL');
 }
-for (const path of ['/', '/index.html', '/auth.js', '/ui-config.json', '/release.json', '/deployment.json']) {
+for (const path of ['/', '/index.html', '/ui-config.json', '/release.json', '/deployment.json']) {
   assert.match(cache[path], /no-store/, path);
 }
 assert.match(fs.readFileSync('scripts/stamp_web_deployment.py', 'utf8'), /&deploy=/);
