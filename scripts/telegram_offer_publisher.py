@@ -349,6 +349,77 @@ def verify_prepared_site(confirmed, config_url, now):
     return verified_website_morning_parity(confirmed, json.loads(body), now)
 
 
+
+# The 17 November release predates this strict receipt fence. Never reinterpret
+# historical sends or retroactively hide an already-published bet.
+EXACT_DAILY_FENCE_FROM = "2026-11-18"
+
+
+def verify_frozen_daily_offer(offer, ledger_state, now, *,
+                              activation_day=EXACT_DAILY_FENCE_FROM):
+    """Fail closed if an already reserved/sent TG offer differs from the board.
+
+    Compare the *full pre-start eligible market offer at reservation time*, not
+    a later future-only website view. Already-started picks are not new offers,
+    and FREE previews are duplicates of the premium immutable selections.
+    This is a read-only contract check, never a Telegram send or ledger writer.
+    """
+    active_day = day(now)
+    if active_day < activation_day:
+        return {"status": "legacy_day", "betting_day": active_day, "locked": False}
+    if not isinstance(ledger_state, dict) or not isinstance(ledger_state.get("attempts"), dict):
+        raise RuntimeError("Telegram ledger unavailable: cannot prove no post-send offer drift")
+    batches = [
+        (key, record) for key, record in ledger_state["attempts"].items()
+        if isinstance(key, str) and key.startswith(active_day + ":")
+        and isinstance(record, dict) and record.get("status") in ("reserved", "sent")
+        and not key.startswith(active_day + ":repost:")
+    ]
+    if not batches:
+        return {"status": "not_reserved", "betting_day": active_day, "locked": False}
+    if len(batches) != 1:
+        raise RuntimeError("Ambiguous multiple same-day Telegram offer reservations")
+    _, record = batches[0]
+    try:
+        reserved_at = stamp(record["reserved_at"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("Telegram offer freeze has no valid reservation clock") from exc
+    if day(reserved_at) != active_day:
+        raise RuntimeError("Telegram reservation day mismatch")
+    rows = record.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("Telegram reservation contains no frozen exact selections")
+    if not isinstance(offer, dict) or offer.get("betting_day") != active_day:
+        raise RuntimeError("Candidate and frozen Telegram betting days differ")
+    # The confirmed snapshot may have been regenerated after the send. Use the
+    # frozen reservation time to reconstruct *which rows could have been sent*.
+    selection_view = {**offer, "generated_at": reserved_at.isoformat()}
+    chosen = select_groups(
+        selection_view,
+        {"sections": {k: True for k in SECTIONS},
+         "free_top_pick": False, "include_started": False,
+         "max_per_section": 0},
+        reserved_at,
+    )
+    counts = {}
+    for category in SECTIONS:
+        expected = [result_reference(row, category) for row in chosen.get(category, [])]
+        frozen = [row for row in rows if isinstance(row, dict) and row.get("channel") == category]
+        if len(expected) != len(frozen) or any(
+            not _same_frozen_selection(current, original)
+            or current.get("scheduled_at") != original.get("scheduled_at")
+            for current, original in zip(expected, frozen)
+        ):
+            raise RuntimeError(
+                "Telegram exact offer freeze violation: " + category
+                + " website/confirmed=" + str(len(expected))
+                + " reserved/sent=" + str(len(frozen))
+            )
+        counts[category] = len(frozen)
+    return {"status": "verified", "betting_day": active_day,
+            "locked": True, "counts": counts}
+
+
 def _free_aces_identity(row):
     """Freeze the exact O/U bet, not just a match that may carry two lines."""
     return [str(row["event_id"]),str(row.get("selection_id") or ""),
