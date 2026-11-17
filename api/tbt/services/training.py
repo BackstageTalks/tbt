@@ -385,6 +385,7 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
             cohort: cal.kind for cohort, cal in
             (getattr(selected, "evidence_calibrators", {}) or {}).items()
         },
+        training_half_life_days=getattr(selected, "training_half_life_days", None),
         atp_blend_weight=getattr(selected, "atp_blend_weight", None),
         atp_elo_weight=getattr(selected, "atp_elo_weight", None),
     )
@@ -1145,6 +1146,7 @@ def train_from_matches(
     # Enabled only for new 7.2.1 research; standard and legacy fits are unchanged.
     evaluation_model.atp_blend_specialization = training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     evaluation_model.accuracy_blend_selection = training_profile == "accuracy-7.2.2"
+    evaluation_model.time_decay_variant_search = training_profile == "accuracy-7.2.2"
     # New candidate only: fix current 7.2.1's coarse isotonic-plateau
     # confidence with smooth evidence-aware calibration, subject to proper
     # score checks on disjoint earlier calibration days. The serialized
@@ -1391,6 +1393,8 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
+            "training_weighting": (evaluation_model.metadata or {}).get("training_weighting"),
+            "training_weight_selection": (evaluation_model.metadata or {}).get("training_weight_selection"),
             "smooth_high_confidence_validation": (evaluation_model.metadata or {}).get("smooth_high_confidence_validation"),
             "calibration_refit_on_selection": (evaluation_model.metadata or {}).get("calibration_refit_on_selection"),
             "accuracy_blend_validation": (evaluation_model.metadata or {}).get("accuracy_blend_validation"),
