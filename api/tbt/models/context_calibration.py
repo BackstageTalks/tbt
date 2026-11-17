@@ -41,11 +41,13 @@ def masks(frame):
         main = names.isin({'atp', 'wta', 'atp 250', 'atp 500', 'atp 1000',
                            'wta 250', 'wta 500', 'wta 1000', 'masters 1000',
                            'atp finals', 'wta finals', 'grand slam', 'grand slams'}).to_numpy()
-        main &= ~(itf | utr | challenger | wta125 | other)
+        # pandas may expose read-only NumPy views under copy-on-write.
+        # Build a fresh mask instead of mutating the Series' backing array.
+        main = main & ~(itf | utr | challenger | wta125 | other)
         # An incorrect gender/competition label is not calibration evidence.
         incompatible = ((tour == 1.) & names.str.startswith('wta').to_numpy()) | (
             (tour == 0.) & names.str.startswith('atp').to_numpy())
-        main &= ~incompatible
+        main = main & ~incompatible
         groups = {'main': main, 'challenger': challenger & ~other,
                   'itf': itf & ~other}
     return {f'{name}_{sex}': group & (tour == value)

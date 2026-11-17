@@ -66,6 +66,23 @@ def test_explicit_competition_resolves_lossy_generic_level_without_gender_guess(
     assert masks(frame)['challenger_atp'].tolist() == [False, False, True, False]
 
 
+def test_competition_masks_accept_read_only_pandas_arrays(monkeypatch):
+    original = pd.Series.to_numpy
+
+    def readonly(self, *args, **kwargs):
+        result = original(self, *args, **kwargs)
+        result.setflags(write=False)
+        return result
+
+    frame, _, _ = evidence(3)
+    frame['competition'] = ['ATP', 'ATP', 'WTA']
+    frame['tournament'] = ['ATP 250', 'ITF M15', 'WTA 500']
+    monkeypatch.setattr(pd.Series, 'to_numpy', readonly)
+    groups = masks(frame)
+    assert groups['main_atp'].tolist() == [True, False, False]
+    assert groups['itf_atp'].tolist() == [False, True, False]
+
+
 
 def test_context_rejects_generic_atp_level_when_tournament_is_lower_tier():
     frame, _, _ = evidence(6)
