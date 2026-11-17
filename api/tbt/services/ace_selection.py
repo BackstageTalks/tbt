@@ -17,10 +17,10 @@ from .feed import ace_eligibility_reason, main_tour_aces
 
 
 def _main_tour_for_aces(row: dict[str, Any]) -> bool:
-    """Shared ESÁ and Viac Es market gate: ranked main tour/Challenger/WTA125.
+    """Shared ESÁ and Viac Es market gate: ATP/Challenger, WTA 250+.
 
-    ITF/Futures, unknown tours and either player without a known TOP1000 rank
-    remain excluded. Match Winner, Value and Double Faults are unchanged.
+    WTA 125, ITF/Futures, ambiguous women's grades, and either player without
+    a known TOP1000 rank are excluded. Match Winner, Value, DF unchanged.
     """
     return main_tour_aces(row)
 
@@ -716,7 +716,8 @@ def select_ace_picks(
     eligible_matches = 0
     ace_gate_counts = {
         "eligible": 0, "unsupported_tour": 0,
-        "excluded_itf_futures": 0, "missing_player_rank": 0,
+        "excluded_itf_futures": 0, "excluded_wta_below_250": 0,
+        "unverified_wta_level": 0, "missing_player_rank": 0,
         "invalid_player_rank": 0, "outside_top1000": 0,
     }
     for row in predictions:
