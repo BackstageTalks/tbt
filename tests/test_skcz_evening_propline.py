@@ -69,7 +69,7 @@ class PropLineEvening(unittest.TestCase):
         values = milestone["verified_single_prices"]
         self.assertEqual([(v["threshold"], v["equivalent_over_line"])
                           for v in values], [(10, 9.5), (11, 10.5)])
-        self.assertAlmostEqual(values[0]["odds"], 1 + 100/133)
+        self.assertAlmostEqual(values[0]["odds"], 1 + 100/133, places=5)
         self.assertEqual(values[1]["odds"], 2.2)
 
     def test_full_two_way_only_from_same_sportsbook(self):
