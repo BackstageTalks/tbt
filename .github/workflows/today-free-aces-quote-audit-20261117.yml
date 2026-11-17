@@ -42,9 +42,9 @@ jobs:
           now=datetime.now(timezone.utc)
           today=tg.day(now)
           snap=tg.snapshot(Path('/tmp/today-aces-free-probe'))
-          assert snap.get('confirmed_only') is True and snap.get('betting_day')==today, 'not today's confirmed offer'
+          assert snap.get('confirmed_only') is True and snap.get('betting_day')==today, 'wrong or unconfirmed betting day'
           site=more.site_readback('https://agreeable-sky-011a7fe10.7.azurestaticapps.net')
-          assert site.get('ready') is True and site.get('stale') is False and site.get('betting_day')==today, 'website not ready for today'
+          assert site.get('ready') is True and site.get('stale') is False and site.get('betting_day')==today, 'website not ready for betting day'
           website_ok=(site.get('generated_at')==snap.get('source_feed_generated_at'))
           all_aces = []
           all_most = []
@@ -83,7 +83,7 @@ jobs:
               'source_feed_generated_at':snap.get('source_feed_generated_at'),
               'website_generated_at':site.get('generated_at'),'website_generation_matches':website_ok,
               'website_visible_counts':site.get('visible_counts'),
-              'ace_rows':len(all_aces),'most_aces_rows':len(all_most),
+              'ace_rows_count':len(all_aces),'most_aces_rows_count':len(all_most),
               'ace_rows_confirmed_on_site':sum(x['on_website_ace_keys'] for x in all_aces),
               'ace_rows':all_aces[:60],'most_aces_rows_detail':all_most[:60],
               'cdb_writes':0,'published_picks_changed':0,'provider_calls':0,
