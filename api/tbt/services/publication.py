@@ -1113,6 +1113,30 @@ def build_daily_offer_snapshot(
     return snapshot
 
 
+def final_offer_digest(snapshot):
+    """Hash the exact frozen premium offer and its TOP selector policy.
+
+    The digest is stored inside the manifest-verified private confirmed release.
+    It is *not* inferred from a mutable website page or live odds.
+    """
+    if not isinstance(snapshot, dict):
+        raise ValueError("Invalid daily offer finality source")
+    payload = {
+        "betting_day": snapshot.get("betting_day"),
+        "source_feed_generated_at": snapshot.get("source_feed_generated_at"),
+        "top_daily_rule": ((snapshot.get("market_selection") or {}).get("top_daily_rule")),
+        "sections": {
+            key: snapshot.get(key)
+            for key in ("top_daily_picks", "value_picks", "ace_picks")
+        },
+    }
+    encoded = json.dumps(
+        payload, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 
 def _frozen_access_contract(ui_config):
     """Keep only non-sensitive entitlement rules effective at issuance."""
@@ -1191,6 +1215,15 @@ def build_confirmed_daily_offer_snapshot(
     # The Telegram website parity check must compare the immutable source
     # generation, never the timestamp of a later idempotent confirmation.
     snapshot["source_feed_generated_at"] = feed.get("generated_at")
+    # Signed finality certificate: Telegram is driven by this confirmed private
+    # offer, irrespective of the order in which the web client displays it.
+    snapshot["final_offer"] = {
+        "schema": 1,
+        "status": "final",
+        "betting_day": snapshot["betting_day"],
+        "confirmed_at": snapshot["generated_at"],
+        "premium_sha256": final_offer_digest(snapshot),
+    }
     access_contract = _frozen_access_contract(ui_config)
     if access_contract is not None:
         snapshot["access_contract"] = access_contract
