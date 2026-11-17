@@ -189,3 +189,8 @@ def test_workflow_waits_for_private_finality_and_never_requires_live_offer(tmp_p
     assert "MORNING_SITE_PARITY" not in workflow
     assert "prepare --daily --verify-site" not in workflow
     assert "final_offer_only=True" in workflow
+    legacy = (root / ".github/workflows/telegram-offer.yml").read_text()
+    assert "BLINQ_GITHUB_ACTIONS_TOKEN: ${{ github.token }}" in legacy
+    publisher = (root / "scripts/telegram_offer_publisher.py").read_text()
+    assert 'if not repost and day(now) >= EXACT_DAILY_FENCE_FROM:' in publisher
+    assert '":repost:" not in reserved_id' in publisher
