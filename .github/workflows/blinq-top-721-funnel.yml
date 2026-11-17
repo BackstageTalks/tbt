@@ -25,17 +25,18 @@ jobs:
           python-version: '3.11'
       - name: Run offline regression tests
         run: python -m unittest discover -s tests -p test_audit_top_721_funnel.py -v
-      - name: Verify committed private snapshot and audit 2026-11-16
+      - name: Verify committed private snapshots for November 16 and 17
         shell: bash
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN"
-          python scripts/audit_top_721_funnel.py --day 2026-11-16 --out .cache/tbt/top-721-funnel-report.json
+          python scripts/audit_top_721_funnel.py --day 2026-11-16 --out .cache/tbt/top-721-funnel-report-2026-11-16.json
+          python scripts/audit_top_721_funnel.py --day 2026-11-17 --out .cache/tbt/top-721-funnel-report-2026-11-17.json
       - name: Upload aggregate-only audit
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: blinq-top-721-funnel-${{ github.run_id }}
-          path: .cache/tbt/top-721-funnel-report.json
+          path: .cache/tbt/top-721-funnel-report-*.json
           if-no-files-found: warn
           retention-days: 30
