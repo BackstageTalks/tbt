@@ -31,7 +31,7 @@ DFS = frozenset(("dabble", "sleeper", "prizepicks", "underdog",
 MIN_REMAINING = 150
 MAX_RESPONSE = 20_000_000
 MILESTONE = re.compile(r"^([1-9][0-9]*)\s*\+\s*aces$", re.I)
-MOST = re.compile(r"\b(most|more|higher|superiority|who.*more)\b", re.I)
+MOST = re.compile(r"(?:^|[_\\s-])(most|more|higher|superiority|winner)(?:$|[_\\s-])", re.I)
 
 
 def _stamp(value):
