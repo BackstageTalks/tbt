@@ -34,7 +34,8 @@ historical prices.
 - Folder: `PropLine` (ID `1C7_B2LB37IVTK9gBu2TT9dSj5XClIUKh`).
 - `propline.json`: human-readable configuration; **NOT** a market snapshot.
 - Daily immutable files: `propline-YYYY-MM-DD-RUNID-HASH16.json`.
-- Requires existing `BLINQ_DRIVE_WRITER_JSON` secret and **Editor** on only
+- Reuses `BLINQ_DRIVE_WRITER_JSON`, or the existing `BLINQ_DRIVE_READER_JSON`
+  service-account credentials as a fallback. The identity requires **Editor** on
   the PropLine folder. The MoviOdds folder's existing ACL does not confer
   permission here. No credential is logged or copied to the repo.
 - Any upload or readback mismatch fails the workflow; private recovery data
