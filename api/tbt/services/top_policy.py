@@ -43,17 +43,19 @@ def competition_group(row):
     level = " ".join(level.replace("_", " ").replace("-", " ").split())
     name = str(row.get("tournament") or "").lower()
     combined = level + " " + name
+    # Classify excluded formats before any tier words; an ATP Challenger
+    # junior/exhibition is not an ATP Challenger singles match.
+    if any(word in combined for word in ("doubles", "wheelchair", "junior", "exhibition")):
+        return "other"
     if "itf" in combined or "futures" in combined:
         return "ITF"
     if "utr" in combined:
         return "UTR"
     if re.search(r"wta\s*125", combined) or ("challenger" in combined and
-            str(row.get("tour") or "").strip().upper() == "WTA"):
+            ("wta" in combined or str(row.get("tour") or "").strip().upper() == "WTA")):
         return "WTA 125"
     if "challenger" in combined:
         return "Challenger"
-    if any(word in combined for word in ("doubles", "wheelchair", "junior", "exhibition")):
-        return "other"
     if level in {"atp", "atp 250", "atp 500", "atp 1000", "masters 1000", "atp finals"}:
         return "ATP" if str(row.get("tour") or "").upper() == "ATP" else "unknown"
     if level in {"wta", "wta 250", "wta 500", "wta 1000", "wta finals"}:
