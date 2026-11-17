@@ -296,8 +296,10 @@ jobs:
           sidecar_path="$(jq -r '.output.sidecar_manifest_path' "$REQUEST_FILE")"
           upload_json /tmp/alimoh-sidecars/manifest.json "$sidecar_path" "Publish alimoh89 sidecar manifest run $GITHUB_RUN_ID"
 
-          audit_path="$(jq -r '.output.audit_path' "$REQUEST_FILE")"
-          upload_json /tmp/alimoh-sidecars/manifest.json "$audit_path" "Audit integrated alimoh89 markets run $GITHUB_RUN_ID"
+          # Retired duplicate audit mirror (same Git blob as sidecar_path).
+          # Preserve one SHA-verifiable provenance record in the private source
+          # manifest. Do not create a second identical repository file.
+          echo "ALIMOH89_SINGLE_PROVENANCE_MANIFEST_PUBLISHED"
 
       - name: Update permanent backup manifest
         if: ${{ steps.request.outputs.mode == 'write' && steps.prepared.outputs.canonical_changes == 'true' }}
