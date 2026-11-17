@@ -11,7 +11,7 @@
   "model_changes": false,
   "scope": "2019, 2026; strict whole-match contradiction exclusion; exact native NULL-only; no identity changes",
   "expected_provider_quarantine": 0,
-  "expected_cdb_bundle_sha256": "021095266d108d866e6de8d79674620e7074a7a21def7acac48a121531a6e980",
+  "expected_cdb_bundle_sha256": "1b7504ac0a7003dd9c5e69b2b4a0c2d217670eafb534fd0a9b5a79fd05a744af",
   "expected_canonical_matches": 1009552,
   "expected_full_canonical_matches": 1009552,
   "expected_staged_matches": 304,
