@@ -197,7 +197,8 @@ def test_aces_and_derived_most_aces_accept_ranked_challengers_but_not_itf():
         history.append(historical(f"a{i}", when, "A", f"X{i}", 9, 3, 1, 2))
         history.append(historical(f"b{i}", when, "B", f"Y{i}", 3, 8, 4, 2))
     future = [
-        {**prediction(now + timedelta(hours=5)), "event_id":str(i), "tour":tour}
+        {**prediction(now + timedelta(hours=5)), "event_id":str(i), "tour":tour,
+         **({"competition": "WTA 250"} if tour == "WTA" else {})}
         for i,tour in enumerate(["ATP","WTA","ITF","ATP Challenger","WTA 125","unknown",""],1)
     ]
     future.extend([
@@ -208,12 +209,34 @@ def test_aces_and_derived_most_aces_accept_ranked_challengers_but_not_itf():
     ])
     cards, _ = select_ace_picks(history, future, now=now,
                                  per_market_limit=20,total_limit=40)
-    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA","ATP Challenger","WTA 125"}
+    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA","ATP Challenger"}
     assert any(row["tour"]=="ITF" and row["market"]=="double_faults" for row in cards)
     more, _ = select_ace_winner_picks(history,future,now=now)
-    assert {row["tour"] for row in more} == {"ATP","WTA","ATP Challenger","WTA 125"}
+    assert {row["tour"] for row in more} == {"ATP","WTA","ATP Challenger"}
     blocked = {"mislabelled-itf"}
     assert not any(row["event_id"] in blocked for row in cards if row["market"] == "aces")
     assert not any(row["event_id"] in blocked for row in more)
     assert any(row["event_id"] == "mislabelled-challenger" and row["market"] == "aces" for row in cards)
     assert any(row["event_id"] == "mislabelled-challenger" for row in more)
+
+
+def test_wta_aces_grade_requires_verified_250_plus_and_rejects_generic_wta():
+    from tbt.services.feed import ace_eligibility_reason, main_tour_aces
+    base = prediction(datetime(2026, 11, 17, 14, tzinfo=timezone.utc))
+    base["tour"] = "WTA"
+    base["tournament"] = "Women's Open"
+    assert ace_eligibility_reason(base) == "unverified_wta_level"
+    for grade in ("WTA 250", "WTA 500", "WTA 1000", "WTA Finals", "Grand Slam"):
+        row = {**base, "competition": grade}
+        assert ace_eligibility_reason(row) == "eligible", grade
+        assert main_tour_aces(row), grade
+    for bad in ("WTA 125", "WTA Challenger", "WTA Junior"):
+        row = {**base, "competition": bad}
+        assert not main_tour_aces(row), bad
+    assert ace_eligibility_reason({**base, "tour": "WTA 125"}) == "excluded_wta_below_250"
+    assert ace_eligibility_reason({**base, "tour": "WTA", "competition": "WTA 125"}) == "excluded_wta_below_250"
+    assert ace_eligibility_reason({**base, "tour": "WTA", "competition": "ITF Women"}) == "excluded_itf_futures"
+    assert ace_eligibility_reason({**base, "tournament": "Wimbledon"}) == "eligible"
+    assert ace_eligibility_reason({**base, "tournament": "Wimbledon Juniors"}) == "excluded_wta_below_250"
+    assert ace_eligibility_reason({**base, "competition": "WTA 250",
+                                   "player1": {**base["player1"], "rank": None}}) == "missing_player_rank"
