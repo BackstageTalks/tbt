@@ -200,8 +200,11 @@ jobs:
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         run: |
-          python scripts/telegram_offer_publisher.py send
+          python scripts/telegram_offer_publisher.py send --config-url "$BLINQ_URL/api/v1/ui-config"
       - name: Persist Telegram receipts and independently verify
         if: steps.prepare.outputs.ready == 'true'
         shell: bash
