@@ -355,3 +355,24 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
         "status": "PASS", "policy": "sports_tiered_top5_60_v24",
         "provider_requests": 0,
     }
+
+
+@pytest.mark.parametrize("tour,competition,tournament,expected", [
+    ("ATP", "ATP Challenger", "Regular", "Challenger"),
+    ("WTA", "Challenger", "Generic", "WTA 125"),
+    ("ATP", "WTA Challenger", "Mislabelled", "WTA 125"),
+    ("WTA", "WTA 125", "Open", "WTA 125"),
+    ("ATP", "ATP Challenger", "Junior Challenger", "other"),
+    ("ATP", "ATP Challenger", "Doubles Challenger", "other"),
+    ("WTA", "Grand Slam", "Junior Wimbledon", "other"),
+    ("ATP", "ATP", "Exhibition Showcase", "other"),
+    ("WTA", "ITF Women", "ITF W100", "ITF"),
+    ("ATP", "UTR", "UTR Open", "UTR"),
+])
+def test_top_competition_classifier_fails_closed_for_unapproved_formats(tour, competition, tournament, expected):
+    from tbt.services.top_policy import competition_group, rejection_reasons
+    card = pick("tier-check", .99, competition)
+    card.update(tour=tour, tournament=tournament)
+    assert competition_group(card) == expected
+    if expected in {"ITF", "UTR", "WTA 125", "other"}:
+        assert "competition_not_approved" in rejection_reasons(card)
