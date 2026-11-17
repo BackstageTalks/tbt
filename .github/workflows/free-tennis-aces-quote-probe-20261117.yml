@@ -81,6 +81,7 @@ jobs:
 
           now = dt.datetime.now(dt.timezone.utc)
           markets = collections.Counter()
+          ace_markets_by_book = collections.Counter()
           pairs = []
           inplay = 0
           start_missing = 0
@@ -110,6 +111,7 @@ jobs:
                       mk = str(market.get("key") or "")
                       if "ace" in mk:
                           markets[mk] += 1
+                          ace_markets_by_book[bookname] += 1
                       if mk != "player_aces":
                           continue
                       if market.get("suspended_at") or market.get("suspended") is True:
@@ -147,8 +149,83 @@ jobs:
               "skipped_inplay_events": inplay,
               "missing_start_events": start_missing,
               "ace_market_keys_observed": dict(markets),
+              "ace_market_counts_by_book": dict(ace_markets_by_book),
+              "conventional_book_aces_market_count": sum(count for book, count in ace_markets_by_book.items() if book not in ("dabble", "sleeper", "prizepicks", "underdog", "parlayplay", "draftkings_pick6")),
               "validated_prematch_player_aces_pairs": len(pairs),
               "sample_verified_pairs": pairs[:5],
               "most_aces_contract_status": "not_verifiable_from_player_aces_bulk",
           }, ensure_ascii=False, sort_keys=True))
+          PY
+
+      - name: Check advertised VIAC ES market keys for two real ATP matches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, urllib.request, urllib.error
+          key = os.getenv("PROPL", "")
+          if not key:
+              raise SystemExit("Existing free PropLine key unavailable")
+          base = "https://api.prop-line.com/v1/sports/tennis/events"
+          examples = [
+              ("Fils-Jodar", "781937"),
+              ("Zverev-Shelton", "733579"),
+          ]
+          summary = {"requests": 0, "events": [], "quote_verified": False}
+          for label, event_id in examples:
+              path = f"{base}/{event_id}/markets"
+              req = urllib.request.Request(path, headers={"X-API-Key": key,
+                  "Accept": "application/json", "User-Agent": "BlinQ-free-market-audit/1.0"})
+              try:
+                  with urllib.request.urlopen(req, timeout=20) as res:
+                      remaining = res.headers.get("X-Daily-Remaining")
+                      payload = json.load(res)
+              except urllib.error.HTTPError as exc:
+                  summary["events"].append({"event": label, "error_http": exc.code})
+                  continue
+              summary["requests"] += 1
+              if remaining is None or int(remaining) <= 150:
+                  summary["status"] = "quota_unverified_or_reserve"
+                  break
+              if isinstance(payload, dict):
+                  rows = payload.get("markets") or payload.get("data") or payload.get("results") or []
+              elif isinstance(payload, list):
+                  rows = payload
+              else:
+                  rows = []
+              keys = sorted(set(str(x.get("key")) for x in rows if isinstance(x, dict) and x.get("key")))
+              ace_keys = [x for x in keys if "ace" in x.lower()]
+              more_keys = [x for x in ace_keys if any(t in x.lower() for t in
+                          ("most", "more", "winner", "superiority", "higher"))]
+              summary["events"].append({
+                  "event": label, "advertised_aces_keys": ace_keys,
+                  "advertised_most_aces_keys": more_keys,
+                  "all_market_keys_count": len(keys),
+                  "quota_remaining": int(remaining)
+              })
+              # Read only one unambiguously advertised VIAC ES market, if present.
+              if more_keys and not summary["quote_verified"]:
+                  from urllib.parse import urlencode
+                  odds_url = f"{base}/{event_id}/odds?" + urlencode({"markets": more_keys[0]})
+                  req2 = urllib.request.Request(odds_url, headers={"X-API-Key": key,
+                      "Accept": "application/json", "User-Agent": "BlinQ-free-market-audit/1.0"})
+                  try:
+                      with urllib.request.urlopen(req2, timeout=20) as res:
+                          quota = res.headers.get("X-Daily-Remaining")
+                          prices = json.load(res)
+                      summary["requests"] += 1
+                      if quota is not None:
+                          summary["quota_remaining"] = int(quota)
+                      summaries = []
+                      for book in prices.get("bookmakers") or []:
+                          for m in book.get("markets") or []:
+                              if m.get("key") == more_keys[0]:
+                                  summaries.append({"book": book.get("key"),
+                                                    "outcomes": [{"name": o.get("name"), "price": o.get("price")}
+                                                                 for o in (m.get("outcomes") or [])[:3]]})
+                      summary["events"][-1]["most_aces_market_price_samples"] = summaries[:3]
+                      summary["quote_verified"] = bool(summaries)
+                  except (urllib.error.HTTPError, OSError, ValueError) as exc:
+                      summary["events"][-1]["market_price_error"] = type(exc).__name__
+          print("FREE_MORE_ACES_PROBE=" + json.dumps(summary, ensure_ascii=False, sort_keys=True))
           PY
