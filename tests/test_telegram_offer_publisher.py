@@ -690,7 +690,7 @@ def test_telegram_aces_accepts_ranked_challengers_but_rejects_itf_unknown():
         priced_ou(row(206,"Unknown Player","aces")|{"tour":None}),
     ]
     chosen=tg.select_groups(snapshot,settings(),NOW)
-    assert [r["event_id"] for r in chosen["aces"]]==["201","202","204"]
+    assert [r["event_id"] for r in chosen["aces"]]==["201","202","204","205"]
     assert len(chosen["top"])==5 and len(chosen["value"])==1
 
 
@@ -705,5 +705,5 @@ def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
     ]
     snapshot["ace_picks"]=rows
     chosen=tg.select_groups(snapshot,settings(),NOW)["aces"]
-    assert [x["event_id"] for x in chosen]==["301","302","303"]
+    assert [x["event_id"] for x in chosen]==["301","302","303","304"]
     assert [x["event_id"] for x in chosen]==[x["event_id"] for x in rows if main_tour_aces(x)]
