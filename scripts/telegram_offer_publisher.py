@@ -325,6 +325,10 @@ def verified_website_morning_parity(offer, readback, now):
         expected = {row_authority_key(row, SECTIONS[category]) for row in rows}
         if not expected.issubset(set(observed)):
             raise ValueError("Website differs from exact issued morning contracts")
+        # A subset-only check let 3 confirmed TOP rows pass while the web had 5.
+        # ESÁ is narrower (verified player O/U only) than the full ace board.
+        if category in ("top", "value") and set(observed) != expected:
+            raise ValueError("Website has additional issued morning picks absent from Telegram")
     return {"betting_day":today,"eligible":sum(len(v) for v in selections.values()),
             "website_generation_verified":True}
 
