@@ -361,6 +361,12 @@ def main(argv=None):
         now=now,
         ui_config=effective_ui_config,
     )
+    # Bind the final certificate to the workflow which actually confirmed it.
+    # A concurrent deployment finishing after this confirmation must not be
+    # mistaken for the same final generation by Telegram.
+    run_id = str(os.getenv("GITHUB_RUN_ID") or "")
+    if run_id.isdecimal() and int(run_id) > 0:
+        daily_snapshot["final_offer"]["issuer_run_id"] = int(run_id)
     write_json(directory / "daily_offer_snapshot.json", daily_snapshot)
     store.upload_bundle([
         directory / "ledger.json",
