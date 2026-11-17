@@ -249,8 +249,13 @@ def collect(*, now: datetime | None = None, opener=None, table=None,
                     table, date_utc=key, raw_count=len(data["results"]),
                     accepted_count=report["final"][key]["valid"],
                     collected_at=now)
+            except (MoviOddsAuthError, MoviOddsQuotaError) as exc:
+                # A rejected key or exhausted account budget applies to every day.
+                # No blind retry against the next two dates; preserve their missing receipts.
+                report["errors"].append("results_" + key + "_" + str(exc))
+                break
             except Exception as exc:
-                report["errors"].append("results_" + key + "_" + (str(exc) if isinstance(exc, (MoviOddsAuthError, MoviOddsQuotaError)) else type(exc).__name__))
+                report["errors"].append("results_" + key + "_" + type(exc).__name__)
     report["ok"] = not report["errors"]
     return report
 
