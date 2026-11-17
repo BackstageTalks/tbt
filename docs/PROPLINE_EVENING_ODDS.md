@@ -48,6 +48,37 @@ their Fortuna-only tests are retired. The morning pipeline already uses
 API Pro -> PropLine -> MoviOdds pre-start fallback where contracts match;
 this collector is research-only and does not override that live enrichment.
 
+## Morning attachment from the nightly PropLine archive (17 Nov 2026)
+- The existing live priority is unchanged: Tennis API Pro -> live PropLine
+  -> MoviOdds, followed by the approved statistical ESÁ fallback.
+- Only during the *new morning refresh*, the optional reader uses the latest
+  same-betting-day JSON in `tbt-data:research/propline-evening-odds/YYYY-MM-DD/`.
+  It consumes no PropLine or RapidAPI requests; Google Drive remains the
+  independently checked archival destination.
+- The read is fail-closed for missing files, stale (>24 h) captures, partial
+  scans, malformed source, timestamp or player identity collisions.
+  Provider raw-event SHA and parsed quote equivalence are checked before use.
+- It attaches only a genuine complete two-sided *sportsbook player Aces O/U*
+  at the same model-derived half-ace line, to the same selected player in the
+  same scheduled fixture. Candidate identity, model, counts and model
+  selection remain unchanged; API-backed, priced, or issued picks retain
+  their original price. Price must be >= 1.50 and must meet the existing
+  verified-ace-odds contract.
+- Multiple sportsbooks quoting the same exact contract are resolved
+  deterministically by highest valid captured Over quote and bookmaker key;
+  a conflicting duplicate from one bookmaker is rejected.
+- N+ milestones, fantasy/pick'em, match-total Aces and Most Aces are **not**
+  promoted to an O/U bet. Most Aces settlement rules remain unverified.
+  When no eligible quote exists, the existing local-statistical price policy
+  is unchanged.
+- Price provenance includes bookmaker, provider event ID, native market ID
+  and exact capture time; 23:00 quotes are historical observations, **not**
+  a guarantee of live price availability at 06:00.
+- Independent validation still requires a real 23:00 external tick, private
+  JSON read-back and Drive read-back, followed by a fresh morning publication
+  without revisions to already-issued cards. Offline fixture tests alone
+  are not that evidence.
+
 ## Acceptance and limitations
 1. Verify offline parser regressions + Drive writer tests and full repository CI.
 2. Verify no old Fortuna module is imported by active code.
