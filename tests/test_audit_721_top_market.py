@@ -119,3 +119,34 @@ def test_excluded_repeat_does_not_hide_real_first_prematch_pick():
     assert result["matched_unique"] == 1
     assert result["excluded_repeated_shadow_snapshots"] == 1
     assert repeat["status"] == "pending"  # read-only audit
+
+
+def test_active_722_uses_only_exact_pair_and_keeps_market_guards():
+    from datetime import datetime, timezone
+    from audit_721_top_market import active_candidate_evidence
+    now = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    version = "v7.2.2-research"
+    report = {"promotion_decision": {"candidate_version": version, "production_version": "v201"}}
+    active = {"production_model_version": "v201", "challenger_model_version": version}
+    evidence = active_candidate_evidence(report, "v201", active, "b" * 64)
+    current = {**shadow(), "challenger_model_version": version}
+    rows = [shadow(), current]
+    result = evaluate_721([issued_row()], rows, evidence, now=now)
+    assert result["matched_unique"] == 1
+    assert result["model_pair"]["candidate"] == version
+    assert result["review_gate"]["ready_for_independent_market_review"] is False
+    assert result["model_promoted"] is False
+    assert result["production_mutated"] is False
+    assert evaluate_721([issued_row()], [shadow()], evidence, now=now)["matched_unique"] == 0
+    late = {**current, "captured_at": "2026-10-21T12:00:00Z"}
+    assert evaluate_721([issued_row()], [late], evidence, now=now)["matched_unique"] == 0
+    unpriced = issued_row()
+    unpriced["market_publications"][0]["issued_snapshot"]["two_way_match_winner"].pop("player2_odds")
+    assert evaluate_721([unpriced], [current], evidence, now=now)["matched_unique"] == 0
+
+
+def test_unsupported_candidate_family_still_rejected():
+    evidence = frozen_evidence()
+    evidence["candidate_version"] = "v7.2.3-unverified"
+    with pytest.raises(ValueError, match="model versions"):
+        evaluate_721([issued_row()], [shadow()], evidence)

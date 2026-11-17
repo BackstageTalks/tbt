@@ -1,4 +1,4 @@
-"""Exact 7.2.1 TOP market observation on real issued pre-match offers.
+"""Exact 7.2.x TOP market observation on real issued pre-match offers.
 
 Read-only. Uses the immutable evaluated candidate identity, signed source
 publication evidence, and a real pre-issuance shadow model pair. Never infers
@@ -74,9 +74,9 @@ def evaluate_721(ledger, shadow, evidence, *, now=None):
             or not (frozen_verified or active_verified)):
         raise ValueError("Candidate immutable release evidence missing")
     champion, candidate = evidence.get("champion_version"), evidence.get("candidate_version")
-    if (not isinstance(candidate, str) or not candidate.startswith("v7.2.1-")
+    if (not isinstance(candidate, str) or not candidate.startswith(("v7.2.1-", "v7.2.2-"))
             or not isinstance(champion, str) or not champion):
-        raise ValueError("Exact v7.2.1/champion model versions required")
+        raise ValueError("Exact v7.2.1 or v7.2.2/champion model versions required")
     frozen, exclusions = exact_issued_top(ledger)
     from tbt.services.frozen_721_research import exclude_repeated_events
     cohort = [r for r in shadow if r.get("production_model_version") == champion
@@ -106,7 +106,7 @@ def evaluate_721(ledger, shadow, evidence, *, now=None):
         },
         "market_scope": "Published >=1.50 TOP only; strict real two-way odds at issuance",
         "limits": result["limits"] + [
-            "Realized ROI is from unchanged published picks, not reselected 7.2.1 picks.",
+            "Realized ROI is from unchanged published picks, not reselected candidate picks.",
             "Even sufficient matched offers do not authorize deployment.",
         ],
         "provider_requests": 0, "production_mutated": False, "model_promoted": False,
