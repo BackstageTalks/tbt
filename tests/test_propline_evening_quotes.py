@@ -106,6 +106,16 @@ class EveningQuoteAttachment(unittest.TestCase):
         self.assertEqual(result, [first, second])
         self.assertEqual(stats["matched_aces"], 0)
 
+    def test_explicit_issuer_line_or_direction_never_overwritten(self):
+        wrong_line = {**card(), "market_line": 9.5,
+                      "price_contract": "player_total_ou", "ou_side": "over"}
+        wrong_side = {**card(), "market_line": 10.5,
+                      "price_contract": "player_total_ou", "ou_side": "under"}
+        priced, stats = attach_prices([wrong_line, wrong_side], report(),
+                                      now=MORNING, betting_day=DAY)
+        self.assertEqual(priced, [wrong_line, wrong_side])
+        self.assertEqual(stats["matched_aces"], 0)
+
     def test_one_sided_milestone_never_becomes_ou_price(self):
         p = source()
         markets = p["events"][0]["bookmakers"][0]["markets"][0]["outcomes"]
