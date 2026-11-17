@@ -9433,7 +9433,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     else if(route==='results'){
       const needsFull=resultsWindowNeedsFullHistory(),needsToday=resultsWindowNeedsTodayOnly();
       if(state.feed?.results_boot_partial
-         &&(needsFull||(needsToday?!state.feed?.results_today_ready:!state.feed?.results_recent_ready))){
+         &&((needsFull&&!state.feed?.results_stale_full_ready)
+           ||(needsToday?!state.feed?.results_today_ready:!state.feed?.results_recent_ready))){
         const error=needsFull?fullResultsError:(needsToday?todayResultsError:recentResultsError);
         const loading=needsFull?'Načítavam úplnú históriu Results…':
           (needsToday?'Načítavam dnešné výsledky…':'Načítavam výsledky za posledných 30 dní…');
@@ -9664,14 +9665,22 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     if(resultsPreloadAfterLoad!==null)window.removeEventListener('load',resultsPreloadAfterLoad);
     resultsPreloadAfterLoad=null;
   }
-  function canKeepResultsPreloadOnFeedUpdate(nextFeed,day){
-    const previous=state.feed;
+  function sameResultsReader(previous,nextFeed){
     const oldAccount=String(previous?.account?.id||previous?.account?.email||'').trim().toLowerCase();
     const newAccount=String(nextFeed?.account?.id||nextFeed?.account?.email||'').trim().toLowerCase();
-    // The server snapshot binds the entire authorized ledger, not just today's
-    // page. An unrelated prediction change must not restart a matching read.
+    // A cached ledger is private, tier-scoped data. A matching account and
+    // entitlement manifest are mandatory even for a short stale display.
     return Boolean(oldAccount&&oldAccount===newAccount
       &&previous?.entitlements?.results===true&&nextFeed?.entitlements?.results===true
+      &&JSON.stringify(previous.entitlements)===JSON.stringify(nextFeed.entitlements)
+      &&['plan','status','role','is_admin'].every(key=>
+        String(previous?.account?.[key]??'')===String(nextFeed?.account?.[key]??'')));
+  }
+  function canKeepResultsPreloadOnFeedUpdate(nextFeed,day){
+    const previous=state.feed;
+    // The server snapshot binds the entire authorized ledger, not just today's
+    // page. An unrelated prediction change must not restart a matching read.
+    return Boolean(sameResultsReader(previous,nextFeed)
       &&previous?.results_boot_partial===true&&nextFeed?.results_boot_partial===true
       &&previous?.results_snapshot&&previous.results_snapshot===nextFeed.results_snapshot
       &&!nextFeed.results_archive_unavailable&&!nextFeed.results_exclusions_unavailable
@@ -9680,27 +9689,32 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         ||todayResultsFlight||recentResultsFlight||fullResultsFlight));
   }
   function reuseHydratedResultsOnRefresh(nextFeed){
-    // The server snapshot covers the complete *authorized* ledger for every
-    // scope. Reuse only across the same account, entitlement and revision.
+    // Snapshot revisions bind the whole authorized ledger. When a new result
+    // changes its revision, preserve the last authorized view while the new
+    // ledger hydrates in the background; never show partial rows as complete.
     const current=state.feed;
-    const a=String(current?.account?.id||current?.account?.email||'').trim().toLowerCase();
-    const b=String(nextFeed?.account?.id||nextFeed?.account?.email||'').trim().toLowerCase();
-    const allowed=Boolean(a&&a===b&&Array.isArray(current?.results)
-      &&nextFeed?.results_boot_partial===true&&nextFeed?.entitlements?.results===true
+    const allowed=Boolean(sameResultsReader(current,nextFeed)
+      &&Array.isArray(current?.results)&&nextFeed?.results_boot_partial===true
       &&!nextFeed?.results_archive_unavailable&&!nextFeed?.results_exclusions_unavailable);
     const digest=String(nextFeed?.results_snapshot||'');
     const day=bratislavaBettingDayKey(Date.now(),6);
-    const full=Boolean(allowed&&completeResultsSnapshot&&!current?.results_boot_partial
-      &&digest===completeResultsSnapshot);
-    const recent=Boolean(allowed&&recentResultsSnapshot&&recentResultsDay===day
-      &&current?.results_recent_ready===true&&digest===recentResultsSnapshot);
-    const today=Boolean(allowed&&todayResultsSnapshot&&todayResultsDay===day
-      &&current?.results_today_ready===true&&digest===todayResultsSnapshot);
-    if(full||recent||today){
+    const hadFull=Boolean(allowed&&completeResultsSnapshot
+      &&(!current?.results_boot_partial||current?.results_stale_full_ready));
+    const hadRecent=Boolean(allowed&&recentResultsSnapshot&&recentResultsDay===day
+      &&current?.results_recent_ready===true);
+    const hadToday=Boolean(allowed&&todayResultsSnapshot&&todayResultsDay===day
+      &&current?.results_today_ready===true);
+    const full=Boolean(hadFull&&digest===completeResultsSnapshot);
+    const recent=Boolean(hadRecent&&digest===recentResultsSnapshot);
+    const today=Boolean(hadToday&&digest===todayResultsSnapshot);
+    const stale=Boolean(allowed&&digest&&!full&&!recent&&!today
+      &&(hadFull||hadRecent||hadToday));
+    if(full||recent||today||stale){
       nextFeed.results=current.results;
-      nextFeed.results_today_ready=true;
-      nextFeed.results_recent_ready=full||recent;
+      nextFeed.results_today_ready=full||recent||today||hadToday;
+      nextFeed.results_recent_ready=full||recent||(stale&&hadRecent);
       nextFeed.results_boot_partial=!full;
+      nextFeed.results_stale_full_ready=stale&&hadFull;
     }else{
       todayResultsSnapshot='';
       completeResultsSnapshot='';
@@ -9708,7 +9722,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       todayResultsDay='';
       recentResultsDay='';
     }
-    return full||recent||today;
+    return full||recent||today||stale;
   }
   function resultsWindowNeedsFullHistory(){
     const f=state.resultsFilters||{},w=String(f.window||'today');
@@ -9912,6 +9926,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               state.feed.results=complete;
               normalizeFeedAceOdds(state.feed);
               state.feed.results_boot_partial=false;
+              state.feed.results_stale_full_ready=false;
               completeResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
               todayResultsSnapshot=snapshot;
@@ -10026,7 +10041,19 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; markBootTiming('Dashboard odkrytý'); if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
-      if(!keepResultsWork)scheduleResultsPreload(generation);
+      if(state.feed?.results_stale_full_ready
+         ||(state.feed?.results_boot_partial&&state.feed?.results_today_ready)){
+        // Do not blank an already opened Results view for a changed ledger.
+        // Refresh the complete version asynchronously and swap only after the
+        // server-authorized pages pass their snapshot/pagination checks.
+        const revision=state.feed.results_snapshot;
+        queueMicrotask(()=>{
+          if(generation===feedGeneration&&state.feed?.results_snapshot===revision
+             &&state.feed?.results_boot_partial&&resultsAccessAllowed()){
+            loadCompleteResults(true).catch(()=>{});
+          }
+        });
+      }else if(!keepResultsWork)scheduleResultsPreload(generation);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(showLoading&&state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
   function uiVisualSignature(){
