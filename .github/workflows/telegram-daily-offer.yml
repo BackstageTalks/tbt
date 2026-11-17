@@ -114,8 +114,13 @@ jobs:
           from pathlib import Path
           sys.path.insert(0,str(Path.cwd()/"scripts"))
           import telegram_offer_publisher as pub
+          from telegram_publication_barrier import verify_live_publication_barrier
           now=datetime.now(timezone.utc)
           snap=pub.snapshot(Path("/tmp/blinq-telegram-gate")/"assets")
+          print("MORNING_DEPLOY_FINALITY",json.dumps(
+              verify_live_publication_barrier(
+                  snap,token=os.environ.get("GH_TOKEN"),
+                  repository=os.environ.get("GITHUB_REPOSITORY"),now=now),sort_keys=True))
           base=os.environ["BLINQ_PRODUCTION_URL"].rstrip("/")
           token=os.environ["BLINQ_LIVE_WORKER_TOKEN"]
           if not token or not base.startswith("https://") or "/" in base.split("://",1)[1]:
@@ -201,6 +206,7 @@ jobs:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_GITHUB_ACTIONS_TOKEN: ${{ github.token }}
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
           BLINQ_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         run: |
