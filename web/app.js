@@ -3994,6 +3994,10 @@
   }
   function filteredResults(filtersOverride=null){
     const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
+    // A single Results render shares this exact filter pass between summary
+    // and table. Other callers/scopes use their original authorization path.
+    if(typeof resultsRenderFilteredRows!=='undefined'&&Array.isArray(resultsRenderFilteredRows)
+       &&filters===state.resultsFilters)return resultsRenderFilteredRows;
     const category=normalizedResultsCategory(filters.category||'all');
     const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
     // Resolve the identical 06:00-to-06:00 range once per filter pass,
@@ -9395,6 +9399,49 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     });
   }
 
+  // Cache only rendered, already-authorized Results markup in this tab. No
+  // localStorage/sessionStorage, server cache or cross-account reuse is involved.
+  let resultsRouteMemo=null,resultsRenderFilteredRows=null;
+  function resultsRouteKey(){
+    const feed=state.feed||{},account=feed.account||{};
+    return JSON.stringify([
+      state.resultsFilters||{},state.resultsPage,state.resultsPageSize,
+      locale,bratislavaBettingDayKey(Date.now(),6),
+      feed.results_snapshot,Boolean(feed.results_boot_partial),
+      Boolean(feed.results_today_ready),Boolean(feed.results_recent_ready),
+      Boolean(feed.results_stale_ready),Boolean(feed.results_stale_full_ready),
+      Boolean(feed.results_archive_unavailable),Boolean(feed.results_exclusions_unavailable),
+      account.id||account.email||'',account.plan,account.status,account.role,account.is_admin,
+      feed.entitlements||{},feed.member_result_rules||{}
+    ]);
+  }
+  function renderResultsRouteContent(){
+    const feed=state.feed||{},rows=feed.results;
+    // The verified server revision is required for memoization. Ad-hoc demo
+    // rows and incomplete/unavailable authorization paths always re-render.
+    const safe=Boolean(!state.demoMode&&feed.results_snapshot
+      &&Array.isArray(rows)&&!feed.results_archive_unavailable
+      &&!feed.results_exclusions_unavailable&&resultsAccessAllowed());
+    const key=safe?resultsRouteKey():'';
+    if(safe&&resultsRouteMemo&&resultsRouteMemo.feed===feed
+       &&resultsRouteMemo.ui===state.ui&&resultsRouteMemo.rows===rows
+       &&resultsRouteMemo.rowCount===rows.length&&resultsRouteMemo.key===key){
+      resultsRouteMemo.hits++;
+      return resultsRouteMemo.html;
+    }
+    // Filter the same authorized ledger once for both KPI summary and table.
+    // Previously each renderer independently traversed the entire history.
+    const filtered=filteredResults();
+    const previous=resultsRenderFilteredRows;
+    let html;
+    resultsRenderFilteredRows=filtered;
+    try{
+      html=resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`;
+    }finally{resultsRenderFilteredRows=previous;}
+    resultsRouteMemo=safe?{feed,ui:state.ui,rows,rowCount:rows.length,
+      key:resultsRouteKey(),html,hits:0}:null;
+    return html;
+  }
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
     if(route==='admin'){
@@ -9443,7 +9490,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       }else{
       // An empty Today result is a valid outcome of the selected filters.
       // Never silently switch to All time and show results from other days.
-      body=resultsAccessAllowed()?(renderResultsFilters()+resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`):resultsLockedCard();
+      body=resultsAccessAllowed()?(renderResultsFilters()+renderResultsRouteContent()):resultsLockedCard();
       }
     }
     else if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming tournament coverage is currently published.'))}</div>`;}
@@ -9614,6 +9661,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     $('upgradeDialogClose')?.focus({preventScroll:true});
   }
   function clearPrivateWorkspaceState(){
+    // Rendered Results HTML contains private member data; discard on sign-out.
+    resultsRouteMemo=null;
     cancelResultsPreload();
     resultsLoadVersion++;todayResultsNonce++;recentResultsNonce++;todayResultsFlight=null;fullResultsFlight=null;recentResultsFlight=null;todayResultsError='';fullResultsError='';recentResultsError='';todayResultsSnapshot='';completeResultsSnapshot='';recentResultsSnapshot='';todayResultsDay='';recentResultsDay='';
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
