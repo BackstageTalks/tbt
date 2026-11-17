@@ -3994,6 +3994,10 @@
   }
   function filteredResults(filtersOverride=null){
     const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
+    // A single Results render shares this exact filter pass between summary
+    // and table. Other callers/scopes use their original authorization path.
+    if(typeof resultsRenderFilteredRows!=='undefined'&&Array.isArray(resultsRenderFilteredRows)
+       &&filters===state.resultsFilters)return resultsRenderFilteredRows;
     const category=normalizedResultsCategory(filters.category||'all');
     const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
     // Resolve the identical 06:00-to-06:00 range once per filter pass,
@@ -4816,9 +4820,9 @@
       'Pro vybrané filtry nejsou dostupné vyhodnocené publikované tipy.');
   }
 
-  function renderResults(rowsOverride=null){
+  function renderResults(){
     if(state.feed?.results_exclusions_unavailable)return '<div class="state-card" role="alert">Vyhodnotené výsledky sú dočasne nedostupné – prebieha ochranné overenie administrátorských vylúčení. Predikcie zostávajú dostupné.</div>';
-    const filters=state.resultsFilters||{},rows=Array.isArray(rowsOverride)?rowsOverride:filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
     if(!entries.length){state.resultsPage=0;return `<div class="state-card" role="status">${escapeHtml(emptyResultsExplanation(rows,category,filters))}</div>`;}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
@@ -8859,8 +8863,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const cardCount=$('resultsSeeAllCardCount');if(cardCount)cardCount.textContent=progressText;
   }
 
-  function resultsSummary(rowsOverride=null){
-    const filters=state.resultsFilters||{},rows=Array.isArray(rowsOverride)?rowsOverride:filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
+  function resultsSummary(){
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
     const missingMemberRules=Boolean(isAdminAccount()&&filters.membership&&!state.feed?.member_result_rules?.[filters.membership]);
     // A custom range covering exactly today's 06:00–06:00 betting day is
     // the same published cohort as the Today preset. Historical ranges have
@@ -9397,7 +9401,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
   // Cache only rendered, already-authorized Results markup in this tab. No
   // localStorage/sessionStorage, server cache or cross-account reuse is involved.
-  let resultsRouteMemo=null;
+  let resultsRouteMemo=null,resultsRenderFilteredRows=null;
   function resultsRouteKey(){
     const feed=state.feed||{},account=feed.account||{};
     return JSON.stringify([
@@ -9428,7 +9432,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     // Filter the same authorized ledger once for both KPI summary and table.
     // Previously each renderer independently traversed the entire history.
     const filtered=filteredResults();
-    const html=resultsSummary(filtered)+`<div class="route-sub results-section-head results-section-clean">${renderResults(filtered)}</div>`;
+    const previous=resultsRenderFilteredRows;
+    let html;
+    resultsRenderFilteredRows=filtered;
+    try{
+      html=resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`;
+    }finally{resultsRenderFilteredRows=previous;}
     resultsRouteMemo=safe?{feed,ui:state.ui,rows,rowCount:rows.length,
       key:resultsRouteKey(),html,hits:0}:null;
     return html;
