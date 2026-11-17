@@ -168,6 +168,33 @@ jobs:
                       key=lambda x:(x["start_utc"],x["match"],x["player"]))
           pickem=sorted((x for x in unique if x["kind"]=="dfs_pickem_pair"),
                         key=lambda x:(x["start_utc"],x["match"],x["player"]))
+          # Compare against the five future ESÁ Over contracts independently
+          # verified on the 17-Nov signed BlinQ website offer (09:54 UTC).
+          confirmed=[
+              ("Borna Gojo",7.5,"Kimmer Coppejans"),
+              ("Otto Virtanen",7.5,"Moez Echargui"),
+              ("Jurij Rodionov",3.5,"Sumit Nagal"),
+              ("Thiago Seyboth Wild",3.5,"Nicolas Kicker"),
+              ("Niels Visker",6.5,"Samir Banerjee"),
+          ]
+          targets=[]
+          for person,line,opponent in confirmed:
+              def n(s):
+                  return " ".join(re.findall(r"[a-z0-9]+",str(s).lower()))
+              matching=[r for r in unique
+                        if r["kind"]=="sportsbook_milestone"
+                        and n(r["player"])==n(person)
+                        and abs(r["equiv_over_line"]-line)<1e-9
+                        and n(opponent) in n(r["match"])]
+              targets.append({
+                  "published_player":person,"published_line":line,
+                  "opponent":opponent,
+                  "exact_matching_bookmaker_quotes":matching,
+                  "publishable_price_ge_1_50":any(r["odd"]>=1.5 for r in matching)
+              })
+          print("PROPLINE_PUBLISHED_CONTRACT_MATCHES="+json.dumps({
+              "utc":now.isoformat(),"targets":targets,"read_only":True
+          },ensure_ascii=False,sort_keys=True))
           print("PROPLINE_COMPACT_TABLE="+json.dumps({
               "checked_at_utc":now.isoformat(),
               "all_free_sportsbook_milestones":bykind["sportsbook_milestone"],
