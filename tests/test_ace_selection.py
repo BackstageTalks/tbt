@@ -209,10 +209,10 @@ def test_aces_and_derived_most_aces_accept_ranked_challengers_but_not_itf():
     ])
     cards, _ = select_ace_picks(history, future, now=now,
                                  per_market_limit=20,total_limit=40)
-    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA","ATP Challenger"}
+    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA","ATP Challenger","WTA 125"}
     assert any(row["tour"]=="ITF" and row["market"]=="double_faults" for row in cards)
     more, _ = select_ace_winner_picks(history,future,now=now)
-    assert {row["tour"] for row in more} == {"ATP","WTA","ATP Challenger"}
+    assert {row["tour"] for row in more} == {"ATP","WTA","ATP Challenger","WTA 125"}
     blocked = {"mislabelled-itf"}
     assert not any(row["event_id"] in blocked for row in cards if row["market"] == "aces")
     assert not any(row["event_id"] in blocked for row in more)
@@ -222,7 +222,7 @@ def test_aces_and_derived_most_aces_accept_ranked_challengers_but_not_itf():
 
 def test_wta_aces_grade_requires_verified_250_plus_and_rejects_generic_wta():
     from tbt.services.feed import ace_eligibility_reason, main_tour_aces
-    base = prediction(datetime(2026, 11, 17, 14, tzinfo=timezone.utc))
+    base = prediction(datetime(2026, 11, 19, 14, tzinfo=timezone.utc))
     base["tour"] = "WTA"
     base["tournament"] = "Women's Open"
     assert ace_eligibility_reason(base) == "unverified_wta_level"
@@ -240,3 +240,16 @@ def test_wta_aces_grade_requires_verified_250_plus_and_rejects_generic_wta():
     assert ace_eligibility_reason({**base, "tournament": "Wimbledon Juniors"}) == "excluded_wta_below_250"
     assert ace_eligibility_reason({**base, "competition": "WTA 250",
                                    "player1": {**base["player1"], "rank": None}}) == "missing_player_rank"
+
+
+def test_wta_grade_rollout_preserves_old_final_offer_and_activates_next_day():
+    from tbt.services.feed import ace_eligibility_reason
+    base = prediction(datetime(2026, 11, 19, 14, tzinfo=timezone.utc))
+    base.update(tour="WTA", competition="WTA 125")
+    before = {**base, "scheduled_at": "2026-11-18T04:59:59+00:00"}
+    after = {**base, "scheduled_at": "2026-11-18T05:00:00+00:00"}
+    assert ace_eligibility_reason(before) == "eligible"
+    assert ace_eligibility_reason(after) == "excluded_wta_below_250"
+    assert ace_eligibility_reason({**after, "competition": "WTA 500"}) == "eligible"
+    assert ace_eligibility_reason({**after, "competition": ""}) == "unverified_wta_level"
+    assert ace_eligibility_reason({**after, "scheduled_at": None}) == "excluded_wta_below_250"
