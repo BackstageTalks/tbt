@@ -706,6 +706,22 @@ def prepare(a):
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     sticky_aces=old.get("free_aces_picks") if isinstance(old.get("free_aces_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
+    if not repost and day(now) >= EXACT_DAILY_FENCE_FROM:
+        # The signed private release is the final source. No public web
+        # serving generation is required to authorize the Telegram offer.
+        from telegram_publication_barrier import (
+            verify_final_offer_snapshot, verify_live_publication_barrier,
+        )
+        print("Telegram final private offer:", json.dumps(
+            verify_final_offer_snapshot(confirmed, now), sort_keys=True,
+        ))
+        print("Telegram final offer writer gate:", json.dumps(
+            verify_live_publication_barrier(
+                confirmed, token=os.getenv("BLINQ_GITHUB_ACTIONS_TOKEN"),
+                repository=os.getenv("GITHUB_REPOSITORY"), now=now,
+                final_offer_only=True,
+            ), sort_keys=True,
+        ))
     if getattr(a, "verify_site", False):
         # Validate THIS snapshot in the preparing job, not an earlier waiter snapshot.
         verify_prepared_site(confirmed, a.config_url, now)
@@ -796,18 +812,33 @@ def send(a):
     raw_now=getattr(a,"now","")
     now=stamp(raw_now) if raw_now else datetime.now(timezone.utc)
     reserved_id=(Path(a.output)/"ready").read_text(encoding="utf-8").strip()
-    if day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id==_daily_id(now):
+    if (day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id.startswith(day(now)+":")
+            and ":repost:" not in reserved_id):
         current=snapshot(Path(a.output)/"final-check")
-        from telegram_publication_barrier import verify_live_publication_barrier
-        print("Telegram final deployment readback:", json.dumps(
+        from telegram_publication_barrier import (
+            verify_final_offer_snapshot, verify_live_publication_barrier,
+        )
+        print("Telegram final private offer:", json.dumps(
+            verify_final_offer_snapshot(current, now), sort_keys=True,
+        ))
+        print("Telegram final offer writer gate:", json.dumps(
             verify_live_publication_barrier(
                 current,token=os.getenv("BLINQ_GITHUB_ACTIONS_TOKEN"),
-                repository=os.getenv("GITHUB_REPOSITORY"),now=now),sort_keys=True,
+                repository=os.getenv("GITHUB_REPOSITORY"),now=now,
+                final_offer_only=True,
+            ), sort_keys=True,
         ))
-        verify_prepared_site(current,a.config_url,now)
+        # Do not allow a refresh of even non-premium snapshot metadata to
+        # replace the exact asset that was reserved before Telegram calls.
+        frozen=load(Path(a.output)/"state.json")
+        reserved=(frozen.get("attempts") or {}).get(reserved_id) or {}
+        digest=hashlib.sha256(json.dumps(
+            current,sort_keys=True,separators=(",",":"),
+        ).encode()).hexdigest()
+        if digest != reserved.get("snapshot_sha256"):
+            raise RuntimeError("Final Telegram snapshot changed after reservation")
         print("Telegram pre-send exact freeze:", json.dumps(
-            verify_frozen_daily_offer(current,load(Path(a.output)/"state.json"),now),
-            sort_keys=True,
+            verify_frozen_daily_offer(current,frozen,now), sort_keys=True,
         ))
     receipts=[]
     for item in load(Path(a.output)/"messages.json"):

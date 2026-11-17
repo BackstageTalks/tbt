@@ -156,10 +156,14 @@ def test_real_publication_paths_apply_fence_before_irreversible_upload():
     publisher = (ROOT / "scripts" / "telegram_offer_publisher.py").read_text(encoding="utf-8")
     flow = (ROOT / ".github" / "workflows" / "telegram-daily-offer.yml").read_text(encoding="utf-8")
     assert "Telegram pre-send exact freeze:" in publisher
-    assert "verify_prepared_site(current,a.config_url,now)" in publisher
+    assert "verify_prepared_site(current,a.config_url,now)" not in publisher
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in flow
-    assert "MORNING_DEPLOY_FINALITY" in flow
-    assert "verify_live_publication_barrier" in publisher
+    assert "MORNING_FINAL_OFFER" in flow
+    assert "MORNING_SITE_PARITY" not in flow
+    assert "prepare --daily --verify-site" not in flow
+    assert "verify_final_offer_snapshot" in publisher
+    assert "final_offer_only=True" in publisher
+    assert "Final Telegram snapshot changed after reservation" in publisher
     assert confirm.index('verify_frozen_daily_offer(') < confirm.index('write_json(directory / "ledger.json", confirmed)')
 
 

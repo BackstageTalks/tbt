@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: blinq-telegram-ledger
@@ -49,6 +50,7 @@ jobs:
       - name: Prepare only confirmed and eligible daily picks
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_GITHUB_ACTIONS_TOKEN: ${{ github.token }}
           BLINQ_TG_CONFIG_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
         run: |
           set -euo pipefail
@@ -79,6 +81,8 @@ jobs:
         env:
           TGB: ${{ secrets.TGB }}
           TGCH: ${{ secrets.TGCH }}
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          BLINQ_GITHUB_ACTIONS_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           python scripts/telegram_offer_publisher.py send

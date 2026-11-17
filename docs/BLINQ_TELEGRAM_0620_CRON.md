@@ -51,18 +51,15 @@ súkromný snapshot, chat ID ani priame tipy sa neposielajú v JSON payload-e.
 1. `repository_dispatch` spustí `BlinQ Telegram complete daily offer (06:20 queue)`.
 2. `queue` uloží denný zámer do súkromnej vetvy
    `BackstageTalks/tbt-data@telegram-bot-state` a vykoná read-back.
-3. `wait-for-confirmed-offer` opakovane načíta podpísanú aktuálnu ponuku a
-   read-only canary produkčného webu `/api/v1/internal/serving-readback`.
-   Vyžaduje rovnaký `generated_at`, správny betting day, `ready=true`,
-   `stale=false` a dostatočný počet viditeľných kategórií. Iné dátové
-   workflow môžu bežať ďalej; nie sú blokáciou, ak je nasadená ponuka
-   už pripravená. Ak je web neaktuálny, chýba sekcia alebo zlyhá canary,
-   neodosiela sa nič. Nezaberá pritom Telegram writer lock.
-4. Po overení načíta **aktuálny** `daily_offer_snapshot.json` zo súkromného
-   release `tbt-predictions-v1`. Kontroluje `confirmed_only`, betting day,
-   `generated_at`, dĺžku dát a SHA-256 oproti
-   `_tbt_bundle_manifest.json`. Predikcie odoberá výlučne zo schváleného
-   publikovania; **nevolá tenisové API**, neposiela shadow ani staging.
+3. `wait-for-confirmed-offer` opakovane načíta SHA-256 manifestom overený
+   súkromný snapshot. Podmienkou nie je živý web: vyžaduje sa
+   `confirmed_only=true`, správny betting day, aktuálne TOP pravidlo
+   a `final_offer` certifikát s odtlačkom TOP/VALUE/ACES.
+   Certifikát je naviazaný na identifikátor publikačného workflowu.
+4. GitHub Actions read-only kontrola overí, že publikačný writer už nebeží.
+   Ak iný writer dokončil nasadenie po finálnej certifikácii, TG počká na
+   nové potvrdenie. Web môže rovnakú ponuku zobraziť pred TG alebo po ňom.
+   Kontrola nijako nevolá platené tenisové API.
 5. Ak dáta ešte nie sú pripravené, opakuje kontrolu každých 60 s.
    Pred limitom GitHub behu odovzdá čakajúci zámer ďalšiemu workflow behu.
    **06:20 je začiatok čakania, nie expirácia odoslania.**
@@ -88,23 +85,24 @@ ale Telegram odoslal tri. Potvrdený snapshot predtým neobsahoval pravidlo
 `market_selection.top_daily_rule`; dedičný výber s hranicou 68 % preto
 odfiltroval dva platné tipy nad schválenou hranicou 60 %.
 
-Od opravy [PR #1685](https://github.com/BackstageTalks/tbt/pull/1685) platí:
+Oprava [PR #1685](https://github.com/BackstageTalks/tbt/pull/1685) uchováva TOP
+pravidlo, blokuje dodatočné TOP/VALUE/ESÁ kontrakty po vydaní a
+chráni originálne Telegram potvrdenia.
 
-- Privátny potvrdený snapshot uchováva aktuálne TOP pravidlo z vydaného feedu.
-- Pred ranným odoslaním sa vyžaduje **presná zhoda TOP a VALUE kontraktov**
-  s produkčným webom, nielen podmnožina. ESÁ naďalej používa užší
-  verifikovaný hráčsky O/U kontrakt, preto sa neporovnáva s celým
-  univerzom ESÁ/VIAC ES.
-- Prvé potvrdenie dennej ponuky uzamkne množinu nových TOP, VALUE a
-  `ace_picks` kontraktov na daný betting day. Ďalší refresh smie
-  zachovať už vydané tipy a obnoviť nesúvisiace údaje, **nesmie ticho
-  doplniť nové tipy do webu po rannom Telegram vydaní**.
-- Pred každým produkčným balením webového feedu a pred dátovým deployom
-  sa nové kontrakty nezávisle kontrolujú proti už vydanému ledgeri.
-  Nesúlad blokuje nasadenie; staré Telegram potvrdenia sa nemenia.
-- Freeze sa uvoľní až pre nasledujúci betting day. Historické Results,
-  PRIME a CDB sa nemenia. Oprava nereviduje už poslanú správu
-  17. 11. 2026 a nesmie vyvolať duplicitné automatické odoslanie.
+Aktuálny princíp finálnej ponuky:
+
+- Jediným zdrojom oboch kanálov je potvrdený súkromný denný snapshot.
+- `final_offer` obsahuje odtlačok konkrétnej ponuky a číslo workflow
+  behu, ktorý ju potvrdil. Telegram odmieta neúplný, iný alebo zastaraný
+  snapshot, aj keby web práve zobrazoval nejaké tipy.
+- Pred prípravou a tesne pred prvým Telegram API volaním sa znovu preverí
+  finálna certifikácia a súbeh produkčných writerov.
+- Po rezervácii sa nesmie zmeniť ani celý zdrojový snapshot. Rozdiel
+  odtlačkov zablokuje odoslanie; neodosiela sa automatický duplikát.
+- Neskorší refresh nesmie dopĺňať nové potvrdené TOP/VALUE/ESÁ tipy
+  do toho istého betting day. Results, PRIME, CDB ani model sa nemenia.
+- Prevádzkové overenie vyžaduje úspešný CI, nasadený kód a prvý
+  reálny ranný priechod s potvrdenými Telegram message ID.
 
 Dôkazy incidentu: [ranné publikovanie](https://github.com/BackstageTalks/tbt/actions/runs/44015922903),
 [Telegram odoslanie](https://github.com/BackstageTalks/tbt/actions/runs/44023410225).

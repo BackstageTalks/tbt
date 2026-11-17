@@ -73,13 +73,114 @@ def assess_publication_deployment(runs_and_jobs, feed_generated_at):
             "feed_generated_at": feed_at.isoformat()}
 
 
+def verify_final_offer_snapshot(source, now, *, activation_day="2026-11-18"):
+    """Require one manifest-verified, explicitly finalized private daily offer."""
+    from telegram_offer_publisher import day
+    from tbt.services.publication import final_offer_digest
+
+    if day(now) < activation_day:
+        return {"status": "legacy_day"}
+    if (not isinstance(source, dict) or source.get("schema") != 1
+            or source.get("confirmed_only") is not True
+            or source.get("betting_day") != day(now)):
+        raise RuntimeError("Final offer unavailable: wrong day or unconfirmed release")
+    certificate = source.get("final_offer")
+    if (not isinstance(certificate, dict) or certificate.get("schema") != 1
+            or certificate.get("status") != "final"
+            or certificate.get("betting_day") != day(now)
+            or certificate.get("confirmed_at") != source.get("generated_at")
+            or certificate.get("premium_sha256") != final_offer_digest(source)
+            or type(certificate.get("issuer_run_id")) is not int
+            or certificate["issuer_run_id"] <= 0):
+        raise RuntimeError("Final offer certificate missing or changed")
+    confirmed_at = _stamp(source["generated_at"])
+    feed_at = _stamp(source["source_feed_generated_at"])
+    if feed_at > confirmed_at or confirmed_at > now + timedelta(minutes=5):
+        raise RuntimeError("Invalid final offer confirmation clock")
+    sections = (
+        "top_daily_picks", "value_picks", "ace_picks",
+        "prime_picks", "sg_picks", "doubles_picks",
+    )
+    totals = source.get("totals")
+    if not isinstance(totals, dict):
+        raise RuntimeError("Final offer category totals missing")
+    for section in sections:
+        rows = source.get(section)
+        if (not isinstance(rows, list) or type(totals.get(section)) is not int
+                or totals[section] != len(rows)):
+            raise RuntimeError("Final offer section is incomplete: " + section)
+    if source["top_daily_picks"] and not str(
+        ((source.get("market_selection") or {}).get("top_daily_rule") or {}).get("policy") or ""
+    ).strip():
+        raise RuntimeError("Final TOP selector policy missing")
+    return {
+        "status": "final_private_offer_verified",
+        "betting_day": day(now),
+        "premium_sha256": certificate["premium_sha256"],
+    }
+
+
+def assess_final_offer_writers(runs_and_jobs, source):
+    """A finalized snapshot is sufficient; no live website readback required.
+
+    A concurrent or subsequently started publishing run invalidates readiness.
+    Only a new confirmed private release may establish another final offer.
+    """
+    feed_at = _stamp(source["source_feed_generated_at"])
+    confirmed_at = _stamp(source["generated_at"])
+    issuer_run_id = (source.get("final_offer") or {}).get("issuer_run_id")
+    if type(issuer_run_id) is not int or issuer_run_id <= 0:
+        raise RuntimeError("Final offer is missing its confirming publication run")
+    for workflow, records in runs_and_jobs.items():
+        if workflow not in PRODUCTION_JOBS or not isinstance(records, list):
+            raise ValueError("Unexpected final offer writer audit shape")
+        for item in records:
+            if not isinstance(item, dict):
+                raise ValueError("Invalid publishing run")
+            run = item.get("run") or {}
+            if run.get("head_branch") != "main":
+                continue
+            created = _stamp(run["created_at"])
+            if created < feed_at - timedelta(hours=3):
+                continue
+            publishing = [
+                j for j in item.get("jobs", []) or []
+                if isinstance(j, dict) and j.get("name") == PRODUCTION_JOBS[workflow]
+            ]
+            if not publishing and run.get("status") in ACTIVE:
+                raise RuntimeError("Final offer not ready: possible publisher still running")
+            for job in publishing:
+                if job.get("status") in ACTIVE:
+                    raise RuntimeError("Final offer not ready: publisher still running")
+                if job.get("status") != "completed":
+                    raise RuntimeError("Final offer not ready: unknown publisher status")
+                if job.get("conclusion") == "skipped":
+                    continue
+                if job.get("conclusion") not in ("success", "failure", "cancelled"):
+                    raise RuntimeError("Final offer not ready: unknown publication outcome")
+                if int(run.get("id") or 0) != issuer_run_id:
+                    completed_at = job.get("completed_at")
+                    if not completed_at:
+                        raise RuntimeError("Final offer not ready: missing publisher completion evidence")
+                    if created >= confirmed_at or _stamp(completed_at) >= confirmed_at:
+                        raise RuntimeError("Final offer not ready: newer publication requires confirmation")
+    return {
+        "status": "final_private_offer_writers_idle",
+        "betting_day": source["betting_day"],
+        "confirmed_at": confirmed_at.isoformat(),
+    }
+
+
 def verify_live_publication_barrier(source, *, token, repository, now=None,
-                                    activation_day="2026-11-18", reader=None):
+                                    activation_day="2026-11-18", reader=None,
+                                    final_offer_only=False):
     """Use the existing GitHub Actions read API; no provider requests or writes."""
     from telegram_offer_publisher import day
     now = now or datetime.now(timezone.utc)
     if day(now) < activation_day:
         return {"status": "legacy_day"}
+    if final_offer_only:
+        verify_final_offer_snapshot(source, now, activation_day=activation_day)
     if (not token or not re.fullmatch(r"[\w.-]+/[\w.-]+", str(repository or ""))
             or not isinstance(source, dict)
             or not source.get("source_feed_generated_at")):
@@ -118,4 +219,6 @@ def verify_live_publication_barrier(source, *, token, repository, now=None,
                 raise RuntimeError("Final deployment verification missing job history")
             matched.append({"run": run, "jobs": job_response["jobs"]})
         data[workflow] = matched
+    if final_offer_only:
+        return assess_final_offer_writers(data, source)
     return assess_publication_deployment(data, source["source_feed_generated_at"])
