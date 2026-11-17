@@ -706,7 +706,7 @@ def prepare(a):
     sticky=old.get("free_picks") if isinstance(old.get("free_picks"),dict) else {}
     sticky_aces=old.get("free_aces_picks") if isinstance(old.get("free_aces_picks"),dict) else {}
     confirmed=snapshot(out/"assets")
-    if getattr(a, "daily", False) and day(now) >= EXACT_DAILY_FENCE_FROM:
+    if not repost and day(now) >= EXACT_DAILY_FENCE_FROM:
         # The signed private release is the final source. No public web
         # serving generation is required to authorize the Telegram offer.
         from telegram_publication_barrier import (
@@ -812,7 +812,8 @@ def send(a):
     raw_now=getattr(a,"now","")
     now=stamp(raw_now) if raw_now else datetime.now(timezone.utc)
     reserved_id=(Path(a.output)/"ready").read_text(encoding="utf-8").strip()
-    if day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id==_daily_id(now):
+    if (day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id.startswith(day(now)+":")
+            and ":repost:" not in reserved_id):
         current=snapshot(Path(a.output)/"final-check")
         from telegram_publication_barrier import (
             verify_final_offer_snapshot, verify_live_publication_barrier,
