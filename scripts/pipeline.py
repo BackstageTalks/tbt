@@ -720,8 +720,22 @@ def _publish_predictions(
         with gzip.open(comparator_path, "wt", encoding="utf-8", compresslevel=6) as handle:
             json.dump(clean(comparator_artifact), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
         bundle.append(comparator_path)
+    # Verify the sent/reserved TG contract at the native writer boundary,
+    # after computing the candidate but immediately before remote mutation.
+    # No new TOP/VALUE/ESÁ may silently appear in a finalized betting day.
+    def _telegram_offer_before_upload():
+        from prepare_feed import _read_confirmed_telegram_state
+        from telegram_offer_publisher import verify_frozen_daily_offer
+        print("Telegram exact offer native-writer fence:", json.dumps(
+            verify_frozen_daily_offer(
+                snapshot, _read_confirmed_telegram_state(store.repository),
+                datetime.now(timezone.utc),
+            ), sort_keys=True,
+        ))
+
     store.upload_bundle(
         bundle,
+        before_upload=_telegram_offer_before_upload,
         remove_names=("comparator.json.gz",) if not isinstance(comparator_artifact, dict) else (),
     )
     return feed
