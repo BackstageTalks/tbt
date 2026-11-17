@@ -46,6 +46,7 @@ def sealed_offer():
         "schema": 1, "status": "final",
         "betting_day": DAY, "confirmed_at": snapshot["generated_at"],
         "premium_sha256": final_offer_digest(snapshot),
+        "issuer_run_id": 11,
     }
     return snapshot
 
@@ -55,9 +56,11 @@ def run(id_, created, state="completed"):
             "created_at": created, "status": state}
 
 
-def job(status="completed", conclusion="success"):
+def job(status="completed", conclusion="success",
+        completed_at="2026-11-18T05:21:00Z"):
     return {"name": "Deploy current prediction generation",
-            "status": status, "conclusion": conclusion}
+            "status": status, "conclusion": conclusion,
+            "completed_at": completed_at}
 
 
 def test_final_signed_snapshot_is_sufficient_without_web_readback():
@@ -129,6 +132,21 @@ def test_newer_publication_requires_a_new_final_snapshot():
     }
     with pytest.raises(RuntimeError, match="newer publication"):
         barrier.assess_final_offer_writers(history, snapshot)
+
+
+def test_other_writer_started_before_final_but_finished_after_is_blocked():
+    """A concurrent deployment may finish after the offer was sealed."""
+    source = sealed_offer()
+    history = {
+        "data.yml": [
+            {"run": run(11, "2026-11-18T05:00:00Z"), "jobs": [job()]},
+            {"run": run(22, "2026-11-18T05:10:00Z"),
+             "jobs": [job(completed_at="2026-11-18T05:18:00Z")]},
+        ],
+        "ci.yml": [],
+    }
+    with pytest.raises(RuntimeError, match="newer publication"):
+        barrier.assess_final_offer_writers(history, source)
 
 
 def test_pending_ci_with_possible_deploy_blocks_sending():
