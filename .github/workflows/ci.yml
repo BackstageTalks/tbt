@@ -684,6 +684,29 @@ jobs:
             exit 1
           fi
 
+      - name: Verify production browser-cache policy for stamped assets
+        if: ${{ vars.TBT_PRODUCTION_URL != '' }}
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          for path in app.js auth.js responsive.js blinq-app.css; do
+            headers="$(mktemp)"
+            curl -fsSL --connect-timeout 4 --max-time 20 \
+              -H 'Cache-Control: no-cache' \
+              -D "$headers" -o /dev/null \
+              "$base/$path?__blinq_cache=${GITHUB_SHA}"
+            policy="$(grep -i '^cache-control:' "$headers" | tail -1 | tr -d '\r' | tr '[:upper:]' '[:lower:]')"
+            rm -f "$headers"
+            if [[ "$policy" != *'public'* || "$policy" != *'max-age=300'* || "$policy" == *'no-store'* ]]; then
+              echo "::error::Unexpected production browser-cache policy for $path: $policy"
+              exit 1
+            fi
+            echo "$path: $policy"
+          done
+
       - name: Smoke deployed authentication readiness
         if: ${{ vars.TBT_PRODUCTION_URL != '' }}
         env:

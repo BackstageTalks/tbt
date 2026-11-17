@@ -49,6 +49,15 @@ class WebDeployContractTests(unittest.TestCase):
                 self.assertEqual(first["files_sha256"][name],
                                  hashlib.sha256((web / name).read_bytes()).hexdigest())
             self.assertEqual(json.loads((web / "deployment.json").read_text()), first)
+            # A new deploy must invalidate the old browser cache even when
+            # release version and committed query strings are unchanged.
+            next_sha = "2" * 40
+            newer = stamp(web, next_sha)
+            updated_html = (web / "index.html").read_text(encoding="utf-8")
+            self.assertEqual(newer["git_sha"], next_sha)
+            self.assertEqual(updated_html.count("&deploy=" + next_sha[:12]), 4)
+            self.assertNotIn("&deploy=" + sha[:12], updated_html)
+            self.assertEqual(newer["files_sha256"], first["files_sha256"])
 
 
 if __name__ == "__main__":
