@@ -5,12 +5,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_dashboard_css_is_not_cached():
+def test_dashboard_css_is_short_cached_only_with_deploy_versioning():
     cfg = json.loads((ROOT / "web/staticwebapp.config.json").read_text(encoding="utf-8"))
     routes = {item["route"]: item for item in cfg["routes"]}
     header = routes["/blinq-app.css"]["headers"]["Cache-Control"]
-    assert "no-store" in header
-    assert "must-revalidate" in header
+    assert "public" in header and "max-age=300" in header
+    assert "must-revalidate" in header and "no-store" not in header
+    assert "/blinq-app.css?v=" in (ROOT / "web/index.html").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    assert "Exact Git SHA and all four deployed asset hashes: PASS" in workflow
+    assert "Verify production browser-cache policy for stamped assets" in workflow
 
 
 def test_deployed_patch_must_match_checkout():
