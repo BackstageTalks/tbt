@@ -34,6 +34,7 @@ jobs:
           python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy
           python -m compileall -q scripts/audit_minmaxxxer_cdb_importability.py scripts/link_uploaded_flashscore_verified.py scripts/verify_uploaded_2025_2026_raw_parity.py
           python -m unittest discover -s tests -p 'test_link_uploaded_flashscore_verified.py' -v
+          python -m unittest discover -s tests -p 'test_minmaxxxer_pinned_source_revisions.py' -v
       - name: Download exactly four source CSVs by immutable public commit
         shell: bash
         run: |
@@ -96,12 +97,14 @@ jobs:
             --source-dir work/source \
             --index work/cdb/blinq-flashscore-event-index-2026.jsonl.gz \
             --history-dir work/cdb \
+            --source-revision 2026-11-16 \
             --out work/qa
           python - <<'PY'
           import json
           from pathlib import Path
           r=json.loads(Path("work/qa/aggregate-report.json").read_text())
-          if (r.get("production_mutated") is not False or
+          if (r.get("source_revision") != "2026-11-16" or
+              r.get("production_mutated") is not False or
               r.get("writer_executed") is not False or
               r.get("paid_api_requests") != 0 or r.get("odds_imported") != 0 or
               r["counts"].get("source_rows") != 11405 or
