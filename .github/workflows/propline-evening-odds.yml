@@ -200,6 +200,7 @@ jobs:
       - name: Archive to PropLine Google Drive folder and verify actual bytes
         env:
           BLINQ_DRIVE_WRITER_JSON: ${{ secrets.BLINQ_DRIVE_WRITER_JSON }}
+          BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
           BETTING_DAY: ${{ steps.day.outputs.date }}
           PROPLINE_DRIVE_FOLDER_ID: "1C7_B2LB37IVTK9gBu2TT9dSj5XClIUKh"
         run: |
