@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "operator_approved": true,
+  "approval_context": "User-directed safe maximum quality CDB NULL-only enrichment; no non-NULL modification, no API spend",
+  "one_shot": true,
+  "audit_run": 44051322279,
+  "native_dry_run": 44052179672,
+  "source": "existing_canonical_exact_opponent_BP_saved_vs_converted_complement_post_match_only",
+  "cdb_sha256": "59398d1f7c7705488e65bf96a348387b4365d13906bec67b6c35a7c9e429b083",
+  "stage_sha256": "887d2a725899e609f703aae19b31b24e2788399065f2e2e0e3e4f264979781e1",
+  "years": [
+    2023,
+    2024
+  ],
+  "matches": 77696,
+  "cells": 133267,
+  "api_calls_allowed": 0,
+  "model_changes_allowed": false,
+  "rejected_identity_uncertainty": "refuse",
+  "rejected_conflicts": "quarantine",
+  "existing_values_policy": "NULL_ONLY",
+  "writer": "existing_scripts/import_offline_linked_serve_return.py --exact-stats-only",
+  "require_prewrite_private_backup": true,
+  "require_global_lock": true,
+  "require_remote_cas": true,
+  "require_independent_full_year_readback": true,
+  "require_postwrite_idempotence": true,
+  "reapproval_required_on_any_drift": true
+}
