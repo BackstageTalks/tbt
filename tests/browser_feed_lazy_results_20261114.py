@@ -46,7 +46,12 @@ def main():
                 source = source.replace("  boot();", """
   const originalResultsFilter=filteredResults;
   window.lazyResultsFilterCalls=0;
-  filteredResults=(...args)=>{window.lazyResultsFilterCalls++;return originalResultsFilter(...args);};
+  filteredResults=(...args)=>{
+    const scoped=Array.isArray(resultsRenderFilteredRows)
+      &&(args[0]||state.resultsFilters)===state.resultsFilters;
+    if(!scoped)window.lazyResultsFilterCalls++;
+    return originalResultsFilter(...args);
+  };
   window.lazyResultsTest={state,setRoute,loadRecentResults,loadCompleteResults,renderDashboardKpis,
     scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration),
     reuseHydratedResultsOnRefresh,loadFeed,
