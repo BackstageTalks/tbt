@@ -229,3 +229,46 @@ jobs:
                       summary["events"][-1]["market_price_error"] = type(exc).__name__
           print("FREE_MORE_ACES_PROBE=" + json.dumps(summary, ensure_ascii=False, sort_keys=True))
           PY
+
+      - name: Inspect actual sportsbook ace outcome shapes before claiming missing prices
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, urllib.request
+          key = os.environ.get("PROPL", "")
+          if not key:
+              raise SystemExit("No existing free API key")
+          url = "https://api.prop-line.com/v1/sports/tennis/events/733579/odds?markets=player_aces"
+          req = urllib.request.Request(url, headers={
+              "X-API-Key": key, "Accept": "application/json",
+              "User-Agent": "BlinQ-sportsbook-shape-audit/1.0"
+          })
+          with urllib.request.urlopen(req, timeout=25) as response:
+              remaining = response.headers.get("X-Daily-Remaining")
+              result = json.load(response)
+          if remaining is None or int(remaining) < 150:
+              raise SystemExit("Provider quota reserve not verified")
+          targets = ("napoleon", "superbet_pl", "superbet_ro", "dabble", "sleeper")
+          sample = []
+          for book in result.get("bookmakers") or []:
+              bookname = str(book.get("key") or "")
+              if bookname not in targets:
+                  continue
+              for market in book.get("markets") or []:
+                  if market.get("key") != "player_aces":
+                      continue
+                  sample.append({
+                    "book": bookname,
+                    "market_key": market.get("key"),
+                    "last_update": market.get("last_update"),
+                    "outcomes": [{k:o.get(k) for k in ("name", "description", "point", "price", "suspended_at")}
+                        for o in (market.get("outcomes") or [])[:7]]
+                  })
+          print("FREE_ACE_BOOK_SHAPES=" + json.dumps({
+              "source": "actual_live_propline_api",
+              "event_id": "733579",
+              "quota_remaining": int(remaining),
+              "samples": sample[:15],
+          }, ensure_ascii=False, sort_keys=True))
+          PY
