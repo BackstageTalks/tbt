@@ -54,7 +54,7 @@ def authenticated_session():
     if info.get("type") == "service_account":
         from google.oauth2.service_account import Credentials
         credentials = Credentials.from_service_account_info(
-            info, scopes=["https://www.googleapis.com/auth/drive.file"])
+            info, scopes=["https://www.googleapis.com/auth/drive"])
     elif info.get("type") == "authorized_user":
         from google.oauth2.credentials import Credentials
         credentials = Credentials.from_authorized_user_info(
