@@ -71,3 +71,25 @@ def test_same_generation_and_counts_do_not_authorize_different_picks(sources):
     site["offer_authority_keys"]["top"] = ["another-contract"] * 3
     with pytest.raises(ValueError, match="exact issued"):
         tg.verified_website_morning_parity(offer, site, NOW)
+
+
+def test_same_generation_web_five_top_cannot_send_only_three(sources):
+    """A subset is not a complete morning offer, even with a matching SHA/day."""
+    offer, site = sources
+    site["offer_authority_keys"]["top"] += ["missing-top-4", "missing-top-5"]
+    site["visible_counts"]["top_daily_picks"] = 5
+    with pytest.raises(ValueError, match="additional issued morning picks"):
+        tg.verified_website_morning_parity(offer, site, NOW)
+
+
+def test_exact_web_value_contracts_also_must_match(sources):
+    offer, site = sources
+    site["offer_authority_keys"]["value"].append("late-value")
+    with pytest.raises(ValueError, match="additional issued morning picks"):
+        tg.verified_website_morning_parity(offer, site, NOW)
+
+
+def test_aces_parity_still_accepts_other_website_ace_markets(sources):
+    offer, site = sources
+    site["offer_authority_keys"]["aces"].extend(["most-aces-contract", "double-faults-contract"])
+    assert tg.verified_website_morning_parity(offer, site, NOW)["website_generation_verified"]
