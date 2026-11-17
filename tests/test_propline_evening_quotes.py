@@ -157,7 +157,9 @@ class EveningQuoteAttachment(unittest.TestCase):
         self.assertEqual(validated_events(r, betting_day="2026-11-19", now=MORNING), [])
         self.assertEqual(validated_events(r, betting_day=DAY, now=MORNING + timedelta(days=2)), [])
         modified = deepcopy(r)
-        modified["events_in_target_window"][0]["aces_markets"][0]["verified_pairs"][0]["over"] = 5.55
+        ou = next(m for m in modified["events_in_target_window"][0]["aces_markets"]
+                  if m["kind"] == "player_aces_ou")
+        ou["verified_pairs"][0]["over"] = 5.55
         self.assertEqual(validated_events(modified, betting_day=DAY, now=MORNING), [])
         modified = deepcopy(r)
         modified["events_in_target_window"][0]["provider_raw_event"]["id"] = "999"
