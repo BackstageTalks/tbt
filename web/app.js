@@ -9709,12 +9709,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const today=Boolean(hadToday&&digest===todayResultsSnapshot);
     const stale=Boolean(allowed&&digest&&!full&&!recent&&!today
       &&(hadFull||hadRecent||hadToday));
+    nextFeed.results_stale_ready=stale;
+    nextFeed.results_stale_full_ready=stale&&hadFull;
     if(full||recent||today||stale){
       nextFeed.results=current.results;
       nextFeed.results_today_ready=full||recent||today||hadToday;
       nextFeed.results_recent_ready=full||recent||(stale&&hadRecent);
       nextFeed.results_boot_partial=!full;
-      nextFeed.results_stale_full_ready=stale&&hadFull;
     }else{
       todayResultsSnapshot='';
       completeResultsSnapshot='';
@@ -9927,6 +9928,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               normalizeFeedAceOdds(state.feed);
               state.feed.results_boot_partial=false;
               state.feed.results_stale_full_ready=false;
+              state.feed.results_stale_ready=false;
               completeResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
               todayResultsSnapshot=snapshot;
@@ -10041,8 +10043,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; markBootTiming('Dashboard odkrytý'); if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
-      if(state.feed?.results_stale_full_ready
-         ||(state.feed?.results_boot_partial&&state.feed?.results_today_ready)){
+      if(!keepResultsWork&&state.feed?.results_stale_ready){
         // Do not blank an already opened Results view for a changed ledger.
         // Refresh the complete version asynchronously and swap only after the
         // server-authorized pages pass their snapshot/pagination checks.
