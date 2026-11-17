@@ -252,7 +252,7 @@ def test_65_floor_applies_to_challenger_and_proven_w35_only():
         [atp, challenger, w35, rejected],
         generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
-    assert snap["selection_policy"] == "sports_tiered_top5_60_v23"
+    assert snap["selection_policy"] == "sports_tiered_top5_60_v24"
     assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
 
 
@@ -352,6 +352,6 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
     assert verify() == {
-        "status": "PASS", "policy": "sports_tiered_top5_60_v23",
+        "status": "PASS", "policy": "sports_tiered_top5_60_v24",
         "provider_requests": 0,
     }
