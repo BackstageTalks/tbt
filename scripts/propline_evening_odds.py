@@ -220,7 +220,7 @@ def _single_book_quotes(event, book):
     return groups, labels
 
 
-def collect(target_day, *, max_events=60, allow_same_day=False,
+def collect(target_day, *, max_events=0, allow_same_day=False,
             now=None, get=fetch):
     now = now or datetime.now(timezone.utc)
     start = datetime.combine(target_day, time(6), TZ).astimezone(timezone.utc)
@@ -229,8 +229,8 @@ def collect(target_day, *, max_events=60, allow_same_day=False,
         raise ValueError("target betting day already passed")
     if now >= start and not allow_same_day:
         raise ValueError("same day requires explicit research opt-in")
-    if not 1 <= max_events <= 60:
-        raise ValueError("max_events must be in 1..60")
+    if max_events < 0:
+        raise ValueError("max_events must be >= 0 (0 means all provider events)")
     payload, remaining = get()
     entries = _events(payload)
     valid = [e for e in entries if isinstance(e, dict) and
@@ -238,7 +238,7 @@ def collect(target_day, *, max_events=60, allow_same_day=False,
              str(e.get("home_team") or "").strip() and
              str(e.get("away_team") or "").strip()]
     # Provider order is preserved so a rerun remains deterministic for fixed data.
-    selected = valid[:max_events]
+    selected = valid if max_events == 0 else valid[:max_events]
     report = {
         "schema": 1, "status": "audited", "source": "propline_free",
         "mode": "read_only_evening_aces",
@@ -246,7 +246,7 @@ def collect(target_day, *, max_events=60, allow_same_day=False,
         "captured_at": now.isoformat(), "target_start": start.isoformat(),
         "target_end": end.isoformat(), "candidate_urls": len(valid),
         "catalog_pages_scanned": 0, "catalog_errors": [],
-        "coverage_truncated": len(valid) > max_events,
+        "coverage_truncated": bool(max_events and len(valid) > max_events),
         "candidate_tournaments": len({_tournament(e) for e in valid if _tournament(e)}),
         "probed_tournaments": len({_tournament(e) for e in selected if _tournament(e)}),
         "probed_urls": len(selected),
@@ -348,9 +348,10 @@ def collect(target_day, *, max_events=60, allow_same_day=False,
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--target-day", type=date.fromisoformat, required=True)
-    p.add_argument("--max-events", type=int, default=60)
+    p.add_argument("--max-events", type=int, default=0,
+                   help="0 = all events returned in one API response")
     p.add_argument("--allow-same-day", action="store_true")
-    p.add_argument("--out", default="reports/skcz-evening/fortuna.json")
+    p.add_argument("--out", default="reports/propline-evening/odds.json")
     args = p.parse_args()
     report = collect(args.target_day, max_events=args.max_events,
                      allow_same_day=args.allow_same_day)
