@@ -1,9 +1,6 @@
 name: BlinQ 2026-11-17 current offer read-only quote audit
 
 on:
-  push:
-    branches: [audit/today-aces-free-quotes-20261117]
-    paths: [.github/workflows/today-free-aces-quote-audit-20261117.yml]
   workflow_dispatch:
 
 permissions:
