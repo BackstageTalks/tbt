@@ -50,6 +50,10 @@ def test_public_endpoint_does_not_load_full_snapshot():
     route = app.split("def comparator_compare(req):", 1)[1].split("@app.route(", 1)[0]
     assert "load_pair_artifact(" in route
     assert "_load_comparator_artifact()" not in route
+    # The obsolete full-gzip serving path and cache must not return.
+    assert "def _load_comparator_artifact(" not in app
+    assert "_COMPARATOR_ARTIFACT_CACHE" not in app
+    assert 'COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"' not in app
     assert 'COMPARATOR_INDEX = Path(__file__).parent / "data/comparator-serving.sqlite3"' in app
 
 

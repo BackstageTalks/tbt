@@ -192,7 +192,6 @@ from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_sl
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"
 COMPARATOR_PLAYERS = Path(__file__).parent / "data/comparator-players.json"
 COMPARATOR_INDEX = Path(__file__).parent / "data/comparator-serving.sqlite3"
 RELEASE = "7.3.6"
@@ -267,8 +266,6 @@ _LIVE_ODDS_CACHE: dict[str, tuple[float, object]] = {}
 _LIVE_ODDS_CACHE_LOCK = Lock()
 _LIVE_ODDS_CACHE_SECONDS = 120.0
 
-_COMPARATOR_ARTIFACT_CACHE: tuple[float, dict] | None = None
-_COMPARATOR_ARTIFACT_CACHE_LOCK = Lock()
 _COMPARATOR_PLAYERS_CACHE: tuple[float, dict] | None = None
 _COMPARATOR_PLAYERS_CACHE_LOCK = Lock()
 _COMPARATOR_RESULT_CACHE: dict[str, tuple[float, dict]] = {}
@@ -366,22 +363,6 @@ def _prune_comparator_result_cache(now_mono: float) -> None:
         oldest = sorted(_COMPARATOR_RESULT_CACHE, key=lambda k: _COMPARATOR_RESULT_CACHE[k][0])[:overflow]
         for key in oldest:
             _COMPARATOR_RESULT_CACHE.pop(key, None)
-
-
-def _load_comparator_artifact() -> dict:
-    global _COMPARATOR_ARTIFACT_CACHE
-    stat = COMPARATOR.stat()
-    mtime = float(stat.st_mtime)
-    with _COMPARATOR_ARTIFACT_CACHE_LOCK:
-        cached = _COMPARATOR_ARTIFACT_CACHE
-        if cached is not None and cached[0] == mtime:
-            return cached[1]
-        with gzip.open(COMPARATOR, "rt", encoding="utf-8") as handle:
-            payload = json.load(handle)
-        if not isinstance(payload, dict) or int(payload.get("schema") or 0) != 1:
-            raise ValueError("invalid comparator artifact")
-        _COMPARATOR_ARTIFACT_CACHE = (mtime, payload)
-        return payload
 
 
 def _load_comparator_players() -> dict:

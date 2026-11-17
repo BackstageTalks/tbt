@@ -13,7 +13,9 @@ def test_match_comparator_release_and_runtime_contract():
     assert 'remove_names=("comparator.json.gz",)' in pipeline
     assert 'COMPARATOR_ASSET = "comparator.json.gz"' in deploy
     assert 'gzip.open(source, "rt"' in deploy
-    assert 'COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"' in api
+    assert 'COMPARATOR_INDEX = Path(__file__).parent / "data/comparator-serving.sqlite3"' in api
+    assert "load_pair_artifact(" in api
+    assert 'COMPARATOR = Path(__file__).parent / "data/comparator.json.gz"' not in api
     assert 'route="v1/comparator/players"' in api
     assert 'route="v1/comparator/compare"' in api
     assert '_COMPARATOR_RESULT_TTL_SECONDS = 5 * 60' in api
