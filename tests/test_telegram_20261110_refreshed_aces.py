@@ -148,20 +148,11 @@ def test_new_issued_refs_are_included_in_results_without_erasing_original():
     assert len([x for x in items if x["channel"]=="aces"])==9
 
 
-def test_explicit_one_shot_trigger_uses_private_ledger_and_production_readback():
-    wf=(Path(__file__).resolve().parents[1]/
-        ".github/workflows/telegram-20261110-refreshed-aces.yml").read_text()
-    assert "group: blinq-telegram-ledger" in wf
-    assert "telegram-20261110-refreshed-aces-request.json" in wf
-    assert "scripts/telegram_20261110_refreshed_aces.py prepare" in wf
-    assert "provider_requests == 0" in wf and "cdb_writes == false" in wf
-    assert "git diff-tree" in wf and "scripts/telegram_offer_publisher.py mark-sent" in wf
-    assert 'workflows: ["Tennis data and predictions"]' in wf
-    assert "42794628480" in wf
-    assert "actions/runs/42794628480" in wf
+def test_historical_one_shot_is_retired_but_frozen_request_remains():
+    root = Path(__file__).resolve().parents[1]
+    assert not (root / ".github/workflows/telegram-20261110-refreshed-aces.yml").exists()
     import json
-    request=json.loads((Path(__file__).resolve().parents[1] /
-        ".github/telegram-20261110-refreshed-aces-request.json").read_text())
+    request = json.loads((root / ".github/telegram-20261110-refreshed-aces-request.json").read_text())
     assert request["source_refresh_run_id"] == 42794628480
     assert request["provider_requests"] == 0
     assert request["preserve_original_issued_bets"] is True
