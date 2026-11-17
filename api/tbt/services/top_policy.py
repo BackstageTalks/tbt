@@ -43,16 +43,19 @@ def competition_group(row):
     level = " ".join(level.replace("_", " ").replace("-", " ").split())
     name = str(row.get("tournament") or "").lower()
     combined = level + " " + name
+    # Classify excluded formats before any tier words; an ATP Challenger
+    # junior/exhibition is not an ATP Challenger singles match.
+    if any(word in combined for word in ("doubles", "wheelchair", "junior", "exhibition")):
+        return "other"
     if "itf" in combined or "futures" in combined:
         return "ITF"
     if "utr" in combined:
         return "UTR"
+    if re.search(r"wta\s*125", combined) or ("challenger" in combined and
+            ("wta" in combined or str(row.get("tour") or "").strip().upper() == "WTA")):
+        return "WTA 125"
     if "challenger" in combined:
         return "Challenger"
-    if re.search(r"wta\s*125", combined):
-        return "WTA 125"
-    if any(word in combined for word in ("doubles", "wheelchair", "junior", "exhibition")):
-        return "other"
     if level in {"atp", "atp 250", "atp 500", "atp 1000", "masters 1000", "atp finals"}:
         return "ATP" if str(row.get("tour") or "").upper() == "ATP" else "unknown"
     if level in {"wta", "wta 250", "wta 500", "wta 1000", "wta finals"}:
@@ -118,7 +121,9 @@ def rejection_reasons(card, *, min_probability=.60, min_depth=.80, min_surface=5
 
     reasons = []
     group = competition_group(card)
-    if group not in {"ATP", "WTA", "Challenger", "ITF"}:
+    # ITF of every grade is held out of NEW TOP picks, independent of probability.
+    # Previously issued snapshots and VALUE/PRIME selection are unaffected.
+    if group not in {"ATP", "WTA", "Challenger"}:
         reasons.append("competition_not_approved")
     # Temporary TOP-only hold pending independently graded M15/M25 calibration.
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.

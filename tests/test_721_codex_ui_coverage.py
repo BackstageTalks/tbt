@@ -66,7 +66,7 @@ def test_unlimited_v21_top_survives_serving_entitlement_without_legacy_three_pic
     assert original_ids == [
         "high-80", "high-75", "high-70", "eligible-66", "eligible-65",
     ]
-    assert published["market_selection"]["top_daily_rule"]["policy"] == "sports_tiered_top5_60_v23"
+    assert published["market_selection"]["top_daily_rule"]["policy"] == "sports_tiered_top5_60_v24"
     assert published["market_selection"]["top_daily_rule"]["fallback_only_if_core_count_below"] is None
     assert [x["event_id"] for x in _daily_rows(published)] == original_ids
     # The old 3-pick tier rule must remain isolated from the new policy.

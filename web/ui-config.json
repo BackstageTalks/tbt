@@ -981,8 +981,6 @@
       "requires_odds": true,
       "objective": "competition_tier_then_probability_desc",
       "min_probability": 0.6,
-      "itf_min_probability_exclusive": 0.65,
-      "itf_max_odds_inclusive": 1.7,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
       "min_odds": 1.5,
@@ -995,7 +993,7 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "Target three, publish up to five eligible TOP picks at 60% or above. ATP/WTA first, then Challenger, then verified ITF; M15/M25 and unverified ITF stay blocked. No forced fill.",
+      "cascade": "Target three, publish at most five quality-approved TOP picks at 60% or above. Main ATP/WTA first, then ATP Challenger. WTA 125, all ITF, UTR, juniors and exhibitions excluded. No forced fill.",
       "confidence_tiers": [
         0.6
       ],
@@ -1006,9 +1004,24 @@
       "dynamic_fallback_tiers": [],
       "backup_min_data_depth": 0.8,
       "backup_min_surface_matches": 5,
-      "competition_priority": [["ATP", "WTA"], ["Challenger"], ["ITF"]],
+      "competition_priority": [
+        [
+          "ATP",
+          "WTA"
+        ],
+        [
+          "Challenger"
+        ]
+      ],
       "quality_fallback": false,
-      "policy": "sports_tiered_top5_60_v23"
+      "policy": "sports_tiered_top5_60_v24",
+      "excluded_competitions": [
+        "ITF",
+        "WTA 125",
+        "UTR",
+        "other",
+        "unknown"
+      ]
     },
     "value": {
       "label": "Value Predictions",

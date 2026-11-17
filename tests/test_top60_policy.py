@@ -30,7 +30,7 @@ def test_top60_global_sports_order_cap_and_odds_independence():
     assert [r['event_id'] for r in select_market_sections(changed)['top_daily_picks']] == ['4', '2', '1', '0', '3']
 
 
-def test_tiered_five_honors_atp_wta_then_challenger_then_verified_itf():
+def test_tiered_five_honors_atp_wta_then_challenger_and_excludes_itf():
     from test_top_priority_policy import verified_w35, pick
     rows = [
         verified_w35("itf", .99),
@@ -65,6 +65,6 @@ def test_low_itf_m15_w15_remain_protected_pending_evidence():
     out = select_market_sections([m15, w15])
     assert out["top_daily_picks"] == []
     assert out["market_selection"]["top_daily_rule"]["competition_priority"] == [
-        ["ATP", "WTA"], ["Challenger"], ["ITF"]
+        ["ATP", "WTA"], ["Challenger"]
     ]
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
