@@ -34,11 +34,14 @@ def test_authenticated_feed_prefetch_overlaps_auth_and_ui_but_not_render():
 
 def test_static_resources_can_reuse_browser_cache_but_runtime_config_cannot():
     routes = {route["route"]: route["headers"].get("Cache-Control", "") for route in ROUTES}
-    # Preserve the production freshness policy for both CSS and critical scripts.
+    # Mutable HTML, live configuration and runtime authority never enter browser cache.
     for path in ("/", "/index.html", "/release.json", "/ui-config.json",
-                 "/blinq-app.css", "/auth.js", "/app.js",
-                 "/responsive.js", "/insight-media.js"):
+                 "/insight-media.js"):
         assert "no-store" in routes[path]
+    # Four deploy-stamped assets are safe for a short browser cache lifetime.
+    for path in ("/blinq-app.css", "/auth.js", "/app.js", "/responsive.js"):
+        assert "public" in routes[path] and "max-age=300" in routes[path]
+        assert "no-store" not in routes[path] and "immutable" not in routes[path]
     assert "cache:'no-store'" in APP  # live config remains uncached
     assert "fast-boot=20261101-1" in HTML
 
