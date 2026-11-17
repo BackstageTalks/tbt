@@ -35,9 +35,10 @@ def test_main_tours_reach_70_before_using_itf_to_fill_target():
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==0
 
 
-def test_itf_is_last_resort_not_entirely_removed():
-    out=select_market_sections([pick("a",.78),pick("b",.75,"WTA"),verified_w35("i",.80)])
-    assert ids(out)==["a","b","i"]
+def test_verified_itf_is_still_excluded_even_with_high_probability():
+    out=select_market_sections([pick("a",.78),pick("b",.75,"WTA"),verified_w35("i",.99)])
+    assert ids(out)==["a","b"]
+    assert out["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
 @pytest.mark.parametrize("p",[.55,.59,.5999])
@@ -98,8 +99,8 @@ def test_main_then_challenger_then_verified_w35_with_wta125_excluded():
     rows = [verified_w35("itf", .95), pick("secondary-low", .71, "Challenger"),
             pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
     result = select_market_sections(rows)
-    assert ids(result) == ["main", "secondary-low", "itf"]
-    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
+    assert ids(result) == ["main", "secondary-low"]
+    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 2
 
 
 @pytest.mark.parametrize("tournament", [
@@ -128,7 +129,7 @@ def test_m15_m25_hold_does_not_change_value_or_generic_itf_top():
     m15["tournament"] = "ITF M15"
     normal_itf = verified_w35("itf-other", .75, odds=1.60)
     out = select_market_sections([m15, normal_itf])
-    assert ids(out) == ["itf-other"]
+    assert ids(out) == []
     assert [x["event_id"] for x in out["value_picks"]] == ["value-m15"]
 
 
@@ -189,7 +190,8 @@ def test_small_outsider_difference_still_eligible():
     # ITF <=1.70 with bookmaker fair not strongly opposed.
     card = verified_w35("small-difference", .71, odds=1.70, other=1.65)
     output = select_market_sections([card])
-    assert ids(output) == ["small-difference"]
+    assert ids(output) == []
+    assert output["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
 def test_outsider_top_hold_does_not_modify_prime_value_or_aces():
@@ -215,7 +217,7 @@ def test_high_odds_atp_selection_unchanged_by_itf_precaution():
 def test_itf_favorite_not_removed_by_market_precaution():
     itf = verified_w35("itf-favorite", .718, odds=1.52, other=2.50)
     output = select_market_sections([itf])
-    assert ids(output) == ["itf-favorite"]
+    assert ids(output) == []
 
 
 def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
@@ -228,9 +230,9 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     ]
     before = deepcopy(rows)
     result = select_market_sections(rows)
-    assert ids(result) == ["atp70", "wta68", "atp65", "challenger", "itf"]
+    assert ids(result) == ["atp70", "wta68", "atp65", "challenger"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60"
+        "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
@@ -242,9 +244,9 @@ def test_65_floor_applies_to_challenger_and_proven_w35_only():
     w35 = verified_w35("w35", .655)
     rejected = pick("under-floor", .599, "Challenger")
     result = select_market_sections([atp, challenger, w35, rejected])
-    assert ids(result) == ["atp", "challenger", "w35"]
+    assert ids(result) == ["atp", "challenger"]
     assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
-        "sports_0.60", "sports_0.60", "sports_0.60"
+        "sports_0.60", "sports_0.60"
     ]
     snap = build_selection_candidate_snapshot(
         [atp, challenger, w35, rejected],
@@ -273,8 +275,8 @@ def test_w35_quality_gate_is_not_waived_for_3_tip_target():
     no_surface = verified_w35("no-surface", .92)
     no_surface["quality"]["feature_evidence"]["surface_serve_return_known_both"] = None
     out = select_market_sections([good, no_serve, no_surface])
-    assert ids(out) == ["good"]
-    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
+    assert ids(out) == []
+    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
 
 
 
@@ -286,18 +288,19 @@ def test_old_itf_safeguards_survive_new_tier_order():
     risky_itf = verified_w35("risky", .75, odds=2.50, other=1.50)
     safe_itf = verified_w35("safe", .73, odds=1.60)
     result = select_market_sections([m15, m25, risky_itf, safe_itf])
-    assert ids(result) == ["safe"]
+    assert ids(result) == []
     assert result["market_selection"]["top_rejection_counts"]["itf_m15_m25_top_hold_pending_calibration"] == 2
     assert result["market_selection"]["top_rejection_counts"]["top_unverified_market_outsider_conflict"] == 1
 
 
-def test_nonapproved_wta125_and_utr_do_not_fill_top():
+def test_nonapproved_wta125_wta_challenger_and_utr_do_not_fill_top():
     wta125 = pick("wta125", .99, "WTA 125")
+    wta_challenger = pick("wta_challenger", .98, "WTA Challenger")
     utr = pick("utr", .98, "UTR")
-    result = select_market_sections([wta125, utr])
+    result = select_market_sections([wta125, wta_challenger, utr])
     assert ids(result) == []
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
-    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 2
+    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 3
 
 
 
@@ -305,11 +308,12 @@ def test_nonapproved_wta125_and_utr_do_not_fill_top():
     (1.50, True), (1.70, True), (1.700001, False),
     (1.71, False), (1.80, False), (2.20, False),
 ])
-def test_itf_top_price_cap_inclusive(odds, eligible):
+def test_itf_top_excluded_regardless_of_price(odds, eligible):
     w35 = verified_w35("w35-price", .75, odds=odds, other=2.50)
     original = deepcopy(w35)
     output = select_market_sections([w35])
-    assert (ids(output) == ["w35-price"]) is eligible
+    assert ids(output) == []
+    assert output["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
     assert ("itf_odds_above_1_70" in output["market_selection"]["top_rejection_counts"]) is (not eligible)
     assert w35 == original
 
@@ -317,10 +321,11 @@ def test_itf_top_price_cap_inclusive(odds, eligible):
 @pytest.mark.parametrize("p,eligible", [
     (.649, False), (.65, False), (.650001, True), (.651, True),
 ])
-def test_itf_top_probability_strictly_above_65(p, eligible):
+def test_itf_top_excluded_regardless_of_probability(p, eligible):
     w35 = verified_w35("w35-probability", p, odds=1.60, other=2.60)
     output = select_market_sections([w35])
-    assert (ids(output) == ["w35-probability"]) is eligible
+    assert ids(output) == []
+    assert output["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
     if p == .65:
         assert output["market_selection"]["top_rejection_counts"]["itf_probability_not_above_65"] == 1
 
@@ -339,7 +344,7 @@ def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
     over = verified_w35("over", .95, odds=1.7001)
     qualifying = verified_w35("qualifying", .651, odds=1.70)
     output = select_market_sections([over, qualifying, main, challenger])
-    assert ids(output) == ["atp65", "ch65", "qualifying"]
+    assert ids(output) == ["atp65", "ch65"]
     assert output["market_selection"]["top_rejection_counts"]["itf_odds_above_1_70"] == 1
 
 
