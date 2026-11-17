@@ -1,0 +1,164 @@
+name: One-time free PropLine tennis ace price table 2026-11-17
+on:
+  push:
+    branches: [audit/propline-available-odds-table-20261117]
+    paths: [.github/workflows/free-propline-ace-prices-20261117.yml]
+permissions:
+  contents: read
+concurrency:
+  group: one-time-free-propline-table-20261117
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PROPL: ${{ secrets.PROPL }}
+    steps:
+      - name: Verify actual pre-match free PropLine price records without writing data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections, datetime, json, math, os, re, urllib.error, urllib.request
+          from zoneinfo import ZoneInfo
+          now=datetime.datetime.now(datetime.timezone.utc)
+          if now.astimezone(ZoneInfo("Europe/Bratislava")).date().isoformat() != "2026-11-17":
+              raise SystemExit("This audit is valid only on Nov 17")
+          key=os.getenv("PROPL", "")
+          if not key:
+              raise SystemExit("Existing free PropLine credential missing")
+          url="https://api.prop-line.com/v1/sports/tennis/odds?markets=player_aces,total_aces"
+          req=urllib.request.Request(url,headers={
+              "X-API-Key":key, "Accept":"application/json",
+              "User-Agent":"BlinQ-free-price-table-readonly/1.0"
+          })
+          try:
+              with urllib.request.urlopen(req,timeout=25) as res:
+                  remaining=res.headers.get("X-Daily-Remaining")
+                  data=res.read(20000001)
+          except urllib.error.HTTPError as exc:
+              print("PROPLINE_TABLE_ERROR="+json.dumps({"http_code":exc.code,
+                  "remaining":exc.headers.get("X-Daily-Remaining")}))
+              raise
+          if len(data)>20000000 or remaining is None or int(remaining)<150:
+              raise SystemExit("Cannot validate response size or safety reserve")
+          response=json.loads(data)
+          if isinstance(response,list):
+              events=response
+          elif isinstance(response,dict):
+              events=next((response[k] for k in ("events","data","results")
+                           if isinstance(response.get(k),list)),[])
+          else:
+              events=[]
+          def dt(iso):
+              try:
+                  t=datetime.datetime.fromisoformat(str(iso or "").replace("Z","+00:00"))
+                  return t if t.tzinfo is not None else None
+              except (ValueError,TypeError):
+                  return None
+          def dec(x):
+              try:
+                  v=float(x)
+                  if not math.isfinite(v):
+                      return None
+                  if v<=-100:
+                      y=1+100/abs(v)
+                  elif v>=100:
+                      y=1+v/100
+                  elif 1.01<=v<=30:
+                      y=v
+                  else:
+                      return None
+                  return round(y,3) if 1.01<=y<=100 else None
+              except (ValueError,TypeError,OverflowError):
+                  return None
+          records=[]
+          bookcounts=collections.Counter()
+          marketcounts=collections.Counter()
+          futureevents=0
+          for e in events:
+              if not isinstance(e,dict) or e.get("in_play") or e.get("live"):
+                  continue
+              start=dt(e.get("commence_time") or e.get("start_time"))
+              if start is None or start<=now:
+                  continue
+              futureevents+=1
+              match=" - ".join(str(e.get(k) or "") for k in ("home_team","away_team"))
+              event_id=str(e.get("id") or "")
+              for book in e.get("bookmakers") or []:
+                  if not isinstance(book,dict):
+                      continue
+                  bookname=str(book.get("key") or book.get("title") or "unknown").lower()
+                  for m in book.get("markets") or []:
+                      if not isinstance(m,dict):
+                          continue
+                      key=str(m.get("key") or "")
+                      if "ace" not in key:
+                          continue
+                      marketcounts[key]+=1
+                      if key!="player_aces":
+                          continue
+                      outs=m.get("outcomes") or []
+                      grouped=collections.defaultdict(dict)
+                      for o in outs:
+                          if not isinstance(o,dict):
+                              continue
+                          player=str(o.get("description") or "").strip()
+                          name=str(o.get("name") or "").strip()
+                          p=dec(o.get("price"))
+                          if not player or p is None:
+                              continue
+                          typ="milestone" if re.fullmatch(r"\d+\s*\+\s*aces",name,re.I) else ""
+                          if typ and bookname not in ("dabble","sleeper","prizepicks","underdog","parlayplay","draftkings_pick6"):
+                              threshold=int(re.search(r"\d+",name).group())
+                              records.append({
+                                  "kind":"sportsbook_milestone","match":match,
+                                  "event_id":event_id,"start_utc":start.isoformat(),
+                                  "book":bookname,"player":player,
+                                  "market":name,"equiv_over_line":threshold-0.5,
+                                  "odd":p,"raw_american":o.get("price"),
+                                  "last_update":m.get("last_update")
+                              })
+                              bookcounts[bookname]+=1
+                          if name.lower() in ("over","under") and o.get("point") is not None:
+                              try:
+                                  pt=float(o.get("point"))
+                              except (TypeError,ValueError):
+                                  continue
+                              if math.isfinite(pt):
+                                  grouped[(player,pt)][name.lower()]=p
+                      for (person,pt),sides in grouped.items():
+                          if set(sides)=={"over","under"}:
+                              kind=("dfs_pickem_pair" if bookname in
+                                  ("dabble","sleeper","prizepicks","underdog","parlayplay","draftkings_pick6")
+                                  else "sportsbook_full_ou")
+                              records.append({
+                                  "kind":kind,"match":match,
+                                  "event_id":event_id,"start_utc":start.isoformat(),
+                                  "book":bookname,"player":person,
+                                  "market":"Over/Under","equiv_over_line":pt,
+                                  "odd_over":sides["over"],"odd_under":sides["under"],
+                                  "last_update":m.get("last_update")
+                              })
+                              bookcounts[bookname]+=1
+          records.sort(key=lambda x:(x["start_utc"],x["match"],x["player"],x["kind"],x["book"],x["equiv_over_line"]))
+          seen=set()
+          unique=[]
+          for x in records:
+              ident=(x["kind"],x["event_id"],x["book"],x["player"],x["market"],x["equiv_over_line"])
+              if ident not in seen:
+                  seen.add(ident);unique.append(x)
+          bykind=collections.Counter(x["kind"] for x in unique)
+          print("PROPLINE_PRICE_TABLE="+json.dumps({
+              "checked_at_utc":now.isoformat(),"free_requests":1,
+              "provider_remaining_after":int(remaining),
+              "provider_events_total":len(events),"future_events":futureevents,
+              "market_keys":dict(marketcounts),
+              "price_records_by_kind":dict(bykind),
+              "price_records_by_book":dict(bookcounts),
+              "rows":unique[:250],
+              "rows_truncated":len(unique)>250,
+              "no_cdb_writes":True,"no_published_tip_changes":True
+          },ensure_ascii=False,sort_keys=True))
+          PY
