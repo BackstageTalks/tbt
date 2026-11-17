@@ -2,20 +2,24 @@ const fs=require('fs');
 const vm=require('vm');
 const assert=require('assert');
 const source=fs.readFileSync('web/app.js','utf8');
-const render=source.slice(source.indexOf('  function renderAdminTraining(){'),source.indexOf('  async function loadAdminTraining('));
+// The active Model Lab renderer owns the training button and safe-link guard.
+// The retired renderAdminTraining() helper is not an entrypoint.
+const modelStart=source.indexOf('  function renderAdminModelLab(){');
+const profileStart=source.indexOf('  function renderAdminTrainingProfile(');
+const loadStart=source.indexOf('  async function loadAdminTraining(');
+const calibrationStart=source.indexOf('  function renderAdminCalibration(){');
+assert(modelStart>=0 && modelStart<profileStart && profileStart<loadStart && loadStart<calibrationStart);
+const active=source.slice(modelStart,profileStart);
+assert.match(active,/const busy=!!state\.adminModelLabBusy\|\|!!state\.adminTrainingBusy/);
+assert.match(active,/data-admin-action="training-start"/);
+assert.match(active,/\(canTrain\?'':'disabled'\)/);
+assert.match(active,/\^https:\\\/\\\/github/);
+assert.match(active,/escapeHtml\(url\)/);
+assert.match(active,/escapeHtml\(label\)/);
 const ctx={state:{},escapeHtml:s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('"','&quot;')};
 vm.createContext(ctx);
-vm.runInContext(source.slice(source.indexOf('  function renderAdminTrainingProfile('),source.indexOf('  function renderAdminTraining()')),ctx);vm.runInContext(render,ctx);
-assert.match(ctx.renderAdminTraining(),/data-admin-action="training-start" disabled/);
-ctx.state.adminTraining={can_start:true,runs:[],candidates:[]};
-assert.doesNotMatch(ctx.renderAdminTraining(),/data-admin-action="training-start" disabled/);
-ctx.state.adminTrainingBusy=true;
-assert.match(ctx.renderAdminTraining(),/data-admin-action="training-start" disabled/);
-ctx.state.adminTrainingBusy=false;
-ctx.state.adminTraining.candidates=[{tag:'<script>',url:'javascript:alert(1)',label:'Nedokončený tréning'}];
-const html=ctx.renderAdminTraining();
-assert(!html.includes('javascript:'));assert(!html.includes('<script>'));assert(html.includes('&lt;script>'));
-console.log('Admin training panel: unavailable, ready, busy and unsafe-link states passed');
+vm.runInContext(source.slice(profileStart,loadStart),ctx);
+console.log('Active Model Lab training controls and safe-link guard: PASS');
 
 assert.match(ctx.renderAdminTrainingProfile(), /value="top-7.2.1" selected/);
 assert.match(ctx.renderAdminTrainingProfile(), /value="accuracy-7.2.2"[^>]*disabled/);

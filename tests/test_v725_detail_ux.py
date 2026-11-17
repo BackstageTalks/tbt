@@ -7,7 +7,7 @@ INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 
 def test_footer_is_minimal_with_live_worker_heartbeat_status():
-    assert "hubDataDepthLabel" in APP
+    assert "const matchAt=state.feed?.match_status_updated_at||'';" in APP
     assert "renderFooterConfig" not in APP
     assert "footer.live_ok" not in APP
     assert ".site-footer-minimal" in CSS

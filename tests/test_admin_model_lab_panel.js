@@ -10,7 +10,7 @@ const escapeHtml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;')
   .replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#39;');
 const ctx={state,escapeHtml,fmtStamp:s=>String(s)};
 vm.createContext(ctx);
-vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  function renderAdminTraining()')),ctx);
+vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  async function loadAdminTraining(')),ctx);
 vm.runInContext(src.slice(begin,end),ctx);
 
 let html=ctx.renderAdminModelLab();

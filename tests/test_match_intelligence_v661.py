@@ -41,6 +41,7 @@ def test_frontend_contract_uses_lxx_and_ranking_movement():
     text = open("web/app.js", encoding="utf-8").read()
     assert "Form L${Math.round(form.matches)}" not in text  # label is dynamic
     assert "L${Math.round(form.matches)} = ${Math.round(form.winPct*100)}%" in text
-    assert "function rankMovement" in text
+    assert "p1PrevRank:player1?.previous_rank??null" in text
+    assert "p2PrevRank:player2?.previous_rank??null" in text
     assert "previous_rank" in text
     assert "surfaceShortName" in text

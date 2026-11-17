@@ -20,7 +20,8 @@ def test_local_country_flags_are_packaged_and_used():
 
 def test_player_meta_and_rank_visual_contract():
     assert "playerMetaHtml" in APP
-    assert "hubPlayerMeta" in APP
+    assert "function playerMetaHtml(rank,country,tour='')" in APP
+    assert APP.count("playerMetaHtml(") >= 2
     assert ".hub-rank" in CSS
     assert "font-variant-numeric:tabular-nums" in CSS
 

@@ -648,4 +648,9 @@ def test_blurred_elite_see_all_does_not_render_rows_or_insights_in_browser_code(
     script = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "if(tab==='see_all'&&String(ent.display_state||'').toLowerCase()==='blurred')" in script
     assert "body.innerHTML=dailyHubLockedRow('see_all',0,firstDailyHubUnlockPlan('see_all',0,true));" in script
-    assert "&& String(dailyHubEntitlement('see_all').display_state||'').toLowerCase()==='blurred'" in script
+    # The live renderDailyHub() branch must enforce the lock before row rendering.
+    lock = script.index("if(tab==='see_all'&&String(ent.display_state||'').toLowerCase()==='blurred')")
+    render = script.index("const includedButUnavailable=dailyHubIncludedButUnavailable(tab,ent,sourceRows.length);", lock)
+    assert lock < render
+    assert "const insight=$('dailyHubInsightBoard');if(insight)insight.hidden=true;" in script[lock:render]
+    assert "return;" in script[lock:render]

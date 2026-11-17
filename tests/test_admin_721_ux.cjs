@@ -38,7 +38,7 @@ const state = {
 };
 const ctx = {state, escapeHtml};
 vm.createContext(ctx);
-vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  function renderAdminTraining()')),ctx);
+vm.runInContext(src.slice(src.indexOf('  function renderAdminTrainingProfile('),src.indexOf('  async function loadAdminTraining(')),ctx);
 const renderCalibrationStart = src.indexOf('  function renderAdminCalibration(){');
 const renderCalibrationEnd = src.indexOf('  function adminTestFilter(){', renderCalibrationStart);
 assert(renderCalibrationStart > 0 && renderCalibrationEnd > renderCalibrationStart);
