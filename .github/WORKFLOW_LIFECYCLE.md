@@ -96,3 +96,7 @@ To recover a specific experiment, inspect its file at commit `ad5fc135478f32c8d3
 ## Telegram dated recovery retirement (2026-11-17)
 
 Retired six date-locked November 3/4–5/5/6/10 recovery/replay and November 6 audit workflows after operator confirmed the external Telegram clock is reconfigured. Removed the three date-locked internal recovery HTTP routes and the unreachable November 3 push-delivery branch from the ordinary Telegram results workflow. Only the obsolete dated branch was removed; the ordinary results dispatch/ledger/reconciliation and November 9 historical safeguard remain unchanged. Historical request manifests, scripts, private Telegram receipts, and offline regression tests remain recoverable for audit. MoviOdds, CDB, model, and PropLine/Fortuna scheduler aliases are outside this retirement scope. No provider or database writes are required by this code cleanup.
+
+## Retired expired 2026-11-04 CDB one-shot entrypoint
+
+The workflow `cdb-urgent-recover-20261104.yml` was tied to a hard UTC cutoff `2026-11-04T17:07:00Z`, and listened only to a push changing its own file, with no regular schedule or reusable workflow_dispatch handler. Its immutable old 2022/2026 partition digests and one-shot emergency dispatch are no longer an applicable current CDB repair procedure. Retire its Actions entrypoint; historical YAML and any CDB release evidence remain in Git history. Do not change `cdb-urgent-recover-20261106.yml`, protected recovery scripts, data, CDB writer or external schedules.
