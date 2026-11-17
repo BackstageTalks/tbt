@@ -1,8 +1,6 @@
 name: One-time free PropLine tennis ace price table 2026-11-17
 on:
-  push:
-    branches: [audit/propline-available-odds-table-20261117]
-    paths: [.github/workflows/free-propline-ace-prices-20261117.yml]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
