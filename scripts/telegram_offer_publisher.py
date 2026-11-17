@@ -790,6 +790,18 @@ def send(a):
     token=os.getenv("TGB");chat=os.getenv("TGCH")
     if not token or not chat:raise RuntimeError("Missing GH Secrets TGB or TGCH")
     if not (Path(a.output)/"ready").is_file():raise RuntimeError("Missing durable reservation")
+    # Close the prepare -> Telegram API race: the reservation is already
+    # persisted to the private git branch, so re-read the final signed release
+    # and live exact website IDs immediately before the first sendMessage.
+    now=stamp(a.now) if a.now else datetime.now(timezone.utc)
+    reserved_id=(Path(a.output)/"ready").read_text(encoding="utf-8").strip()
+    if day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id==_daily_id(now):
+        current=snapshot(Path(a.output)/"final-check")
+        verify_prepared_site(current,a.config_url,now)
+        print("Telegram pre-send exact freeze:", json.dumps(
+            verify_frozen_daily_offer(current,load(Path(a.output)/"state.json"),now),
+            sort_keys=True,
+        ))
     receipts=[]
     for item in load(Path(a.output)/"messages.json"):
         if not isinstance(item,dict) or item.get("audience") not in ("free","premium","elite"): raise RuntimeError("Invalid reserved recipient")
