@@ -7,7 +7,7 @@ from pathlib import Path
 
 from scripts.normalize_atp_worldtour import completed, valid, STATS, convert
 
-EXPECTED_DIGEST = 'd7ea6898fcdb42e58f3342fd3deac506ba4f2872493d76cde4db77a3d8463bc4'
+EXPECTED_DIGEST = 'a964520ffb19c2f530d3599f8b5e88744817864dd6a64e547fc8fa23ebe05a87'
 
 
 class WorldTourAdapterTests(unittest.TestCase):
@@ -47,6 +47,8 @@ class WorldTourAdapterTests(unittest.TestCase):
                 row=next(csv.DictReader(f))
                 self.assertEqual(row['source_date_kind'],'tournament_start')
                 self.assertTrue(row['source_record_id'])
+                self.assertEqual(row['source_winner_id'], row['winner_id'])
+                self.assertEqual(row['source_loser_id'], row['loser_id'])
 
 
 if __name__ == '__main__':
