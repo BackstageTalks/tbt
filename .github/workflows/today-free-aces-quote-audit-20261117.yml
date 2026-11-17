@@ -1,0 +1,91 @@
+name: BlinQ 2026-11-17 current offer read-only quote audit
+
+on:
+  push:
+    branches: [audit/today-aces-free-quotes-20261117]
+    paths: [.github/workflows/today-free-aces-quote-audit-20261117.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-today-free-aces-quote-audit-20261117
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      PROPL: ${{ secrets.PROPL }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify current published BlinQ snapshot and website readback
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from datetime import datetime,timezone
+          import telegram_offer_publisher as tg
+          import telegram_more_aces as more
+          from tbt.services.issued_authority import row_authority_key
+          from tbt.services.feed import main_tour_aces
+
+          now=datetime.now(timezone.utc)
+          today=tg.day(now)
+          snap=tg.snapshot(Path('/tmp/today-aces-free-probe'))
+          assert snap.get('confirmed_only') is True and snap.get('betting_day')==today, 'not today's confirmed offer'
+          site=more.site_readback('https://agreeable-sky-011a7fe10.7.azurestaticapps.net')
+          assert site.get('ready') is True and site.get('stale') is False and site.get('betting_day')==today, 'website not ready for today'
+          website_ok=(site.get('generated_at')==snap.get('source_feed_generated_at'))
+          all_aces = []
+          all_most = []
+          details = []
+          for r in snap.get('ace_picks') or []:
+              if not isinstance(r,dict) or not isinstance(r.get('player1'),dict) or not isinstance(r.get('player2'),dict):
+                  continue
+              try:
+                  when=tg.stamp(r.get('scheduled_at'))
+              except (TypeError, ValueError, KeyError):
+                  continue
+              if tg.day(when)!=today or when.astimezone(tg.TZ).date().isoformat()!=today or not main_tour_aces(r):
+                  continue
+              name=(r['player1'].get('name'),r['player2'].get('name'))
+              selected=str(r.get('selection_id') or '')
+              player=next((p.get('name') for p in (r['player1'],r['player2']) if str(p.get('id') or '')==selected),None)
+              typ=str(r.get('market') or '')
+              key=row_authority_key(r,'ace_picks')
+              on_website=key in set((site.get('offer_authority_keys') or {}).get('aces') or [])
+              item={
+                  'event_id':str(r.get('event_id')),'match':list(name),'start':when.isoformat(),
+                  'selected_player':player, 'market':typ,
+                  'price_contract':r.get('price_contract'),
+                  'market_line':r.get('market_line'),'ou_side':r.get('ou_side'),
+                  'projection':r.get('projection'),'price_status':r.get('price_status'),
+                  'odds_source':r.get('odds_source'),
+                  'on_website_ace_keys':on_website,'future':when>now,
+              }
+              if typ=='aces':
+                  all_aces.append(item)
+              elif typ=='most_aces':
+                  all_most.append(item)
+              details.append(item)
+          print('BLINQ_TODAY_SNAPSHOT='+json.dumps({
+              'checked_at_utc':now.isoformat(),'betting_day':today,'snapshot_generated_at':snap.get('generated_at'),
+              'source_feed_generated_at':snap.get('source_feed_generated_at'),
+              'website_generated_at':site.get('generated_at'),'website_generation_matches':website_ok,
+              'website_visible_counts':site.get('visible_counts'),
+              'ace_rows':len(all_aces),'most_aces_rows':len(all_most),
+              'ace_rows_confirmed_on_site':sum(x['on_website_ace_keys'] for x in all_aces),
+              'ace_rows':all_aces[:60],'most_aces_rows_detail':all_most[:60],
+              'cdb_writes':0,'published_picks_changed':0,'provider_calls':0,
+          },ensure_ascii=False,sort_keys=True))
+          PY
