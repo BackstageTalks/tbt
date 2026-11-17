@@ -1,0 +1,173 @@
+name: BlinQ ATP World Tour current CDB source audit (read only)
+'on':
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/blinq-atp-worldtour-null-audit.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-atp-worldtour-null-audit
+  cancel-in-progress: false
+
+jobs:
+  readonly-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DATA_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: .:api:scripts
+      SOURCE_SHA: a92c6192c5e775df9d6be81d3ef978052b012cd9
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install native CDB reader requirements and source-unit tests
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pandas pyarrow numpy pydantic
+          python -m unittest tests.test_normalize_atp_worldtour -v
+          python -m compileall -q scripts/normalize_atp_worldtour.py scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py
+      - name: Fetch immutable upstream ATP source with eleven original blob hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p work/atp work/source
+          curl --fail --location --retry 4 --retry-delay 3 --max-time 180 \
+            "https://github.com/serve-and-volley/atp-world-tour-tennis-data/archive/$SOURCE_SHA.zip" \
+            -o work/atp/source.zip
+          unzip -q work/atp/source.zip -d work/atp
+          root="$(find work/atp -mindepth 1 -maxdepth 1 -type d -name 'atp-world-tour-tennis-data-*' | head -n1)"
+          test -d "$root/csv"
+          echo "PINNED_ATP_DIR=$root" >> "$GITHUB_ENV"
+          ROOT="$root" python - <<'PY'
+          import hashlib,os
+          from pathlib import Path
+          root=Path(os.environ['ROOT'])
+          pins={
+            'csv/1_tournaments/tournaments_2010-2019.csv':'932dc7042aaaa6d6b87cad8f8c7c57d07bac3ef6',
+            'csv/1_tournaments/tournaments_2020-2022.csv':'7b07e3a4bc91bff81aae453b9bee9689dc6eae58',
+            'csv/2_match_scores/match_scores_2010-2019.csv':'4c1e7f3849504aeff8e1f09ffd9740bb3ee6622e',
+            'csv/2_match_scores/match_scores_2020-2022.csv':'706a9ca96bc19f956c28a980763db54a9fc39a6d',
+            'csv/3_match_stats/match_stats_2016.csv':'8ac7df2458406d967dc0b702b76d06af4612f055',
+            'csv/3_match_stats/match_stats_2017.csv':'27339e424dd349e75bbae5d19c83e3fa5c674abb',
+            'csv/3_match_stats/match_stats_2018.csv':'4036f5afea26f458fb2d5a453eeb94ced7371f58',
+            'csv/3_match_stats/match_stats_2019.csv':'4e5c912b1300cb6d9a65948443fda551a5c6640c',
+            'csv/3_match_stats/match_stats_2020.csv':'658b2b1178797ac07c541ec8a1e141f96e930e3a',
+            'csv/3_match_stats/match_stats_2021.csv':'dfac9370d8f941c8405a635df50f204f3f609182',
+            'csv/3_match_stats/match_stats_2022.csv':'54596d6967972b69095c4ba555abd8a745a6eafb'}
+          for name,expected in pins.items():
+              raw=(root/name).read_bytes()
+              actual=hashlib.sha1(b'blob '+str(len(raw)).encode()+b'\0'+raw).hexdigest()
+              if actual!=expected:
+                  raise SystemExit('SOURCE_GIT_BLOB_DRIFT '+name)
+          print('ATP_PINNED_SOURCE_GIT_BLOBS_VERIFIED',len(pins))
+          PY
+      - name: Verify full adapter, exact 24207 rows, golden SHA
+        run: |
+          set -euo pipefail
+          BLINQ_PINNED_ATP_DIR="$PINNED_ATP_DIR" python -m unittest tests.test_normalize_atp_worldtour -v
+          python scripts/normalize_atp_worldtour.py \
+            --source-dir "$PINNED_ATP_DIR" \
+            --output work/source/atp_worldtour.csv \
+            --report work/source/source_report.json
+          echo 'd7ea6898fcdb42e58f3342fd3deac506ba4f2872493d76cde4db77a3d8463bc4  work/source/atp_worldtour.csv' | sha256sum -c
+      - name: Download all current private CDB partitions and verify release plus two manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$DATA_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p work/cdb
+          gh api "repos/$DATA_REPO/releases/tags/tbt-data-v1" > work/release.json
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D work/cdb \
+            -p 'history-*.parquet' -p history_manifest.json -p _tbt_bundle_manifest.json
+          python - <<'PY'
+          import hashlib,json
+          from pathlib import Path
+          root=Path('work/cdb')
+          release={v['name']:v for v in json.load(open('work/release.json'))['assets']}
+          years=json.loads((root/'history_manifest.json').read_text())['years']
+          bundle=json.loads((root/'_tbt_bundle_manifest.json').read_text())['files']
+          for year,entry in years.items():
+              name=f'history-{year}.parquet'
+              path=root/name
+              if not path.is_file():
+                  raise SystemExit('MISSING_CDB_YEAR '+name)
+              digest=hashlib.sha256(path.read_bytes()).hexdigest()
+              if (entry['sha256']!=digest or bundle[name]['sha256']!=digest
+                  or release[name].get('digest')!='sha256:'+digest):
+                  raise SystemExit('CANONICAL_CDB_SHA_MISMATCH '+name)
+          if len(years)<78:
+              raise SystemExit('CANONICAL_CDB_YEAR_REGRESSION')
+          print('FULL_PRIVATE_CDB_SHA_VERIFIED',len(years))
+          PY
+      - name: Link 24207 ATP observations to current CDB using existing strict linker
+        run: |
+          set -euo pipefail
+          python scripts/link_offline_serve_return.py \
+            --history-dir work/cdb \
+            --source-csv work/source/atp_worldtour.csv \
+            --out-dir work/link
+      - name: Native CDB importer dry-run, zero writes
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/link/auto_linked.jsonl \
+            --history-dir work/cdb \
+            --out-dir work/native-dryrun
+      - name: Emit non-sensitive current CDB counts and verify no write
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          s=json.load(open('work/source/source_report.json'))
+          l=json.load(open('work/link/report.json'))
+          n=json.load(open('work/native-dryrun/report.json'))
+          if (s['output_rows']!=24207 or l['source_rows']!=24207 or
+              l.get('production_mutated') is not False or l.get('api_requests')!=0 or
+              n.get('production_mutated') is not False or
+              n.get('local_partitions_written') is not False):
+              raise SystemExit('READONLY_NATIVE_CONTRACT_FAILED')
+          c=l.get('counts',{})
+          d=n.get('counts',{})
+          if any(d.get(k,0) for k in ('identity_missing','identity_changed','invalid_stats','stat_conflicts')):
+              raise SystemExit('STRICT_IMPORTER_REJECTED_STAGED_EVIDENCE')
+          result={
+            'raw_source_rows':sum(v['source_rows'] for v in s['year_counts'].values()),
+            'normalized':s['output_rows'],
+            'canonical_rows':l.get('canonical_rows'),
+            'identity_linked':c.get('identity_linked',0),
+            'ambiguous':c.get('ambiguous',0),
+            'weak_evidence':c.get('weak_evidence',0),
+            'unmatched':c.get('unmatched',0),
+            'already_present':c.get('already_present',0),
+            'conflicted_matches':c.get('stat_conflict_matches',0),
+            'staged_matches':c.get('staged_matches',0),
+            'native_dryrun_matches':d.get('updated',0),
+            'native_null_fields':d.get('stat_fields_added',0),
+            'production_writes':0,
+            'api_requests':0,
+            'state':'READ_ONLY_NOT_IMPORTED'}
+          Path('work/aggregate-qa.json').write_text(json.dumps(result,indent=2)+'\n')
+          print('ATP_WORLD_TOUR_CURRENT_CDB_NATIVE_DRYRUN',json.dumps(result,sort_keys=True))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
+              f.write('## ATP World Tour current CDB native dry-run (no writes)\n\n')
+              f.write('\n'.join(f'- {k}: {v}' for k,v in result.items()))
+          PY
+      - name: Save aggregate-only QA, never private row-level stages
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: atp-worldtour-current-cdb-aggregate-readonly
+          path: |
+            work/aggregate-qa.json
+            work/source/source_report.json
+          if-no-files-found: warn
+          retention-days: 14
