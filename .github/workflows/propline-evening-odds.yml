@@ -1,11 +1,11 @@
-name: BlinQ SK/CZ evening bookmaker aces audit (read-only)
+name: BlinQ PropLine evening odds archive (Drive + private recovery)
 
-# Existing external scheduler sends the original repository_dispatch at 23:00 Europe/Bratislava.
-# Source replaced with PropLine FREE; keep legacy dispatch event for cron compatibility.
+# External 23:00 Europe/Bratislava scheduler; old event type is a temporary alias.
+# No second schedule is created. New scheduler may migrate to blinq-propline-odds-tick.
 # No native GitHub cron and no dependency on the paid TennisAPI budget.
 on:
   repository_dispatch:
-    types: [blinq-fortuna-evening-odds-tick]
+    types: [blinq-fortuna-evening-odds-tick, blinq-propline-odds-tick]
   workflow_dispatch:
     inputs:
       target_day:
@@ -14,10 +14,10 @@ on:
         type: string
         default: ''
       max_events:
-        description: "Maximum free PropLine tennis events examined (1-60)"
+        description: "Maximum events parsed from one free PropLine API response (0=all)"
         required: false
         type: number
-        default: 60
+        default: 0
       allow_same_day:
         description: "Research only: capture still-upcoming matches on target betting day after 06:00"
         required: false
@@ -33,14 +33,13 @@ concurrency:
 
 jobs:
   capture:
-    # Playwright 1.57 Chromium does not support ubuntu-26.04 runner image.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PROPL: ${{ secrets.PROPL }}
       DATA_REPO: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      MAX_EVENTS: ${{ inputs.max_events || 60 }}
+      MAX_EVENTS: ${{ inputs.max_events || 0 }}
       INPUT_TARGET_DAY: ${{ github.event.client_payload.target_day || inputs.target_day || '' }}
       INPUT_ALLOW_SAME_DAY: ${{ github.event.client_payload.allow_same_day || inputs.allow_same_day || false }}
     steps:
@@ -51,7 +50,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Offline source/parser regressions (no provider requests)
-        run: python -m unittest discover -s tests -p 'test_skcz_evening_*.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_propline_evening_*.py' -v
+          python -m unittest discover -s tests -p 'test_propline_drive_archive.py' -v
       - name: Resolve next Bratislava betting day
         id: day
         shell: bash
@@ -81,11 +82,11 @@ jobs:
         run: |
           set -euo pipefail
           args=(--target-day "$BETTING_DAY" --max-events "$MAX_EVENTS"
-                --out reports/skcz-evening/fortuna.json)
+                --out reports/propline-evening/odds.json)
           if [[ "${INPUT_ALLOW_SAME_DAY,,}" == "true" ]]; then
             args+=(--allow-same-day)
           fi
-          python scripts/skcz_evening_propline.py "${args[@]}"
+          python scripts/propline_evening_odds.py "${args[@]}"
       - name: Validate audit and create-only store in separate private research path
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
@@ -94,7 +95,7 @@ jobs:
           test -n "$GH_TOKEN"
           python - <<'PY'
           import base64, hashlib, json, os, pathlib, subprocess
-          data = pathlib.Path("reports/skcz-evening/fortuna.json").read_bytes()
+          data = pathlib.Path("reports/propline-evening/odds.json").read_bytes()
           report = json.loads(data)
           assert report["schema"] == 1
           assert report["target_betting_day"] == os.environ["BETTING_DAY"]
@@ -102,7 +103,7 @@ jobs:
           assert report["provider_paid_calls"] == 0
           assert report["source"] == "propline_free" and report["provider_requests"] == 1
           assert isinstance(report["provider_remaining"], int) and report["provider_remaining"] >= 150
-          assert report["probed_events"] == report["probed_urls"] and report["probed_events"] <= 60
+          assert report["probed_events"] == report["probed_urls"] and report["probed_events"] <= report["candidate_events"]
           assert report["milestone_quotes"] == sum(
               len(m.get("verified_single_prices") or [])
               for e in report["events_in_target_window"] for m in e["aces_markets"])
@@ -119,7 +120,7 @@ jobs:
           from datetime import datetime, timedelta
           from zoneinfo import ZoneInfo
           observed = report["observed_prematch_priced_events"]
-          assert isinstance(observed, list) and len(observed) <= report["probed_urls"] <= 60
+          assert isinstance(observed, list) and len(observed) <= report["probed_urls"] <= report["candidate_events"]
           total = outside = total_singles = outside_singles = 0
           for event in observed:
               captured = datetime.fromisoformat(event["captured_at"])
@@ -169,11 +170,11 @@ jobs:
           if repo != "BackstageTalks/tbt-data":
               raise SystemExit("Unexpected target repo; refuse research write")
           run_id = os.environ["GITHUB_RUN_ID"]
-          path = f"research/skcz-evening-odds/{report['target_betting_day']}/propline-{run_id}.json"
+          path = f"research/propline-evening-odds/{report['target_betting_day']}/propline-{run_id}.json"
           api = f"repos/{repo}/contents/{path}"
           payload = {"message": f"research: immutable SKCZ evening quotes {run_id} [skip ci]",
                      "content": base64.b64encode(data).decode("ascii")}
-          body = pathlib.Path("/tmp/skcz-evening-odds-write.json")
+          body = pathlib.Path("/tmp/propline-evening-odds-write.json")
           body.write_text(json.dumps(payload), encoding="utf-8")
           subprocess.run(["gh", "api", "-X", "PUT", api, "--input", str(body)],
                          check=True, capture_output=True)
@@ -194,11 +195,25 @@ jobs:
                             "source_errors": len(report["errors"]),
                             "cdb_writes": 0}, sort_keys=True))
           PY
+      - name: Install scoped Google Drive authenticated client
+        run: python -m pip install --disable-pip-version-check google-auth requests
+      - name: Archive to PropLine Google Drive folder and verify actual bytes
+        env:
+          BLINQ_DRIVE_WRITER_JSON: ${{ secrets.BLINQ_DRIVE_WRITER_JSON }}
+          BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
+          BETTING_DAY: ${{ steps.day.outputs.date }}
+          PROPLINE_DRIVE_FOLDER_ID: "1C7_B2LB37IVTK9gBu2TT9dSj5XClIUKh"
+        run: |
+          set -euo pipefail
+          python scripts/propline_drive_archive.py \
+            --report reports/propline-evening/odds.json \
+            --day "$BETTING_DAY" --run-id "$GITHUB_RUN_ID" \
+            --folder "$PROPLINE_DRIVE_FOLDER_ID"
       - name: Keep local evidence even if provider access is blocked
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: blinq-skcz-evening-research-${{ github.run_id }}
-          path: reports/skcz-evening/fortuna.json
+          name: blinq-propline-evening-research-${{ github.run_id }}
+          path: reports/propline-evening/odds.json
           if-no-files-found: warn
           retention-days: 14

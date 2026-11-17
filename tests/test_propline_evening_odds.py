@@ -1,4 +1,4 @@
-"""Free PropLine replacement for the evening Fortuna source: offline invariants."""
+"""PropLine evening collector: offline invariants."""
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from skcz_evening_propline import collect, _price, _single_book_quotes
+from propline_evening_odds import collect, _price, _single_book_quotes
 
 NOW = datetime(2026, 11, 17, 22, 0, tzinfo=timezone.utc)
 DAY = date(2026, 11, 18)
@@ -182,6 +182,26 @@ class PropLineEvening(unittest.TestCase):
         self.assertNotIn("X-API-Key", body)
         self.assertNotIn("Bearer ", body)
         self.assertNotIn("secret", body.lower())
+
+    def test_full_single_response_not_cut_off_at_legacy_60(self):
+        original = example()["events"][0]
+        payload = {"events": [dict(original, id=str(3000 + i))
+                              for i in range(85)]}
+        result = research(payload)
+        self.assertEqual(result["candidate_events"], 85)
+        self.assertEqual(result["probed_events"], 85)
+        self.assertFalse(result["coverage_truncated"])
+        self.assertEqual(result["provider_requests"], 1)
+
+    def test_explicit_debug_limit_is_counted_as_truncation(self):
+        original = example()["events"][0]
+        payload = {"events": [dict(original, id=str(3000 + i))
+                              for i in range(7)]}
+        result = collect(DAY, max_events=2, now=NOW,
+                         get=lambda: (payload, 455))
+        self.assertEqual(result["candidate_events"], 7)
+        self.assertEqual(result["probed_events"], 2)
+        self.assertTrue(result["coverage_truncated"])
 
     def test_empty_ace_market_is_true_zero(self):
         data = example()
