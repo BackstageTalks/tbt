@@ -46,8 +46,11 @@ def assess_publication_deployment(runs_and_jobs, feed_generated_at):
                 if isinstance(j, dict)
                 and j.get("name") == PRODUCTION_JOBS[workflow]
             ]
-            if not publishes and run.get("status") in ACTIVE and workflow == "data.yml":
-                raise RuntimeError("Final offer not ready: active prediction writer with pending deploy job")
+            if not publishes and run.get("status") in ACTIVE:
+                # A queued CI deploy job may not exist in the Jobs API until
+                # its checks finish. Do not treat an unfinished workflow as a
+                # non-publisher merely because that job is not listed yet.
+                raise RuntimeError("Final offer not ready: active workflow may still deploy")
             for job in publishes:
                 status, conclusion = str(job.get("status") or ""), str(job.get("conclusion") or "")
                 if status in ACTIVE:
