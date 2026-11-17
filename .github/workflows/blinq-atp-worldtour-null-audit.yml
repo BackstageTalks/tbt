@@ -1,6 +1,11 @@
 name: BlinQ ATP World Tour current CDB source audit (read only)
 'on':
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/blinq-atp-worldtour-null-audit.yml'
+      - 'scripts/normalize_atp_worldtour.py'
+      - 'tests/test_normalize_atp_worldtour.py'
   push:
     branches: [main]
     paths:
