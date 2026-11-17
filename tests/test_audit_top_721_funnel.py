@@ -63,5 +63,56 @@ class TestReadonlyFunnel(unittest.TestCase):
         self.assertEqual(report["last_snapshot"]["today_singles"], 2)
 
 
+    def test_raw_to_adjusted_depth_loss_is_measured_without_changing_filters(self):
+        strong = row(p=.72, priced=False, depth=.55)
+        strong["raw_model_probability"] = .90
+        strong["blinq_probability"] = .72
+        secure = row(p=.81, priced=False, depth=.90)
+        secure["raw_model_probability"] = .8444444444
+        result = analyze_snapshot({"generated_at": "2026-11-16T05:02:00Z",
+                                   "rows": [strong, secure]}, "2026-11-16")
+        attr = result["confidence_attrition"]
+        self.assertEqual(attr["thresholds"]["75"]["raw_at_least"], 2)
+        self.assertEqual(attr["thresholds"]["75"]["lost_in_depth_adjustment"], 1)
+        self.assertEqual(attr["thresholds"]["75"]["adjusted_at_least"], 1)
+        self.assertEqual(attr["thresholds"]["75"]["passes_price_150"], 0)
+        self.assertEqual(result["selected_sections"]["unselected"], 2)
+
+    def test_strict_price_gate_requires_prestart_two_way_selected_side(self):
+        from audit_top_721_funnel import quote_evidence
+        def quoted():
+            r = row(p=.75, priced=True)
+            r.update({
+                "player1": {"id": "a"}, "player2": {"id": "b"},
+                "betting": {"selection_id": "a", "odds": 1.68,
+                            "captured_at": "2026-11-16T04:58:00Z"},
+                "two_way_market": {"player1_odds": 1.68, "player2_odds": 2.23,
+                                   "captured_at": "2026-11-16T04:58:00Z"},
+            })
+            return r
+        at = __import__("datetime").datetime.fromisoformat("2026-11-16T05:02:00+00:00")
+        valid = quoted()
+        self.assertEqual(quote_evidence(valid, at),
+                         "verified_prestart_selected_price_ge_150")
+        opposite = quoted()
+        opposite["betting"]["odds"] = 2.23
+        self.assertEqual(quote_evidence(opposite, at), "not_verified_two_way_quote")
+        late = quoted()
+        late["betting"]["captured_at"] = "2026-11-16T05:03:00Z"
+        self.assertEqual(quote_evidence(late, at), "missing_or_late_quote_clock")
+        too_short = quoted()
+        too_short["betting"]["odds"] = 1.40
+        self.assertEqual(quote_evidence(too_short, at), "selected_price_below_150")
+
+    def test_inconsistent_depth_formula_never_counts_as_trusted_confidence(self):
+        r = row(p=.95, priced=True, depth=.20)
+        r["raw_model_probability"] = .95
+        result = analyze_snapshot({"generated_at": "2026-11-16T05:02:00Z",
+                                   "rows": [r]}, "2026-11-16")
+        attr = result["confidence_attrition"]
+        self.assertEqual(attr["probability_evidence_anomalies"]["inconsistent_depth_adjustment"], 1)
+        self.assertEqual(attr["thresholds"]["80"]["adjusted_at_least"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

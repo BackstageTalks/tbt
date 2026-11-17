@@ -62,6 +62,108 @@ def tour(row):
     return "other"
 
 
+
+def quote_evidence(row, generated_at):
+    """Independent exact selected-side price check, NOT an alternative TOP gate.
+
+    Snapshots are pre-match only; missing timestamps/side IDs are not inferred.
+    The source's priced boolean alone does not prove a usable 1.50+ quote.
+    """
+    if row.get("priced") is not True:
+        return "unpriced"
+    bet = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    market = row.get("two_way_market") if isinstance(row.get("two_way_market"), dict) else {}
+    price = number(bet.get("odds"))
+    if price is None:
+        return "missing_selected_price"
+    if price < 1.50:
+        return "selected_price_below_150"
+    start = aware(row.get("scheduled_at"))
+    captured = aware(bet.get("captured_at"))
+    market_captured = aware(market.get("captured_at"))
+    if (not generated_at or not start or not captured or not market_captured
+            or not captured <= generated_at < start
+            or not market_captured <= generated_at < start):
+        return "missing_or_late_quote_clock"
+    p1, p2 = row.get("player1") or {}, row.get("player2") or {}
+    ids = (str(p1.get("id") or ""), str(p2.get("id") or ""))
+    picked = str(bet.get("selection_id") or "")
+    if not ids[0] or not ids[1] or ids[0] == ids[1] or picked not in ids:
+        return "ambiguous_selected_identity"
+    side = "player1_odds" if picked == ids[0] else "player2_odds"
+    opposite = "player2_odds" if picked == ids[0] else "player1_odds"
+    side_price, opposite_price = number(market.get(side)), number(market.get(opposite))
+    if (side_price is None or opposite_price is None
+            or side_price <= 1 or opposite_price <= 1
+            or not math.isclose(price, side_price, rel_tol=0, abs_tol=1e-4)):
+        return "not_verified_two_way_quote"
+    return "verified_prestart_selected_price_ge_150"
+
+
+def confidence_attrition(rows, generated_at):
+    """Measure raw -> depth-adjusted confidence and strictly timed 1.50+ offers.
+
+    Independent descriptive counts. No historic outcome, threshold changes,
+    relabeling, imputed quote, or derived production prediction.
+    """
+    floors = (0.60, 0.65, 0.70, 0.75, 0.80)
+    cols = {str(int(100 * floor)): Counter() for floor in floors}
+    quote_counts, model_versions = Counter(), Counter()
+    anomalies = Counter()
+    for row in rows:
+        model_versions[str(row.get("model_version") or "unknown")] += 1
+        quote = quote_evidence(row, generated_at)
+        quote_counts[quote] += 1
+        raw, public, depth = (number(row.get(key)) for key in
+                               ("raw_model_probability", "blinq_probability", "data_depth"))
+        if (raw is None or public is None or depth is None
+                or not .5 <= raw < 1 or not .5 <= public < 1 or not 0 <= depth <= 1):
+            anomalies["missing_or_invalid_probability_depth"] += 1
+            continue
+        if not math.isclose(public, .5 + (raw - .5) * depth,
+                            rel_tol=0, abs_tol=.005):
+            anomalies["inconsistent_depth_adjustment"] += 1
+            continue
+        gate = depth_gate(row)
+        reasons = set(str(x) for x in row.get("top_rejection_reasons") or () if x)
+        for floor in floors:
+            c = cols[str(int(100 * floor))]
+            if raw + 1e-12 >= floor:
+                c["raw_at_least"] += 1
+                if public + 1e-12 < floor:
+                    c["lost_in_depth_adjustment"] += 1
+            if public + 1e-12 < floor:
+                continue
+            c["adjusted_at_least"] += 1
+            if not gate:
+                c["fails_separate_depth_or_surface_gate"] += 1
+                continue
+            c["passes_depth_and_surface"] += 1
+            if quote != "verified_prestart_selected_price_ge_150":
+                c["fails_verified_price_150"] += 1
+                continue
+            c["passes_price_150"] += 1
+            if reasons:
+                c["fails_other_recorded_top_reasons"] += 1
+            else:
+                c["passes_all_recorded_top_reasons"] += 1
+    return {
+        "status": "DESCRIPTIVE_NOT_MODEL_OR_SELECTOR_VALIDATION",
+        "thresholds": {k: {n: c.get(n, 0) for n in (
+            "raw_at_least", "lost_in_depth_adjustment",
+            "adjusted_at_least", "fails_separate_depth_or_surface_gate",
+            "passes_depth_and_surface", "fails_verified_price_150",
+            "passes_price_150", "fails_other_recorded_top_reasons",
+            "passes_all_recorded_top_reasons")} for k, c in cols.items()},
+        "price_verification": dict(sorted(quote_counts.items())),
+        "model_versions": dict(sorted(model_versions.items())),
+        "probability_evidence_anomalies": dict(sorted(anomalies.items())),
+        "caveat": ("Recorded TOP reasons are nonexclusive and were calculated by "
+                   "the original publishing policy; strict quote timing is an "
+                   "additional independent descriptive check, not issuance proof."),
+    }
+
+
 def analyze_snapshot(snapshot, day):
     sources = [r for r in snapshot.get("rows", []) if isinstance(r, dict)]
     rows = [r for r in sources if during_day(r, day)]
@@ -98,6 +200,7 @@ def analyze_snapshot(snapshot, day):
         "tour_group_counts": dict(sorted(tours.items())),
         "top_rejection_reasons_nonexclusive": dict(sorted(reasons.items())),
         "serve_return_both_available": dict(sorted(evidence.items())),
+        "confidence_attrition": confidence_attrition(rows, aware(snapshot.get("generated_at"))),
         "confidence_floor_funnel": {
             k: {key: v.get(key, 0) for key in (
                 "model_probability_at_least", "also_top_depth_and_surface",
