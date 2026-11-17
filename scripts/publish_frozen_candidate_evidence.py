@@ -6,6 +6,7 @@ promote, train, modify canonical data, or overwrite model release artifacts.
 from __future__ import annotations
 
 import base64
+import gzip
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -147,15 +148,71 @@ def main():
     from tbt.models.artifact import load_model
     remote=base/"training-backup/candidate-persisted-readback"
     store=ReleaseStore(DATA_REPO,cert["candidate_tag"],remote)
+    paired_meta = (report.get("paired_top_holdout") or {})
+    paired_name = paired_meta.get("asset") if isinstance(paired_meta, dict) else None
+    if paired_name not in (None, "paired_top_holdout.json.gz"):
+        raise RuntimeError("Unrecognized paired holdout asset name")
+    required = ("model.joblib", "training_report.json", "promotion_history.json")
+    if paired_name:
+        required += (paired_name,)
     store.download(
-        extra_names=("model.joblib","training_report.json","promotion_history.json"),
-        required_names=("model.joblib","training_report.json","promotion_history.json"),
+        extra_names=required,
+        required_names=required,
         require_bundle_manifest=True,
     )
     if hashlib.sha256((remote/"model.joblib").read_bytes()).hexdigest()!=evidence["candidate_sha256"]:
         raise RuntimeError("Published candidate binary differs from fitted local artifact")
     if (remote/"training_report.json").read_bytes()!=(base/"model/training_report.json").read_bytes():
         raise RuntimeError("Published candidate training report differs from local results")
+    if paired_name:
+        paired_file = remote / paired_name
+        digest = hashlib.sha256(paired_file.read_bytes()).hexdigest()
+        if digest != paired_meta.get("sha256"):
+            raise RuntimeError("Private paired holdout artifact digest mismatch")
+        with gzip.open(paired_file, "rt", encoding="utf-8") as handle:
+            rows = json.load(handle)
+        if (rows.get("schema") != 1
+                or rows.get("holdout_fingerprint") != evidence["holdout_fingerprint"]
+                or rows.get("candidate_version") != evidence["candidate_version"]
+                or rows.get("champion_version") != evidence["champion_version"]
+                or len(rows.get("rows", [])) != evidence["comparison"]["sample_size"]
+                or len(rows["rows"]) != paired_meta.get("rows")
+                or rows.get("historical_prices_included") is not False
+                or any("odds" in str(k).lower() or "market" in str(k).lower()
+                       for row in rows["rows"] for k in row)):
+            raise RuntimeError("Private paired holdout row-level readback mismatch")
+        identities = set()
+        for row in rows["rows"]:
+            key = row.get("match_id")
+            if not isinstance(key, str) or not key or key in identities:
+                raise RuntimeError("Duplicate or missing scored match identity")
+            identities.add(key)
+            p1, p2, winner = (row.get(field) for field in
+                              ("player1_id", "player2_id", "winner_id"))
+            if not p1 or not p2 or p1 == p2 or winner not in (p1, p2):
+                raise RuntimeError("Scored player/winner orientation invalid")
+            if int(row.get("target_player1_win", -1)) != int(winner == p1):
+                raise RuntimeError("Scored label does not match oriented winner")
+            from datetime import datetime
+            clock = datetime.fromisoformat(str(row.get("scheduled_at", "")).replace("Z", "+00:00"))
+            if clock.tzinfo is None or clock.utcoffset() is None:
+                raise RuntimeError("Scored fixture timestamp is not timezone-aware")
+            features = row.get("pre_match_features")
+            if not isinstance(features, dict) or not features:
+                raise RuntimeError("No rescorable PIT model features")
+            encoded = json.dumps(features, sort_keys=True, separators=(",", ":"),
+                                 allow_nan=False).encode()
+            if hashlib.sha256(encoded).hexdigest() != row.get("feature_vector_sha256"):
+                raise RuntimeError("PIT feature vector hash mismatch")
+            if any(any(term in str(name).lower() for term in
+                       ("odds", "bookmaker", "market_", "roi", "ev_", "price_"))
+                   for name in features):
+                raise RuntimeError("Market-derived feature in sports model evidence")
+        evidence["paired_holdout"] = {
+            "status": "PRIVATE_ROW_LEVEL_READBACK_VERIFIED",
+            "rows": len(rows["rows"]), "sha256": digest,
+            "asset": paired_name, "market_inputs_excluded": True,
+        }
     loaded=load_model(str(remote/"model.joblib"))
     if not loaded.fitted or loaded.version!=evidence["candidate_version"]:
         raise RuntimeError("Published candidate model is unfitted or has wrong version")

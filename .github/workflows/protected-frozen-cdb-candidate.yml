@@ -19,6 +19,11 @@ on:
         description: Only for explicit Model Factory phase 2; never promotes production
         type: boolean
         default: false
+      sports_weight_profile:
+        description: Candidate-only sport training experiment, no odds and no automatic promotion
+        type: choice
+        options: [none, main_tour_2x]
+        default: none
 
 permissions:
   contents: read
@@ -80,6 +85,7 @@ jobs:
       # Stream long-running training logs rather than losing output on runner exit.
       PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
+      BLINQ_SPORTS_WEIGHT_PROFILE: "${{ inputs.sports_weight_profile || 'none' }}"
       BLINQ_TRAINING_PROFILE: "${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}"
     steps:
       - uses: actions/checkout@v4
@@ -138,6 +144,14 @@ jobs:
       - name: Fit separate candidate only if immutable backup gate passed
         run: |
           set -euo pipefail
+          # Reject inconsistent manual variants before touching a trained model.
+          case "$BLINQ_SPORTS_WEIGHT_PROFILE" in
+            none) ;;
+            main_tour_2x)
+              test "$BLINQ_TRAINING_PROFILE" = 'top-7.2.1'
+              ;;
+            *) echo "::error::Invalid model weighting experiment"; exit 2 ;;
+          esac
           # No --promote. No current candidate tag rewrite. No app deployment.
           python scripts/pipeline.py train --max-requests 1 --training-profile "$BLINQ_TRAINING_PROFILE" \
             --verified-feature-cache .cache/tbt/verified-training-features.parquet \

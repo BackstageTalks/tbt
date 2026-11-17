@@ -118,6 +118,7 @@ class TrainingResult:
     model: TennisEnsemble
     report: dict
     feature_frame: pd.DataFrame
+    paired_holdout: dict | None = None
 
 
 def _candidate_learning_window(frame, training_profile):
@@ -364,6 +365,8 @@ def _split_serving_refit_by_date(
 def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     """Refit only after promotion approval, consuming the already-used holdout."""
     selected = result.model
+    if getattr(selected, "sports_sample_weight_profile", "none") != "none":
+        raise ValueError("Experimental sport-weighted model requires separate verified serving-refit design")
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
     serving = _new_production_ensemble()
@@ -1010,7 +1013,12 @@ def train_from_matches(
     wta_season_stats=None,
     training_profile="standard",
     verified_frame: pd.DataFrame | None = None,
+    sports_weight_profile: str = "none",
 ) -> TrainingResult:
+    if sports_weight_profile not in {"none", "main_tour_2x"}:
+        raise ValueError("Unknown sports-only training experiment")
+    if sports_weight_profile != "none" and training_profile != "top-7.2.1":
+        raise ValueError("Sport weighting is experimental and only valid for top-7.2.1")
     if training_profile not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
         raise ValueError("Unknown training profile")
     # Do not allow future rows to become eligible while the lengthy protected
@@ -1153,11 +1161,15 @@ def train_from_matches(
         training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     )
     evaluation_model.smooth_calibration_only = training_profile == "top-7.2.1"
+    evaluation_model.sports_sample_weight_profile = sports_weight_profile
     evaluation_model.fit(train, calibration)
 
     _training_progress("fit_estimators_complete", len(train))
     if training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
-        evaluation_model.version = ("v7.2.2-" if training_profile == "accuracy-7.2.2" else "v7.2.1-") + evaluation_model.version
+        model_prefix = ("v7.2.2-" if training_profile == "accuracy-7.2.2"
+                        else "v7.2.1-order2x-" if sports_weight_profile == "main_tour_2x"
+                        else "v7.2.1-")
+        evaluation_model.version = model_prefix + evaluation_model.version
 
     test_p = (
         evaluation_model
@@ -1250,8 +1262,31 @@ def train_from_matches(
         key: _metric_delta(holdout_metrics, production_metrics, key)
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
+    paired_holdout = None
+    # Unit-test model doubles do not implement the serialized feature contract.
+    # A real protected fit requires the contract; the frozen publisher fails
+    # closed on any nonempty scored holdout without paired evidence.
+    if (production_probabilities is not None and len(test)
+            and getattr(production_model, "feature_names", None)
+            and getattr(evaluation_model, "feature_names", None)):
+        from .paired_top_evaluation import make_paired_holdout
+        paired_holdout = make_paired_holdout(
+            test, source, production_probabilities, test_p,
+            champion_version=production_model.version,
+            candidate_version=evaluation_model.version,
+            fingerprint=holdout_fingerprint,
+            candidate_feature_names=evaluation_model.feature_names,
+            champion_feature_names=production_model.feature_names,
+        )
     report = {
         "training_profile": training_profile,
+        "sports_weight_experiment": {
+            "profile": sports_weight_profile,
+            "status": "CANDIDATE_ONLY_SPORTS_TRAINING_NO_TOP_GAIN_CLAIM",
+            "competition_only_no_odds": True,
+            "candidate_holdout_is_previously_inspected": True,
+            "no_production_promotion": True,
+        },
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
             "historical_replay_rows": replay_rows,
@@ -1267,7 +1302,7 @@ def train_from_matches(
         "input_diagnostics": diagnostics,
         "top_market_validation": {
             "status": "NOT_EVALUATED",
-            "required": "Independent pre-match odds >=1.50, at most 10 picks/day, no forced fill",
+            "required": "Independent timestamped pre-match odds >=1.50; no fixed pick cap or forced fill",
             "promotion_ready_for_top": False,
         },
         "production_holdout": production_metrics,
@@ -1497,4 +1532,5 @@ def train_from_matches(
         production_model,
         report,
         frame,
+        paired_holdout,
     )

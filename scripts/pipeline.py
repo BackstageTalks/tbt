@@ -975,8 +975,16 @@ def main():
             from verified_training_frame import load as load_verified_frame
             verified_frame = load_verified_frame(
                 args.verified_feature_cache, args.training_profile, matches)
+        # Research flag never applies to serving or the normal production fit.
+        weight_profile = os.getenv("BLINQ_SPORTS_WEIGHT_PROFILE", "none").strip()
+        if weight_profile not in {"none", "main_tour_2x"}:
+            raise ValueError("Unsupported sports-only training profile")
+        if weight_profile != "none" and (not frozen or args.training_profile != "top-7.2.1"
+                                         or args.promote):
+            raise RuntimeError("Sports weighting requires protected nonpromoting TOP research")
         result = train_from_matches(
             matches,
+            sports_weight_profile=weight_profile,
             production_model=champion,
             promotion_history=promotion_history,
             atp_leaderboards=atp_leaderboards,
@@ -987,6 +995,27 @@ def main():
             verified_frame=verified_frame,
         )
         report = clean(result.report)
+        # Private, same-fixture sport-only predictions from the actual frozen
+        # holdout. Never append odds here or expose these rows in Actions artifacts.
+        paired_asset = None
+        if frozen and result.paired_holdout is not None:
+            from hashlib import sha256
+            paired_asset = model_dir / "paired_top_holdout.json.gz"
+            raw_paired = (json.dumps(result.paired_holdout, ensure_ascii=False,
+                                     sort_keys=True, separators=(",", ":"),
+                                     allow_nan=False) + "\n").encode("utf-8")
+            with gzip.open(paired_asset, "wb") as evidence_file:
+                evidence_file.write(raw_paired)
+            report["paired_top_holdout"] = {
+                "status": "PRIVATE_REPLAY_ROWS_NOT_PROSPECTIVE",
+                "asset": paired_asset.name,
+                "rows": len(result.paired_holdout["rows"]),
+                "sha256": sha256(paired_asset.read_bytes()).hexdigest(),
+                "holdout_fingerprint": result.paired_holdout["holdout_fingerprint"],
+                "historical_odds_included": False,
+            }
+        elif frozen and champion is not None and (report.get("data") or {}).get("holdout"):
+            raise RuntimeError("Paired model evidence missing from nonempty protected holdout")
         report["rank_feature_input_bundle"] = clean(rank_feature_input_report)
         governance = report.get("evaluation_governance") or {}
         fingerprint = str(governance.get("holdout_fingerprint") or "")
@@ -1099,8 +1128,11 @@ def main():
                 raise RuntimeError("Serving champion changed during frozen fit; refusing candidate publication")
             if candidate._asset_names():
                 raise RuntimeError("Frozen candidate release already contains assets; refusing overwrite")
-        candidate.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
-                                 promotion_history_path])
+        candidate_files = [model_dir / "model.joblib", model_dir / "training_report.json",
+                           promotion_history_path]
+        if paired_asset is not None:
+            candidate_files.append(paired_asset)
+        candidate.upload_bundle(candidate_files)
         print(json.dumps(decision, indent=2))
         if args.promote:
             if deferred:
