@@ -82,6 +82,7 @@ jobs:
           now = dt.datetime.now(dt.timezone.utc)
           markets = collections.Counter()
           ace_markets_by_book = collections.Counter()
+          sportsbook_ace_market_samples = []
           pairs = []
           inplay = 0
           start_missing = 0
@@ -114,6 +115,13 @@ jobs:
                           ace_markets_by_book[bookname] += 1
                       if mk != "player_aces":
                           continue
+                      if bookname in ("napoleon", "superbet_pl", "superbet_ro") and len(sportsbook_ace_market_samples) < 10:
+                          sportsbook_ace_market_samples.append({
+                              "event": title, "book": bookname, "market_key": mk,
+                              "last_update": market.get("last_update"),
+                              "outcomes": [{k: o.get(k) for k in ("name","description","point","price")}
+                                           for o in (market.get("outcomes") or [])[:6]],
+                          })
                       if market.get("suspended_at") or market.get("suspended") is True:
                           continue
                       groups = collections.defaultdict(list)
@@ -150,6 +158,7 @@ jobs:
               "missing_start_events": start_missing,
               "ace_market_keys_observed": dict(markets),
               "ace_market_counts_by_book": dict(ace_markets_by_book),
+              "sportsbook_ace_market_samples": sportsbook_ace_market_samples,
               "conventional_book_aces_market_count": sum(count for book, count in ace_markets_by_book.items() if book not in ("dabble", "sleeper", "prizepicks", "underdog", "parlayplay", "draftkings_pick6")),
               "validated_prematch_player_aces_pairs": len(pairs),
               "sample_verified_pairs": pairs[:5],
