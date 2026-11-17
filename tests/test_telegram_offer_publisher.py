@@ -361,7 +361,7 @@ def test_classic_format_and_deterministic_free_pick():
 
 def test_free_aces_pinned_selection_and_atp_wta_quality_gate():
     snap=offer()
-    candidate=priced_ou(row(101,"WTA Server","aces") | {"tour":"WTA"})
+    candidate=priced_ou(row(101,"WTA Server","aces") | {"tour":"WTA","competition":"WTA 250"})
     bad=priced_ou(row(102,"ITF Server","aces") | {"tour":"ITF"})
     snap["ace_picks"]=[bad,candidate]
     out=tg.messages(snap,settings(),NOW)
@@ -683,14 +683,14 @@ def test_telegram_aces_accepts_ranked_challengers_but_rejects_itf_unknown():
     snapshot=offer()
     snapshot["ace_picks"]=[
         priced_ou(row(201,"ATP Player","aces")|{"tour":"ATP"}),
-        priced_ou(row(202,"WTA Player","aces")|{"tour":"WTA"}),
+        priced_ou(row(202,"WTA Player","aces")|{"tour":"WTA","competition":"WTA 250"}),
         priced_ou(row(203,"ITF Player","aces")|{"tour":"ITF"}),
         priced_ou(row(204,"Challenger Player","aces")|{"tour":"ATP Challenger"}),
         priced_ou(row(205,"WTA125 Player","aces")|{"tour":"WTA 125"}),
         priced_ou(row(206,"Unknown Player","aces")|{"tour":None}),
     ]
     chosen=tg.select_groups(snapshot,settings(),NOW)
-    assert [r["event_id"] for r in chosen["aces"]]==["201","202","204","205"]
+    assert [r["event_id"] for r in chosen["aces"]]==["201","202","204"]
     assert len(chosen["top"])==5 and len(chosen["value"])==1
 
 
@@ -699,11 +699,11 @@ def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
     snapshot=offer()
     rows=[
         priced_ou(row(301,"ATP","aces")|{"tour":"ATP","tournament":"Main draw"}),
-        priced_ou(row(302,"WTA","aces")|{"tour":"WTA","tournament":"Tour event"}),
+        priced_ou(row(302,"WTA","aces")|{"tour":"WTA","tournament":"WTA 250 event"}),
         priced_ou(row(303,"Challenger","aces")|{"tour":"ATP","tournament":"Istanbul Challenger"}),
         priced_ou(row(304,"WTA125","aces")|{"tour":"WTA","tournament":"WTA 125 Mumbai"}),
     ]
     snapshot["ace_picks"]=rows
     chosen=tg.select_groups(snapshot,settings(),NOW)["aces"]
-    assert [x["event_id"] for x in chosen]==["301","302","303","304"]
+    assert [x["event_id"] for x in chosen]==["301","302","303"]
     assert [x["event_id"] for x in chosen]==[x["event_id"] for x in rows if main_tour_aces(x)]
