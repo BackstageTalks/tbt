@@ -44,9 +44,15 @@ def main():
                 source = (WEB / "app.js").read_text(encoding="utf-8")
                 assert source.count("  boot();") == 1
                 source = source.replace("  boot();", """
+  const originalResultsFilter=filteredResults;
+  window.lazyResultsFilterCalls=0;
+  filteredResults=(...args)=>{window.lazyResultsFilterCalls++;return originalResultsFilter(...args);};
   window.lazyResultsTest={state,setRoute,loadRecentResults,loadCompleteResults,renderDashboardKpis,
     scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration),
     reuseHydratedResultsOnRefresh,loadFeed,
+    resultsMemoState:()=>resultsRouteMemo?{hits:resultsRouteMemo.hits,
+      key:resultsRouteMemo.key,account:resultsRouteMemo.feed?.account?.id||''}:null,
+    resultKey:()=>resultsRouteKey(),
     setResultDay:()=>{lastFeedBettingDay=bratislavaBettingDayKey(Date.now(),6);},
     hasStagedFlight:()=>Boolean(resultsPreloadFlight)};
   boot();""")
@@ -306,6 +312,38 @@ def main():
                     "ids":["today","recent","history","newly-settled"],
                     "stale":False,"spinner":False,
                 }, (width, after_swap)
+                # Returning to the same authorized Results screen must reuse
+                # the calculated markup. A changed filter or entitlement must
+                # recompute from the current ledger (never reuse private HTML).
+                memo = page.evaluate("""() => {
+                  const t=window.lazyResultsTest,s=t.state;
+                  s.resultsFilters.window='all';
+                  t.setRoute('results',false);
+                  t.setRoute('predictions',false);
+                  window.lazyResultsFilterCalls=0;
+                  const before=t.resultsMemoState();
+                  t.setRoute('results',false);
+                  const sameView={filterCalls:window.lazyResultsFilterCalls,
+                    hits:t.resultsMemoState()?.hits-before.hits,
+                    rows:document.querySelectorAll('#routePanel .results-table tbody tr').length};
+                  s.resultsFilters.window='90';
+                  window.lazyResultsFilterCalls=0;
+                  t.setRoute('results',false);
+                  const changedView={filterCalls:window.lazyResultsFilterCalls,
+                    hits:t.resultsMemoState()?.hits};
+                  const originalEntitlements=s.feed.entitlements;
+                  const originalKey=t.resultKey();
+                  s.feed.entitlements={...originalEntitlements,result_categories:['value']};
+                  const permissionKey=t.resultKey();
+                  s.feed.entitlements=originalEntitlements;
+                  return {sameView,changedView,permissionGuard:originalKey!==permissionKey};
+                }""")
+                assert memo["sameView"]["filterCalls"] == 0, (width, memo)
+                assert memo["sameView"]["hits"] == 1, (width, memo)
+                assert memo["sameView"]["rows"] > 0, (width, memo)
+                assert memo["changedView"]["filterCalls"] == 1, (width, memo)
+                assert memo["changedView"]["hits"] == 0, (width, memo)
+                assert memo["permissionGuard"] is True, (width, memo)
                 assert hydrated["overflow"] <= 2, (width, hydrated["overflow"])
                 assert not errors, (width, errors)
                 context.close()
