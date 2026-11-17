@@ -1,0 +1,216 @@
+name: BlinQ guarded native BP opponent NULL-only import 2023-24
+'on':
+  push:
+    branches: [main]
+    paths: ['.github/cdb-bp-opponent-2023-24-request.json']
+permissions:
+  contents: read
+concurrency:
+  group: blinq-bp-opponent-2023-24-native-writer
+  cancel-in-progress: false
+jobs:
+  guarded:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      CDB_REPO: BackstageTalks/tbt-data
+      PYTHONPATH: .:api:scripts
+      REQUEST: .github/cdb-bp-opponent-2023-24-request.json
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require one-shot exact operator approved current-CDB request
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$CDB_REPO" --json visibility -q .visibility)" = PRIVATE
+          python - <<'PY'
+          import json,os,re
+          r=json.load(open(os.environ["REQUEST"]))
+          assert r.get("schema")==1 and r.get("mode")=="write"
+          assert r.get("operator_approved") is True
+          assert r.get("api_calls_allowed")==0 and r.get("model_changes_allowed") is False
+          assert r.get("years")==[2023,2024] and r.get("audit_run")==44051322279
+          for name in ("cdb_sha256","stage_sha256"):
+              assert re.fullmatch("[a-f0-9]{64}",r.get(name,""))
+          assert type(r.get("matches")) is int and 0<r["matches"]<=77696
+          assert type(r.get("cells")) is int and 0<r["cells"]<=133267
+          print("BP_EXACT_ONE_SHOT_REQUEST",r["matches"],r["cells"])
+          PY
+          python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy pytest
+          python -m pytest -q tests/test_audit_cdb_bp_opponent_nulls.py tests/test_offline_linked_serve_return_importer.py tests/test_offline_exact_cdb_write.py tests/test_cdb_global_writer_lock.py
+      - name: SHA-stable all-78 partition CDB snapshot and reproducible exact native dry-run
+        run: |
+          set -euo pipefail
+          mkdir -p work/private work/qa
+          python scripts/download_stable_cdb.py --repository "$CDB_REPO" --out work/history --report work/qa/source.json
+          sha="$(python -c 'import os,json;print(json.load(open(os.environ["REQUEST"]))["cdb_sha256"])')"
+          python scripts/stage_cdb_bp_opponent_nulls.py --history-dir work/history \
+            --stage-file work/private/stage.jsonl --expected-manifest "$sha" \
+            --start-year 2023 --end-year 2024
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/private/stage.jsonl --history-dir work/history --out-dir work/private/dry
+          python - <<'PY'
+          import json,os
+          r=json.load(open(os.environ["REQUEST"]))
+          snapshot=json.load(open("work/qa/source.json"))
+          stage=json.load(open("work/private/stage-report.json"))
+          dry=json.load(open("work/private/dry/report.json"))
+          c=dry["counts"];s=stage["counts"]
+          if (snapshot["status"]!="verified" or snapshot["provider_api_requests"]!=0 or
+                  snapshot["manifest_sha256"]!=r["cdb_sha256"] or
+                  len(__import__("glob").glob("work/history/history-*.parquet"))!=78 or
+                  stage["source_bundle_manifest_sha256"]!=r["cdb_sha256"] or
+                  stage["stage_sha256"]!=r["stage_sha256"] or
+                  s["staged_matches"]!=r["matches"] or s["staged_new_null_cells"]!=r["cells"] or
+                  dry["production_mutated"] is not False or dry["local_partitions_written"] is not False or
+                  c.get("updated")!=r["matches"] or c.get("stat_fields_added")!=r["cells"] or
+                  sorted(dry.get("changed_years",[]))!=r["years"] or
+                  any(c.get(k,0) for k in ("invalid_stats","stat_conflicts","identity_changed","identity_missing"))):
+              raise SystemExit("PINNED_CDB_NATIVE_NULL_DELTA_DRIFT__NO_WRITE")
+          print("BP_NATIVE_EXACT_DRYRUN_CONFIRMED",r["matches"],r["cells"])
+          PY
+      - name: Acquire cross-repository global CDB writer lock
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
+          python scripts/cdb_global_writer_lock.py verify
+      - name: Verify remote CAS and preserve private original backup plus source stage
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib,json,os,shutil
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from cdb_global_writer_lock import verify
+          repo=os.environ["CDB_REPO"]
+          verify(repo,Path(".cdb-global-writer-lock.json"))
+          req=json.load(open(os.environ["REQUEST"]))
+          src=Path("work/history")
+          if hashlib.sha256((src/"_tbt_bundle_manifest.json").read_bytes()).hexdigest()!=req["cdb_sha256"]:
+              raise SystemExit("ORIGINAL_CDB_MANIFEST_CHANGED")
+          manifest=json.loads((src/"_tbt_bundle_manifest.json").read_text())["files"]
+          if ReleaseStore(repo,"tbt-data-v1",src)._remote_bundle_files()!=manifest:
+              raise SystemExit("REMOTE_CDB_CHANGED_AFTER_LOCK__CAS_ABORT")
+          shutil.copytree(src,"work/before")
+          shutil.copytree(src,"work/after")
+          Path("work/backup").mkdir()
+          for name in ("history-2023.parquet","history-2024.parquet","history_manifest.json","_tbt_bundle_manifest.json"):
+              shutil.copy2(src/name,Path("work/backup")/name)
+          for old,new in (("work/private/stage.jsonl","stage-private.jsonl"),
+                          ("work/private/stage-report.json","stage-report.json"),
+                          ("work/private/dry/report.json","native-dry-report.json")):
+              shutil.copy2(old,Path("work/backup")/new)
+          print("BP_CDB_GLOBAL_LOCK_CAS_AND_SOURCE_BACKUP_READY")
+          PY
+          (cd work/backup && sha256sum * > SHA256SUMS && sha256sum --check SHA256SUMS)
+          tag="blinq-bp-cdb-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release create "$tag" work/backup/* -R "$CDB_REPO" --target main \
+            --title "Immutable original BP source and CDB backup" \
+            --notes "Private original 2023-24 Parquet, manifests, source provenance and native stage; rollback only after independent CAS."
+          mkdir work/backup-readback
+          gh release download "$tag" -R "$CDB_REPO" -D work/backup-readback
+          (cd work/backup-readback && sha256sum --check SHA256SUMS)
+          echo BP_PRIVATE_PREWRITE_BACKUP_SHA_READBACK_VERIFIED
+      - name: Original native NULL-only exact-stats importer and exhaustive local readback
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/private/stage.jsonl --history-dir work/after \
+            --out-dir work/private/write --write-partitions \
+            --write-history-dir work/after --exact-stats-only
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from offline_exact_cdb_write import verify_persisted
+          r=json.load(open(os.environ["REQUEST"]))
+          stage=[json.loads(x) for x in Path("work/private/stage.jsonl").read_text().splitlines() if x.strip()]
+          w=json.load(open("work/private/write/report.json"))
+          observed=verify_persisted("work/before","work/after",stage,r["years"])
+          if (observed["added_values"]!=r["cells"] or observed["enriched_matches"]!=r["matches"] or
+                  observed["existing_values_overwritten"]!=0 or
+                  w["counts"].get("updated")!=r["matches"] or
+                  w["counts"].get("stat_fields_added")!=r["cells"] or
+                  sorted(w["changed_years"])!=r["years"]):
+              raise SystemExit("BP_NATIVE_LOCAL_FULL_YEAR_READBACK_FAILED")
+          print("BP_NATIVE_LOCAL_READBACK_PASS",r["matches"],r["cells"])
+          PY
+      - name: Existing release-store manifest-CAS protected publication
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from cdb_global_writer_lock import verify
+          from release_store import ReleaseStore
+          repo=os.environ["CDB_REPO"]
+          before=Path("work/before");after=Path("work/after")
+          expected=json.loads((before/"_tbt_bundle_manifest.json").read_text())["files"]
+          store=ReleaseStore(repo,"tbt-data-v1",after)
+          def cas():
+              verify(repo,Path(".cdb-global-writer-lock.json"))
+              if store._remote_bundle_files()!=expected:
+                  raise RuntimeError("CDB_MANIFEST_CAS_CHANGED__STOP")
+          cas()
+          store.upload_bundle([after/"history-2023.parquet",after/"history-2024.parquet",
+                               after/"history_manifest.json"],before_upload=cas)
+          print("BP_CDB_PRODUCTION_PUBLISHED_UNDER_GLOBAL_CAS")
+          PY
+      - name: Independent production CDB readback all rows and same-stage idempotence
+        run: |
+          set -euo pipefail
+          python scripts/cdb_global_writer_lock.py verify
+          python - <<'PY'
+          import hashlib,json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from offline_exact_cdb_write import verify_persisted
+          r=json.load(open(os.environ["REQUEST"]))
+          remote=Path("work/remote")
+          ReleaseStore(os.environ["CDB_REPO"],"tbt-data-v1",remote).download(require_bundle_manifest=True)
+          stage=[json.loads(x) for x in Path("work/private/stage.jsonl").read_text().splitlines() if x.strip()]
+          actual=verify_persisted("work/before",remote,stage,r["years"])
+          if actual["enriched_matches"]!=r["matches"] or actual["added_values"]!=r["cells"] or actual["existing_values_overwritten"]!=0:
+              raise SystemExit("BP_CDB_PRODUCTION_READBACK_MISMATCH")
+          for year in r["years"]:
+              name=f"history-{year}.parquet"
+              if hashlib.sha256((Path("work/after")/name).read_bytes()).digest()!=hashlib.sha256((remote/name).read_bytes()).digest():
+                  raise SystemExit("BP_PRODUCTION_REMOTE_PARTITION_MISMATCH")
+          info={"schema":1,"status":"PRODUCTION_CDB_INDEPENDENT_READBACK_VERIFIED",
+                "enriched_matches":r["matches"],"stat_fields_added":r["cells"],"overwrites":0,
+                "source_prewrite_manifest":r["cdb_sha256"],"stage_sha256":r["stage_sha256"],
+                "changed_years":r["years"],"provider_requests":0,"run":os.environ["GITHUB_RUN_ID"]}
+          Path("work/qa/production-verified.json").write_text(json.dumps(info,indent=2,sort_keys=True)+"\n")
+          print("BP_CDB_PRODUCTION_READBACK_VERIFIED",json.dumps(info,sort_keys=True),flush=True)
+          PY
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/private/stage.jsonl --history-dir work/remote --out-dir work/private/idempotence
+          python - <<'PY'
+          import json
+          r=json.load(open("work/private/idempotence/report.json"))
+          if r["production_mutated"] is not False or r["counts"].get("updated",0)!=0 or r["counts"].get("stat_fields_added",0)!=0:
+              raise SystemExit("BP_IMPORT_NOT_IDEMPOTENT")
+          print("BP_CDB_POSTWRITE_IDEMPOTENCE_ZERO_DELTA")
+          PY
+          tag="blinq-bp-cdb-prewrite-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          gh release upload "$tag" work/qa/production-verified.json -R "$CDB_REPO"
+      - name: Release lock only if owned by this run
+        if: always()
+        run: python scripts/cdb_global_writer_lock.py release --if-held
+      - name: Retain aggregate-only completion attestation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdb-bp-2023-24-native-write-aggregate
+          path: |
+            work/qa/source.json
+            work/qa/production-verified.json
+            work/private/stage-report.json
+          if-no-files-found: ignore
+          retention-days: 14
