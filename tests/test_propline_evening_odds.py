@@ -183,6 +183,26 @@ class PropLineEvening(unittest.TestCase):
         self.assertNotIn("Bearer ", body)
         self.assertNotIn("secret", body.lower())
 
+    def test_full_single_response_not_cut_off_at_legacy_60(self):
+        original = example()["events"][0]
+        payload = {"events": [dict(original, id=str(3000 + i))
+                              for i in range(85)]}
+        result = research(payload)
+        self.assertEqual(result["candidate_events"], 85)
+        self.assertEqual(result["probed_events"], 85)
+        self.assertFalse(result["coverage_truncated"])
+        self.assertEqual(result["provider_requests"], 1)
+
+    def test_explicit_debug_limit_is_counted_as_truncation(self):
+        original = example()["events"][0]
+        payload = {"events": [dict(original, id=str(3000 + i))
+                              for i in range(7)]}
+        result = collect(DAY, max_events=2, now=NOW,
+                         get=lambda: (payload, 455))
+        self.assertEqual(result["candidate_events"], 7)
+        self.assertEqual(result["probed_events"], 2)
+        self.assertTrue(result["coverage_truncated"])
+
     def test_empty_ace_market_is_true_zero(self):
         data = example()
         data["events"][0]["bookmakers"] = []
