@@ -81,6 +81,36 @@ Ak je ponuka väčšia než limit Telegramu 4096 UTF-16 jednotiek, publisher ju
 rozdelí na viaceré premium správy po riadkoch, bez straty tipov.
 Riadky sú mobilne kompaktné; presné zalomenie závisí od šírky klienta.
 
+## Jednotná ranná ponuka a zákaz dodatočných tipov (17. 11. 2026)
+
+Incident 17. 11. 2026: web mal pri rannom potvrdení päť TOP tipov,
+ale Telegram odoslal tri. Potvrdený snapshot predtým neobsahoval pravidlo
+`market_selection.top_daily_rule`; dedičný výber s hranicou 68 % preto
+odfiltroval dva platné tipy nad schválenou hranicou 60 %.
+
+Od opravy [PR #1685](https://github.com/BackstageTalks/tbt/pull/1685) platí:
+
+- Privátny potvrdený snapshot uchováva aktuálne TOP pravidlo z vydaného feedu.
+- Pred ranným odoslaním sa vyžaduje **presná zhoda TOP a VALUE kontraktov**
+  s produkčným webom, nielen podmnožina. ESÁ naďalej používa užší
+  verifikovaný hráčsky O/U kontrakt, preto sa neporovnáva s celým
+  univerzom ESÁ/VIAC ES.
+- Prvé potvrdenie dennej ponuky uzamkne množinu nových TOP, VALUE a
+  `ace_picks` kontraktov na daný betting day. Ďalší refresh smie
+  zachovať už vydané tipy a obnoviť nesúvisiace údaje, **nesmie ticho
+  doplniť nové tipy do webu po rannom Telegram vydaní**.
+- Pred každým produkčným balením webového feedu a pred dátovým deployom
+  sa nové kontrakty nezávisle kontrolujú proti už vydanému ledgeri.
+  Nesúlad blokuje nasadenie; staré Telegram potvrdenia sa nemenia.
+- Freeze sa uvoľní až pre nasledujúci betting day. Historické Results,
+  PRIME a CDB sa nemenia. Oprava nereviduje už poslanú správu
+  17. 11. 2026 a nesmie vyvolať duplicitné automatické odoslanie.
+
+Dôkazy incidentu: [ranné publikovanie](https://github.com/BackstageTalks/tbt/actions/runs/44015922903),
+[Telegram odoslanie](https://github.com/BackstageTalks/tbt/actions/runs/44023410225).
+Regresné testy: `tests/test_r55_daily_offer_snapshot.py` a
+`tests/test_telegram_morning_site_readback.py`.
+
 ## Prevádzkové overenie
 
 - Akcia: `https://github.com/BackstageTalks/tbt/actions/workflows/telegram-daily-offer.yml`.
