@@ -52,7 +52,15 @@ def main():
     if(!scoped)window.lazyResultsFilterCalls++;
     return originalResultsFilter(...args);
   };
+  const oldRenderNavigation=renderNavigation,oldRenderMarkets=renderMarketSections,
+    oldRenderPreview=renderDashboardResultsPreview;
+  window.blinqRouteRenderCounts={navigation:0,markets:0,preview:0};
+  renderNavigation=(...args)=>{window.blinqRouteRenderCounts.navigation++;return oldRenderNavigation(...args);};
+  renderMarketSections=(...args)=>{window.blinqRouteRenderCounts.markets++;return oldRenderMarkets(...args);};
+  renderDashboardResultsPreview=(...args)=>{window.blinqRouteRenderCounts.preview++;return oldRenderPreview(...args);};
   window.lazyResultsTest={state,setRoute,loadRecentResults,loadCompleteResults,renderDashboardKpis,
+    renderCounts:()=>({...window.blinqRouteRenderCounts}),
+    resetRenderCounts:()=>{window.blinqRouteRenderCounts={navigation:0,markets:0,preview:0};},
     scheduleResultsPreload:()=>scheduleResultsPreload(feedGeneration),
     reuseHydratedResultsOnRefresh,loadFeed,
     resultsMemoState:()=>resultsRouteMemo?{hits:resultsRouteMemo.hits,
@@ -253,9 +261,11 @@ def main():
                     results_snapshot:'fixture-snapshot',
                     results_today_ready:false,results_recent_ready:false};
                   const originalFeed=auth.feed, originalResultsPage=auth.resultsPage;
+                  t.resetRenderCounts();
                   auth.feed=async()=>unrelated;
                   try{await t.loadFeed(false,{skipUnchanged:true});}
                   finally{auth.feed=originalFeed;}
+                  const bootWork=t.renderCounts();
                   t.setRoute('results',false);
                   const sameRevisionNoReload=!t.state.feed.results_boot_partial
                     &&t.state.feed.results===savedRows
@@ -293,12 +303,13 @@ def main():
                   // The negative probes clear the internal snapshot markers,
                   // but must not revoke the existing verified in-flight refresh.
                   auth.resultsPage=originalResultsPage;
-                  return {sameRevisionNoReload,safeOldRows,noLoading,
+                  return {sameRevisionNoReload,safeOldRows,noLoading,bootWork,
                     revoked,deniedEmpty:denied.results.length===0,
                     scopeReused,scopeEmpty:changedScope.results.length===0};
                 }""")
                 assert stale_view == {
                     "sameRevisionNoReload": True, "safeOldRows": True, "noLoading": True,
+                    "bootWork": {"navigation": 1, "markets": 1, "preview": 1},
                     "revoked": False, "deniedEmpty": True,
                     "scopeReused": False, "scopeEmpty": True,
                 }, (width, stale_view)
