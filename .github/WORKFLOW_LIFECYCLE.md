@@ -92,3 +92,7 @@ date; current workflow references take precedence.
 ## Recovery
 
 To recover a specific experiment, inspect its file at commit `ad5fc135478f32c8d3ee21d23fd326cb82c68714` and explicitly reintroduce only the required logic after reviewing up-to-date CDB evidence, single-writer controls, API reserve, and dependencies. Do not resurrect old pinned writers wholesale.
+
+## Telegram dated recovery retirement (2026-11-17)
+
+Retired six date-locked November 3/4–5/5/6/10 recovery/replay and November 6 audit workflows after operator confirmed the external Telegram clock is reconfigured. Removed the three date-locked internal recovery HTTP routes and the unreachable November 3 push-delivery branch from the ordinary Telegram results workflow. Only the obsolete dated branch was removed; the ordinary results dispatch/ledger/reconciliation and November 9 historical safeguard remain unchanged. Historical request manifests, scripts, private Telegram receipts, and offline regression tests remain recoverable for audit. MoviOdds, CDB, model, and PropLine/Fortuna scheduler aliases are outside this retirement scope. No provider or database writes are required by this code cleanup.

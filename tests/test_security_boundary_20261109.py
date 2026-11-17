@@ -16,6 +16,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "api" / "function_app.py"
+# Original minimum 59, reduced only by three explicitly retired November
+# Telegram recovery endpoints. Every remaining handler is still checked.
+MIN_PRIVILEGED_ROUTES = 56
 
 
 def _routes():
@@ -64,7 +67,7 @@ def test_all_admin_and_internal_routes_retain_early_server_side_guards():
             f"{route} starts without an early authorization check"
         )
     # A missing file or accidentally disabled scan must never report PASS.
-    assert len(privileged) >= 59
+    assert len(privileged) >= MIN_PRIVILEGED_ROUTES
 
 
 def test_admin_guard_is_identity_based_and_suspension_aware():
@@ -155,4 +158,4 @@ def test_privileged_routes_deny_anonymous_without_side_effects(
 
 
 def test_sensitive_route_inventory_is_not_empty():
-    assert len(_PRIVILEGED) >= 59
+    assert len(_PRIVILEGED) >= MIN_PRIVILEGED_ROUTES

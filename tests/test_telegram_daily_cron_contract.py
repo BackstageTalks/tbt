@@ -70,3 +70,22 @@ def test_nov9_telegram_results_one_shot_triggers_only_on_changed_commit_request(
     assert "git diff-tree --root" not in workflow
     assert "index(\".github/telegram-20261109-postponed-request.json\")" not in workflow
     assert "--postpone-unverifiable-20261109" in workflow
+
+
+def test_dated_telegram_recoveries_are_not_live_entrypoints():
+    api = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
+    for day in ("20261103", "20261104-05", "20261106"):
+        assert f'route="v1/internal/telegram/recover-{day}"' not in api
+    assert 'route="v1/internal/telegram/reconcile-daily-aces"' in api
+    for name in (
+        "telegram-20261103-recovery.yml",
+        "telegram-20261104-05-original-aces-recovery.yml",
+        "telegram-20261105-verified-replay.yml",
+        "telegram-20261106-original-aces-recovery.yml",
+        "telegram-20261110-refreshed-aces.yml",
+        "telegram-results-archive-audit-20261106.yml",
+    ):
+        assert not (ROOT / ".github/workflows" / name).exists()
+    live = (ROOT / ".github/workflows/telegram-results.yml").read_text(encoding="utf-8")
+    assert "telegram-20261103-deliver-request.json" not in live
+    assert "types: [telegram-results-tick]" in live
