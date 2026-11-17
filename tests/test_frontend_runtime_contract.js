@@ -177,7 +177,8 @@ const hydrationContext={
   recentResultsFlight:null,fullResultsFlight:null,
 };
 vm.createContext(hydrationContext);
-vm.runInContext(frontendHelper('canKeepResultsPreloadOnFeedUpdate'),hydrationContext);
+vm.runInContext(frontendHelper('sameResultsReader')+'\n'
+  +frontendHelper('canKeepResultsPreloadOnFeedUpdate'),hydrationContext);
 const baseNext={
   account:{id:'member-a'},entitlements:{results:true},
   results_boot_partial:true,results_snapshot:'ledger-42'
@@ -191,6 +192,10 @@ assert.equal(keep({...baseNext,account:{id:'member-b'}}),false,
   'cross-account Results work must be discarded');
 assert.equal(keep({...baseNext,entitlements:{results:false}}),false,
   'revoked Results entitlement must invalidate in-flight reads');
+assert.equal(keep({...baseNext,entitlements:{results:true,result_categories:['value']}}),false,
+  'changed Results category grant must invalidate in-flight reads');
+assert.equal(keep({...baseNext,account:{id:'member-a',plan:'expired'}}),false,
+  'changed membership context must invalidate in-flight reads');
 assert.equal(keep({...baseNext,results_archive_unavailable:true}),false,
   'unavailable archive must not reuse stale results');
 assert.equal(keep(baseNext,'2026-11-18'),false,
@@ -205,7 +210,9 @@ assert.ok(feedRead.includes('const keepResultsWork=skipUnchanged&&canKeepResults
   'automatic feed updates must use authorized snapshot matching');
 assert.ok(feedRead.includes('if(!keepResultsWork)cancelResultsPreload();'),
   'do not cancel matching background archive stages');
-assert.ok(feedRead.includes('if(!keepResultsWork)scheduleResultsPreload(generation);'),
+assert.ok(feedRead.includes('if(!keepResultsWork&&state.feed?.results_stale_ready)'),
+  'only changed Results revisions start the background revalidation');
+assert.ok(feedRead.includes('}else if(!keepResultsWork)scheduleResultsPreload(generation);'),
   'do not reschedule the same staged background pipeline');
 
 // Execute the real refresh function: UI configuration refresh must not render
