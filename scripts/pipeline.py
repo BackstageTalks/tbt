@@ -44,6 +44,11 @@ from tbt.services.publication import (
 from tbt.services.ace_selection import select_ace_picks, select_ace_winner_picks
 from tbt.services.most_aces_pricing import freeze_most_aces_price
 from ace_working_odds import eligible_local_ace_projection, verified_ace_odds, local_player_aces_ou
+from propline_evening_quotes import (
+    load_evening_report as load_propline_evening_report,
+    attach_prices as attach_propline_evening_prices,
+    TZ as PROPLINE_TZ,
+)
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
     enrich_projection_odds, prefetch_projection_market_board,
@@ -1897,6 +1902,32 @@ def main():
             )
             projection_odds_report.update(attachment_report)
             projection_odds_report["discovery"] = projection_discovery_report
+        # Nightly quote read is optional and free: it must never reselect
+        # matches, overwrite live API prices or mutate frozen issued cards.
+        # Its only eligible use is exact pre-start player Aces O/U at the
+        # already model-selected line. Single-sided N+ and Most Aces are research.
+        if args.morning_refresh and ace_picks:
+            try:
+                observed_at = datetime.now(timezone.utc)
+                evening_day = selection_now.astimezone(PROPLINE_TZ).date().isoformat()
+                evening_report, evening_status = load_propline_evening_report(
+                    betting_day=evening_day, now=observed_at)
+                if evening_report is not None:
+                    ace_picks, evening_stats = attach_propline_evening_prices(
+                        ace_picks, evening_report,
+                        now=observed_at, betting_day=evening_day)
+                else:
+                    evening_stats = {"matched_aces": 0, "eligible_events": 0}
+                projection_odds_report["propline_evening_archive"] = {
+                    "source_status": evening_status, **evening_stats,
+                }
+            except Exception as exc:
+                # Optional archive loss/invalidity cannot stop the morning model,
+                # change a selection or block the approved statistical fallback.
+                projection_odds_report["propline_evening_archive"] = {
+                    "source_status": "unavailable:" + type(exc).__name__,
+                    "matched_aces": 0,
+                }
         # Market-first publication is strict: an unmatched card remains an
         # internal model diagnostic, never a bookmaker-looking bet.
         if projection_odds_cap:
@@ -1931,12 +1962,6 @@ def main():
                                 source == "moviodds"
                                 and provider == 3
                                 and row.get("odds_bookmaker") == "bet365"
-                            )
-                            or (
-                                source == "fortuna_sk"
-                                and provider == 4
-                                and row.get("odds_bookmaker") == "Fortuna SK"
-                                and str(row.get("odds_provider_event_id") or "").startswith("ufo:mtch:")
                             )
                         )
                     )
