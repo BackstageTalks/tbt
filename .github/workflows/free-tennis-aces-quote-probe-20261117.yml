@@ -2,9 +2,7 @@ name: One-time free tennis ace quotes live audit (read-only)
 # Probe only the existing PROPL key and the free provider's tennis markets.
 # This branch-specific workflow is never a scheduled production writer.
 on:
-  push:
-    branches:
-      - audit/free-tennis-aces-quote-20261117
+  workflow_dispatch:
 
 permissions:
   contents: read
