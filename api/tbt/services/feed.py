@@ -13,6 +13,23 @@ from zoneinfo import ZoneInfo
 
 MAX_FEED_BYTES = 32 * 1024 * 1024  # Guarded headroom for verified 21,728,761-byte 2026-10-25 release
 MAX_ACES_PLAYER_RANK = 1000  # Both players, ATP/WTA active Aces / Most Aces only
+# Forward-only cutoff. Preserve the finalized, previously published 17 Nov
+# daily offer across a same-day deployment. 18 Nov 06:00 local (CET) starts
+# the first betting day under the new WTA250+ selection rule.
+WTA_GRADE_GATE_EFFECTIVE_UTC = datetime(2026, 11, 18, 5, 0, tzinfo=timezone.utc)
+
+
+def _legacy_wta_offer(row):
+    """Only events from betting days before the explicit activation cutoff."""
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+    if not raw:
+        return False  # unknown event clock cannot grandfather into new offers
+    try:
+        stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return (stamp.tzinfo is not None and
+            stamp.astimezone(timezone.utc) < WTA_GRADE_GATE_EFFECTIVE_UTC)
 
 
 def _wta_aces_level_reason(row):
@@ -65,7 +82,7 @@ def ace_eligibility_reason(row):
         label = str(row.get(field) or "").strip().casefold()
         if any(tag in label for tag in ("itf", "futures")):
             return "excluded_itf_futures"
-    if tour in wta_tours:
+    if tour in wta_tours and not _legacy_wta_offer(row):
         level_reason = _wta_aces_level_reason(row)
         if level_reason != "eligible":
             return level_reason
