@@ -6,9 +6,6 @@ name: BlinQ SK/CZ evening bookmaker aces audit (read-only)
 on:
   repository_dispatch:
     types: [blinq-fortuna-evening-odds-tick]
-  push:
-    branches: [fix/replace-evening-fortuna-with-propline-free-20261117]
-    paths: ['.github/workflows/skcz-evening-odds.yml', 'scripts/skcz_evening_propline.py', 'tests/test_skcz_evening_propline.py']
   workflow_dispatch:
     inputs:
       target_day:
