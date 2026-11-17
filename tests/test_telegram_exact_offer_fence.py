@@ -159,3 +159,41 @@ def test_real_publication_paths_apply_fence_before_irreversible_upload():
     assert "verify_prepared_site(current,a.config_url,now)" in publisher
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in flow
     assert confirm.index('verify_frozen_daily_offer(') < confirm.index('write_json(directory / "ledger.json", confirmed)')
+
+
+def test_late_eligible_player_aces_offer_cannot_escape_frozen_telegram_receipt():
+    from test_telegram_offer_publisher import row as ace_fixture, priced_ou
+    from tbt.services.publication import _market_commitment_from_feed_row
+
+    def ace(event):
+        card = priced_ou(ace_fixture(int(event), "Server", "aces"))
+        card.update(event_id=str(event), betting_day=DAY, tour="ATP",
+                    scheduled_at="2026-11-18T15:00:00+00:00",
+                    captured_at=RESERVED.isoformat())
+        commitment = _market_commitment_from_feed_row(card, "ace")
+        names = ("event_id", "section", "market", "selection_id", "odds",
+                 "model_probability", "edge", "expected_value", "betting_day",
+                 "projection", "opponent_projection", "projection_scope",
+                 "projection_metric", "projection_confidence", "projection_label")
+        published_record = dict(zip(names, commitment))
+        published_record.update(issued_at=RESERVED.isoformat(), publication_status="published")
+        card["market_publications"][0].update(published_record)
+        return card, {"event_id": str(event), "market_publications": [published_record]}
+
+    first, first_ledger = ace(901)
+    extra, extra_ledger = ace(902)
+    one_feed = {"generated_at": RESERVED.isoformat(),
+                "top_daily_picks": [], "value_picks": [], "ace_picks": [first],
+                "prime_picks": [], "doubles_picks": [], "sg_picks": []}
+    one_snapshot = build_confirmed_daily_offer_snapshot(one_feed, [first_ledger], now=RESERVED)
+    frozen = state_for(one_snapshot)
+    assert len(frozen["attempts"][f"{DAY}:daily:0620"]["rows"]) == 1
+    assert frozen["attempts"][f"{DAY}:daily:0620"]["rows"][0]["channel"] == "aces"
+    assert tg.verify_frozen_daily_offer(one_snapshot, frozen, READBACK)["counts"]["aces"] == 1
+
+    two_feed = {**one_feed, "ace_picks": [first, extra]}
+    two_snapshot = build_confirmed_daily_offer_snapshot(
+        two_feed, [first_ledger, extra_ledger], now=RESERVED
+    )
+    with pytest.raises(RuntimeError, match="aces website/confirmed=2 reserved/sent=1"):
+        tg.verify_frozen_daily_offer(two_snapshot, frozen, READBACK)
