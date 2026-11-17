@@ -13,6 +13,8 @@ from tempfile import TemporaryDirectory
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed
+from prepare_feed import _read_confirmed_telegram_state
+from telegram_offer_publisher import verify_frozen_daily_offer
 from tbt.services.issued_authority import build_confirmed_authority
 from tbt.services.publication import (
     build_confirmed_daily_offer_snapshot,
@@ -346,6 +348,12 @@ def main(argv=None):
             require_prepared=args.require_prepared_evidence,
         )
     after = sum(1 for row in confirmed if isinstance(row, dict) and row.get("issued_at"))
+    print("Telegram exact offer confirmation gate:", json.dumps(
+        verify_frozen_daily_offer(
+            build_confirmed_daily_offer_snapshot(deployed_feed, confirmed, now=now),
+            _read_confirmed_telegram_state(args.data_repository), now,
+        ), sort_keys=True,
+    ))
     write_json(directory / "ledger.json", confirmed)
     daily_snapshot = build_confirmed_daily_offer_snapshot(
         feed,
