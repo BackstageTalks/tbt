@@ -29,15 +29,19 @@ def test_daily_workflow_waits_for_data_writers_and_verifies_telegram_receipts():
     assert "cancel-in-progress: false" in text
     assert "group: blinq-telegram-ledger" in text
     assert 'queue-daily --state .private-telegram/ops/telegram-bot-state.json' in text
-    assert 'prepare --daily --verify-site --config-url' in text
+    assert 'prepare --daily --config-url' in text
     assert "python scripts/telegram_offer_publisher.py send" in text
     assert "python scripts/telegram_offer_publisher.py mark-sent" in text
     assert "ls-remote origin refs/heads/telegram-bot-state" in text
-    # Site readiness supersedes waiting for unrelated background data writers.
-    assert "api/v1/internal/serving-readback" in text
-    assert "verified_website_morning_parity" in text
+    # Explicit private finalization replaces the mutable live-website gate.
+    assert "MORNING_FINAL_OFFER" in text
+    assert "MORNING_WRITER_FINALITY" in text
+    assert "verify_final_offer_snapshot" in text
+    assert "final_offer_only=True" in text
+    assert "api/v1/internal/serving-readback" not in text
+    assert "verified_website_morning_parity" not in text
     assert "data pipeline busy" not in text
-    assert "BLINQ_LIVE_WORKER_TOKEN" in text
+    assert "BLINQ_GITHUB_ACTIONS_TOKEN" in text
     assert 'sleep 60' in text
     assert "gh workflow run telegram-daily-offer.yml" in text
     assert "\nschedule:" not in text  # external cron is operator-owned
