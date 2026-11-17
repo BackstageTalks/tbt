@@ -32,11 +32,18 @@ def test_backend_config_validates_firebase_admin_material():
     assert '"firebase_server_config_invalid"' in API
 
 
-def test_auth_critical_assets_are_never_served_from_stale_cache():
+def test_auth_critical_assets_are_versioned_and_live_config_never_cached():
     routes = {route.get("route"): route for route in SWA["routes"]}
-    for path in ("/auth.js", "/app.js", "/responsive.js", "/ui-config.json"):
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    for path in ("/auth.js", "/app.js", "/responsive.js"):
         assert path in routes
-        assert "no-store" in routes[path]["headers"]["Cache-Control"]
+        policy = routes[path]["headers"]["Cache-Control"]
+        assert "public" in policy and "max-age=300" in policy
+        assert "no-store" not in policy and "immutable" not in policy
+        assert f'{path}?v=' in html
+    # The auth script is a versioned public asset, not an auth token or session.
+    assert "no-store" in routes["/ui-config.json"]["headers"]["Cache-Control"]
+    assert "Verify production browser-cache policy for stamped assets" in CI
 
 
 def test_deploy_contract_checks_frontend_and_server_auth_readiness():
