@@ -1,0 +1,48 @@
+{
+  "schema": 2,
+  "title": "BlinQ PropLine FREE evening odds archive",
+  "status": "configured_in_repo_external_scheduler_unverified",
+  "schedule": {
+    "cron": "0 23 * * *",
+    "timezone": "Europe/Bratislava",
+    "owner": "external_scheduler",
+    "github_native_schedule": false
+  },
+  "dispatch": {
+    "method": "POST",
+    "url": "https://api.github.com/repos/BackstageTalks/tbt/dispatches",
+    "event_type": "blinq-propline-odds-tick",
+    "legacy_event_type_accepted_during_transition": "blinq-fortuna-evening-odds-tick",
+    "success_http_status": 204
+  },
+  "github_workflow": ".github/workflows/propline-evening-odds.yml",
+  "source": {
+    "provider": "PropLine",
+    "endpoint": "/v1/sports/tennis/odds?markets=player_aces,total_aces",
+    "auth_secret": "PROPL",
+    "requests_per_capture": 1,
+    "minimum_remaining": 150
+  },
+  "storage": {
+    "google_drive_folder_id": "1C7_B2LB37IVTK9gBu2TT9dSj5XClIUKh",
+    "google_drive_file_pattern": "propline-YYYY-MM-DD-RUNID-HASH16.json",
+    "drive_writer_secret": "BLINQ_DRIVE_WRITER_JSON",
+    "immutable": true,
+    "sha256_readback": true,
+    "recovery_repo": "BackstageTalks/tbt-data",
+    "recovery_prefix": "research/propline-evening-odds"
+  },
+  "scope": {
+    "model": false,
+    "cdb": false,
+    "issued_picks": false,
+    "telegram": false,
+    "web": false
+  },
+  "activation_checks": [
+    "External scheduler actual event verified",
+    "Service account Editor permission on PropLine folder",
+    "GitHub Action success",
+    "Drive JSON content digest independently read back"
+  ]
+}
