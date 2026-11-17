@@ -1268,7 +1268,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "sports_tiered_top5_60_v23",
+            "selection_policy": "sports_tiered_top5_60_v24",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1373,7 +1373,7 @@ def select_market_sections(
                 "limit": top_limit,
                 "sort": "competition_tier_then_probability_desc_then_event_id",
                 "ranked_full_slate": True,
-                "policy": "sports_tiered_top5_60_v23",
+                "policy": "sports_tiered_top5_60_v24",
                 "competition_priority": [["ATP", "WTA"], ["Challenger"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
