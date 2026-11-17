@@ -793,7 +793,8 @@ def send(a):
     # Close the prepare -> Telegram API race: the reservation is already
     # persisted to the private git branch, so re-read the final signed release
     # and live exact website IDs immediately before the first sendMessage.
-    now=stamp(a.now) if a.now else datetime.now(timezone.utc)
+    raw_now=getattr(a,"now","")
+    now=stamp(raw_now) if raw_now else datetime.now(timezone.utc)
     reserved_id=(Path(a.output)/"ready").read_text(encoding="utf-8").strip()
     if day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id==_daily_id(now):
         current=snapshot(Path(a.output)/"final-check")
