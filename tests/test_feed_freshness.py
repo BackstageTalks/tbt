@@ -166,7 +166,7 @@ def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
     cards=[
         {"event_id":"atp","tour":"ATP","market":"aces","scheduled_at":start,
          "player1":{"rank":1000},"player2":{"rank":95}},
-        {"event_id":"wta","tour":"WTA","competition":"WTA 500","market":"most_aces","scheduled_at":start,
+        {"event_id":"wta","tour":"WTA","market":"most_aces","scheduled_at":start,
          "player1":{"rank":90},"player2":{"rank":"999"}},
         {"event_id":"comp_challenger","tour":"ATP","tournament":"Prague Open","competition":"ATP Challenger","market":"aces","scheduled_at":start,"player1":{"rank":200},"player2":{"rank":300}},
         {"event_id":"comp_itf","tour":"WTA","tournament":"Monastir Open","competition":"ITF Women","market":"most_aces","scheduled_at":start,"player1":{"rank":200},"player2":{"rank":300}},
@@ -184,8 +184,8 @@ def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
              "results":[{"event_id":"historical-itf","market":"aces","tour":"ITF"}]}
     visible=visible_feed(payload,now=now)
     assert [x["event_id"] for x in visible["ace_picks"]]==[
-        "atp", "wta", "comp_challenger", "challenger",
-        "atp_challenger", "df",
+        "atp", "wta", "comp_challenger", "comp_wta125", "challenger",
+        "wta125", "atp_challenger", "df",
     ]
     assert visible["results"]==payload["results"]
     assert len(visible["upcoming"])==11  # Match Winner discovery remains unchanged.
