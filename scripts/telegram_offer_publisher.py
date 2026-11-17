@@ -798,6 +798,12 @@ def send(a):
     reserved_id=(Path(a.output)/"ready").read_text(encoding="utf-8").strip()
     if day(now)>=EXACT_DAILY_FENCE_FROM and reserved_id==_daily_id(now):
         current=snapshot(Path(a.output)/"final-check")
+        from telegram_publication_barrier import verify_live_publication_barrier
+        print("Telegram final deployment readback:", json.dumps(
+            verify_live_publication_barrier(
+                current,token=os.getenv("BLINQ_GITHUB_ACTIONS_TOKEN"),
+                repository=os.getenv("GITHUB_REPOSITORY"),now=now),sort_keys=True,
+        ))
         verify_prepared_site(current,a.config_url,now)
         print("Telegram pre-send exact freeze:", json.dumps(
             verify_frozen_daily_offer(current,load(Path(a.output)/"state.json"),now),
