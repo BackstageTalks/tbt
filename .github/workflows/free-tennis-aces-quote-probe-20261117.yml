@@ -1,0 +1,154 @@
+name: One-time free tennis ace quotes live audit (read-only)
+# Probe only the existing PROPL key and the free provider's tennis markets.
+# This branch-specific workflow is never a scheduled production writer.
+on:
+  push:
+    branches:
+      - audit/free-tennis-aces-quote-20261117
+
+permissions:
+  contents: read
+
+concurrency:
+  group: free-tennis-aces-quote-probe-20261117
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      PROPL: ${{ secrets.PROPL }}
+    steps:
+      - name: Check authenticated tennis aces market with one capped free request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import collections
+          import datetime as dt
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          key = os.getenv("PROPL", "")
+          if not key:
+              print("FREE_ACES_PROBE=" + json.dumps({"status": "missing_existing_propline_key"}))
+              raise SystemExit(2)
+          endpoint = "https://api.prop-line.com/v1/sports/tennis/odds?markets=player_aces,total_aces"
+          req = urllib.request.Request(endpoint, headers={
+              "X-API-Key": key, "Accept": "application/json",
+              "User-Agent": "BlinQ-free-quote-readonly-audit/1.0"
+          })
+          try:
+              with urllib.request.urlopen(req, timeout=35) as response:
+                  remain = response.headers.get("X-Daily-Remaining")
+                  raw = response.read(30000001)
+                  code = response.status
+          except urllib.error.HTTPError as exc:
+              print("FREE_ACES_PROBE=" + json.dumps({
+                  "status": "provider_http_error", "http_code": exc.code,
+                  "remaining": exc.headers.get("X-Daily-Remaining"),
+              }))
+              raise SystemExit(2)
+          except (OSError, TimeoutError) as exc:
+              print("FREE_ACES_PROBE=" + json.dumps({"status": "provider_network_error",
+                       "error_type": type(exc).__name__}))
+              raise SystemExit(2)
+          if len(raw) > 30000000:
+              raise SystemExit("Provider response larger than 30 MB")
+          if remain is None:
+              print("FREE_ACES_PROBE=" + json.dumps({
+                  "status": "no_quota_header", "http_code": code, "bytes": len(raw)}))
+              raise SystemExit(2)
+          if int(remain) < 150:
+              print("FREE_ACES_PROBE=" + json.dumps({
+                  "status": "quota_reserve_reached_no_further_calls",
+                  "remaining": int(remain)}))
+              raise SystemExit(2)
+
+          payload = json.loads(raw)
+          if isinstance(payload, list):
+              events = payload
+          elif isinstance(payload, dict):
+              events = next((payload[k] for k in ("events", "data", "results")
+                             if isinstance(payload.get(k), list)), [])
+          else:
+              events = []
+          if not isinstance(events, list):
+              raise SystemExit("Unexpected events format")
+
+          now = dt.datetime.now(dt.timezone.utc)
+          markets = collections.Counter()
+          pairs = []
+          inplay = 0
+          start_missing = 0
+          for event in events:
+              if not isinstance(event, dict):
+                  continue
+              if event.get("live") or event.get("in_play"):
+                  inplay += 1
+                  continue
+              start = str(event.get("commence_time") or event.get("start_time") or "")
+              try:
+                  start_dt = dt.datetime.fromisoformat(start.replace("Z", "+00:00"))
+                  if start_dt.tzinfo is None or start_dt <= now:
+                      continue
+              except ValueError:
+                  start_missing += 1
+                  continue
+              ident = str(event.get("id") or event.get("event_id") or "")
+              title = " - ".join(str(event.get(k) or "") for k in ("home_team", "away_team"))
+              for book in event.get("bookmakers") or []:
+                  if not isinstance(book, dict):
+                      continue
+                  bookname = str(book.get("key") or book.get("title") or "")
+                  for market in book.get("markets") or []:
+                      if not isinstance(market, dict):
+                          continue
+                      mk = str(market.get("key") or "")
+                      if "ace" in mk:
+                          markets[mk] += 1
+                      if mk != "player_aces":
+                          continue
+                      if market.get("suspended_at") or market.get("suspended") is True:
+                          continue
+                      groups = collections.defaultdict(list)
+                      for outcome in market.get("outcomes") or []:
+                          if not isinstance(outcome, dict):
+                              continue
+                          side = str(outcome.get("name") or "").strip().lower()
+                          person = str(outcome.get("description") or "").strip()
+                          line = outcome.get("point")
+                          odds = outcome.get("price")
+                          if side in ("over", "under") and person and line is not None:
+                              try:
+                                  val = float(odds)
+                                  if val <= -100 or val >= 100 or 1 < val <= 30:
+                                      groups[(person, float(line))].append((side, val))
+                              except (ValueError, TypeError):
+                                  pass
+                      for (person, line), rows in groups.items():
+                          if len(rows) == 2 and {x[0] for x in rows} == {"over", "under"}:
+                              pairs.append({
+                                  "event": title, "event_id": ident, "start": start,
+                                  "bookmaker": bookname, "player": person,
+                                  "line": line, "over_price_raw": next(x[1] for x in rows if x[0] == "over"),
+                                  "under_price_raw": next(x[1] for x in rows if x[0] == "under"),
+                              })
+          print("FREE_ACES_PROBE=" + json.dumps({
+              "status": "live_api_read_completed",
+              "utc_captured_at": now.isoformat(),
+              "provider": "propline",
+              "request_count": 1,
+              "quota_remaining": int(remain),
+              "raw_event_count": len(events),
+              "skipped_inplay_events": inplay,
+              "missing_start_events": start_missing,
+              "ace_market_keys_observed": dict(markets),
+              "validated_prematch_player_aces_pairs": len(pairs),
+              "sample_verified_pairs": pairs[:5],
+              "most_aces_contract_status": "not_verifiable_from_player_aces_bulk",
+          }, ensure_ascii=False, sort_keys=True))
+          PY
