@@ -227,6 +227,18 @@ def attach_prices(ace_picks, report, *, now, betting_day):
             result.append(original)
             stats["unmatched_aces"] += 1
             continue
+        # An already explicit model/issuer contract takes precedence over a
+        # newly derived local O/U line. Never silently switch its direction.
+        if row.get("market_line") is not None or row.get("ou_side"):
+            try:
+                original_line = float(row.get("market_line"))
+            except (ValueError, TypeError, OverflowError):
+                original_line = None
+            if (original_line != float(local["market_line"])
+                    or str(row.get("ou_side") or "over").lower() != "over"):
+                result.append(original)
+                stats["unmatched_aces"] += 1
+                continue
         fixtures = [(event, _event_identity(event, row)) for event in events]
         fixtures = [(event, mapping) for event, mapping in fixtures if mapping is not None]
         if len(fixtures) != 1:
