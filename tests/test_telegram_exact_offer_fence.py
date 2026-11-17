@@ -158,6 +158,8 @@ def test_real_publication_paths_apply_fence_before_irreversible_upload():
     assert "Telegram pre-send exact freeze:" in publisher
     assert "verify_prepared_site(current,a.config_url,now)" in publisher
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in flow
+    assert "MORNING_DEPLOY_FINALITY" in flow
+    assert "verify_live_publication_barrier" in publisher
     assert confirm.index('verify_frozen_daily_offer(') < confirm.index('write_json(directory / "ledger.json", confirmed)')
 
 
