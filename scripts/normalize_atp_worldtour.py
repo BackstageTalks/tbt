@@ -39,7 +39,7 @@ STATS = ('match_id tourney_slug match_stats_url_suffix match_time match_duration
          'loser_return_points_total loser_total_points_won loser_total_points_total').split()
 assert len(STATS) == 59
 FIELDS = ('source_record_id tourney_id tourney_date tourney_name surface round best_of '
-          'winner_name loser_name winner_id loser_id match_num source_score source_date_kind '
+          'winner_name loser_name winner_id loser_id source_winner_id source_loser_id match_num source_score source_date_kind '
           'w_svpt w_1stIn w_1stWon w_2ndWon w_ace w_df w_bpSaved w_bpFaced '
           'l_svpt l_1stIn l_1stWon l_2ndWon l_ace l_df l_bpSaved l_bpFaced').split()
 
@@ -176,7 +176,8 @@ def convert(root: Path, output: Path, report_path: Path):
                            tourney_date=x[5].replace('.', ''), tourney_name=x[2],
                            surface=t[14], round=x[16], best_of=best,
                            winner_name=x[19], loser_name=x[22], winner_id=x[20],
-                           loser_id=x[23], match_num=x[18], source_score=x[27],
+                           loser_id=x[23], source_winner_id=x[20], source_loser_id=x[23],
+                           match_num=x[18], source_score=x[27],
                            source_date_kind='tournament_start')
                 for side, p in (('w','winner_'),('l','loser_')):
                     row.update({f'{side}_svpt':s[p+'service_points_total'],
