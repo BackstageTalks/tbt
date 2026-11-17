@@ -28,7 +28,7 @@ def _wta_aces_level_reason(row):
     tour = str(row.get("tour") or "").strip().casefold()
     labels.append(tour)
     if any(re.search(r"\bwta[\s_-]*(?:125|challenger)\b", label)
-           or re.search(r"\b(?:junior|wheelchair|exhibition)\b", label)
+           or re.search(r"\b(?:juniors?|wheelchair|exhibition)\b", label)
            for label in labels):
         return "excluded_wta_below_250"
     if any(re.search(r"\bwta[\s_-]*(?:250|500|1000|finals)\b", label)
