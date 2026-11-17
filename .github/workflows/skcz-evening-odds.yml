@@ -1,10 +1,14 @@
 name: BlinQ SK/CZ evening bookmaker aces audit (read-only)
 
-# External scheduler sends repository_dispatch at 23:00 Europe/Bratislava.
+# Existing external scheduler sends the original repository_dispatch at 23:00 Europe/Bratislava.
+# Source replaced with PropLine FREE; keep legacy dispatch event for cron compatibility.
 # No native GitHub cron and no dependency on the paid TennisAPI budget.
 on:
   repository_dispatch:
     types: [blinq-fortuna-evening-odds-tick]
+  push:
+    branches: [fix/replace-evening-fortuna-with-propline-free-20261117]
+    paths: ['.github/workflows/skcz-evening-odds.yml', 'scripts/skcz_evening_propline.py', 'tests/test_skcz_evening_propline.py']
   workflow_dispatch:
     inputs:
       target_day:
@@ -13,7 +17,7 @@ on:
         type: string
         default: ''
       max_events:
-        description: "Maximum public Fortuna tennis event pages (1-60)"
+        description: "Maximum free PropLine tennis events examined (1-60)"
         required: false
         type: number
         default: 60
@@ -27,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: blinq-skcz-evening-odds-research
+  group: propline-nightly-closeout
   cancel-in-progress: false
 
 jobs:
@@ -37,6 +41,7 @@ jobs:
     timeout-minutes: 20
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PROPL: ${{ secrets.PROPL }}
       DATA_REPO: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       MAX_EVENTS: ${{ inputs.max_events || 60 }}
       INPUT_TARGET_DAY: ${{ github.event.client_payload.target_day || inputs.target_day || '' }}
@@ -73,12 +78,7 @@ jobs:
           datetime.date.fromisoformat(sys.argv[1])
           PY
           echo "date=$target" >> "$GITHUB_OUTPUT"
-      - name: Install isolated Chromium for public client-rendered match cards
-        run: |
-          set -euo pipefail
-          python -m pip install playwright==1.57.0
-          python -m playwright install --with-deps chromium
-      - name: Capture public bookmaker markets without paid APIs or CDB changes
+      - name: Capture existing free PropLine bookmaker markets without CDB changes
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
@@ -88,7 +88,7 @@ jobs:
           if [[ "${INPUT_ALLOW_SAME_DAY,,}" == "true" ]]; then
             args+=(--allow-same-day)
           fi
-          python scripts/skcz_evening_fortuna.py "${args[@]}"
+          python scripts/skcz_evening_propline.py "${args[@]}"
       - name: Validate audit and create-only store in separate private research path
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
@@ -103,6 +103,15 @@ jobs:
           assert report["target_betting_day"] == os.environ["BETTING_DAY"]
           assert report["cdb_writes"] == 0 and report["published_picks_changed"] == 0
           assert report["provider_paid_calls"] == 0
+          assert report["source"] == "propline_free" and report["provider_requests"] == 1
+          assert isinstance(report["provider_remaining"], int) and report["provider_remaining"] >= 150
+          assert report["probed_events"] == report["probed_urls"] and report["probed_events"] <= 60
+          assert report["milestone_quotes"] == sum(
+              len(m.get("verified_single_prices") or [])
+              for e in report["events_in_target_window"] for m in e["aces_markets"])
+          assert report["dfs_pairs"] == sum(
+              len(m.get("research_pairs") or [])
+              for e in report["events_in_target_window"] for m in e["aces_markets"])
           assert report["status"] in ("audited", "no_exact_aces_market_available")
           assert report["exact_aces_pairs"] == sum(
               len(m["verified_pairs"]) for e in report["events_in_target_window"]
@@ -114,32 +123,57 @@ jobs:
           from zoneinfo import ZoneInfo
           observed = report["observed_prematch_priced_events"]
           assert isinstance(observed, list) and len(observed) <= report["probed_urls"] <= 60
-          total = outside = 0
+          total = outside = total_singles = outside_singles = 0
           for event in observed:
               captured = datetime.fromisoformat(event["captured_at"])
               scheduled = datetime.fromisoformat(event["scheduled_at"])
               assert captured.tzinfo and scheduled.tzinfo and captured < scheduled
-              assert event["provider"] == "fortuna_sk"
-              assert str(event["event_id"]).startswith("ufo:mtch:")
-              assert str(event["source_url"]).startswith("https://www.ifortuna.sk/stavkovanie/tenis/")
+              assert event["provider"] == "propline"
+              assert str(event["event_id"]).isdigit()
+              assert event["source_url"] == "https://api.prop-line.com/v1/sports/tennis/odds?markets=player_aces%2Ctotal_aces"
               assert len(event["source_sha256"]) == 64
+              raw_event = event.get("provider_raw_event")
+              assert isinstance(raw_event, dict)
+              assert str(raw_event.get("id")) == str(event["event_id"])
+              digest = hashlib.sha256(json.dumps(
+                  raw_event, ensure_ascii=False, sort_keys=True,
+                  separators=(",", ":")).encode("utf-8")).hexdigest()
+              assert digest == event["source_sha256"]
               local = scheduled.astimezone(ZoneInfo("Europe/Bratislava"))
               betting = (local - timedelta(days=1) if local.hour < 6 else local).date()
               assert event["event_betting_day"] == betting.isoformat()
               prices = sum(len(m["verified_pairs"]) for m in event["aces_markets"])
               assert prices > 0
-              assert all(m["kind"] in ("player_aces_ou", "most_aces_match")
+              assert all(m["kind"] in ("player_aces_ou", "most_aces_match",
+                     "player_aces_milestone", "dfs_pickem_player_aces_ou")
                          for m in event["aces_markets"])
+              singles = sum(len(m.get("verified_single_prices") or [])
+                            for m in event["aces_markets"])
+              assert prices + singles > 0
+              for market in event["aces_markets"]:
+                  assert market["bookmaker"]
+                  assert all(q["bookmaker"] == market["bookmaker"]
+                             and q["equivalent_over_line"] == q["threshold"] - .5
+                             and 1.01 <= q["odds"] <= 100
+                             for q in market.get("verified_single_prices") or [])
+                  assert (market["kind"] == "player_aces_milestone" or
+                          not market.get("verified_single_prices"))
+                  if market["kind"] == "dfs_pickem_player_aces_ou":
+                      assert not market["verified_pairs"]
               total += prices
+              total_singles += singles
               if event["event_betting_day"] != report["target_betting_day"]:
                   outside += prices
+                  outside_singles += singles
           assert report["observed_prematch_priced_pairs"] == total
           assert report["observed_priced_pairs_outside_target"] == outside
+          assert report["observed_prematch_priced_singles"] == total_singles
+          assert report["observed_priced_singles_outside_target"] == outside_singles
           repo = os.environ["DATA_REPO"]
           if repo != "BackstageTalks/tbt-data":
               raise SystemExit("Unexpected target repo; refuse research write")
           run_id = os.environ["GITHUB_RUN_ID"]
-          path = f"research/skcz-evening-odds/{report['target_betting_day']}/fortuna-{run_id}.json"
+          path = f"research/skcz-evening-odds/{report['target_betting_day']}/propline-{run_id}.json"
           api = f"repos/{repo}/contents/{path}"
           payload = {"message": f"research: immutable SKCZ evening quotes {run_id} [skip ci]",
                      "content": base64.b64encode(data).decode("ascii")}
@@ -153,6 +187,10 @@ jobs:
               "Independent persisted research read-back mismatch")
           print(json.dumps({"status": "PERSISTED_VERIFIED_READBACK",
                             "private_path": path,
+                            "source": report["source"],
+                            "milestone_quotes": report["milestone_quotes"],
+                            "dfs_pairs": report["dfs_pairs"],
+                            "provider_remaining": report["provider_remaining"],
                             "exact_aces_pairs": report["exact_aces_pairs"],
                             "aces_market_groups": report["aces_market_groups"],
                             "archived_verified_prematch_pairs": total,
