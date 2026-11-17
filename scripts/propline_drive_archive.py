@@ -46,7 +46,8 @@ def validated_archive(path: Path, target_day: str) -> bytes:
 
 
 def authenticated_session():
-    raw = (os.getenv("BLINQ_DRIVE_WRITER_JSON") or "").strip()
+    raw = (os.getenv("BLINQ_DRIVE_WRITER_JSON") or
+           os.getenv("BLINQ_DRIVE_READER_JSON") or "").strip()
     if not raw:
         raise RuntimeError("BLOCKED_PROPLINE_DRIVE_WRITER_CREDENTIAL_MISSING")
     info = json.loads(raw)
