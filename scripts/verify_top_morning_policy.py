@@ -8,13 +8,14 @@ def verify():
     from tbt.services.top_policy import rejection_reasons
     rule = select_market_sections([])["market_selection"]["top_daily_rule"]
     ui = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]["top_daily"]
-    assert rule["policy"] == ui["policy"] == "sports_tiered_top5_60_v23"
+    assert rule["policy"] == ui["policy"] == "sports_tiered_top5_60_v24"
     assert rule["limit"] == ui["limit"] == 5
     assert rule["core_min_probability"] == ui["min_probability"] == .60
     assert rule["probability_tiers"] == ui["confidence_tiers"] == [.60]
     assert rule["daily_minimum_target"] == ui["target_count"] == 3
     assert rule["min_odds"] == ui["min_odds"] == 1.50 and ui["max_odds"] is None
-    assert ui["competition_priority"] == [["ATP", "WTA"], ["Challenger"], ["ITF"]]
+    assert ui["competition_priority"] == rule["competition_priority"] == [["ATP", "WTA"], ["Challenger"]]
+    assert "ITF" in rule["excluded_competitions"] == ui["excluded_competitions"]
     def card(event, competition, probability):
         return dict(event_id=event, competition=competition,
                     tour="WTA" if competition.startswith("WTA") else "ATP",
@@ -23,12 +24,12 @@ def verify():
             card("main-65", "ATP", .65), card("main-68", "ATP", .69),
             card("main-70", "WTA", .79), card("excluded", "WTA 125", .99)]
     selected, _, details = _rank_full_slate_top(pool, [])
-    assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65", "secondary", "w35"]
+    assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65", "secondary"]
     assert all(c["selection_tier"] == "sports_0.60" for c in selected[:3])
     assert details["shortfall"] == 0
     selected, _, details = _rank_full_slate_top([pool[0], pool[1], pool[4]], [])
-    assert [c["event_id"] for c in selected] == ["main-70", "secondary", "w35"]
-    assert details["shortfall"] == 0
+    assert [c["event_id"] for c in selected] == ["main-70", "secondary"]
+    assert details["shortfall"] == 1
     selected, _, details = _rank_full_slate_top([card("none", "ATP", .59)], [])
     assert selected == [] and details["shortfall"] == 3
 
@@ -44,8 +45,7 @@ def verify():
         "surface_serve_return_known_both": True,
     }}
     assert "itf_top_requires_verified_w35plus" not in rejection_reasons(verified)
-    assert rule["itf_max_odds_inclusive"] == ui["itf_max_odds_inclusive"] == 1.70
-    assert rule["itf_min_probability_exclusive"] == ui["itf_min_probability_exclusive"] == .65
+    assert "competition_not_approved" in rejection_reasons(verified)
     verified["odds"] = 1.70
     assert "itf_odds_above_1_70" not in rejection_reasons(verified)
     verified["odds"] = 1.700001
