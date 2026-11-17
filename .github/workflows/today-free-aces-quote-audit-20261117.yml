@@ -89,3 +89,15 @@ jobs:
               'cdb_writes':0,'published_picks_changed':0,'provider_calls':0,
           },ensure_ascii=False,sort_keys=True))
           PY
+      - name: Compare every current ESÁ/VIAC ES pick with free PropLine prices (read only)
+        run: |
+          set -euo pipefail
+          python scripts/audit_today_aces_free_quotes_20261117.py
+      - name: Preserve audited comparison for independent review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: free-tennis-aces-quote-audit-${{ github.run_id }}
+          path: /tmp/blinq-today-free-aces-quote-report.json
+          if-no-files-found: warn
+          retention-days: 7
