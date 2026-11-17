@@ -150,6 +150,31 @@ jobs:
               if ident not in seen:
                   seen.add(ident);unique.append(x)
           bykind=collections.Counter(x["kind"] for x in unique)
+          # Compact full-event coverage: one representative pre-start sportsbook
+          # milestone per player, preference for Napoleon, then Superbet. The
+          # choice is for presentation only, NOT a model pick or price advice.
+          ranked={}
+          for item in unique:
+              if item["kind"]!="sportsbook_milestone":
+                  continue
+              target=(item["event_id"],item["player"])
+              preference=(0 if item["book"]=="napoleon" else
+                          1 if item["book"]=="superbet_pl" else 2,
+                          abs(item["odd"]-1.75),
+                          item["market"])
+              if (target not in ranked or preference<ranked[target][0]):
+                  ranked[target]=(preference,item)
+          reps=sorted((rec for _preference,rec in ranked.values()),
+                      key=lambda x:(x["start_utc"],x["match"],x["player"]))
+          pickem=sorted((x for x in unique if x["kind"]=="dfs_pickem_pair"),
+                        key=lambda x:(x["start_utc"],x["match"],x["player"]))
+          print("PROPLINE_COMPACT_TABLE="+json.dumps({
+              "checked_at_utc":now.isoformat(),
+              "all_free_sportsbook_milestones":bykind["sportsbook_milestone"],
+              "sportsbook_event_player_representatives":len(reps),
+              "representatives":reps,
+              "dfs_pair_records":pickem,
+          },ensure_ascii=False,sort_keys=True))
           print("PROPLINE_PRICE_TABLE="+json.dumps({
               "checked_at_utc":now.isoformat(),"free_requests":1,
               "provider_remaining_after":int(remaining),
