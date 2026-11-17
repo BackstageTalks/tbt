@@ -89,7 +89,9 @@ def verify_final_offer_snapshot(source, now, *, activation_day="2026-11-18"):
             or certificate.get("status") != "final"
             or certificate.get("betting_day") != day(now)
             or certificate.get("confirmed_at") != source.get("generated_at")
-            or certificate.get("premium_sha256") != final_offer_digest(source)):
+            or certificate.get("premium_sha256") != final_offer_digest(source)
+            or type(certificate.get("issuer_run_id")) is not int
+            or certificate["issuer_run_id"] <= 0):
         raise RuntimeError("Final offer certificate missing or changed")
     confirmed_at = _stamp(source["generated_at"])
     feed_at = _stamp(source["source_feed_generated_at"])
@@ -126,6 +128,9 @@ def assess_final_offer_writers(runs_and_jobs, source):
     """
     feed_at = _stamp(source["source_feed_generated_at"])
     confirmed_at = _stamp(source["generated_at"])
+    issuer_run_id = (source.get("final_offer") or {}).get("issuer_run_id")
+    if type(issuer_run_id) is not int or issuer_run_id <= 0:
+        raise RuntimeError("Final offer is missing its confirming publication run")
     for workflow, records in runs_and_jobs.items():
         if workflow not in PRODUCTION_JOBS or not isinstance(records, list):
             raise ValueError("Unexpected final offer writer audit shape")
@@ -151,10 +156,14 @@ def assess_final_offer_writers(runs_and_jobs, source):
                     raise RuntimeError("Final offer not ready: unknown publisher status")
                 if job.get("conclusion") == "skipped":
                     continue
-                if created >= confirmed_at:
-                    raise RuntimeError("Final offer not ready: newer publication requires confirmation")
                 if job.get("conclusion") not in ("success", "failure", "cancelled"):
                     raise RuntimeError("Final offer not ready: unknown publication outcome")
+                if int(run.get("id") or 0) != issuer_run_id:
+                    completed_at = job.get("completed_at")
+                    if not completed_at:
+                        raise RuntimeError("Final offer not ready: missing publisher completion evidence")
+                    if created >= confirmed_at or _stamp(completed_at) >= confirmed_at:
+                        raise RuntimeError("Final offer not ready: newer publication requires confirmation")
     return {
         "status": "final_private_offer_writers_idle",
         "betting_day": source["betting_day"],
