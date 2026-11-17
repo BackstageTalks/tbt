@@ -1,11 +1,6 @@
 name: Activate verified frozen shadow candidate
 run-name: "Model Lab activate shadow ${{ inputs.request_id || github.run_id }}"
 on:
-  # One-shot activation only for the exact reviewed 7.2.2 merge title.
-  # Remove this push override after independent read-back; native manual dispatch stays intact.
-  push:
-    branches: [main]
-    paths: [".github/workflows/activate-shadow-candidate.yml"]
   workflow_dispatch:
     inputs:
       request_id:
@@ -40,19 +35,17 @@ jobs:
     if: >-
       github.repository == 'BackstageTalks/tbt' &&
       github.ref == 'refs/heads/main' &&
-      (github.event_name == 'workflow_dispatch' ||
-       (github.event_name == 'push' &&
-        startsWith(github.event.head_commit.message, 'chore(722): one-shot prospective shadow activation 44155715600')))
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       PYTHONPATH: api:scripts
       PYTHONUNBUFFERED: '1'
-      SOURCE_TAG: ${{ github.event_name == 'push' && 'blinq-candidate-frozen-44155715600-1' || inputs.source_tag || 'blinq-candidate-frozen-39368300257-1' }}
-      EXPECTED_SHA: ${{ github.event_name == 'push' && 'f6fbc34a1d9786e6c455e4cb556e025270c2fb4ef60a33c31fef6a0b9b0c48f7' || inputs.expected_candidate_sha256 || '7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141' }}
-      PROSPECTIVE_ONLY: ${{ github.event_name == 'push' || inputs.prospective_only || false }}
-      SOURCE_SHA: ${{ github.event_name == 'push' && '9c3d299af91634705cd038d04ac9b6a16cca6d4f9dd35b2c8e9b571144f69a36' || inputs.expected_source_sha256 }}
+      SOURCE_TAG: ${{ inputs.source_tag || 'blinq-candidate-frozen-39368300257-1' }}
+      EXPECTED_SHA: ${{ inputs.expected_candidate_sha256 || '7ac60b0b671091a7f620cca80a7c558b417e20c9448f577878625447e565c141' }}
+      PROSPECTIVE_ONLY: ${{ inputs.prospective_only || false }}
+      SOURCE_SHA: ${{ inputs.expected_source_sha256 }}
     steps:
       - uses: actions/checkout@v4
         with:
