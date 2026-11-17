@@ -133,7 +133,6 @@ def _single_book_quotes(event, book):
         outcomes = market.get("outcomes") or []
         if not isinstance(outcomes, list):
             continue
-        quote_clock = _stamp(market.get("last_update"))
         market_id = str(market.get("id") or "").strip() or (
             str(event["id"]) + ":" + name + ":" + key)
         if key == "player_aces":
@@ -193,7 +192,8 @@ def _single_book_quotes(event, book):
                     "research_pairs": [pair] if kind.startswith("dfs_") else [],
                     "last_update": market.get("last_update"),
                 })
-        elif "ace" in key.lower() and MOST.search(key):
+        elif ("ace" in key.lower() and MOST.search(key)
+              and not re.search(r"(?:^|[_\\s-])(set|sets|period|tiebreak|tie_break)(?:$|[_\\s-])", key, re.I)):
             # A confirmed two-way sportsbook price requires two named players.
             named = [o for o in outcomes if isinstance(o, dict)]
             names = {_norm(o.get("name")) for o in named}
