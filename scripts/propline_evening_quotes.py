@@ -201,7 +201,7 @@ def _price(value):
         if isinstance(value, bool):
             return None
         result = float(value)
-        return result if math.isfinite(result) and 1.50 <= result <= 100 else None
+        return result if math.isfinite(result) and 1.01 <= result <= 100 else None
     except (TypeError, ValueError, OverflowError):
         return None
 
@@ -262,7 +262,7 @@ def attach_prices(ace_picks, report, *, now, betting_day):
                 price = _price(pair.get("over"))
                 if (line != float(local["market_line"])
                         or price is None or _price(pair.get("under")) is None
-                        or price == 2.0
+                        or price < 1.50 or price == 2.0
                         or not market.get("market_id")
                         or pair.get("market_id") != market.get("market_id")
                         or pair.get("bookmaker") != market.get("bookmaker")):
