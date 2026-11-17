@@ -10,6 +10,7 @@ from tbt.services.publication import (
     build_daily_offer_snapshot,
     carry_forward_betting_day_market_rows,
     confirm_market_publications,
+    validate_no_late_telegram_offer_rows,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -367,3 +368,112 @@ def test_confirmed_daily_snapshot_preserves_two_top_and_two_esa_separately_from_
     # The two ESÁ O/U are distinct from the independent Viac Es offer.
     assert sum(row["market"] == "aces" for row in snapshot["ace_picks"]) == 2
     assert sum(row["market"] == "most_aces" for row in snapshot["ace_picks"]) == 1
+
+
+def test_confirmed_snapshot_retains_actual_five_pick_top_60_policy():
+    """Prevent the 17 Nov 2026 web=5 / Telegram=3 regression."""
+    from tbt.services.entitlements import _daily_rows
+
+    now = datetime(2026, 11, 17, 6, 15, tzinfo=timezone.utc)
+    rows = []
+    for i, probability in enumerate((.75, .71, .69, .63, .61), 1):
+        card = winner_row(
+            f"top-{i}", "2026-11-17T17:00:00+00:00",
+            selection="Alpha", odds=1.70, day="2026-11-17",
+        )
+        card["blinq_probability"] = probability
+        card["betting"]["blinq_probability"] = probability
+        card["betting"]["model_probability"] = probability
+        card["player1"]["probability"] = probability
+        card["player2"]["probability"] = 1 - probability
+        rows.append(card)
+
+    feed = {
+        "generated_at": "2026-11-17T05:01:00+00:00",
+        "market_selection": {"top_daily_rule": {"policy": "sports_tiered_top5_60_v23"}},
+        "top_daily_picks": rows,
+        "value_picks": [], "prime_picks": [], "doubles_picks": [],
+        "ace_picks": [], "sg_picks": [],
+    }
+    ledger = [
+        {"event_id": card["event_id"],
+         "market_publications": [publication_for(card, "top_daily", issued=True)]}
+        for card in rows
+    ]
+    snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now)
+    assert snapshot["totals"]["top_daily_picks"] == 5
+    assert snapshot["market_selection"]["top_daily_rule"]["policy"] == "sports_tiered_top5_60_v23"
+    assert [r["event_id"] for r in _daily_rows(snapshot)] == [r["event_id"] for r in rows]
+    # Without the preserved rule, the legacy 68% fallback discards two picks.
+    old = {k: v for k, v in snapshot.items() if k != "market_selection"}
+    assert len(_daily_rows(old)) == 3
+
+
+def test_confirmed_morning_snapshot_blocks_later_top_value_and_aces_additions():
+    now = datetime(2026, 11, 17, 8, 0, tzinfo=timezone.utc)
+    issued = winner_row(
+        "sent-top", "2026-11-17T11:00:00+00:00",
+        selection="Alpha", odds=1.70, day="2026-11-17",
+    )
+    new_top = winner_row(
+        "late-top", "2026-11-17T18:00:00+00:00",
+        selection="Alpha", odds=1.70, day="2026-11-17",
+    )
+    new_value = winner_row(
+        "late-value", "2026-11-17T18:00:00+00:00",
+        selection="Alpha", odds=1.80, day="2026-11-17",
+    )
+    new_aces = winner_row(
+        "late-aces", "2026-11-17T18:00:00+00:00",
+        selection="Alpha", odds=1.80, day="2026-11-17",
+    )
+    new_aces["market"] = "aces"
+    new_aces["betting"]["market"] = "aces"
+    prior = {
+        "schema": 1, "confirmed_only": True, "betting_day": "2026-11-17",
+        "top_daily_picks": [issued],
+    }
+    candidate = {
+        "top_daily_picks": [new_top],
+        "value_picks": [new_value],
+        "ace_picks": [new_aces],
+        "market_selection": {"top_daily_rule": {"policy": "sports_tiered_top5_60_v23"}},
+    }
+    ledger = [
+        {"event_id": issued["event_id"],
+         "market_publications": [publication_for(issued, "top_daily", issued=True)]},
+    ]
+    merged, report = carry_forward_betting_day_market_rows(
+        candidate, [prior], ledger, now=now,
+    )
+    assert [row["event_id"] for row in merged["top_daily_picks"]] == ["sent-top"]
+    assert merged["value_picks"] == []
+    assert merged["ace_picks"] == []
+    for key in ("top_daily_picks", "value_picks", "ace_picks"):
+        assert report["new"][key] == 0
+        assert report["skipped_post_confirmation"][key] == 1
+
+    with __import__("pytest").raises(RuntimeError, match="already-issued|Already-issued"):
+        validate_no_late_telegram_offer_rows(candidate, ledger, now=now)
+    assert validate_no_late_telegram_offer_rows(merged, ledger, now=now)["locked"]
+    # The next betting day may publish genuinely new picks.
+    next_day = datetime(2026, 11, 18, 8, 0, tzinfo=timezone.utc)
+    assert not validate_no_late_telegram_offer_rows(candidate, ledger, now=next_day)["locked"]
+
+
+def test_unconfirmed_offer_does_not_freeze_before_first_morning_publication():
+    now = datetime(2026, 11, 17, 6, 0, tzinfo=timezone.utc)
+    pick = winner_row(
+        "first", "2026-11-17T18:00:00+00:00",
+        selection="Alpha", odds=1.70, day="2026-11-17",
+    )
+    ledger = [{"event_id": pick["event_id"],
+               "market_publications": [publication_for(pick, "top_daily", issued=False)]}]
+    raw = {"top_daily_picks": [pick]}
+    merged, report = carry_forward_betting_day_market_rows(
+        raw, {"betting_day": "2026-11-17", "confirmed_only": False},
+        ledger, now=now,
+    )
+    assert [r["event_id"] for r in merged["top_daily_picks"]] == ["first"]
+    assert report["skipped_post_confirmation"]["top_daily_picks"] == 0
+    assert not validate_no_late_telegram_offer_rows(raw, ledger, now=now)["locked"]
