@@ -22,7 +22,9 @@ from tbt.services.publication import (
     restore_published_market_snapshots,
     validate_publication_candidate,
     validate_no_late_telegram_offer_rows,
+    build_confirmed_daily_offer_snapshot,
 )
+from telegram_offer_publisher import verify_frozen_daily_offer
 
 
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
@@ -698,8 +700,14 @@ def main() -> None:
             print("Morning offer freeze preflight:", json.dumps(
                 validate_no_late_telegram_offer_rows(payload, ledger), sort_keys=True,
             ))
-            payload = _attach_player_assets(payload, repository)
             telegram_state = _read_confirmed_telegram_state(repository)
+            print("Exact Telegram sent/reserved offer fence:", json.dumps(
+                verify_frozen_daily_offer(
+                    build_confirmed_daily_offer_snapshot(payload, ledger),
+                    telegram_state, datetime.now(timezone.utc),
+                ), sort_keys=True,
+            ))
+            payload = _attach_player_assets(payload, repository)
             if telegram_state is not None:
                 bridged = overlay_confirmed_telegram_aces_ou(payload, telegram_state)
                 links = []
