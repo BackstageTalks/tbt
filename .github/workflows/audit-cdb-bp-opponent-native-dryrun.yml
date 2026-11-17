@@ -1,0 +1,123 @@
+name: BlinQ BP opponent rates native CDB NULL-only dry-run (2023-2024)
+'on':
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/audit-cdb-bp-opponent-native-dryrun.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-bp-opponent-native-dryrun
+  cancel-in-progress: false
+
+jobs:
+  strict-native-stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: .:api:scripts
+      CDB_REPO: BackstageTalks/tbt-data
+      CDB_BASELINE: 59398d1f7c7705488e65bf96a348387b4365d13906bec67b6c35a7c9e429b083
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test original CDB importer and opponent break-point field semantics
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check pandas pyarrow pydantic numpy pytest
+          python -m pytest -q tests/test_audit_cdb_bp_opponent_nulls.py tests/test_offline_linked_serve_return_importer.py
+          python -m compileall -q scripts/stage_cdb_bp_opponent_nulls.py scripts/import_offline_linked_serve_return.py
+      - name: Freeze all current 78 CDB partitions and immutable release manifest
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$CDB_REPO" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p work/audit
+          python scripts/download_stable_cdb.py --repository "$CDB_REPO" \
+            --out work/history --report work/audit/source.json
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads(Path("work/audit/source.json").read_text())
+          assert r["status"]=="verified" and r["provider_api_requests"]==0
+          assert r["manifest_sha256"]==os.environ["CDB_BASELINE"], "CDB changed; require new read-only scope audit"
+          assert len(list(Path("work/history").glob("history-*.parquet")))==78
+          print("CDB_BP_CURRENT_78_PARTITION_SHA_STABLE",r["manifest_sha256"])
+          PY
+      - name: Stage only exact completed-match NULL BP counterparts, 2023 and 2024
+        run: |
+          set -euo pipefail
+          python scripts/stage_cdb_bp_opponent_nulls.py \
+            --history-dir work/history --stage-file work/private/bp-candidate-stage.jsonl \
+            --expected-manifest "$CDB_BASELINE" \
+            --start-year 2023 --end-year 2024
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("work/private/stage-report.json").read_text())
+          c=r["counts"]
+          if (r.get("production_mutated") is not False or r.get("write_authorized") is not False or
+                  r.get("provider_requests")!=0 or
+                  c.get("staged_new_null_cells",0)<=0 or
+                  c.get("staged_new_null_cells",0)>133267 or
+                  c.get("staged_matches",0)>77696 or
+                  r["stage_rows"]!=c.get("staged_matches")):
+              raise SystemExit("NEW_BP_CANDIDATE_SCOPE_MISMATCH__NO_WRITE")
+          print("BP_CDB_PRIVATE_STAGED",c["staged_matches"],c["staged_new_null_cells"])
+          PY
+      - name: Reuse exact native importer in dry-run only, ensure zero conflicts and no writes
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py \
+            --stage work/private/bp-candidate-stage.jsonl \
+            --history-dir work/history --out-dir work/private/native-dry
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          source=json.loads(Path("work/private/stage-report.json").read_text())
+          native=json.loads(Path("work/private/native-dry/report.json").read_text())
+          a=source["counts"]; b=native["counts"]
+          if (native.get("production_mutated") is not False or native.get("local_partitions_written") is not False or
+                  b.get("updated")!=a["staged_matches"] or b.get("stat_fields_added")!=a["staged_new_null_cells"] or
+                  any(b.get(k,0) for k in ("stat_conflicts","invalid_stats","identity_changed","identity_missing")) or
+                  sorted(map(int,native["changed_years"]))!=[2023,2024]):
+              raise SystemExit("NATIVE_BP_NULL_ONLY_DRYRUN_FAILED__NO_WRITE")
+          summary={"schema":1,"status":"CURRENT_CDB_NATIVE_NULL_ONLY_DRYRUN_NO_WRITE",
+                   "source_bundle_sha256":source["source_bundle_manifest_sha256"],
+                   "stage_sha256":source["stage_sha256"], "affected_years":native["changed_years"],
+                   "eligible_matches":b["updated"],"verified_new_null_cells":b["stat_fields_added"],
+                   "existing_values_overwritten":0,"provider_requests":0,"production_mutated":False}
+          Path("work/audit/result.json").write_text(json.dumps(summary,sort_keys=True,indent=2)+"\n")
+          print("BP_CDB_POSITIVE_NATIVE_NULL_ONLY_DRYRUN",json.dumps(summary,sort_keys=True),flush=True)
+          PY
+      - name: Recheck live canonical manifest after staging
+        run: |
+          set -euo pipefail
+          gh api "repos/$CDB_REPO/releases/tags/tbt-data-v1" > work/audit/after.json
+          python - <<'PY'
+          import json,os
+          a=json.load(open("work/audit/after.json"))["assets"]
+          m=[x for x in a if x["name"]=="_tbt_bundle_manifest.json"]
+          if len(m)!=1 or m[0].get("digest")!="sha256:"+os.environ["CDB_BASELINE"]:
+              raise SystemExit("CDB_CONCURRENT_WRITER_CHANGED_SNAPSHOT__NO_AUTHORITY_TO_IMPORT")
+          print("BP_NATIVE_POST_AUDIT_CANONICAL_MANIFEST_UNCHANGED")
+          PY
+      - name: Publish aggregate-only audit (never canonical rows or stages)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cdb-bp-opponent-native-positive-dryrun
+          path: |
+            work/audit/source.json
+            work/audit/result.json
+            work/private/stage-report.json
+          if-no-files-found: ignore
+          retention-days: 21
