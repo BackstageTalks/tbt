@@ -16,6 +16,7 @@ from tbt.services.publication import (
     restore_published_market_snapshots,
     validate_market_publication_candidate,
     validate_publication_candidate,
+    validate_no_late_telegram_offer_rows,
 )
 
 
@@ -140,6 +141,10 @@ def main(argv=None):
         validate_market_publication_candidate(prepared_feed, ledger)
 
     now = datetime.now(timezone.utc)
+    # Check immutable ledger issuance even if a refresh already replaced
+    # the confirmed snapshot with an unconfirmed candidate.
+    offer_freeze = validate_no_late_telegram_offer_rows(prepared_feed, ledger, now=now)
+    print(json.dumps({"morning_offer_freeze": offer_freeze}))
     prepared_ledger = prepare_publication_evidence(
         ledger,
         prepared_feed.get("upcoming") or [],

@@ -21,6 +21,7 @@ from tbt.services.publication import (
     validate_market_publication_candidate,
     restore_published_market_snapshots,
     validate_publication_candidate,
+    validate_no_late_telegram_offer_rows,
 )
 
 
@@ -691,6 +692,12 @@ def main() -> None:
                         "legacy ESA card(s) omitted because no unique issued snapshot exists; "
                         "odds-backed sections remain strict.",
                     )
+            # Every UI and prediction deployment packages this exact feed.
+            # Prevent an unconfirmed concurrent refresh from adding paid picks
+            # after the first issued morning offer (before any Azure upload).
+            print("Morning offer freeze preflight:", json.dumps(
+                validate_no_late_telegram_offer_rows(payload, ledger), sort_keys=True,
+            ))
             payload = _attach_player_assets(payload, repository)
             telegram_state = _read_confirmed_telegram_state(repository)
             if telegram_state is not None:

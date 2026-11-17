@@ -824,6 +824,59 @@ def _market_row_before_cutoff(row, now, cutoff_minutes=PUBLICATION_CUTOFF_MINUTE
     return now < scheduled - timedelta(minutes=max(0, int(cutoff_minutes)))
 
 
+# Freeze premium categories after the first confirmed morning publication.
+# PRIME, sets/games, settlement and historical Results remain independent.
+DAILY_TELEGRAM_MARKET_KEYS = ("top_daily_picks", "value_picks", "ace_picks")
+DAILY_TELEGRAM_SECTIONS = frozenset(("top_daily", "value", "ace", "ace_winner", "double_faults"))
+
+
+def validate_no_late_telegram_offer_rows(
+    feed, ledger, *, now=None, timezone_name="Europe/Bratislava", start_hour=6,
+):
+    """Refuse new morning-offer contracts before Azure deploy.
+
+    A confirmed release snapshot may be superseded by an unconfirmed candidate
+    during a concurrent refresh, so the immutable issued ledger is the guard.
+    """
+    if not isinstance(feed, dict) or not isinstance(ledger, list):
+        raise ValueError("Invalid frozen offer inputs")
+    now = now or datetime.now(timezone.utc)
+    day = _current_betting_day(now, timezone_name=timezone_name, start_hour=start_hour)
+    locked = any(
+        isinstance(source, dict)
+        and isinstance(publication, dict)
+        and publication.get("issued_at")
+        and publication.get("publication_status") == "published"
+        and publication.get("section") in DAILY_TELEGRAM_SECTIONS
+        and (str(publication.get("betting_day") or "")
+             or _row_betting_day(source, timezone_name=timezone_name, start_hour=start_hour)) == day
+        for source in ledger
+        for publication in ((source.get("market_publications") or []) if isinstance(source, dict) else [])
+    )
+    if not locked:
+        return {"locked": False, "betting_day": day, "new": 0}
+    index = _market_ledger_index(ledger)
+    new = {}
+    for key in DAILY_TELEGRAM_MARKET_KEYS:
+        rows = feed.get(key) or []
+        if not isinstance(rows, list):
+            raise ValueError("Invalid frozen offer category: " + key)
+        extra = sum(
+            isinstance(row, dict)
+            and _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) == day
+            and not _issued_exact_market_row(row, key, index)
+            for row in rows
+        )
+        if extra:
+            new[key] = extra
+    if new:
+        raise RuntimeError(
+            "Already-issued morning offer cannot acquire new Telegram-category picks: "
+            + ", ".join(f"{key}={count}" for key, count in sorted(new.items()))
+        )
+    return {"locked": True, "betting_day": day, "new": 0}
+
+
 def _top_display_probability(row):
     """Use the same adjusted confidence as the public TOP card."""
     betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
@@ -872,6 +925,10 @@ def carry_forward_betting_day_market_rows(
     day = _current_betting_day(now, timezone_name=timezone_name, start_hour=start_hour)
     result = deepcopy(feed)
     ledger_index = _market_ledger_index(ledger)
+    frozen_after_confirmation = any(
+        source.get("confirmed_only") is True and source.get("betting_day") == day
+        for source in prior_sources
+    )
 
     report = {
         "betting_day": day,
@@ -879,6 +936,7 @@ def carry_forward_betting_day_market_rows(
         "new": {},
         "skipped_cutoff": {},
         "skipped_top_fallback": {},
+        "skipped_post_confirmation": {},
         "top_core_available": {},
         "total": {},
     }
@@ -953,6 +1011,7 @@ def carry_forward_betting_day_market_rows(
         new_count = 0
         skipped_cutoff = 0
         skipped_top_fallback = 0
+        skipped_post_confirmation = 0
         for row in current_rows:
             if not isinstance(row, dict):
                 continue
@@ -972,6 +1031,10 @@ def carry_forward_betting_day_market_rows(
                 continue
 
             already_published = _issued_exact_market_row(row, key, ledger_index)
+            if (frozen_after_confirmation and key in DAILY_TELEGRAM_MARKET_KEYS
+                    and not already_published):
+                skipped_post_confirmation += 1
+                continue
             if not already_published and not _market_row_before_cutoff(
                 row,
                 now,
@@ -996,6 +1059,7 @@ def carry_forward_betting_day_market_rows(
         report["new"][key] = new_count
         report["skipped_cutoff"][key] = skipped_cutoff
         report["skipped_top_fallback"][key] = skipped_top_fallback
+        report["skipped_post_confirmation"][key] = skipped_post_confirmation
         if key == "top_daily_picks":
             report["top_core_available"][key] = len(core_ids)
         report["total"][key] = len(kept)
@@ -1042,6 +1106,10 @@ def build_daily_offer_snapshot(
         snapshot[key] = kept
         totals[key] = len(kept)
     snapshot["totals"] = totals
+    # Telegram's _daily_rows must see the same current TOP policy as the web.
+    rule = (feed.get("market_selection") or {}).get("top_daily_rule")
+    if isinstance(rule, dict):
+        snapshot["market_selection"] = {"top_daily_rule": deepcopy(rule)}
     return snapshot
 
 
