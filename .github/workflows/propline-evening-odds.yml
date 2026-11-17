@@ -33,7 +33,6 @@ concurrency:
 
 jobs:
   capture:
-    # Playwright 1.57 Chromium does not support ubuntu-26.04 runner image.
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -51,7 +50,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Offline source/parser regressions (no provider requests)
-        run: python -m unittest discover -s tests -p 'test_propline_evening_*.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_propline_evening_*.py' -v
+          python -m unittest discover -s tests -p 'test_propline_drive_archive.py' -v
       - name: Resolve next Bratislava betting day
         id: day
         shell: bash
