@@ -63,6 +63,11 @@ def odds_priority(market_keys):
 PLAYER_GAMES_PROBE_MAX = 16  # Offline compatibility; active night reads exact CDB gaps
 NIGHTLY_GAP_PLAYER_MAX = 600
 NIGHTLY_ODDS_RESERVE = 50
+# Shared PropLine account: the independent 23:00 archive requires one
+# bookmaker board request and insists on >=150 remaining AFTER that request.
+# Keep additional headroom for simultaneously scheduled CLV/other consumers.
+# This is a provider-remaining guard, never a new cap on CDB model/API Pro.
+EVENING_ARCHIVE_REMAINING_RESERVE = 200
 
 
 def run_odds_reserve():
@@ -457,11 +462,19 @@ def request(path, params=None, *, allow_not_found=False, optional_stats=False):
     if STATE["remaining"] is not None and STATE["remaining"] <= 0:
         STATE["reason"] = "daily_quota_exhausted"
         return None
+    if (STATE["remaining"] is not None and
+            STATE["remaining"] <= EVENING_ARCHIVE_REMAINING_RESERVE):
+        STATE["reason"] = "evening_archive_quota_reserved"
+        return None
     url = API + path + ("?" + urllib.parse.urlencode(params) if params else "")
     retries = 0
     while True:
         if not allowed(now()) or STATE["calls"] >= MAX_CALLS:
             STATE["reason"] = "cutoff_or_run_cap"
+            return None
+        if (STATE["remaining"] is not None and
+                STATE["remaining"] <= EVENING_ARCHIVE_REMAINING_RESERVE):
+            STATE["reason"] = "evening_archive_quota_reserved"
             return None
         STATE["calls"] += 1
         time.sleep(WAIT)
