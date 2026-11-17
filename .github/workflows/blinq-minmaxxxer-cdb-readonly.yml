@@ -1,4 +1,4 @@
-name: BlinQ pinned MinMaxxxer current CDB importability (read only)
+name: BlinQ weekly MinMaxxxer CDB importability (read only)
 'on':
   push:
     branches: [main]
@@ -20,7 +20,7 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       DATA_REPO: BackstageTalks/tbt-data
-      SOURCE_COMMIT: e5c7471f73cb54d06a7ecc2455b7fbb78a0bf77a
+      SOURCE_COMMIT: 7b3dc21eb0d48a84e08cfa7bdbb520e4a98d9999
       PYTHONPATH: .:api:scripts
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "${SOURCE_COMMIT}" = e5c7471f73cb54d06a7ecc2455b7fbb78a0bf77a
+          test "${SOURCE_COMMIT}" = 7b3dc21eb0d48a84e08cfa7bdbb520e4a98d9999
           mkdir -p work/source
           for name in atp_matches_2025.csv wta_matches_2025.csv atp_matches_2026.csv wta_matches_2026.csv; do
             curl --fail --silent --show-error --location --retry 3 --retry-delay 3 --max-time 120 \
@@ -47,6 +47,22 @@ jobs:
             test -s "work/source/${name}"
           done
           (cd work/source && sha256sum *.csv)
+          python - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected={
+              "atp_matches_2025.csv": ("141dc79265fcebcea1f8e000e15aa0acea095752",832145),
+              "atp_matches_2026.csv": ("e102fb4ad52b05aa75cd5d79cf469a8d768cf7d7",781669),
+              "wta_matches_2025.csv": ("97762ec6ce23b92fc9fafa002b1280c54e990975",793966),
+              "wta_matches_2026.csv": ("69c4393d011d4f3cf85a18fc3a8f182d20ba1f2d",743966),
+          }
+          for name,(blob_sha,size) in expected.items():
+              data=(Path("work/source")/name).read_bytes()
+              digest=hashlib.sha1(f"blob {len(data)}\0".encode()+data).hexdigest()
+              if digest!=blob_sha or len(data)!=size:
+                  raise SystemExit("HF_SOURCE_BLOB_DRIFT__NO_CDB_AUDIT "+name)
+          print("HF_WEEKLY_PINNED_FOUR_CSV_GIT_BLOBS_VERIFIED")
+          PY
           echo "HF_PINNED_FOUR_SOURCE_FILES_DOWNLOADED"
       - name: Obtain one SHA-verified private canonical 2024–2026 snapshot and independent event index
         shell: bash
@@ -88,7 +104,7 @@ jobs:
           if (r.get("production_mutated") is not False or
               r.get("writer_executed") is not False or
               r.get("paid_api_requests") != 0 or r.get("odds_imported") != 0 or
-              r["counts"].get("source_rows") != 11364 or
+              r["counts"].get("source_rows") != 11405 or
               len(r.get("pinned_source_sha256", {})) != 4):
               raise SystemExit("HF_SOURCE_QA_AUDIT_CONTRACT_FAILED")
           print("HF_PRIVATE_READONLY_CDB_LINK_REPORT",json.dumps(r["counts"],sort_keys=True))
@@ -148,7 +164,7 @@ jobs:
         run: |
           set -euo pipefail
           report=work/qa/aggregate-report.json
-          file=research/source-acquisition/minmaxxxer-20261116-current-cdb-importability.json
+          file=research/source-acquisition/minmaxxxer-20261117-weekly-current-cdb-importability.json
           encoded="$(base64 -w0 "$report")"
           sha="$(gh api "repos/$DATA_REPO/contents/$file" --jq .sha 2> work/content-error.txt)" || {
             if ! grep -Fq 'HTTP 404' work/content-error.txt; then
@@ -179,3 +195,5 @@ jobs:
           retention-days: 21
 # 2026-11-16 repeat READ-ONLY audit: separate calendar-day/actual-clock mismatches; no CDB import permission changed.
 # 2026-11-16 additional READ-ONLY proof: bounded 24-hour clock with full score, native event and four count corroboration; no publisher.
+
+# 2026-11-17: immutable weekly revision 7b3dc21, strict four-CSV Git blob verification; read-only current CDB NULL audit, 0 provider API and 0 CDB writes.
