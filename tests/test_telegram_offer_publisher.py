@@ -361,7 +361,7 @@ def test_classic_format_and_deterministic_free_pick():
 
 def test_free_aces_pinned_selection_and_atp_wta_quality_gate():
     snap=offer()
-    candidate=priced_ou(row(101,"WTA Server","aces") | {"tour":"WTA"})
+    candidate=priced_ou(row(101,"WTA Server","aces") | {"tour":"WTA","competition":"WTA 250"})
     bad=priced_ou(row(102,"ITF Server","aces") | {"tour":"ITF"})
     snap["ace_picks"]=[bad,candidate]
     out=tg.messages(snap,settings(),NOW)
@@ -683,7 +683,7 @@ def test_telegram_aces_accepts_ranked_challengers_but_rejects_itf_unknown():
     snapshot=offer()
     snapshot["ace_picks"]=[
         priced_ou(row(201,"ATP Player","aces")|{"tour":"ATP"}),
-        priced_ou(row(202,"WTA Player","aces")|{"tour":"WTA"}),
+        priced_ou(row(202,"WTA Player","aces")|{"tour":"WTA","competition":"WTA 250"}),
         priced_ou(row(203,"ITF Player","aces")|{"tour":"ITF"}),
         priced_ou(row(204,"Challenger Player","aces")|{"tour":"ATP Challenger"}),
         priced_ou(row(205,"WTA125 Player","aces")|{"tour":"WTA 125"}),
@@ -699,7 +699,7 @@ def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
     snapshot=offer()
     rows=[
         priced_ou(row(301,"ATP","aces")|{"tour":"ATP","tournament":"Main draw"}),
-        priced_ou(row(302,"WTA","aces")|{"tour":"WTA","tournament":"Tour event"}),
+        priced_ou(row(302,"WTA","aces")|{"tour":"WTA","tournament":"WTA 250 event"}),
         priced_ou(row(303,"Challenger","aces")|{"tour":"ATP","tournament":"Istanbul Challenger"}),
         priced_ou(row(304,"WTA125","aces")|{"tour":"WTA","tournament":"WTA 125 Mumbai"}),
     ]
@@ -707,3 +707,38 @@ def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
     chosen=tg.select_groups(snapshot,settings(),NOW)["aces"]
     assert [x["event_id"] for x in chosen]==["301","302","303","304"]
     assert [x["event_id"] for x in chosen]==[x["event_id"] for x in rows if main_tour_aces(x)]
+
+
+def test_next_day_wta_aces_web_and_telegram_share_finalized_grade_filter():
+    """Same final offer yields identical eligible prestart IDs in web and TG."""
+    from tbt.services.feed import visible_feed
+
+    now = datetime(2026, 11, 19, 7, tzinfo=timezone.utc)
+    cases = [
+        ("wta250", "WTA", "WTA 250", "Krakow Open", True),
+        ("wta500", "WTA", "WTA 500", "WTA Main", True),
+        ("wtafinals", "WTA", "WTA Finals", "Riyadh", True),
+        ("grand", "WTA", "Grand Slam", "Wimbledon", True),
+        ("wta125", "WTA", "WTA 125", "WTA 125", False),
+        ("generic", "WTA", "WTA", "Unknown Women's", False),
+        ("itf", "ITF", "ITF Women", "ITF W100", False),
+        ("atp_ch", "ATP", "ATP Challenger", "ATP Challenger", True),
+        ("atp", "ATP", "ATP 250", "ATP Main", True),
+    ]
+    cards = []
+    for i, (key, tour, competition, tournament, _) in enumerate(cases):
+        candidate = priced_ou(row(900 + i, key, "aces"))
+        candidate.update(event_id=key, tour=tour, competition=competition,
+                         tournament=tournament,
+                         scheduled_at=(now + timedelta(hours=4)).isoformat(),
+                         captured_at=(now - timedelta(hours=1)).isoformat())
+        cards.append(candidate)
+    finalized = offer()
+    finalized.update(betting_day="2026-11-19", generated_at=now.isoformat(),
+                     ace_picks=cards)
+    web_rows = visible_feed(finalized, now=now)["ace_picks"]
+    tg_rows = tg.select_groups(finalized, settings(), now)["aces"]
+    expected = {key for key, _, _, _, eligible in cases if eligible}
+    assert {r["event_id"] for r in web_rows} == expected
+    assert {r["event_id"] for r in tg_rows} == expected
+    assert finalized["ace_picks"] == cards  # no mutation of frozen source

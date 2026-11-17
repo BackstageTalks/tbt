@@ -127,6 +127,7 @@ def test_ranked_challenger_eligible_but_stale_website_and_receipts_fail_closed()
         },site(),datetime.fromisoformat(NOW),old_attempt)
     assert task.main_tour_aces(candidate("c","ATP","Challenger Open")) is True
     assert task.main_tour_aces(candidate("w","WTA","WTA 125")) is True
+    assert task.main_tour_aces(candidate("w-main","WTA","WTA 250")) is True
     assert task.main_tour_aces(candidate("i","ATP","ITF Futures Open")) is False
     missing_rank=candidate("r","ATP","Challenger Open")
     missing_rank["player2"]["rank"]=None

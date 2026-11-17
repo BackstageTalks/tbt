@@ -235,10 +235,10 @@ def test_workflow_wires_only_existing_telegram_sender_and_ledger():
     assert 'group: blinq-telegram-ledger' in job
 
 
-def test_more_aces_keeps_ranked_atp_wta_wta125_but_rejects_unsupported_tours():
+def test_more_aces_keeps_ranked_atp_wta_250_but_rejects_unsupported_tours():
     rows=[
         row(event="atp")|{"tour":"ATP"},
-        row(event="wta")|{"tour":"WTA"},
+        row(event="wta")|{"tour":"WTA","competition":"WTA 250"},
         row(event="itf")|{"tour":"ITF"},
         row(event="challenger")|{"tour":"Challenger"},
         row(event="wta125")|{"tour":"WTA 125"},
@@ -248,10 +248,10 @@ def test_more_aces_keeps_ranked_atp_wta_wta125_but_rejects_unsupported_tours():
     assert [r["event_id"] for r in result]==["atp","wta","wta125"]
 
 
-def test_more_aces_includes_ranked_challenger_or_125_even_if_tour_is_generic():
+def test_more_aces_includes_ranked_challenger_and_verified_wta_250():
     examples=[
         row(event="atp")|{"tour":"ATP","tournament":"Main draw"},
-        row(event="wta")|{"tour":"WTA","tournament":"WTA Tour"},
+        row(event="wta")|{"tour":"WTA","tournament":"WTA 500 Tour"},
         row(event="challenger")|{"tour":"ATP","tournament":"Prague Challenger"},
         row(event="wta125")|{"tour":"WTA","tournament":"WTA 125 Mumbai"},
     ]

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from functools import lru_cache
 from hashlib import sha256
 from datetime import datetime, timedelta, timezone
@@ -12,28 +13,79 @@ from zoneinfo import ZoneInfo
 
 MAX_FEED_BYTES = 32 * 1024 * 1024  # Guarded headroom for verified 21,728,761-byte 2026-10-25 release
 MAX_ACES_PLAYER_RANK = 1000  # Both players, ATP/WTA active Aces / Most Aces only
+# Forward-only cutoff. Preserve the finalized, previously published 17 Nov
+# daily offer across a same-day deployment. 18 Nov 06:00 local (CET) starts
+# the first betting day under the new WTA250+ selection rule.
+WTA_GRADE_GATE_EFFECTIVE_UTC = datetime(2026, 11, 18, 5, 0, tzinfo=timezone.utc)
+
+
+def _legacy_wta_offer(row):
+    """Only events from betting days before the explicit activation cutoff."""
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+    if not raw:
+        return False  # unknown event clock cannot grandfather into new offers
+    try:
+        stamp = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except (ValueError, TypeError, OverflowError):
+        return False
+    return (stamp.tzinfo is not None and
+            stamp.astimezone(timezone.utc) < WTA_GRADE_GATE_EFFECTIVE_UTC)
+
+
+def _wta_aces_level_reason(row):
+    """Fail closed unless the women's event is verified WTA 250+ or a Slam.
+
+    The generic WTA gender/tour label is not proof of tournament grade.
+    Missing classification must not silently admit WTA 125 or ITF.
+    """
+    fields = ("tournament", "tournament_name", "tournament_type",
+              "competition", "competition_type", "tour_level",
+              "tournament_level", "category")
+    labels = [str(row.get(field) or "").strip().casefold() for field in fields]
+    tour = str(row.get("tour") or "").strip().casefold()
+    labels.append(tour)
+    if any(re.search(r"\bwta[\s_-]*(?:125|challenger)\b", label)
+           or re.search(r"\b(?:juniors?|wheelchair|exhibition)\b", label)
+           for label in labels):
+        return "excluded_wta_below_250"
+    if any(re.search(r"\bwta[\s_-]*(?:250|500|1000|finals)\b", label)
+           or re.search(r"\bgrand\s+slams?\b", label)
+           for label in labels):
+        return "eligible"
+    tournament = str(row.get("tournament") or row.get("tournament_name") or "").casefold()
+    if re.search(r"\b(?:australian open|roland garros|french open|wimbledon|us open)\b",
+                 tournament):
+        return "eligible"
+    return "unverified_wta_level"
 
 
 def ace_eligibility_reason(row):
-    """Explain the active ESÁ/Viac Es gate, without changing model thresholds.
+    """Explain the active singles ESÁ/Viac Es gate, without changing thresholds.
 
-    Main ATP/WTA and Challenger/WTA 125 singles may qualify if *both* players
-    have verified, integral TOP-1000 ranks. ITF/Futures and unknown tours never
-    qualify. Historic Results/issued receipts are not touched.
+    ATP main-tour/Challenger remain eligible with both players TOP-1000;
+    WTA requires positive evidence of WTA 250/500/1000, Finals or Grand Slam.
+    WTA 125, ITF/Futures and unknown WTA grades are excluded.
+    Existing historical issued Results are not regraded.
     """
     if not isinstance(row, dict):
         return "unsupported_tour"
     tour = str(row.get("tour") or "").strip().casefold()
-    if tour not in {
-        "atp", "wta", "atp tour", "wta tour",
-        "atp challenger", "wta challenger", "wta 125", "wta125", "wta-125",
-    }:
+    atp_tours = {"atp", "atp tour", "atp challenger"}
+    wta_tours = {"wta", "wta tour", "wta challenger", "wta 125", "wta125",
+                 "wta-125", "wta 250", "wta250", "wta 500", "wta500",
+                 "wta 1000", "wta1000", "wta finals"}
+    if tour not in atp_tours | wta_tours:
         return "unsupported_tour"
     for field in ("tournament", "tournament_name", "tournament_type",
-                  "competition", "competition_type", "tour_level", "tournament_level", "category"):
+                  "competition", "competition_type", "tour_level",
+                  "tournament_level", "category"):
         label = str(row.get(field) or "").strip().casefold()
         if any(tag in label for tag in ("itf", "futures")):
             return "excluded_itf_futures"
+    if tour in wta_tours and not _legacy_wta_offer(row):
+        level_reason = _wta_aces_level_reason(row)
+        if level_reason != "eligible":
+            return level_reason
     for side in ("player1", "player2"):
         player = row.get(side)
         if not isinstance(player, dict) or player.get("rank") in (None, ""):
