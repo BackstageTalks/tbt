@@ -53,7 +53,10 @@ def test_probability_objective_is_opt_in():
     assert _new_production_ensemble(objective="log_loss").objective == "log_loss"
 
 
-def test_721_fit_preserves_probability_profile_and_separate_market_gate():
+def test_721_fit_preserves_probability_profile_and_separate_market_gate(monkeypatch):
+    # This fixture covers the legacy profile, without weekly archive inputs.
+    # A candidate workflow's opt-in flag must not change the tested contract.
+    monkeypatch.setenv("BLINQ_CONTEXT_CALIBRATION", "false")
     from datetime import datetime, timedelta, timezone
     from tbt.schemas import MatchRecord
     from tbt.services.training import train_from_matches

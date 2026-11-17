@@ -17,7 +17,7 @@ from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surfac
 from ..models.metrics import evaluate_probabilities
 from .prediction_quality import coverage, subgroup_report
 from .data_quality import audit_history
-from .training import _enforce_rank_provenance
+from .training import _enforce_rank_provenance, _pit_rank_snapshot
 from .publication import confirm_publication
 from .countries import normalize_country_code
 
@@ -269,6 +269,9 @@ def predict(
         raise ValueError("Unknown model feature semantics: independent_direct_rates")
     if type(point_weighted_quality) is not bool:
         raise ValueError("Unknown model feature semantics: point_weighted_quality")
+    rank_feature_source = semantics.get("rank_feature_source")
+    if rank_feature_source not in (None, "point_in_time_weekly"):
+        raise ValueError("Unknown model rank feature provenance")
     builder = FeatureBuilder(
         independent_serve_return=independent,
         independent_direct_rates=direct_rates,
@@ -282,6 +285,13 @@ def predict(
         if return_context:
             return empty, {"builder": builder, "cutoff": cutoff, "replay_history": replay_history}
         return empty
+    if rank_feature_source == "point_in_time_weekly":
+        # A FeatureBuilder snapshot contains zero placeholders for unloaded
+        # archives. Never mistake those placeholders for a verified source
+        # when a model explicitly promises point-in-time ranking evidence.
+        if ((atp_rank_history is None and any(m.tour.lower() == "atp" for m in future))
+                or (wta_rank_history is None and any(m.tour.lower() == "wta" for m in future))):
+            raise ValueError("Missing frozen weekly rank source for calibrated candidate")
     persisted_feature_names = getattr(model, "feature_names", None)
     feature_names = list(
         persisted_feature_names
@@ -342,6 +352,8 @@ def predict(
             values.update(
                 wta_season_stats.features_for_match(match, current=True)
             )
+        if rank_feature_source == "point_in_time_weekly":
+            _pit_rank_snapshot(values, match.tour)
         features.append(values)
     # Serving is artifact-schema driven. This keeps an already-deployed legacy
     # champion usable while the repository evolves to a richer feature schema;
@@ -349,7 +361,14 @@ def predict(
     missing = [name for name in feature_names if name not in features[0]]
     if missing:
         raise ValueError(f"Model artifact requests unavailable features: {missing}")
-    probabilities = model.predict_proba(pd.DataFrame(features, columns=feature_names))
+    inference_frame = pd.DataFrame(features, columns=feature_names)
+    # Only artifacts with an accepted context map consume original competition
+    # metadata. Legacy estimators and unmodified champions must receive their
+    # exact persisted numeric feature schema (no unexpected extra columns).
+    if getattr(model, 'context_calibrators', None):
+        inference_frame['competition'] = [match.tournament_level or 'unknown' for match in future]
+        inference_frame['tournament'] = [match.tournament or 'unknown' for match in future]
+    probabilities = model.predict_proba(inference_frame)
     rows = []
     for match, f, probability in zip(future, features, probabilities):
         p = float(probability)

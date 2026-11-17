@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 WTA_RANK_HISTORY_FEATURE_NAMES = [
     "wta_hist_rank_advantage",
+    "wta_hist_best_rank_log",
+    "wta_hist_worst_rank_log",
     "wta_hist_points_advantage",
     "wta_hist_rank_momentum_4w_diff",
     "wta_hist_rank_momentum_12w_diff",
@@ -66,6 +68,9 @@ class WTARankHistory:
             if str(key).strip() and str(value).strip()
         }
         by_player: dict[str, list[tuple]] = defaultdict(list)
+        name_source_ids: dict[str, set[str]] = defaultdict(set)
+        observed: dict[tuple[str, object], tuple[int, int | None]] = {}
+        ambiguous_keys: set[str] = set()
         for raw in rows:
             name = _norm_name(raw.get("name"))
             sackmann_id = str(raw.get("sackmann_player_id") or "").strip()
@@ -78,18 +83,34 @@ class WTARankHistory:
                 keys.append(f"id:{sackmann_id}")
             if name:
                 keys.append(f"name:{name}")
+                if sackmann_id:
+                    name_source_ids[name].add(sackmann_id)
+                    if len(name_source_ids[name]) > 1:
+                        # A canonical crosswalk still accesses each id:key.
+                        # Unverified name fallback must not blend players.
+                        ambiguous_keys.add(f"name:{name}")
             if not keys:
                 continue
+            signature = (rank, _positive_int(raw.get("points")))
             for key in keys:
-                by_player[key].append(
-                    (source_date, rank, _positive_int(raw.get("points")))
-                )
+                pair = key, source_date
+                previous = observed.get(pair)
+                if previous is not None:
+                    if previous != signature:
+                        ambiguous_keys.add(key)
+                    continue
+                observed[pair] = signature
+                by_player[key].append((source_date, *signature))
 
+        self._ambiguous_keys = ambiguous_keys
         self._dates = {}
         self._ranks = {}
         self._points = {}
         self._career_best = {}
         for name, values in by_player.items():
+            if name in ambiguous_keys:
+                # Conflicting ranking source/identity is not evidence.
+                continue
             values.sort(key=lambda item: item[0])
             dates, ranks, points, bests = [], [], [], []
             best = None
@@ -433,6 +454,12 @@ class WTARankHistory:
             return out
 
         out["wta_hist_known_both"] = 1.0
+        # Absolute, point-in-time ranking strength: rank ratios alone cannot
+        # distinguish a #50 vs #100 matchup from #2500 vs #5000. These
+        # side-invariant covariates are unavailable when either identity/rank
+        # lacks a strictly pre-match weekly snapshot.
+        out["wta_hist_best_rank_log"] = math.log1p(min(p1["rank"], p2["rank"]))
+        out["wta_hist_worst_rank_log"] = math.log1p(max(p1["rank"], p2["rank"]))
         out["wta_hist_rank_advantage"] = math.log1p(p2["rank"]) - math.log1p(p1["rank"])
         if p1.get("points") is not None and p2.get("points") is not None:
             out["wta_hist_points_advantage"] = (
@@ -515,6 +542,7 @@ class WTARankHistory:
             for key, value in (state.get("canonical_to_sackmann") or {}).items()
             if str(key).strip() and str(value).strip()
         }
+        obj._ambiguous_keys = set()
         obj._dates, obj._ranks, obj._points, obj._career_best = {}, {}, {}, {}
         for key, rows in (state.get("players") or {}).items():
             if not isinstance(rows, list):

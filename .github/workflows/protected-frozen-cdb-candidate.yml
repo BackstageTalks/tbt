@@ -15,6 +15,10 @@ on:
         type: choice
         options: [standard, top-7.2.1, accuracy-7.2.2]
         default: top-7.2.1
+      context_calibration:
+        description: Candidate-only sports context calibration; no production promotion
+        type: boolean
+        default: false
       auto_shadow:
         description: Only for explicit Model Factory phase 2; never promotes production
         type: boolean
@@ -80,6 +84,7 @@ jobs:
       # Stream long-running training logs rather than losing output on runner exit.
       PYTHONUNBUFFERED: '1'
       BLINQ_RAPIDAPI_MAX_RPS: '0'
+      BLINQ_CONTEXT_CALIBRATION: "${{ inputs.context_calibration && 'true' || 'false' }}"
       BLINQ_TRAINING_PROFILE: "${{ inputs.training_profile || (startsWith(github.event.head_commit.message, 'feat(722): one-shot PIT evidence calibration study') && 'accuracy-7.2.2') || 'top-7.2.1' }}"
     steps:
       - uses: actions/checkout@v4
@@ -103,6 +108,7 @@ jobs:
             tests/test_champion_rollback_rehearsal.py \
             tests/test_training_inputs.py \
             tests/test_verified_training_frame.py \
+            tests/test_context_calibration.py \
             tests/test_calibration_override_guard.py \
             tests/test_calibration_freshness.py \
             tests/test_721_smooth_confidence_gate.py \

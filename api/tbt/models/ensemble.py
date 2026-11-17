@@ -78,6 +78,8 @@ class TennisEnsemble:
         # New v7.2.1 experiment only; old models load through getattr fallback.
         self.tour_calibrators: dict[str, ProbabilityCalibrator] = {}
         self.evidence_calibrators: dict[str, ProbabilityCalibrator] = {}
+        self.context_calibration_selection = False
+        self.context_calibrators = {}
         self.version = datetime.now(timezone.utc).strftime("v201-%Y%m%dT%H%M%S%fZ")
         self.metadata: dict[str, Any] = {}
         self.fitted = False
@@ -461,7 +463,8 @@ class TennisEnsemble:
                 calibrator = conditional.get(cohort)
                 if calibrator is not None and mask.any():
                     p[mask] = self._calibrated(calibrator, raw[mask])
-        return np.clip(p, .01, .99)
+        from .context_calibration import apply
+        return apply(frame, np.clip(p, .01, .99), getattr(self, "context_calibrators", {}) or {})
 
     @staticmethod
     def _smooth_confidence_validation(raw, labels, predictions):
@@ -556,6 +559,7 @@ class TennisEnsemble:
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
         self.evidence_calibrators = {}
+        self.context_calibrators = {}
         split = calibration_split(cal) if len(cal) >= 120 else None
         self.metadata = {"objective": self.objective, "feature_names": self.feature_names,
                          "excluded_features": sorted(self.excluded_features),
@@ -686,6 +690,18 @@ class TennisEnsemble:
                                   "calibration_candidates": dict((k, v) for v, k in candidates)})
         else:
             self.metadata["calibration_fallback"] = "insufficient disjoint calendar days"
+        if getattr(self, "context_calibration_selection", False):
+            if not getattr(self, "smooth_calibration_only", False):
+                raise ValueError("Sports context calibration requires frozen smooth parent maps")
+            if split is None:
+                self.metadata["context_calibration_validation"] = {"status": "INSUFFICIENT_DAYS"}
+            else:
+                from .context_calibration import choose
+                parent = self._predict_with_tour_calibration(cal, self._raw(cal))
+                self.context_calibrators, context_report = choose(
+                    cal, parent, cal.target.to_numpy(dtype=int), split)
+                self.metadata["context_calibration_validation"] = context_report
+            self.metadata["context_calibration_methods"] = sorted(self.context_calibrators)
         self.metadata.update({"smooth_calibration_only": bool(getattr(self, "smooth_calibration_only", False)),
                               "evidence_calibration_methods": {
                                   key: cal.kind for key, cal
@@ -786,6 +802,7 @@ class TennisEnsemble:
         self.calibrator = ProbabilityCalibrator()
         self.tour_calibrators = {}
         self.evidence_calibrators = {}
+        self.context_calibrators = {}
         if calibrator_kind != "identity":
             raw = self._raw(cal)
             self.calibrator = self._fit_calibrator(

@@ -2,6 +2,7 @@
 import math
 
 from issued_calibration_reliability import issued_reliability, wilson95
+from audit_top_reliability import picked_player_rank_2000_band
 
 
 def test_five_point_bands_use_original_issued_values_and_never_fill_pending():
@@ -73,3 +74,14 @@ def test_mixed_model_legacy_cannot_claim_exact_issued_reliability():
     assert "issued_probability_reliability" not in legacy
     exact = analyze([], now=now, model_version="v7.2.1-test")
     assert exact["issued_probability_reliability"]["settled_with_original_confidence"] == 0
+
+
+def test_rank_2500_original_issued_cohort_is_not_merged_with_rank_1200():
+    row = {"player1": {"id": "p1", "rank": 2500},
+           "player2": {"id": "p2", "rank": 1200}}
+    assert picked_player_rank_2000_band(row, "p1") == "pick_2000_plus"
+    assert picked_player_rank_2000_band(row, "p1", publication={}) == "rank_unknown"
+    assert picked_player_rank_2000_band(row, "p2") == "pick_below_2000"
+    assert picked_player_rank_2000_band(row, "unknown") == "rank_unknown"
+    row["player1"].pop("rank")
+    assert picked_player_rank_2000_band(row, "p1") == "rank_unknown"

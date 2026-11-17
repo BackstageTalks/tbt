@@ -30,6 +30,46 @@ def test_wta_rank_history_is_strictly_point_in_time():
     assert abs(f["wta_hist_rank_advantage"]-expected)<1e-12
 
 
+
+def test_wta_namesake_requires_canonical_crosswalk_for_rank_signal():
+    day = datetime(2024, 12, 30).date()
+    rows = [
+        {"date": day, "name": "Same Name", "sackmann_player_id": "101",
+         "rank": 2500, "points": 5},
+        {"date": day, "name": "Same Name", "sackmann_player_id": "202",
+         "rank": 45, "points": 2400},
+        {"date": day, "name": "Beta Two", "sackmann_player_id": "303",
+         "rank": 90, "points": 950},
+    ]
+    archive = WTARankHistory(rows, canonical_to_sackmann={
+        "A": "101", "B": "202", "C": "303"})
+    assert "name:same name" in archive._ambiguous_keys
+    when = datetime.fromisoformat("2025-01-02T12:00:00+00:00")
+    unknown = SimpleNamespace(
+        tour="wta", scheduled_at=when,
+        player1_name="Same Name", player2_name="Beta Two")
+    assert archive.features_for_match(unknown)["wta_hist_known_both"] == 0.
+    unique = SimpleNamespace(
+        tour="wta", scheduled_at=when, player1_id="A", player2_id="C",
+        player1_name="Same Name", player2_name="Beta Two")
+    assert archive.features_for_match(unique)["wta_hist_known_both"] == 1.
+    assert archive.features_for_match(unique)["wta_hist_best_rank_log"] > 0.
+
+
+def test_wta_conflicting_same_week_id_is_not_resolved_by_guessing():
+    day = datetime(2024, 12, 30).date()
+    archive = WTARankHistory([
+        {"date": day, "name": "Alpha One", "sackmann_player_id": "101", "rank": 20},
+        {"date": day, "name": "Alpha One", "sackmann_player_id": "101", "rank": 2500},
+        {"date": day, "name": "Beta Two", "sackmann_player_id": "303", "rank": 90},
+    ], canonical_to_sackmann={"A": "101", "C": "303"})
+    fixture = SimpleNamespace(
+        tour="wta", scheduled_at=datetime.fromisoformat("2025-01-02T12:00:00+00:00"),
+        player1_id="A", player2_id="C",
+        player1_name="Alpha One", player2_name="Beta Two")
+    assert "id:101" in archive._ambiguous_keys
+    assert archive.features_for_match(fixture)["wta_hist_known_both"] == 0.
+
 def test_sackmann_player_id_join_and_candidate_governance(tmp_path):
     players=tmp_path/"players.csv"
     players.write_text("player_id,name_first,name_last,hand,birth_date,country_code\n1,Alpha,One,R,20000101,USA\n2,Beta,Two,L,20000101,CZE\n")
@@ -45,9 +85,14 @@ def test_sackmann_player_id_join_and_candidate_governance(tmp_path):
     assert history.features_for_match(match)["wta_hist_known_both"]==1.0
     assert not (set(WTA_RANK_HISTORY_FEATURE_NAMES)&set(PRODUCTION_FEATURE_NAMES))
     assert not (set(WTA_RANK_HISTORY_FEATURE_NAMES)&set(_candidate_feature_names()))
-    assert set(WTA_RANK_HISTORY_FEATURE_NAMES).issubset(
-        _candidate_feature_names(wta_rank_history=history)
-    )
+    legacy = set(_candidate_feature_names(wta_rank_history=history))
+    protected = set(_candidate_feature_names(
+        wta_rank_history=history, pit_rank_aligned=True))
+    inherited = set(WTA_RANK_HISTORY_FEATURE_NAMES) - {
+        "wta_hist_best_rank_log", "wta_hist_worst_rank_log"}
+    assert inherited.issubset(legacy)
+    assert set(WTA_RANK_HISTORY_FEATURE_NAMES).issubset(protected)
+    assert not {"wta_hist_best_rank_log", "wta_hist_worst_rank_log"} & legacy
 
 
 

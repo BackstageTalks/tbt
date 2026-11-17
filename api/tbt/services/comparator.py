@@ -17,7 +17,7 @@ from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surfac
 from ..models.portable_export import export_portable_model
 from ..schemas import MatchRecord
 from .data_quality import audit_history
-from .training import _enforce_rank_provenance
+from .training import _enforce_rank_provenance, _pit_rank_snapshot
 
 
 ALLOWED_TOURS = {"atp", "wta"}
@@ -287,6 +287,14 @@ def compare(
         features.update(wta_rank_history.features_for_match(synthetic))
     if wta_season_stats is not None:
         features.update(wta_season_stats.features_for_match(synthetic, current=True))
+    rank_semantics = (getattr(model, "metadata", None) or {}).get("rank_feature_source")
+    if rank_semantics == "point_in_time_weekly":
+        if (tour == "atp" and atp_rank_history is None or
+                tour == "wta" and wta_rank_history is None):
+            raise ComparatorCoverageError("Missing frozen weekly rank source")
+        _pit_rank_snapshot(features, synthetic.tour)
+    elif rank_semantics not in (None,):
+        raise ComparatorCoverageError("Unknown model rank evidence provenance")
 
     feature_names = list(getattr(model, "feature_names", None) or FEATURE_NAMES)
     feature_set = set(feature_names)
@@ -298,7 +306,18 @@ def compare(
     if missing:
         raise ComparatorCoverageError("model feature sources unavailable: " + ", ".join(missing))
 
-    probability = float(model.predict_proba(pd.DataFrame([features], columns=feature_names))[0])
+    inference_frame = pd.DataFrame([features], columns=feature_names)
+    if getattr(model, "context_calibrators", None):
+        # The comparator's synthetic fixture has no verified competition
+        # category. Applying a subgroup model or inventing an ATP tier would
+        # produce misleading "80%" labels, so fail closed until the context is
+        # supplied by a verified pre-match fixture.
+        if not synthetic.tournament_level or not synthetic.tournament:
+            raise ComparatorCoverageError(
+                "Calibrated comparison requires verified tournament context")
+        inference_frame["competition"] = synthetic.tournament_level
+        inference_frame["tournament"] = synthetic.tournament
+    probability = float(model.predict_proba(inference_frame)[0])
     if not math.isfinite(probability) or not 0.0 < probability < 1.0:
         raise ComparatorError("model returned invalid probability")
     p1 = probability

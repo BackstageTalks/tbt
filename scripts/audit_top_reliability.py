@@ -200,6 +200,21 @@ def picked_player_rank_band(row, selection_id, publication=None):
     return "pick_1000_plus"
 
 
+def picked_player_rank_2000_band(row, selection_id, publication=None):
+    """Strictly original-issued selected-player rank, not a refreshed profile."""
+    if publication is not None and issued_snapshot(publication) is None:
+        # Unlike legacy descriptive rank buckets, this new reliability cohort
+        # is never populated from a mutable current player profile.
+        return "rank_unknown"
+    players = ranking_players(row, publication)
+    selected = next((p for p in players if isinstance(p, dict) and
+                     str(p.get("id")) == selection_id), None)
+    rank = number(selected.get("rank")) if selected else None
+    if rank is None or rank <= 0:
+        return "rank_unknown"
+    return "pick_2000_plus" if rank >= 2000 else "pick_below_2000"
+
+
 def confidence(row, publication):
     """Prefer the exact deployed public confidence; legacy rows are conservative.
 
@@ -378,6 +393,7 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
             )
             selected_id = str(pub.get("selection_id") or "")
             picked_rank = picked_player_rank_band(row, selected_id, pub)
+            picked_rank_2000 = picked_player_rank_2000_band(row, selected_id, pub)
             stats = observed_stats(row, pub)
             # BlinQ betting day begins at 06:00 in Slovakia, including DST.
             betting_day = (issued.astimezone(ZoneInfo("Europe/Bratislava")) -
@@ -394,6 +410,13 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
                 "ranking_500": rank_band(row, selected_id, cutoff=500, publication=pub),
                 "ranking_1000": rank_band(row, selected_id, cutoff=1000, publication=pub),
                 "picked_rank": picked_rank,
+                "picked_rank_2000": picked_rank_2000,
+                "picked_rank_2000_confidence": (
+                    f"{picked_rank_2000}/{probability_band(p)}"),
+                "picked_rank_2000_80": (
+                    f"{picked_rank_2000}/"
+                    + ("issued_80_plus" if p is not None and p >= .80
+                       else "issued_below_80" if p is not None else "confidence_unknown")),
                 "stats": stats,
                 "rank_and_stats": f"{picked_rank}/{stats}",
                 "confidence_band": probability_band(p),
@@ -423,7 +446,9 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
     for dimension in ("competition", "itf_grade", "serve_return_evidence",
                       "market_disagreement", "confidence_70_75",
                       "ranking", "ranking_500", "ranking_1000",
-                      "picked_rank", "stats", "rank_and_stats", "confidence_band",
+                      "picked_rank", "picked_rank_2000",
+                      "picked_rank_2000_confidence", "picked_rank_2000_80",
+                      "stats", "rank_and_stats", "confidence_band",
                       "surface_evidence", "rank_and_surface"):
         groups = defaultdict(list)
         for entry in entries:

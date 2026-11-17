@@ -27,7 +27,7 @@ from ..data.wta_season_stats import (
 )
 from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
-from ..models.metrics import evaluate_probabilities
+from ..models.metrics import evaluate_probabilities, wilson_interval
 from ..schemas import MatchRecord
 from .data_quality import audit_history
 from .prediction_quality import subgroup_report, history_band
@@ -57,6 +57,58 @@ WTA_CANDIDATE_FEATURE_NAMES = (
 )
 
 
+
+def _pit_rank_snapshot(features: dict, tour: str) -> dict:
+    """Same verified weekly ranking signal for research train and live serving.
+
+    This does not guess an absolute rank or infer missing rankings from event
+    metadata. Both tour-specific sources use snapshots strictly prior to play.
+    """
+    tour = str(tour or "").lower()
+    if tour not in {"atp", "wta"}:
+        raise ValueError("Invalid tour for point-in-time ranking")
+    known_key = f"{tour}_hist_known_both"
+    diff_key = f"{tour}_hist_rank_advantage"
+    if known_key not in features or diff_key not in features:
+        raise ValueError("Missing frozen weekly ranking source for model")
+    known, diff = float(features[known_key]), float(features[diff_key])
+    if known not in (0., 1.) or not np.isfinite(diff):
+        raise ValueError("Invalid pre-match weekly rank evidence")
+    features["rank_known_both"] = known
+    features["rank_advantage"] = diff if known else 0.
+    return features
+
+
+def _pit_rank_frame_inplace(frame: pd.DataFrame) -> dict:
+    """Apply identical ranking semantics from immutable weekly feature columns.
+
+    The source features were built strictly from prior ranking release dates.
+    Never backfill the raw historical rank field with today's rank.
+    """
+    required = {"tour_atp", "atp_hist_known_both", "wta_hist_known_both",
+                "atp_hist_rank_advantage", "wta_hist_rank_advantage"}
+    if missing := (required - set(frame.columns)):
+        raise ValueError(f"Missing point-in-time weekly rank columns: {sorted(missing)}")
+    tour = frame["tour_atp"].to_numpy(dtype=float)
+    if not np.isfinite(tour).all() or not np.isin(tour, (0., 1.)).all():
+        raise ValueError("Point-in-time rank alignment requires known ATP/WTA tour")
+    atp = tour == 1.
+    known = np.where(atp, frame["atp_hist_known_both"].to_numpy(dtype=float),
+                     frame["wta_hist_known_both"].to_numpy(dtype=float))
+    difference = np.where(atp, frame["atp_hist_rank_advantage"].to_numpy(dtype=float),
+                          frame["wta_hist_rank_advantage"].to_numpy(dtype=float))
+    if not np.isfinite(known).all() or not np.isin(known, (0., 1.)).all():
+        raise ValueError("Invalid weekly known-both rank signal")
+    if not np.isfinite(difference).all():
+        raise ValueError("Invalid weekly rank differences")
+    frame["rank_known_both"] = known
+    frame["rank_advantage"] = np.where(known == 1., difference, 0.)
+    return {"status": "PIT_WEEKLY_ALIGNED",
+            "rows": int(len(frame)),
+            "known_both_rows": int(known.sum()),
+            "previous_unverified_rank_data_ignored": True,
+            "provider_requests": 0}
+
 def _training_progress(phase: str, rows: int) -> None:
     """Stream low-cardinality fit progress and peak RSS to private Actions logs."""
     from time import monotonic
@@ -83,16 +135,26 @@ def _candidate_feature_names(
     wta_rank_history=None,
     wta_season_stats=None,
     atp_surface_opponent_form=False,
+    pit_rank_aligned=False,
 ):
     names = list(PRODUCTION_FEATURE_NAMES)
+    if pit_rank_aligned:
+        # The verified weekly ATP/WTA relative-rank columns are already in the
+        # feature set; including rank_advantage again would count the same
+        # historical rank signal twice, particularly for ITF tail players.
+        names.remove("rank_advantage")
     if atp_surface_opponent_form:
         names.append("atp_surface_opponent_form_diff")
     if atp_leaderboards is not None:
         names += list(ATP_LEADERBOARD_FEATURE_NAMES)
     if atp_rank_history is not None:
-        names += list(ATP_RANK_HISTORY_FEATURE_NAMES)
+        names += [name for name in ATP_RANK_HISTORY_FEATURE_NAMES
+                  if pit_rank_aligned or name not in {
+                      "atp_hist_best_rank_log", "atp_hist_worst_rank_log"}]
     if wta_rank_history is not None:
-        names += list(WTA_RANK_HISTORY_FEATURE_NAMES)
+        names += [name for name in WTA_RANK_HISTORY_FEATURE_NAMES
+                  if pit_rank_aligned or name not in {
+                      "wta_hist_best_rank_log", "wta_hist_worst_rank_log"}]
     if wta_season_stats is not None:
         names += list(WTA_SEASON_FEATURE_NAMES)
     return names
@@ -364,6 +426,17 @@ def _split_serving_refit_by_date(
 def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     """Refit only after promotion approval, consuming the already-used holdout."""
     selected = result.model
+    # A selected context map is part of the validated probability model.
+    # fit_frozen() refits the estimator and legacy calibrators but cannot yet
+    # carry forward its sports-context maps. Never deploy an apparently
+    # approved model with those maps silently dropped or apply a stale map to
+    # a newly fitted estimator. A separate validated serving-refit contract is
+    # required before enabling promotion of context-calibrated candidates.
+    if getattr(selected, "context_calibrators", None):
+        raise ValueError(
+            "Context-calibrated candidate requires independently verified "
+            "serving refit; refusing to discard validated probability maps"
+        )
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
     serving = _new_production_ensemble()
@@ -407,6 +480,8 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
         "production_train_matches": int(len(serving_train)),
         "production_calibration_matches": int(len(serving_calibration)),
         "rank_provenance": selected_metadata.get("rank_provenance"),
+        "rank_feature_source": selected_metadata.get("rank_feature_source"),
+        "rank_alignment": selected_metadata.get("rank_alignment"),
         "independent_serve_return": bool(selected_metadata.get("independent_serve_return", False)),
         "independent_direct_rates": bool(selected_metadata.get("independent_direct_rates", False)),
         "point_weighted_quality": bool(selected_metadata.get("point_weighted_quality", False)),
@@ -996,6 +1071,113 @@ def paired_evidence_holdout_diagnostics(test, candidate_p, champion_p=None):
             }}
 
 
+
+def paired_rank_reliability_holdout(test, candidate_p, champion_p=None):
+    """Read-only accuracy of *published* confidence by verified absolute rank.
+
+    Unlike raw rank_advantage, the weekly worst-rank magnitude distinguishes
+    #50/#100 from #2500/#5000. No post-match ranking refresh, bookmaker quote,
+    or publication outcome is used to select model parameters here.
+    """
+    if test.empty:
+        return {"status": "NO_HOLDOUT", "groups": {}}
+    required = {"tour_atp", "data_depth", "rank_known_both",
+                "atp_hist_worst_rank_log", "wta_hist_worst_rank_log", "target"}
+    missing = required - set(test.columns)
+    if missing:
+        raise ValueError("Missing PIT rank audit columns: " + ", ".join(sorted(missing)))
+    n = len(test)
+    candidate = np.asarray(candidate_p, dtype=float)
+    champion = None if champion_p is None else np.asarray(champion_p, dtype=float)
+    if (candidate.shape != (n,) or not np.isfinite(candidate).all()
+            or (champion is not None
+                and (champion.shape != (n,) or not np.isfinite(champion).all()))):
+        raise ValueError("Rank reliability audit needs paired finite fixture probabilities")
+    labels = test.target.to_numpy(dtype=int)
+    if not np.isin(labels, (0, 1)).all():
+        raise ValueError("Rank reliability labels must be binary")
+    tour = test.tour_atp.to_numpy(dtype=float)
+    depth = test.data_depth.to_numpy(dtype=float)
+    known = test.rank_known_both.to_numpy(dtype=float)
+    if (not np.isin(tour, (0., 1.)).all()
+            or not np.isin(known, (0., 1.)).all()
+            or not np.isfinite(depth).all()
+            or not ((depth >= 0.) & (depth <= 1.)).all()):
+        raise ValueError("Rank reliability requires valid PIT tour/depth evidence")
+    log_rank = np.where(tour == 1.,
+                        test.atp_hist_worst_rank_log.to_numpy(dtype=float),
+                        test.wta_hist_worst_rank_log.to_numpy(dtype=float))
+    if not np.isfinite(log_rank).all() or (log_rank[known == 1.] <= 0).any():
+        raise ValueError("Invalid point-in-time absolute rank evidence")
+    # Original rank value is preserved only as a logarithm of a pre-match
+    # snapshot. Neither player-side order nor post-match ranking is used.
+    worst_rank = np.expm1(np.clip(log_rank, 0., np.log1p(100000.)))
+    groups = {
+        "all": np.ones(n, dtype=bool),
+        "weekly_rank_pair_missing": known == 0.,
+        "weekly_rank_pair_known": known == 1.,
+        "atp_rank_2000plus": (tour == 1.) & (known == 1.) & (worst_rank >= 2000.),
+        "atp_rank_below_2000": (tour == 1.) & (known == 1.) & (worst_rank < 2000.),
+        "wta_rank_1000plus": (tour == 0.) & (known == 1.) & (worst_rank >= 1000.),
+        "wta_rank_below_1000": (tour == 0.) & (known == 1.) & (worst_rank < 1000.),
+    }
+    candidate_public = .5 + (candidate - .5) * depth
+    champion_public = (.5 + (champion - .5) * depth) if champion is not None else None
+
+    def scored(mask, raw, public):
+        if raw is None:
+            return None
+        actual = labels[mask]
+        if not len(actual):
+            return None
+        p, shown = raw[mask], public[mask]
+        correct = (p >= .5) == actual
+        confidence = np.maximum(shown, 1-shown)
+        wins = int(correct.sum())
+        return {
+            "n": int(len(actual)), "wins": wins,
+            "accuracy": float(correct.mean()),
+            "mean_published_confidence": float(confidence.mean()),
+            "published_calibration_gap": float(correct.mean() - confidence.mean()),
+            "published_brier": float(np.mean((shown-actual)**2)),
+            "accuracy_wilson95": wilson_interval(wins, len(actual)),
+        }
+
+    report = {}
+    for key, mask in groups.items():
+        count = int(mask.sum())
+        if not count:
+            report[key] = {"n": 0, "status": "INSUFFICIENT_EVIDENCE"}
+            continue
+        floor_rows = {}
+        for threshold in (.60, .70, .80):
+            published = np.maximum(candidate_public, 1-candidate_public)
+            if champion_public is not None:
+                published = np.maximum(published,
+                                       np.maximum(champion_public, 1-champion_public))
+            anchor = mask & (published >= threshold)
+            size = int(anchor.sum())
+            floor_rows[str(threshold)] = {
+                "selection": "union_published_confidence_no_threshold_escape",
+                "candidate": scored(anchor, candidate, candidate_public),
+                "champion": scored(anchor, champion, champion_public),
+                "status": ("DESCRIPTIVE" if size >= 100 else "SMALL_SAMPLE"),
+            }
+        report[key] = {
+            "n": count, "status": ("DESCRIPTIVE" if count >= 100 else "SMALL_SAMPLE"),
+            "candidate": scored(mask, candidate, candidate_public),
+            "champion": scored(mask, champion, champion_public),
+            "thresholds": floor_rows,
+        }
+    return {
+        "status": "READ_ONLY_RANK_STRATIFIED_HOLDOUT_NOT_TOP_BET_VALIDATION",
+        "rank_source": "weekly_strictly_pre_match",
+        "absolute_rank_thresholds_are_diagnostics_not_probability_caps": True,
+        "model_selection_uses_no_holdout_labels": True,
+        "actual_issued_TOP_and_odds_not_verified_by_this_report": True,
+        "groups": report,
+    }
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -1091,6 +1273,26 @@ def train_from_matches(
     replay_rows = len(frame)
     frame = _candidate_learning_window(frame, training_profile)
 
+    import os
+    context_flag = os.environ.get("BLINQ_CONTEXT_CALIBRATION", "false").lower()
+    if context_flag not in {"true", "false"}:
+        raise ValueError("Invalid BLINQ_CONTEXT_CALIBRATION flag")
+    if context_flag == "true" and training_profile != "top-7.2.1":
+        raise ValueError("Context calibration is candidate-only top-7.2.1")
+    rank_alignment = {"status": "LEGACY_ARTIFACT_SEMANTICS_UNCHANGED"}
+    if context_flag == "true":
+        # Existing current-rank fields have very different provenance and
+        # availability across train, holdout and live. Use only pinned weekly
+        # archives already replayed before the match for this research model.
+        if atp_rank_history is None or wta_rank_history is None:
+            raise ValueError("Context candidate requires both historical weekly rank archives")
+        # Keep the original verifier-cleaned MatchRecord ranks ONLY for the
+        # champion baseline, which must be scored under its own frozen feature
+        # contract on these very same fixtures.
+        frame["legacy_rank_advantage"] = frame["rank_advantage"].to_numpy(copy=True)
+        frame["legacy_rank_known_both"] = frame["rank_known_both"].to_numpy(copy=True)
+        rank_alignment = _pit_rank_frame_inplace(frame)
+
     # -------------------------------------------------
     # Strict out-of-time evaluation. The smooth candidate reclaims history
     # before the final eligible holdout instead of keeping a stale cal cutoff.
@@ -1116,6 +1318,7 @@ def train_from_matches(
             atp_leaderboards=atp_leaderboards, atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history, wta_season_stats=wta_season_stats,
             atp_surface_opponent_form=True,
+            pit_rank_aligned=context_flag == "true",
         )
         diagnostics = input_diagnostics({"train": train, "calibration": calibration}, names)
         require_informative_inputs(diagnostics)
@@ -1130,6 +1333,7 @@ def train_from_matches(
                     wta_rank_history=wta_rank_history,
                     wta_season_stats=wta_season_stats,
                     atp_surface_opponent_form=(training_profile in {"top-7.2.1", "accuracy-7.2.2"}),
+                    pit_rank_aligned=context_flag == "true",
                 ), objective=objective,
             )
             if (
@@ -1153,7 +1357,11 @@ def train_from_matches(
         training_profile in {"top-7.2.1", "accuracy-7.2.2"}
     )
     evaluation_model.smooth_calibration_only = training_profile == "top-7.2.1"
+    evaluation_model.context_calibration_selection = context_flag == "true"
     evaluation_model.fit(train, calibration)
+    if context_flag == "true":
+        evaluation_model.metadata["rank_feature_source"] = "point_in_time_weekly"
+        evaluation_model.metadata["rank_alignment"] = rank_alignment
 
     _training_progress("fit_estimators_complete", len(train))
     if training_profile in {"top-7.2.1", "accuracy-7.2.2"}:
@@ -1165,6 +1373,14 @@ def train_from_matches(
             test
         )
     )
+
+    context_holdout = None
+    if evaluation_model.context_calibration_selection:
+        from copy import copy
+        from ..models.context_calibration import holdout_report
+        parent_model = copy(evaluation_model)
+        parent_model.context_calibrators = {}
+        context_holdout = holdout_report(test, parent_model.predict_proba(test), test_p)
 
     elo_p = (
         test[
@@ -1234,8 +1450,18 @@ def train_from_matches(
         ),
     }
 
+    production_frame = test
+    champion_rank_source = ((getattr(production_model, "metadata", None) or {})
+                            .get("rank_feature_source") if production_model is not None else None)
+    if production_model is not None and len(test) and context_flag == "true":
+        if champion_rank_source in (None, ""):
+            production_frame = test.copy()
+            production_frame["rank_advantage"] = production_frame["legacy_rank_advantage"]
+            production_frame["rank_known_both"] = production_frame["legacy_rank_known_both"]
+        elif champion_rank_source != "point_in_time_weekly":
+            raise ValueError("Unknown champion rank provenance in paired holdout")
     production_probabilities = (
-        production_model.predict_proba(test)
+        production_model.predict_proba(production_frame)
         if production_model is not None and len(test) else None
     )
     production_metrics = (
@@ -1251,6 +1477,13 @@ def train_from_matches(
         for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
     }
     report = {
+        "context_calibration_holdout": context_holdout,
+        "rank_alignment": rank_alignment,
+        "paired_champion_rank_feature_source": (champion_rank_source or "legacy"),
+        "paired_baseline_rank_features_preserved": context_flag == "true",
+        "rank_reliability_holdout": (
+            paired_rank_reliability_holdout(test, test_p, production_probabilities)
+            if context_flag == "true" else None),
         "training_profile": training_profile,
         "learning_window": {
             "start_inclusive_utc": "2024-01-01T00:00:00Z" if training_profile in {"top-7.2.1", "accuracy-7.2.2"} else None,
@@ -1267,7 +1500,7 @@ def train_from_matches(
         "input_diagnostics": diagnostics,
         "top_market_validation": {
             "status": "NOT_EVALUATED",
-            "required": "Independent pre-match odds >=1.50, at most 10 picks/day, no forced fill",
+            "required": "Independent pre-match odds >=1.50, at most 5 picks/day, no forced fill",
             "promotion_ready_for_top": False,
         },
         "production_holdout": production_metrics,
@@ -1391,6 +1624,8 @@ def train_from_matches(
         ),
         "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
+            "context_calibration_validation": (evaluation_model.metadata or {}).get("context_calibration_validation"),
+            "context_calibration_methods": (evaluation_model.metadata or {}).get("context_calibration_methods"),
             "smooth_high_confidence_validation": (evaluation_model.metadata or {}).get("smooth_high_confidence_validation"),
             "calibration_refit_on_selection": (evaluation_model.metadata or {}).get("calibration_refit_on_selection"),
             "accuracy_blend_validation": (evaluation_model.metadata or {}).get("accuracy_blend_validation"),
