@@ -81,7 +81,7 @@ jobs:
             --source-dir "$PINNED_ATP_DIR" \
             --output work/source/atp_worldtour.csv \
             --report work/source/source_report.json
-          echo 'd7ea6898fcdb42e58f3342fd3deac506ba4f2872493d76cde4db77a3d8463bc4  work/source/atp_worldtour.csv' | sha256sum -c
+          echo 'a964520ffb19c2f530d3599f8b5e88744817864dd6a64e547fc8fa23ebe05a87  work/source/atp_worldtour.csv' | sha256sum -c
       - name: Download all current private CDB partitions and verify release plus two manifests
         shell: bash
         run: |
