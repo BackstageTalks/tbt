@@ -62,6 +62,40 @@ class CloseoutContractTests(unittest.TestCase):
             self.assertEqual(mod.STATE["reason"], "daily_quota_exhausted")
 
 
+    def test_separate_2300_archive_quota_is_preserved_before_request(self):
+        utc = datetime(2026, 11, 17, 22, 0, tzinfo=timezone.utc)
+        with mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod.urllib.request, "urlopen",
+                               side_effect=AssertionError("Must not consume archive reserve")):
+            mod.STATE["remaining"] = mod.EVENING_ARCHIVE_REMAINING_RESERVE
+            self.assertIsNone(mod.request("/sports/tennis/events"))
+            self.assertEqual(mod.STATE["calls"], 0)
+            self.assertEqual(mod.STATE["reason"], "evening_archive_quota_reserved")
+
+    def test_closeout_stops_at_reserved_provider_remaining_and_no_retry(self):
+        utc = datetime(2026, 11, 17, 22, 0, tzinfo=timezone.utc)
+        class Response:
+            headers = {"X-Daily-Remaining": str(mod.EVENING_ARCHIVE_REMAINING_RESERVE),
+                       "X-Daily-Reset": "2000000000"}
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self, *args):
+                return b'{"events":[]}'
+        def reply(*args, **kwargs):
+            return Response()
+        with mock.patch.object(mod, "now", return_value=utc), \
+             mock.patch.object(mod.time, "sleep"), \
+             mock.patch.object(mod.urllib.request, "urlopen", side_effect=reply) as send:
+            mod.STATE["remaining"] = mod.EVENING_ARCHIVE_REMAINING_RESERVE + 1
+            self.assertEqual(mod.request("/sports/tennis/events"), {"events": []})
+            self.assertIsNone(mod.request("/sports/tennis/events/123/markets"))
+            self.assertEqual(send.call_count, 1)
+            self.assertEqual(mod.STATE["calls"], 1)
+            self.assertEqual(mod.STATE["remaining"], mod.EVENING_ARCHIVE_REMAINING_RESERVE)
+            self.assertEqual(mod.STATE["reason"], "evening_archive_quota_reserved")
+
     def test_unique_priced_tennis_markets_prioritized_over_generic_odds(self):
         self.assertEqual(
             mod.SPECIAL_MARKETS,
