@@ -2648,7 +2648,11 @@ def internal_moviodds_stats_worker(req):
         mode = str((getattr(req, "params", {}) or {}).get("mode") or "all").lower()
         if mode not in ("all", "live", "final"):
             return response({"error": "invalid_collection_mode"}, 400)
-        result = collect(collect_live=mode != "final", collect_finished=mode != "live")
+        # Accept a provider key only after validating the private worker token.
+        # It is never copied to a URL, a feed or an application log.
+        worker_key = (getattr(req, "headers", {}) or {}).get("X-MoviOdds-API-Key")
+        result = collect(collect_live=mode != "final", collect_finished=mode != "live",
+                         api_key=worker_key)
         return response(result, 200 if result.get("ok") else 503)
     except (ValueError, TypeError):
         return response({"error": "invalid_moviodds_stats_request"}, 400)

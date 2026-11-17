@@ -193,3 +193,12 @@ Google Drive archivácia a pôvodný Drive Inbox režim zostávajú oddelené.
 MoviOdds import je aktívny iba keď sa explicitly dispatchuje
 \`cdb-drive-inbox.yml\` s \`source_mode=moviodds\`; implicitný režim je
 vždy \`drive\`. Žiadne nové tenisové API quota čerpanie.
+
+
+## MoviOdds authenticated capture and Drive ordering (17 November 2026)
+
+The current upstream docs require `X-API-Key`. The backend-only `MOVIODDS_API_KEY` is required for the morning pipeline and LIVE/FINISHED collectors. Existing GitHub Actions secrets are forwarded to the already worker-token-authenticated API only as `X-MoviOdds-API-Key`; Azure can alternatively use its private environment setting. Never include credentials in URLs, logs, a public page, or the source repository. Without a key the source fails closed, leaving API Pro and PropLine unaffected.
+
+The existing external Match Status clock still runs, but the FINISHED MoviOdds collector only calls the provider at **04:00 and 16:00 UTC** (first 15 minutes of the hour), overlapping the current and preceding two UTC days. The Drive export now starts at **05:00 UTC**, after the 04:00 finished post-day scan. Missing verified scans still return 503 instead of silently fabricating zero rows. The read-only CDB staging remains at 05:00 UTC and never imports. MoviOdds substeps remain isolated via `continue-on-error`, with distinct diagnostic codes for missing keys and provider 401/429.
+
+The MoviOdds public pricing page and API documentation currently differ about Free monthly limits. Conservative first-party cadence reduces use, but it is **not** proof of account-wide available budget; inspect the provider account and external consumers. Automatic MoviOdds CDB writes stay on quality hold while source quality, canonical lock/CAS and independent read-back are checked.
