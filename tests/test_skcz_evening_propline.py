@@ -161,6 +161,20 @@ class PropLineEvening(unittest.TestCase):
         self.assertEqual(most["verified_pairs"][0]["settlement"],
                          "bookmaker_rules_not_yet_verified")
 
+    def test_most_aces_set_specific_is_not_full_match(self):
+        data = example()
+        data["events"][0]["bookmakers"][0]["markets"].append({
+            "key": "most_aces_first_set", "outcomes": [
+                {"name": "Alexander Zverev", "price": -120},
+                {"name": "Ben Shelton", "price": 100},
+            ],
+        })
+        r = research(data)
+        self.assertEqual(r["exact_aces_pairs"], 1)
+        self.assertFalse(any(m["kind"] == "most_aces_match"
+                             for e in r["events_in_target_window"]
+                             for m in e["aces_markets"]))
+
     def test_price_research_contains_no_source_secrets(self):
         r = research()
         import json
