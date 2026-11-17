@@ -6,6 +6,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
@@ -80,6 +81,10 @@ class TennisEnsemble:
         self.evidence_calibrators: dict[str, ProbabilityCalibrator] = {}
         self.version = datetime.now(timezone.utc).strftime("v201-%Y%m%dT%H%M%S%fZ")
         self.metadata: dict[str, Any] = {}
+        # Disabled for legacy and 7.2.1; candidate-only research opt-in.
+        self.time_decay_variant_search = False
+        self.training_half_life_days: int | None = None
+        self.training_weight_selection: dict[str, Any] | None = None
         self.fitted = False
 
     def _matrix(self, frame):
@@ -520,6 +525,134 @@ class TennisEnsemble:
             "holdout_or_issued_outcomes_used": False,
         }
 
+
+    @staticmethod
+    def _age_sample_weights(train: pd.DataFrame, half_life_days: int | None):
+        """Fit-time decay anchored to the latest TRAINING match, not wall clock."""
+        if half_life_days not in (None, 180, 365):
+            raise ValueError("Unsupported candidate training half-life")
+        if half_life_days is None:
+            return None, {"family": "uniform", "half_life_days": None}
+        dates = pd.to_datetime(train["scheduled_at"], utc=True, errors="coerce")
+        if dates.isna().any() or dates.empty:
+            raise ValueError("Invalid training timestamps for time weighting")
+        cutoff = dates.max()
+        age_days = (cutoff - dates).dt.total_seconds().to_numpy(dtype=float) / 86400.
+        if not np.isfinite(age_days).all() or (age_days < 0).any():
+            raise ValueError("Invalid time-decay ages")
+        weights = np.exp2(-age_days / half_life_days)
+        # Preserve comparable regularization strength in LogisticRegression.
+        # Both orientations receive the SAME normalized per-match weight.
+        weights /= weights.mean()
+        if not np.isfinite(weights).all() or (weights <= 0).any():
+            raise ValueError("Degenerate training weights")
+        return weights, {
+            "family": "exponential_half_life",
+            "half_life_days": half_life_days,
+            "cutoff_utc": cutoff.isoformat(),
+            "normalization": "mean_one_on_original_matches",
+            "min_weight": float(weights.min()),
+            "max_weight": float(weights.max()),
+            "effective_matches": float(weights.sum() ** 2 / np.square(weights).sum()),
+        }
+
+    def _fit_estimators(self, train: pd.DataFrame, half_life_days: int | None):
+        """Reuse the original symmetric matrix contract for both estimators."""
+        weights, evidence = self._age_sample_weights(train, half_life_days)
+        left = self._matrix(train)
+        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
+        x[:len(train)] = left
+        del left
+        x[len(train):] = self._matrix(swap_frame(train))
+        target = train.target.to_numpy(dtype=int)
+        y = np.concatenate((target, 1 - target), axis=0)
+        if weights is None:
+            # Deliberately identical to the pre-experiment legacy fit calls.
+            self.linear.fit(x, y)
+            self.boost.fit(x, y)
+        else:
+            doubled = np.concatenate((weights, weights))
+            self.linear.fit(
+                x, y, scale__sample_weight=doubled,
+                model__sample_weight=doubled,
+            )
+            self.boost.fit(x, y, sample_weight=doubled)
+        return evidence
+
+    def _select_training_half_life(self, train: pd.DataFrame):
+        """Compare 0/365/180 on earlier TRAIN-only UTC days, never calibration/test."""
+        days = pd.to_datetime(train["scheduled_at"], utc=True).dt.normalize()
+        boundaries = np.flatnonzero(days.ne(days.shift()).to_numpy())
+        eligible = [int(i) for i in boundaries
+                    if i >= 300 and len(train) - i >= 120]
+        if not eligible:
+            self.training_weight_selection = {
+                "status": "INSUFFICIENT_TRAIN_ONLY_DAYS",
+                "selected_half_life_days": None,
+                "holdout_used": False,
+            }
+            return None
+        split = min(eligible, key=lambda i: abs(i - .8 * len(train)))
+        earlier, later = train.iloc[:split], train.iloc[split:]
+        labels = later.target.to_numpy(dtype=float)
+        dates = days.iloc[split:].to_numpy()
+        losses, metrics = {}, {}
+        for half_life in (None, 365, 180):
+            trial = TennisEnsemble(feature_names=self.feature_names,
+                                   objective=self.objective)
+            trial.excluded_features = set(self.excluded_features)
+            trial.linear = clone(self.linear)
+            trial.boost = clone(self.boost)
+            trial._fit_estimators(earlier, half_life)
+            linear, boost = trial._symmetric_pair(later)
+            # Fixed 50/50 raw blend: tuning/calibration happens later on
+            # disjoint days; do not reuse later labels to choose blend weights.
+            p = np.clip(.5 * (linear + boost), .01, .99)
+            loss = -labels * np.log(p) - (1 - labels) * np.log1p(-p)
+            key = "uniform" if half_life is None else str(half_life)
+            losses[key] = loss
+            metrics[key] = {
+                "log_loss": float(loss.mean()),
+                "brier": float(np.mean(np.square(p - labels))),
+            }
+        baseline = metrics["uniform"]
+        selected, best_gain = None, 0.
+        for half_life in (365, 180):
+            key = str(half_life)
+            per_day = np.array([
+                float((losses["uniform"][dates == day] -
+                       losses[key][dates == day]).mean())
+                for day in np.unique(dates)
+            ])
+            stderr = (float(per_day.std(ddof=1) / np.sqrt(len(per_day)))
+                      if len(per_day) > 1 else float("inf"))
+            gain = baseline["log_loss"] - metrics[key]["log_loss"]
+            metrics[key]["gain_vs_uniform"] = float(gain)
+            metrics[key]["daily_gain_stderr"] = (
+                stderr if np.isfinite(stderr) else None
+            )
+            # One-sided cautious screen across days, with a practical margin.
+            if (gain > max(.002, 1.96 * stderr)
+                    and metrics[key]["brier"] <= baseline["brier"] + 1e-12
+                    and gain > best_gain):
+                selected, best_gain = half_life, gain
+        self.training_weight_selection = {
+            "status": "TRAIN_ONLY_SELECTED" if selected else "BASELINE_RETAINED",
+            "selected_half_life_days": selected,
+            "candidate_metrics": metrics,
+            "fit_rows": len(earlier),
+            "validation_rows": len(later),
+            "validation_days": int(len(np.unique(dates))),
+            "fit_cutoff_utc": pd.to_datetime(earlier.scheduled_at, utc=True).max().isoformat(),
+            "validation_start_utc": pd.to_datetime(later.scheduled_at, utc=True).min().isoformat(),
+            "comparison": "same matches, raw symmetric 50/50 linear+boost; no calibration",
+            "min_log_loss_gain": .002,
+            "daily_stderr_multiplier": 1.96,
+            "holdout_used": False,
+            "market_odds_used": False,
+        }
+        return selected
+
     def fit(self, train_frame, calibration_frame):
         self.fitted = False
         if len(train_frame) < 300:
@@ -538,19 +671,13 @@ class TennisEnsemble:
             cal_start = pd.to_datetime(cal.scheduled_at, utc=True).min().normalize()
             if train_end >= cal_start or set(train.match_id) & set(cal.match_id):
                 raise ValueError("Training and calibration must be disjoint whole UTC days")
-        # Preserve BOTH orientations of every original training match.
-        # Materialize only their numeric feature matrices: duplicating a full
-        # ~million-row pandas training frame (including metadata columns) used
-        # substantial extra RAM on the protected GitHub runner.
-        left = self._matrix(train)
-        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
-        x[:len(train)] = left
-        del left
-        x[len(train):] = self._matrix(swap_frame(train))
-        target = train.target.to_numpy(dtype=int)
-        y = np.concatenate((target, 1 - target), axis=0)
-        self.linear.fit(x, y)
-        self.boost.fit(x, y)
+        if getattr(self, "time_decay_variant_search", False):
+            self.training_half_life_days = self._select_training_half_life(train)
+        else:
+            self.training_weight_selection = None
+        weighting = self._fit_estimators(
+            train, getattr(self, "training_half_life_days", None)
+        )
         self.blend_weight, self.elo_weight = .5, 0.
         self.atp_blend_weight, self.atp_elo_weight = None, None
         self.calibrator = ProbabilityCalibrator()
@@ -559,7 +686,9 @@ class TennisEnsemble:
         split = calibration_split(cal) if len(cal) >= 120 else None
         self.metadata = {"objective": self.objective, "feature_names": self.feature_names,
                          "excluded_features": sorted(self.excluded_features),
-                         "symmetric_inference": True, "training_matches": len(train)}
+                         "symmetric_inference": True, "training_matches": len(train),
+                         "training_weighting": weighting,
+                         "training_weight_selection": self.training_weight_selection}
         if split is not None:
             linear, boost = self._symmetric_pair(cal)
             elo = cal.elo_probability.to_numpy(dtype=float)
@@ -711,6 +840,7 @@ class TennisEnsemble:
         calibrator_kind: str,
         tour_calibrator_kinds: dict[str, str] | None = None,
         evidence_calibrator_kinds: dict[str, str] | None = None,
+        training_half_life_days: int | None = None,
         atp_blend_weight: float | None = None,
         atp_elo_weight: float | None = None,
     ):
@@ -765,19 +895,8 @@ class TennisEnsemble:
         if train_end >= cal_start or set(train.match_id) & set(cal.match_id):
             raise ValueError("Training and calibration must be disjoint whole UTC days")
 
-        # Preserve BOTH orientations of every original training match.
-        # Materialize only their numeric feature matrices: duplicating a full
-        # ~million-row pandas training frame (including metadata columns) used
-        # substantial extra RAM on the protected GitHub runner.
-        left = self._matrix(train)
-        x = np.empty((2 * len(train), left.shape[1]), dtype=left.dtype)
-        x[:len(train)] = left
-        del left
-        x[len(train):] = self._matrix(swap_frame(train))
-        target = train.target.to_numpy(dtype=int)
-        y = np.concatenate((target, 1 - target), axis=0)
-        self.linear.fit(x, y)
-        self.boost.fit(x, y)
+        self.training_half_life_days = training_half_life_days
+        weighting = self._fit_estimators(train, training_half_life_days)
 
         self.blend_weight = float(blend_weight)
         self.elo_weight = float(elo_weight)
@@ -850,6 +969,7 @@ class TennisEnsemble:
                 k: v.kind for k, v in self.evidence_calibrators.items()
             },
             "frozen_serving_refit": True,
+            "training_weighting": weighting,
             "serving_calibration_matches": len(cal),
         }
         self.fitted = True
