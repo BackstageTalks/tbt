@@ -28,6 +28,26 @@ FILES = {
     "atp_matches_2026.csv": ("ATP", 773871),
     "wta_matches_2026.csv": ("WTA", 739770),
 }
+
+# Two immutable, independently checked releases. Never infer source identity
+# from a changing "main" branch; each workflow pins Git blob hashes separately.
+FILES_WEEKLY_20261116 = {
+    "atp_matches_2025.csv": ("ATP", 832145),
+    "wta_matches_2025.csv": ("WTA", 793966),
+    "atp_matches_2026.csv": ("ATP", 781669),
+    "wta_matches_2026.csv": ("WTA", 743966),
+}
+SOURCE_FILE_VERSIONS = {
+    "2026-11-09": FILES,
+    "2026-11-16": FILES_WEEKLY_20261116,
+}
+
+
+def _files_for_revision(revision: str):
+    if revision not in SOURCE_FILE_VERSIONS:
+        raise ValueError("Unrecognized pinned HF source revision")
+    return SOURCE_FILE_VERSIONS[revision]
+
 REQUIRED = {"match_id", "tourney_name", "surface", "round", "best_of",
             "winner_name", "loser_name", "score", "start_time_utc",
             "w_ace", "w_df", "l_ace", "l_df", "w_svpt", "w_1stIn",
@@ -108,7 +128,7 @@ def completed_score(value, best_of):
     return sets
 
 
-def audit(source, index_file, history, out):
+def audit(source, index_file, history, out, *, source_revision="2026-11-09"):
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     source = Path(source)
@@ -140,7 +160,7 @@ def audit(source, index_file, history, out):
     staged_ids = set()
     sha_sources = {}
     source_ids = set()
-    for file, (tour, expected_bytes) in FILES.items():
+    for file, (tour, expected_bytes) in _files_for_revision(source_revision).items():
         path = source / file
         if not path.is_file() or path.stat().st_size != expected_bytes:
             raise ValueError("Pinned source bytes / inventory mismatch: " + file)
@@ -310,6 +330,7 @@ def audit(source, index_file, history, out):
     report = {
         "schema": 1, "status": "READ_ONLY_HF_TO_CURRENT_CDB_NULL_AUDIT",
         "canonical_rows_checked": len(canonical),
+        "source_revision": source_revision,
         "pinned_source_sha256": dict(sorted(sha_sources.items())),
         "index_sha256": INDEX_SHA,
         "counts": dict(sorted(counts.items())),
@@ -336,8 +357,9 @@ def main():
     parser = argparse.ArgumentParser()
     for name in ("source-dir", "index", "history-dir", "out"):
         parser.add_argument("--" + name, required=True)
+    parser.add_argument("--source-revision", choices=tuple(SOURCE_FILE_VERSIONS), default="2026-11-09")
     a = parser.parse_args()
-    audit(a.source_dir, a.index, a.history_dir, a.out)
+    audit(a.source_dir, a.index, a.history_dir, a.out, source_revision=a.source_revision)
 
 
 if __name__ == "__main__":
