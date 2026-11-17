@@ -11,12 +11,14 @@ import gzip
 import hashlib
 import json
 import math
+import urllib.error
 import re
 import urllib.parse
 import urllib.request
 from typing import Any
 
 from .admin_storage import AdminStorageUnavailable, _table
+from .moviodds_auth import headers, MoviOddsAuthError, MoviOddsQuotaError
 
 TABLE = "BlinQMoviOddsStats"
 ROOT = "https://moviodds.com"
@@ -32,14 +34,19 @@ def _when(value: Any) -> datetime | None:
     return value.astimezone(timezone.utc) if value.tzinfo is not None else None
 
 
-def _get(path: str, *, params: dict[str, str], opener=None) -> dict:
+def _get(path: str, *, params: dict[str, str], opener=None,
+         api_key: str | None = None) -> dict:
     url = ROOT + path + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers={
-        "Accept": "application/json",
-        "Accept-Encoding": "gzip",
-        "User-Agent": "BlinQ-StatsArchive/1.0",
-    })
-    with (opener or urllib.request.urlopen)(req, timeout=20) as response:
+    req = urllib.request.Request(url, headers=headers("BlinQ-StatsArchive/1.0", api_key=api_key))
+    try:
+        response = (opener or urllib.request.urlopen)(req, timeout=20)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            raise MoviOddsAuthError("moviodds_api_key_rejected") from None
+        if exc.code == 429:
+            raise MoviOddsQuotaError("moviodds_provider_quota_reached") from None
+        raise
+    with response as response:
         body = response.read(MAX_BYTES + 1)
         if len(body) > MAX_BYTES:
             raise ValueError("MoviOdds stats response too large")
@@ -206,7 +213,8 @@ def save_final_scan_receipt(table, *, date_utc: str, raw_count: int,
 
 
 def collect(*, now: datetime | None = None, opener=None, table=None,
-            collect_live: bool = True, collect_finished: bool = True) -> dict:
+            collect_live: bool = True, collect_finished: bool = True,
+            api_key: str | None = None) -> dict:
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
         raise ValueError("MoviOdds requires an aware timestamp")
@@ -217,13 +225,13 @@ def collect(*, now: datetime | None = None, opener=None, table=None,
     if collect_live:
         try:
             data = _get("/odds", params={"sport": "tennis", "in_play": "1",
-                                         "groups": "67", "stats": "1"}, opener=opener)
+                                         "groups": "67", "stats": "1"}, opener=opener, api_key=api_key)
             if not isinstance(data.get("matches"), list):
                 raise ValueError("Missing live matches")
             report["live"] = save_observations(table, data["matches"],
                                                 completed=False, collected_at=now)
         except Exception as exc:
-            report["errors"].append("live_" + type(exc).__name__)
+            report["errors"].append("live_" + (str(exc) if isinstance(exc, (MoviOddsAuthError, MoviOddsQuotaError)) else type(exc).__name__))
     if collect_finished:
         # Collect current and the prior two UTC days to recover late provider
         # indexing and autonomous Drive retry after transient source outages.
@@ -232,7 +240,7 @@ def collect(*, now: datetime | None = None, opener=None, table=None,
             key = day.isoformat()
             try:
                 data = _get("/results", params={"sport": "tennis", "date": key,
-                                                "stats": "1"}, opener=opener)
+                                                "stats": "1"}, opener=opener, api_key=api_key)
                 if not isinstance(data.get("results"), list):
                     raise ValueError("Missing finished results")
                 report["final"][key] = save_observations(
@@ -241,6 +249,11 @@ def collect(*, now: datetime | None = None, opener=None, table=None,
                     table, date_utc=key, raw_count=len(data["results"]),
                     accepted_count=report["final"][key]["valid"],
                     collected_at=now)
+            except (MoviOddsAuthError, MoviOddsQuotaError) as exc:
+                # A rejected key or exhausted account budget applies to every day.
+                # No blind retry against the next two dates; preserve their missing receipts.
+                report["errors"].append("results_" + key + "_" + str(exc))
+                break
             except Exception as exc:
                 report["errors"].append("results_" + key + "_" + type(exc).__name__)
     report["ok"] = not report["errors"]

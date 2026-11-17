@@ -10,6 +10,7 @@ from __future__ import annotations
 import gzip
 import json
 import math
+import urllib.error
 import re
 import unicodedata
 import urllib.parse
@@ -18,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from tbt.services.market_selection import extract_match_winner_odds
+from tbt.services.moviodds_auth import headers, MoviOddsAuthError, MoviOddsQuotaError
 from tbt.services.projection_odds import extract_match_total_odds, extract_player_total_ou
 
 BASE_URL = "https://moviodds.com/odds"
@@ -95,10 +97,17 @@ def _fetch_board(*, opener=None) -> dict:
         "sport": "tennis", "groups": ",".join(GROUPS),
     })
     request = urllib.request.Request(
-        url, headers={"Accept": "application/json", "Accept-Encoding": "gzip",
-                      "User-Agent": "BlinQ-MoviOdds-Fallback/1.0"},
+        url, headers=headers("BlinQ-MoviOdds-Fallback/1.0"),
     )
-    with (opener or urllib.request.urlopen)(request, timeout=10) as response:
+    try:
+        response = (opener or urllib.request.urlopen)(request, timeout=10)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 401:
+            raise MoviOddsAuthError("moviodds_api_key_rejected") from None
+        if exc.code == 429:
+            raise MoviOddsQuotaError("moviodds_provider_quota_reached") from None
+        raise
+    with response as response:
         body = response.read(MAX_RESPONSE_BYTES + 1)
         if len(body) > MAX_RESPONSE_BYTES:
             raise ValueError("MoviOdds response exceeds safety limit")
@@ -260,8 +269,10 @@ def discover_moviodds_fallback(
         try:
             board = _fetch_board(opener=opener)
             report["requests"] = 1
-        except (OSError, ValueError, json.JSONDecodeError, UnicodeError):
+        except (OSError, ValueError, json.JSONDecodeError, UnicodeError) as exc:
             report["errors"] += 1
+            report["reason"] = (str(exc) if isinstance(exc, (MoviOddsAuthError, MoviOddsQuotaError))
+                                else type(exc).__name__)
             return {}, report
     if not isinstance(board, dict) or board.get("warming") is True:
         report["errors"] += 1

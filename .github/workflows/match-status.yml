@@ -45,17 +45,26 @@ jobs:
           # A 503 with provider_errors now fails this job rather than reporting an empty PASS.
 
       - name: Capture finalized MoviOdds tennis statistics in DB
-        # Reuse the existing 30-minute external status clock; API Pro is separate.
+        # External clock remains unchanged; collect only at 04/16 UTC to bound provider usage.
         continue-on-error: true
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
           BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          MOVIODDS_API_KEY: ${{ secrets.MOVIODDS_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
+          hour="$(date -u +%H)"
+          minute="$(date -u +%M)"
+          if [[ "$hour" != "04" && "$hour" != "16" ]] || (( 10#$minute >= 15 )); then
+            echo "MOVIODDS_FINAL_NOT_DUE_04_16_UTC"
+            exit 0
+          fi
           test -n "$BLINQ_LIVE_WORKER_TOKEN"
+          test -n "$MOVIODDS_API_KEY" || { echo "::error::MOVIODDS_API_KEY_MISSING"; exit 1; }
           curl --fail-with-body --silent --show-error --max-time 90 \
             -X POST -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            -H "X-MoviOdds-API-Key: $MOVIODDS_API_KEY" \
             "${BLINQ_BASE_URL%/}/api/v1/internal/moviodds-stats-worker?mode=final" \
             -o /tmp/moviodds-final.json
           python - <<'PY'
@@ -269,7 +278,7 @@ jobs:
           set -euo pipefail
           hour="$(date -u +%H)"
           minute="$(date -u +%M)"
-          if [[ "$hour" != "04" ]] || (( 10#$minute >= 30 )); then
+          if [[ "$hour" != "05" ]] || (( 10#$minute >= 30 )); then
             echo 'MOVIODDS_DRIVE_ARCHIVE_NOT_DUE'
             exit 0
           fi

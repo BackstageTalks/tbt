@@ -407,6 +407,8 @@ jobs:
           python scripts/cdb_global_writer_lock.py acquire --wait-seconds 1200
 
       - name: Execute selected operation
+        env:
+          MOVIODDS_API_KEY: ${{ secrets.MOVIODDS_API_KEY }}
         shell: bash
         run: |
           set -euo pipefail
