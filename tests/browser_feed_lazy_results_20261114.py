@@ -164,7 +164,7 @@ def main():
                 reuse = page.evaluate("""() => {
                   const t=window.lazyResultsTest, old=t.state.feed;
                   const next={
-                    account:{...old.account},entitlements:{results:true},
+                    account:{...old.account},entitlements:{...old.entitlements},
                     results:[],results_boot_partial:true,results_snapshot:'fixture-snapshot'
                   };
                   const retained=t.reuseHydratedResultsOnRefresh(next);
@@ -228,6 +228,84 @@ def main():
                 assert page.evaluate(
                     "window.lazyResultsTest.state.feed.results.map(r=>r.event_id)"
                 ) == ["today", "recent", "history"], width
+                # The user returns to Results after a feed refresh. A changed
+                # authorized ledger must update in the background instead of
+                # replacing the already-loaded table with a loading spinner.
+                stale_view = page.evaluate("""async () => {
+                  const t=window.lazyResultsTest, auth=window.BlinqAuth;
+                  t.state.resultsFilters.window='all';
+                  t.setRoute('predictions',false);
+                  t.setResultDay();
+                  const old=t.state.feed, savedRows=old.results;
+                  const unrelated={...old,upcoming:[{event_id:'fresh-prediction'}],
+                    results:[],results_boot_partial:true,
+                    results_snapshot:'fixture-snapshot',
+                    results_today_ready:false,results_recent_ready:false};
+                  const originalFeed=auth.feed, originalResultsPage=auth.resultsPage;
+                  auth.feed=async()=>unrelated;
+                  try{await t.loadFeed(false,{skipUnchanged:true});}
+                  finally{auth.feed=originalFeed;}
+                  t.setRoute('results',false);
+                  const sameRevisionNoReload=!t.state.feed.results_boot_partial
+                    &&t.state.feed.results===savedRows
+                    &&!document.getElementById('routePanel').textContent.includes('Načítavam');
+                  const changed={...t.state.feed,upcoming:[{event_id:'fresh-prediction-v2'}],
+                    results:[],results_boot_partial:true,
+                    results_snapshot:'fixture-snapshot-v2',
+                    results_today_ready:false,results_recent_ready:false};
+                  window.staleRefreshCalls=0;
+                  window.resolveStaleRefresh=null;
+                  const newRow={...savedRows[0],event_id:'newly-settled'};
+                  auth.resultsPage=()=>{window.staleRefreshCalls++;return new Promise(resolve=>{
+                    window.resolveStaleRefresh=()=>resolve({
+                      results:[...savedRows,newRow],page:0,limit:500,
+                      total:savedRows.length+1,has_more:false,snapshot:'fixture-snapshot-v2'
+                    });
+                  });};
+                  auth.feed=async()=>changed;
+                  try{await t.loadFeed(false,{skipUnchanged:true});}
+                  finally{auth.feed=originalFeed;}
+                  t.setRoute('predictions',false);
+                  t.setRoute('results',false);
+                  const text=document.getElementById('routePanel').textContent;
+                  const safeOldRows=t.state.feed.results===savedRows
+                    &&t.state.feed.results_stale_full_ready===true
+                    &&t.state.feed.results_boot_partial===true;
+                  const noLoading=text.includes('One')&&!text.includes('Načítavam úplnú históriu');
+                  // Capture a revocation/categorical downgrade without mutating
+                  // the actual authorized workspace or its pending request.
+                  const denied={...changed,results:[],entitlements:{results:false}};
+                  const revoked=t.reuseHydratedResultsOnRefresh(denied);
+                  const changedScope={...changed,results:[],
+                    entitlements:{...old.entitlements,result_categories:['value']}};
+                  const scopeReused=t.reuseHydratedResultsOnRefresh(changedScope);
+                  // The negative probes clear the internal snapshot markers,
+                  // but must not revoke the existing verified in-flight refresh.
+                  auth.resultsPage=originalResultsPage;
+                  return {sameRevisionNoReload,safeOldRows,noLoading,
+                    revoked,deniedEmpty:denied.results.length===0,
+                    scopeReused,scopeEmpty:changedScope.results.length===0};
+                }""")
+                assert stale_view == {
+                    "sameRevisionNoReload": True, "safeOldRows": True, "noLoading": True,
+                    "revoked": False, "deniedEmpty": True,
+                    "scopeReused": False, "scopeEmpty": True,
+                }, (width, stale_view)
+                page.wait_for_function("window.staleRefreshCalls === 1")
+                page.evaluate("window.resolveStaleRefresh()")
+                page.wait_for_function(
+                    "window.lazyResultsTest.state.feed.results_boot_partial === false",
+                    timeout=10000,
+                )
+                after_swap=page.evaluate("""() => ({
+                  ids:window.lazyResultsTest.state.feed.results.map(row=>row.event_id),
+                  stale:window.lazyResultsTest.state.feed.results_stale_full_ready,
+                  spinner:document.getElementById('routePanel').textContent.includes('Načítavam úplnú históriu')
+                })""")
+                assert after_swap == {
+                    "ids":["today","recent","history","newly-settled"],
+                    "stale":False,"spinner":False,
+                }, (width, after_swap)
                 assert hydrated["overflow"] <= 2, (width, hydrated["overflow"])
                 assert not errors, (width, errors)
                 context.close()
