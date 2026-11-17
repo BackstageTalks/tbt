@@ -59,3 +59,21 @@ def test_final_capture_and_archive_order_is_safe():
     api = (root / "api/function_app.py").read_text()
     route = api.split("def internal_moviodds_stats_worker(req):", 1)[1].split("@app.route(",1)[0]
     assert route.index("_live_worker_token_ok(req)") < route.index('get("X-MoviOdds-API-Key")')
+
+
+def test_final_collection_stops_after_first_auth_or_quota_failure(monkeypatch):
+    from datetime import datetime, timezone
+    from tbt.services import moviodds_stats
+    for error in (MoviOddsAuthError, MoviOddsQuotaError):
+        calls = []
+        def reject(path, *, params, **kwargs):
+            calls.append((path, params.get("date")))
+            raise error("moviodds_test_provider_rejected")
+        monkeypatch.setattr(moviodds_stats, "_get", reject)
+        report = moviodds_stats.collect(now=datetime(2026, 11, 17, 4, 5, tzinfo=timezone.utc),
+                                        table=object(), collect_live=False, collect_finished=True,
+                                        api_key="fake-test-only")
+        assert report["ok"] is False
+        assert len(calls) == 1
+        assert len(report["errors"]) == 1
+        assert "moviodds_test_provider_rejected" in report["errors"][0]
