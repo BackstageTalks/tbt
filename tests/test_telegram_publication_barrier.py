@@ -70,6 +70,15 @@ def test_queued_or_waiting_publish_blocks_even_after_earlier_success():
         assess_publication_deployment(data, GENERATED)
 
 
+def test_ci_checks_in_progress_without_deploy_job_is_not_final():
+    data = data_state(job(status="completed", conclusion="success",
+                          completed="2026-11-17T05:23:24Z"), status="completed")
+    data["ci.yml"] = [{"run": run(8, "2026-11-17T05:24:00Z", "in_progress"),
+                       "jobs": [{"name": "checks", "status": "in_progress"}]}]
+    with pytest.raises(RuntimeError, match="active workflow may still deploy"):
+        assess_publication_deployment(data, GENERATED)
+
+
 def test_nonpublishing_skipped_workflow_does_not_overrule_success():
     data = data_state(job(status="completed", conclusion="success",
                           completed="2026-11-17T05:23:24Z"), status="completed")
