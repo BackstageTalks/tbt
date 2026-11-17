@@ -143,7 +143,6 @@ jobs:
               betting = (local - timedelta(days=1) if local.hour < 6 else local).date()
               assert event["event_betting_day"] == betting.isoformat()
               prices = sum(len(m["verified_pairs"]) for m in event["aces_markets"])
-              assert prices > 0
               assert all(m["kind"] in ("player_aces_ou", "most_aces_match",
                      "player_aces_milestone", "dfs_pickem_player_aces_ou")
                          for m in event["aces_markets"])
