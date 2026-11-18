@@ -19,6 +19,7 @@ from replay_selection_reliability import (
     anchors, canonical_index, dt, load_snapshots, metrics, prepare, sha,
 )
 from research.legacy_market_selection_v18 import select_market_sections
+from audit_top_721_funnel import quote_evidence
 
 SECTIONS = ("value", "top_daily", "prime")
 RETURNED = {"value": "value_picks", "top_daily": "top_daily_picks", "prime": "prime_picks"}
@@ -34,6 +35,9 @@ def snapshots_to_candidates(snapshots, matches):
             prepared = prepare(row, when, day, index, diagnostics)
             if not prepared:
                 continue
+            prepared["verified_price_ge_150"] = (
+                quote_evidence(row, when) == "verified_prestart_selected_price_ge_150"
+            )
             key = (prepared["model"], prepared["event"])
             if key in seen:
                 diagnostics["repeated_model_event"] += 1
@@ -169,12 +173,14 @@ def same_capacity_complete_days(baseline, raw):
 
 def price_qualified_depth_audit(rows):
     """Fixed observed offers, not a replacement selector or fitted calibrator."""
-    priced = [r for r in rows if r["quote_ok"] and r["odds"] >= 1.50]
+    priced = [r for r in rows if r["quote_ok"] and r.get("verified_price_ge_150")]
     groups = {"all": priced,
               "depth_below_80": [r for r in priced if r["depth"] < .8],
               "depth_at_least_80": [r for r in priced if r["depth"] >= .8],
               "lost_at_60": [r for r in priced if r["raw"] >= .6 > r["public"]],
               "retained_at_60": [r for r in priced if r["public"] >= .6]}
+    groups["odds_150_to_200"] = [r for r in priced if r["odds"] <= 2]
+    groups["odds_above_200"] = [r for r in priced if r["odds"] > 2]
     for tour in ("ATP", "WTA"):
         groups[tour] = [r for r in priced if r["tour"] == tour]
     return {
