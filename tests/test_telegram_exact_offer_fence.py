@@ -92,7 +92,8 @@ def test_real_2026_11_18_receipt_key_gap_accepts_only_canonical_backfill():
         tg.verify_frozen_daily_offer(wrong, reserved, READBACK)
 
     changed = deepcopy(confirmed)
-    changed["value_picks"][0]["betting"]["odds"] = 1.90
+    # Publication contract, not merely a mutable presentation field, changed.
+    changed["value_picks"][0]["market_publications"][0]["odds"] = 1.90
     with pytest.raises(RuntimeError, match="freeze violation"):
         tg.verify_frozen_daily_offer(changed, reserved, READBACK)
 
