@@ -501,6 +501,9 @@ def test_legacy_promotion_flag_fails_before_any_release_access(monkeypatch, caps
     assert "verified isolated champion rollback evidence" in capsys.readouterr().err
 
 def test_release_upload_does_not_backdate_issuance(monkeypatch, tmp_path, match_factory):
+    import prepare_feed
+    monkeypatch.setattr(prepare_feed, "_read_confirmed_telegram_state",
+                        lambda _repository: {"schema": 1, "attempts": {}})
     start = datetime.now(timezone.utc)
     later = replace(match_factory('later', 'A', 'B', None), scheduled_at=start + timedelta(hours=1))
     model = SimpleNamespace(version='test', predict_proba=lambda frame: np.full(len(frame), .7))
