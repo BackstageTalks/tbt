@@ -12,6 +12,16 @@ import prepare_feed
 from tbt.services.feed import empty_feed
 
 
+@pytest.fixture(autouse=True)
+def isolated_unreserved_telegram_state(monkeypatch):
+    # These fixtures model an unpublished offer, not a live private receipt.
+    # The fence became active on 2026-11-18; keep it enabled and provide its input.
+    def unreserved(_repository):
+        return {"schema": 1, "attempts": {}}
+    monkeypatch.setattr(prepare_feed, "_read_confirmed_telegram_state", unreserved)
+    monkeypatch.setattr(confirm, "_read_confirmed_telegram_state", unreserved)
+
+
 def _valid_feed(event_id="event-1"):
     now = datetime.now(timezone.utc)
     future = (now + timedelta(days=2)).isoformat()

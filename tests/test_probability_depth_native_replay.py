@@ -108,6 +108,41 @@ def test_paired_day_bootstrap_is_zero_for_equal_scores():
         assert x["day_bootstrap_ci95"] == [0, 0]
 
 
+def test_price_depth_audit_excludes_low_late_prices_and_preserves_unsettled():
+    lost = row("lost", raw=.7, depth=.2, selected=None, odds=1.50)
+    retained = row("retained", raw=.7, depth=1, odds=1.8)
+    pending = row("pending", raw=.7, depth=1, odds=1.8)
+    low = row("low", odds=1.49)
+    late = row("late", odds=1.8)
+    late["betting"]["captured_at"] = "2026-11-02T10:00:00Z"
+    report = replay_analysis([snapshot([lost, retained, pending, low, late])],
+                             [match("lost"), match("retained", winner="b"),
+                              match("pending", status="pending"), match("low"), match("late")])
+    groups = report["models"]["model-test"]["price_qualified_depth_audit"]["groups"]
+    assert groups["all"]["candidate_count"] == 3
+    assert groups["all"]["raw"]["settled"] == groups["all"]["shrunk"]["settled"] == 2
+    assert groups["all"]["pending_or_excluded"] == 1
+    assert groups["lost_at_60"]["raw"]["hit_rate"] == 1
+    assert groups["lost_at_60"]["shrunk"]["mean_probability"] == pytest.approx(.54)
+    assert groups["retained_at_60"]["raw"]["hit_rate"] == 0
+    assert groups["WTA"]["raw"]["settled"] == 0
+    assert report["candidate_promoted"] is False
+
+
+@pytest.mark.parametrize("change", ["missing_opposite", "wrong_selected_price", "wrong_identity"])
+def test_price_depth_requires_exact_two_way_selected_quote(change):
+    source = row()
+    if change == "missing_opposite":
+        source["two_way_market"].pop("player2_odds")
+    elif change == "wrong_selected_price":
+        source["two_way_market"]["player1_odds"] = 1.9
+    else:
+        source["betting"]["selection_id"] = "someone-else"
+    report = replay_analysis([snapshot([source])], [match()])
+    groups = report["models"]["model-test"]["price_qualified_depth_audit"]["groups"]
+    assert groups["all"]["candidate_count"] == 0
+
+
 def test_void_outcomes_not_counted_as_settled():
     r = replay_analysis([snapshot([row()])], [match(status="scheduled")])
     x = r["models"]["model-test"]
