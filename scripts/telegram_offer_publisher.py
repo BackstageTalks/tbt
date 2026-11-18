@@ -406,7 +406,9 @@ def verify_frozen_daily_offer(offer, ledger_state, now, *,
         expected = [result_reference(row, category) for row in chosen.get(category, [])]
         frozen = [row for row in rows if isinstance(row, dict) and row.get("channel") == category]
         if len(expected) != len(frozen) or any(
-            not _same_frozen_selection(current, original)
+            not _same_frozen_selection(
+                current, original,
+                legacy_winner_key_day=(active_day if offer.get("confirmed_only") is True else None))
             or current.get("scheduled_at") != original.get("scheduled_at")
             for current, original in zip(expected, frozen)
         ):
@@ -552,11 +554,30 @@ def result_reference(row,section):
             "price_basis":PRICE_BASIS if market=="aces" and odds and not verified_provider else None,
             "projection":num(row.get("projection")) if market=="aces" else None}
 
-def _same_frozen_selection(current, frozen, *, allow_aces_price_update=False):
-    """No change to exact sent identity, price or O/U settlement contract."""
+def _same_frozen_selection(current, frozen, *, allow_aces_price_update=False,
+                           legacy_winner_key_day=None):
+    """No change to the sent bet; handle missing pre-issuance winner key only.
+
+    A Telegram reservation can precede the final canonical market publication
+    that assigns its deterministic key. Only that *exact* canonical key may be
+    supplied by the confirmed private snapshot later. No price/selection/clock
+    changes and no exception for ACE line/side contracts or existing keys.
+    """
     for key in ("event_id","section","channel","market","selection_id",
-                "publication_key","market_line","projection_direction"):
+                "market_line","projection_direction"):
         if str(current.get(key) or "")!=str(frozen.get(key) or ""):
+            return False
+    if str(current.get("publication_key") or "")!=str(frozen.get("publication_key") or ""):
+        channel=str(frozen.get("channel") or "")
+        section={"top":"top_daily","value":"value"}.get(channel)
+        event=str(frozen.get("event_id") or "")
+        selection=str(frozen.get("selection_id") or "")
+        expected=(f"{section}:match_winner:{legacy_winner_key_day}:{event}:{selection}"
+                  if section and legacy_winner_key_day and event and selection else "")
+        if not (section and str(frozen.get("section") or "")==section
+                and str(frozen.get("market") or "")=="match_winner"
+                and not frozen.get("publication_key")
+                and expected and str(current.get("publication_key") or "")==expected):
             return False
     if (allow_aces_price_update and frozen.get("channel")=="aces"
             and current.get("price_basis")==PRICE_BASIS):
