@@ -65,6 +65,69 @@ def case(rows):
     return feed, ledger, snapshot
 
 
+
+def test_real_2026_11_18_receipt_key_gap_accepts_only_canonical_backfill():
+    """Daily send preceded canonical publication; no other frozen field may drift."""
+    _, _, morning = case([top("a"), top("b")])
+    morning["value_picks"] = [top("v", odds=1.82)]
+    reserved = state_for(morning)
+    reference = reserved["attempts"][f"{DAY}:daily:0620"]["rows"]
+    assert len(reference) == 3 and all(r["publication_key"] == "" for r in reference)
+
+    confirmed = deepcopy(morning)
+    for category, section in (("top_daily_picks", "top_daily"), ("value_picks", "value")):
+        for row in confirmed[category]:
+            key = f"{section}:match_winner:{DAY}:{row['event_id']}:{row['betting']['selection_id']}"
+            row["market_publications"] = [{**publication_for(row, section),
+                                           "publication_key": key}]
+    original = deepcopy(reserved)
+    assert tg.verify_frozen_daily_offer(confirmed, reserved, READBACK)["counts"] == {
+        "top": 2, "value": 1, "aces": 0,
+    }
+    assert reserved == original
+
+    wrong = deepcopy(confirmed)
+    wrong["top_daily_picks"][0]["market_publications"][0]["publication_key"] += ":other"
+    with pytest.raises(RuntimeError, match="freeze violation"):
+        tg.verify_frozen_daily_offer(wrong, reserved, READBACK)
+
+    changed = deepcopy(confirmed)
+    # Publication contract, not merely a mutable presentation field, changed.
+    changed["value_picks"][0]["market_publications"][0]["odds"] = 1.90
+    with pytest.raises(RuntimeError, match="freeze violation"):
+        tg.verify_frozen_daily_offer(changed, reserved, READBACK)
+
+    extra = deepcopy(confirmed)
+    extra["top_daily_picks"].append(top("late-extra"))
+    with pytest.raises(RuntimeError, match="freeze violation"):
+        tg.verify_frozen_daily_offer(extra, reserved, READBACK)
+
+    # Backfill must be authorized by the *confirmed* snapshot, never by a
+    # merely prepared candidate, and never replace an existing frozen key.
+    candidate = deepcopy(confirmed)
+    candidate["confirmed_only"] = False
+    with pytest.raises(RuntimeError, match="freeze violation"):
+        tg.verify_frozen_daily_offer(candidate, reserved, READBACK)
+    keyed = deepcopy(reserved)
+    keyed["attempts"][f"{DAY}:daily:0620"]["rows"][0]["publication_key"] = "issued:immutable:key"
+    with pytest.raises(RuntimeError, match="freeze violation"):
+        tg.verify_frozen_daily_offer(confirmed, keyed, READBACK)
+
+
+def test_missing_ace_key_never_uses_winner_publication_compatibility():
+    current = {
+        "event_id": "a", "section": "ace", "channel": "aces",
+        "market": "aces", "selection_id": "p1",
+        "publication_key": "ace:total:a:p1:over:5.5",
+        "market_line": 5.5, "projection_direction": "over",
+        "odds": 1.78,
+    }
+    sent = {**current, "publication_key": ""}
+    assert not tg._same_frozen_selection(
+        current, sent, legacy_winner_key_day=DAY,
+    )
+
+
 def test_same_exact_reservation_and_sent_offer_readback():
     feed, ledger, snapshot = case([top("a"), top("b"), top("c")])
     frozen = state_for(snapshot)
