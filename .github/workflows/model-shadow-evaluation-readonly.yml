@@ -48,6 +48,8 @@ jobs:
         run: python -m pytest tests/test_audit_model_shadow_readonly.py tests/test_shadow_calibration_research.py tests/test_shadow_evaluation.py tests/test_audit_721_top_market.py tests/test_audit_711_top_value_shadow.py tests/test_audit_frozen_721_segments.py -q
       - name: Independently read current champion, challenger and private issued shadow ledger
         run: python scripts/audit_model_shadow_readonly.py --out .cache/tbt/model-shadow-audit/report.json
+      - name: Independently audit exact issued TOP 1.50+ offers on active model pair
+        run: python scripts/audit_721_top_market.py --out .cache/tbt/model-shadow-audit/721-top-market.json
       - name: Independently validate model-only gate and report exact immutable pair
         run: |
           python - <<'PY'
@@ -63,12 +65,15 @@ jobs:
               raise ValueError('Champion and challenger have identical artifact digests')
           metrics=r['overall']
           n=r['cohort']['settled']
-          if r['status']!='EVALUATED' or n < 200:
-              raise ValueError('Current same-event shadow evaluation lacks model-quality sample')
+          if r['status'] not in ('EVALUATED', 'INSUFFICIENT_PAIRED_SAMPLE') or n < 1:
+              raise ValueError('Current same-event shadow evaluation has no usable paired results')
+          # A provisional 2-day read-only report must not bypass the existing
+          # >=200 settled and >=3 settled-day promotion-review prerequisites.
+          mature = n >= 200 and r['cohort']['settled_utc_days'] >= 3
           for field in ('champion','challenger'):
               if metrics[field]['n']!=n:
                   raise ValueError('Shadow models do not have identical settled population')
-          quality_pass=r['gate'].get('ready_for_promotion_review') is True
+          quality_pass=mature and r['gate'].get('ready_for_promotion_review') is True
           # Even a passing shadow is only model-quality evidence, not permission to
           # bypass Elo, fresh PIT, operator approval or atomic release controller.
           decision={
@@ -80,6 +85,7 @@ jobs:
               'candidate_version': r['challenger_model_version'],
               'settled_same_event': n, 'captured':r['cohort']['captured'],
               'settled_utc_days':r['cohort']['settled_utc_days'],
+              'mature_review_sample': mature,
               'champion':metrics['champion'], 'candidate':metrics['challenger'],
               'gate':r['gate'], 'release_screen':r['release_screen'],
               'uncertainty':r['paired_uncertainty'], 'sources':source,
@@ -104,6 +110,20 @@ jobs:
               'Market TOP/PRIME/value research intentionally separate: no price/odds/EV promotion gate.',
               'No CDB write, model fit, provider call, candidate/champion promotion or deploy.',
           ]
+          forensic=r['ledger_forensics']
+          assert sum(forensic['statuses'].values()) == r['cohort']['captured']
+          assert forensic['statuses']['settled'] == n
+          assert forensic['paired_winner_outcomes'].get('candidate_only_correct', 0) == r['paired']['challenger_only_correct']
+          assert forensic['paired_winner_outcomes'].get('champion_only_correct', 0) == r['paired']['production_only_correct']
+          market=json.loads(Path('.cache/tbt/model-shadow-audit/721-top-market.json').read_text())
+          assert market['provider_requests'] == 0 and market['model_promoted'] is False
+          assert market['model_pair']['champion'] == r['production_model_version']
+          assert market['model_pair']['candidate'] == r['challenger_model_version']
+          lines.append(f"Shadow ledger statuses: {forensic['statuses']}; first/last capture: {forensic['capture_first_utc']} / {forensic['capture_last_utc']}")
+          lines.append(f"Shadow excluded reasons: {forensic['excluded_reason_counts']}; void reasons: {forensic['void_reason_counts']}")
+          lines.append(f"Paired changed winner by tour: {forensic['changed_winner_by_tour']}")
+          lines.append(f"Exact published pre-start TOP >=1.50 matched: {market['matched_unique']}; source issued: {market['source_issued']}; reasons: {market['unmatched_reasons']}")
+          lines.append("Own model-selected TOP cannot be inferred from the raw shadow pair without frozen selection/price inputs.")
           print('\n'.join(lines))
           Path(os.environ['GITHUB_STEP_SUMMARY']).write_text('\n'.join(lines)+'\n')
           PY
@@ -115,5 +135,6 @@ jobs:
           path: |
             .cache/tbt/model-shadow-audit/report.json
             .cache/tbt/model-shadow-audit/model-quality-decision.json
+            .cache/tbt/model-shadow-audit/721-top-market.json
           if-no-files-found: warn
           retention-days: 14

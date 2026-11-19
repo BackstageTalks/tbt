@@ -150,3 +150,18 @@ def test_unsupported_candidate_family_still_rejected():
     evidence["candidate_version"] = "v7.2.3-unverified"
     with pytest.raises(ValueError, match="model versions"):
         evaluate_721([issued_row()], [shadow()], evidence)
+
+
+@pytest.mark.parametrize("invalid_opposite", [None, 0, 1, -1, float("nan"), "not-a-price"])
+def test_exact_top_needs_real_valid_opposite_quote(invalid_opposite):
+    from audit_721_top_market import exact_issued_top
+    item = issued_row()
+    item["market_publications"][0]["issued_snapshot"]["two_way_match_winner"]["player2_odds"] = invalid_opposite
+    kept, reasons = exact_issued_top([item])
+    assert kept == []
+    # The signed prepared/confirmed snapshot can reject a tampered opposite
+    # side before the later explicit two-sided price check is even reached.
+    assert sum(reasons.values()) == 1
+    assert set(reasons).issubset({
+        "no_exact_prematch_issuance", "unverified_selected_price"
+    })
