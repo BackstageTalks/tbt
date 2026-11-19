@@ -385,3 +385,64 @@ def test_winner_history_ui_does_not_claim_count_depth_is_data_coverage():
     assert "coverage.history+' · '+coverage.serve" in source
     assert "row?.quality||{},a=q?.player1?.matches,b=q?.player2?.matches" in source
     assert "S/R neoverené" in source  # Missing pre-match evidence stays unknown.
+
+
+def test_current_model_export_includes_verified_price_and_breakeven_groups(monkeypatch, tmp_path):
+    """Regression: the native audit must not silently drop new strict subgroups."""
+    import json
+    from pathlib import Path
+    from types import SimpleNamespace
+    import audit_current_model_top as writer
+
+    class SyntheticRelease:
+        def __init__(self, repo, tag, directory):
+            self.directory = Path(directory)
+            self.directory.mkdir(parents=True, exist_ok=True)
+            if tag == "tbt-predictions-v1":
+                (self.directory / "ledger.json").write_text("[]", encoding="utf-8")
+            if tag == "tbt-model-production-v1":
+                (self.directory / "model.joblib").write_bytes(b"immutable-test-fixture")
+        def download(self, **kwargs):
+            assert kwargs["require_bundle_manifest"] is True
+
+    def fake_analyze(ledger, *, model_version, window_days, section="top_daily"):
+        assert ledger == [] and model_version == "frozen-test" and window_days == 30
+        groups = {
+            "competition": {"ATP": {"published": 1}},
+            "itf_grade": {"ATP": {"published": 1}},
+            "serve_return_evidence": {"unverified": {"published": 1}},
+            "market_disagreement": {"unverified": {"published": 1}},
+            "confidence_70_75": {"other": {"published": 1}},
+            "confidence_band": {"70_75": {"published": 1}},
+            "surface_evidence": {"low_or_unknown": {"published": 1}},
+            "issued_price_band": {"150_to_200": {"published": 1, "settled": 1}},
+            "published_p_vs_break_even": {"below_break_even_if_calibrated":
+                                            {"published": 1, "settled": 1}},
+        }
+        return {
+            "overall": {"published": 1, "settled": 1, "wins": 0, "losses": 1},
+            "issued_probability_reliability": {},
+            "diagnostics": {},
+            "coverage": {},
+            "subgroups": groups,
+            "price_breakeven_interpretation": {
+                "not_a_calibrated_edge_or_trading_signal": True,
+            },
+        }
+
+    monkeypatch.setattr(writer, "ReleaseStore", SyntheticRelease)
+    monkeypatch.setattr(writer, "load_model",
+                        lambda path: SimpleNamespace(fitted=True, version="frozen-test"))
+    monkeypatch.setattr(writer, "analyze", fake_analyze)
+    out = writer.current_report(directory=tmp_path)
+    for part in (out, out["value"]):
+        assert part["subgroups"]["issued_price_band"]["150_to_200"]["settled"] == 1
+        assert part["subgroups"]["published_p_vs_break_even"][
+            "below_break_even_if_calibrated"]["published"] == 1
+        assert part["price_breakeven_interpretation"][
+            "not_a_calibrated_edge_or_trading_signal"] is True
+    assert out["provider_requests"] == 0
+    assert out["CDB_mutated"] is False
+    assert out["production_mutated"] is False
+
+
