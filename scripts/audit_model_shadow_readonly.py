@@ -183,27 +183,27 @@ def cohort_forensics(rows, production_version, challenger_version):
         itf_label_by_tour_status.setdefault(tour, {}).setdefault(group, Counter())[status_label] += 1
         if status_label != "excluded" or row.get("excluded_reason") != "duplicate_provider_event_snapshot":
             continue
-        first = by_match.get(str(row.get("primary_match_id") or ""))
-        if first is None or first is row:
+        primary = by_match.get(str(row.get("primary_match_id") or ""))
+        if primary is None or primary is row:
             duplicate_links["missing_primary"] += 1
             continue
-        if not row.get("event_id") or str(first.get("event_id")) != str(row["event_id"]):
+        if not row.get("event_id") or str(primary.get("event_id")) != str(row["event_id"]):
             duplicate_links["provider_event_mismatch"] += 1
             continue
-        if (str(first.get("tour") or "").upper() != tour
-                or first.get("production_model_version") != row.get("production_model_version")
-                or first.get("challenger_model_version") != row.get("challenger_model_version")
-                or {str(first.get("player1_id")), str(first.get("player2_id"))}
+        if (str(primary.get("tour") or "").upper() != tour
+                or primary.get("production_model_version") != row.get("production_model_version")
+                or primary.get("challenger_model_version") != row.get("challenger_model_version")
+                or {str(primary.get("player1_id")), str(primary.get("player2_id"))}
                 != {str(row.get("player1_id")), str(row.get("player2_id"))}):
             duplicate_links["player_or_model_identity_mismatch"] += 1
             continue
-        if _datetime(first.get("captured_at")) > _datetime(row.get("captured_at")):
+        if _datetime(primary.get("captured_at")) > _datetime(row.get("captured_at")):
             duplicate_links["primary_after_duplicate"] += 1
             continue
         duplicate_links["verified_original_event_pair"] += 1
-        if _datetime(first.get("scheduled_at")) != _datetime(row.get("scheduled_at")):
+        if _datetime(primary.get("scheduled_at")) != _datetime(row.get("scheduled_at")):
             duplicate_links["schedule_changed"] += 1
-        duplicate_primary_status[str(first.get("status") or "unknown")] += 1
+        duplicate_primary_status[str(primary.get("status") or "unknown")] += 1
     total_duplicate = sum(
         row.get("excluded_reason") == "duplicate_provider_event_snapshot"
         for row in cohort)
