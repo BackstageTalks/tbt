@@ -52,7 +52,8 @@ def prepare(args):
 
     cfg = tg.config(args.config_url)
     posts = results.combined_daily_report(
-        original_rows, verified, day, tg.branded_footer(cfg.get("footer"))
+        original_rows, verified, day, tg.branded_footer(cfg.get("footer")),
+        include_market_breakdown=False,  # Original operator-approved four-line receipt
     )
     if len(posts) != len(original_receipts):
         raise RuntimeError("Results reissue differs from original page count")
