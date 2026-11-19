@@ -166,6 +166,50 @@ def cohort_forensics(rows, production_version, challenger_version):
         raise ValueError("Canonical winner ID disagrees with settled pair")
     if missing_player_ids:
         raise ValueError("Incomplete paired player identities")
+    # Reconcile every provider-event duplicate with its original immutable
+    # first-captured row, without modifying either status or selecting a
+    # "better" outcome. An unexplained pointer is a review item, not a win.
+    by_match = {str(row["match_id"]): row for row in cohort}
+    duplicate_links = Counter()
+    duplicate_primary_status = Counter()
+    itf_label_by_tour = {}
+    itf_label_by_tour_status = {}
+    for row in cohort:
+        tour = str(row.get("tour") or "unknown").upper()
+        status_label = str(row.get("status") or "")
+        label = str(row.get("tournament") or "").strip()
+        group = "explicit_itf" if label.upper().startswith("ITF ") else "not_explicit_itf"
+        itf_label_by_tour.setdefault(tour, Counter())[group] += 1
+        itf_label_by_tour_status.setdefault(tour, {}).setdefault(group, Counter())[status_label] += 1
+        if status_label != "excluded" or row.get("excluded_reason") != "duplicate_provider_event_snapshot":
+            continue
+        first = by_match.get(str(row.get("primary_match_id") or ""))
+        if first is None or first is row:
+            duplicate_links["missing_primary"] += 1
+            continue
+        if not row.get("event_id") or str(first.get("event_id")) != str(row["event_id"]):
+            duplicate_links["provider_event_mismatch"] += 1
+            continue
+        if (str(first.get("tour") or "").upper() != tour
+                or first.get("production_model_version") != row.get("production_model_version")
+                or first.get("challenger_model_version") != row.get("challenger_model_version")
+                or {str(first.get("player1_id")), str(first.get("player2_id"))}
+                != {str(row.get("player1_id")), str(row.get("player2_id"))}):
+            duplicate_links["player_or_model_identity_mismatch"] += 1
+            continue
+        if _datetime(first.get("captured_at")) > _datetime(row.get("captured_at")):
+            duplicate_links["primary_after_duplicate"] += 1
+            continue
+        duplicate_links["verified_original_event_pair"] += 1
+        if _datetime(first.get("scheduled_at")) != _datetime(row.get("scheduled_at")):
+            duplicate_links["schedule_changed"] += 1
+        duplicate_primary_status[str(first.get("status") or "unknown")] += 1
+    total_duplicate = sum(
+        row.get("excluded_reason") == "duplicate_provider_event_snapshot"
+        for row in cohort)
+    verified = duplicate_links.get("verified_original_event_pair", 0)
+    duplicate_status = ("VERIFIED_FIRST_EVENT_SNAPSHOT_LINKS"
+                        if verified == total_duplicate else "REVIEW_MISSING_OR_CONFLICTING_DUPLICATE_LINKS")
     return {
         "status": "READ_ONLY_LEDGER_FORENSICS",
         "raw_ledger_rows": len(rows),
@@ -187,6 +231,14 @@ def cohort_forensics(rows, production_version, challenger_version):
         "by_surface_status": {k: dict(sorted(v.items())) for k, v in sorted(by_surface.items())},
         "void_reason_counts": dict(sorted(void_reasons.items())),
         "excluded_reason_counts": dict(sorted(excluded_reasons.items())),
+        "excluded_duplicate_link_status": duplicate_status,
+        "excluded_duplicate_link_counts": dict(sorted(duplicate_links.items())),
+        "duplicate_primary_status_counts": dict(sorted(duplicate_primary_status.items())),
+        "explicit_itf_label_by_tour": {
+            k: dict(sorted(v.items())) for k, v in sorted(itf_label_by_tour.items())},
+        "explicit_itf_label_by_tour_status": {
+            k: {g: dict(sorted(c.items())) for g, c in sorted(v.items())}
+            for k, v in sorted(itf_label_by_tour_status.items())},
         "paired_winner_outcomes": dict(sorted(agreement.items())),
         "changed_winner_by_tour": {k: {
             "candidate_only_correct": v.get("candidate_only_correct", 0),
