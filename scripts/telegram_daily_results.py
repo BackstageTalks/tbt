@@ -411,8 +411,9 @@ def combined_daily_report(rows, archive_rows, day_text, footer, *, postponed_key
             f"{_pct(ace['won'], ace_decisions)} | {ace['units']:+.2f}u | ROI {ace_roi}"
         )
     summary_tail.extend([
-        f"🎯 Úspešnosť celkom {win}",
-        f"💰 Zisk celkom {total_profit:+.2f}u | 📈 ROI {roi}",
+        "📊 Celkom TOP+VALUE+ESÁ",
+        f"🎯 Úspešnosť {win}",
+        f"💰 Zisk {total_profit:+.2f}u | 📈 ROI {roi}",
     ])
     if total["pending"]:
         summary_tail.append("⏳ Priebežné vyhodnotenie: neuzavreté zápasy sa počítajú ako Pending.")
