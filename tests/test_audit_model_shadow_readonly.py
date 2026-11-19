@@ -209,7 +209,7 @@ def test_duplicate_exclusion_links_earliest_same_event_identity_without_scoring(
             "player1_id": "p1", "player2_id": "p2",
             "tournament": "ITF M15 Verified Men"}
     repeat = {**row(2, status="excluded"), "event_id": "provider-1",
-              "player1_id": "p1", "player2_id": "p2",
+              "tour": "ATP", "player1_id": "p1", "player2_id": "p2",
               "tournament": "ITF M15 Verified Men",
               "excluded_reason": "duplicate_provider_event_snapshot",
               "primary_match_id": base["match_id"]}
