@@ -9,6 +9,8 @@ def row(index=1, *, p_prod=0.4, p_chal=0.8, target=1, status="settled"):
     day = datetime(2026, 10, 9 + index, 12, tzinfo=timezone.utc)
     result = {
         "match_id": f"match-{index}",
+        "player1_id": f"p1-{index}",
+        "player2_id": f"p2-{index}",
         "tour": "ATP" if index % 2 else "WTA",
         "surface": "hard",
         "production_model_version": "champion",
