@@ -258,10 +258,12 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert abs(out["profit_units"]-0.6)<1e-9
     message=out["text"]
     assert message.count("📅")==0  # date lives inside the Results title
-    assert ("✅ WIN 2 | ❌ LOSS 1\n"
-            "🟪 VOID 1 | ⏳ PENDING 1\n"
-            "🎯 Úspešnosť 66.7%\n"
-            "💰 Zisk +0.60u | 📈 ROI +20.0%") in message
+    assert "✅ WIN 2 | ❌ LOSS 1" in message
+    assert "🟪 VOID 1 | ⏳ PENDING 1" in message
+    assert "🏆 Víťazi TOP+VALUE 1/2 | 50.0% | -0.20u | ROI -10.0%" in message
+    assert "🎾 ESÁ 1/1 | 100.0% | +0.80u | ROI +80.0%" in message
+    assert "🎯 Úspešnosť 66.7%" in message
+    assert "💰 Zisk +0.60u | 📈 ROI +20.0%" in message
     assert "📊 Denný súhrn" not in message
     assert "TOP · WIN" not in message
     assert "VALUE · WIN" not in message
@@ -277,6 +279,46 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert "13:30" not in message  # no match time in compact ELITE results
 
 
+
+
+def test_winner_only_accounting_2026_11_19_style_does_not_hide_loss():
+    top_odds = (2.05, 1.55, 1.58, 1.57, 1.50)
+    value_odds = (1.82, 1.85, 1.95)
+    ace_odds = (1.80, 1.77, 1.72, 1.60, 1.64, 1.66, 1.65, 1.62, 1.71)
+    entries, graded = [], []
+    decisions = ([("top", price, i in (1, 4)) for i, price in enumerate(top_odds)]
+                 + [("value", price, i == 0) for i, price in enumerate(value_odds)]
+                 + [("aces", price, True) for price in ace_odds])
+    for index, (section, price, correct) in enumerate(decisions):
+        ref = sent(section, f"frozen-{index}", price)
+        entries.append(ref)
+        graded.append(settled(ref, correct))
+    frozen = [dict(entry) for entry in entries]
+    evidence = [dict(entry) for entry in graded]
+    posts = r.combined_daily_report(entries, graded, DAY, tg.branded_footer())
+    assert len(posts) == 1 and posts[0]["counts"] == {
+        "won": 12, "lost": 5, "void": 0, "pending": 0,
+    }
+    msg = posts[0]["text"]
+    assert "🏆 Víťazi TOP+VALUE 3/8 | 37.5% | -3.13u | ROI -39.1%" in msg
+    assert "🎾 ESÁ 9/9 | 100.0% | +6.17u | ROI +68.6%" in msg
+    assert "🎯 Úspešnosť 70.6%" in msg
+    assert "💰 Zisk +3.04u | 📈 ROI +17.9%" in msg
+    assert entries == frozen and graded == evidence
+
+
+def test_winner_summary_never_converts_pending_or_void_to_losses():
+    winners = [sent("top", "w1", 1.8), sent("value", "w2", 1.9),
+               sent("value", "w3", 1.8)]
+    priced_ace = sent("aces", "a1", 1.7)
+    archive = [settled(winners[0], False),
+               settled(winners[1], True, void=True),
+               settled(priced_ace, True)]
+    msg = r.combined_daily_report(winners + [priced_ace], archive,
+                                  DAY, tg.branded_footer())[0]["text"]
+    assert "🏆 Víťazi TOP+VALUE 0/1 | 0.0% | -1.00u | ROI -100.0%" in msg
+    assert "🎾 ESÁ 1/1 | 100.0% | +0.70u | ROI +70.0%" in msg
+    assert "PENDING 1" in msg and "VOID 1" in msg
 
 
 def test_elite_seven_picks_with_postponed_and_purple_void_are_not_fabricated():
