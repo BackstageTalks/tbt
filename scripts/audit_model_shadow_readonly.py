@@ -67,6 +67,154 @@ def validate_cohort(rows, production_version, challenger_version):
     return cohort
 
 
+
+def cohort_forensics(rows, production_version, challenger_version):
+    """Independent, aggregate-only ledger accounting; no outcome-driven selection.
+
+    The raw shadow ledger does not necessarily include level, data depth,
+    form, or issuer-price snapshots. Never infer those fields from later data.
+    """
+    from collections import Counter
+
+    cohort = validate_cohort(rows, production_version, challenger_version)
+    status = Counter()
+    capture_days, scheduled_days, settled_days = Counter(), Counter(), Counter()
+    by_tour, by_surface = {}, {}
+    excluded_reasons, void_reasons = Counter(), Counter()
+    tournament_counts, tournament_labels_by_tour = Counter(), {}
+    agreement = Counter()
+    agree_by_tour, agree_by_surface = {}, {}
+    lead_buckets = Counter()
+    ids, events = set(), set()
+    duplicated_event_ids = 0
+    missing_player_ids = 0
+    inconsistent_recorded_winner = 0
+    missing_pricing = 0
+    feature_fields = Counter()
+    first, last = None, None
+    first_start, last_start = None, None
+    for row in cohort:
+        match = str(row["match_id"])
+        ids.add(match)
+        event = str(row.get("event_id") or "")
+        if event:
+            duplicated_event_ids += int(event in events)
+            events.add(event)
+        state = str(row["status"])
+        status[state] += 1
+        capture = _datetime(row["captured_at"])
+        scheduled = _datetime(row["scheduled_at"])
+        first = min(first, capture) if first else capture
+        last = max(last, capture) if last else capture
+        first_start = min(first_start, scheduled) if first_start else scheduled
+        last_start = max(last_start, scheduled) if last_start else scheduled
+        capture_days[capture.date().isoformat()] += 1
+        scheduled_days[scheduled.date().isoformat()] += 1
+        if state == "settled":
+            settled_days[scheduled.date().isoformat()] += 1
+        lead = (scheduled - capture).total_seconds()
+        bucket = ("under_15m" if lead < 900 else "15m_to_1h" if lead < 3600
+                  else "1h_to_24h" if lead < 86400 else "over_24h")
+        lead_buckets[bucket] += 1
+        tour = str(row.get("tour") or "unknown").upper()
+        surface = str(row.get("surface") or "unknown").lower()
+        for key, label, out in (("tour", tour, by_tour),
+                                ("surface", surface, by_surface)):
+            if label not in out:
+                out[label] = Counter()
+            out[label][state] += 1
+        tournament = str(row.get("tournament") or "").strip()
+        if tournament:
+            tournament_counts[(tour, tournament)] += 1
+            tournament_labels_by_tour.setdefault(tour, set()).add(tournament)
+        if state == "excluded":
+            excluded_reasons[str(row.get("excluded_reason") or "UNSPECIFIED")] += 1
+        if state == "void":
+            void_reasons[str(row.get("excluded_reason") or "UNSPECIFIED")] += 1
+        p1, p2 = str(row.get("player1_id") or ""), str(row.get("player2_id") or "")
+        if not p1 or not p2 or p1 == p2:
+            missing_player_ids += 1
+        if state == "settled":
+            target = int(row["target_player1_win"])
+            known_winner = str(row.get("result_winner_id") or "")
+            if known_winner and p1 and p2 and (
+                    known_winner != (p1 if target else p2)):
+                inconsistent_recorded_winner += 1
+            old = float(row["production_player1_probability"]) >= .5
+            new = float(row["challenger_player1_probability"]) >= .5
+            truth = bool(target)
+            group = ("both_correct" if old == truth and new == truth
+                     else "both_wrong" if old != truth and new != truth
+                     else "candidate_only_correct" if new == truth
+                     else "champion_only_correct")
+            agreement[group] += 1
+            agree_by_tour.setdefault(tour, Counter())[group] += 1
+            agree_by_surface.setdefault(surface, Counter())[group] += 1
+        # No retrospective odds backfill: this documents the unsupported scope.
+        if not isinstance(row.get("two_way_market"), dict):
+            missing_pricing += 1
+        for field in ("data_depth", "opponent_adjusted_form_diff",
+                      "surface_elo_diff", "competition_level", "weekly_rank_diff",
+                      "recent_form", "layoff_advantage"):
+            if row.get(field) is not None:
+                feature_fields[field] += 1
+    counts = dict(status)
+    expected = {"settled", "pending", "void", "excluded"}
+    if set(counts) - expected or sum(counts.values()) != len(cohort):
+        raise ValueError("Shadow ledger states do not reconcile")
+    if inconsistent_recorded_winner:
+        raise ValueError("Canonical winner ID disagrees with settled pair")
+    if missing_player_ids:
+        raise ValueError("Incomplete paired player identities")
+    return {
+        "status": "READ_ONLY_LEDGER_FORENSICS",
+        "raw_ledger_rows": len(rows),
+        "active_pair_captured": len(cohort),
+        "other_model_pairs": len(rows) - len(cohort),
+        "unique_match_ids": len(ids),
+        "unique_nonempty_event_ids": len(events),
+        "repeated_nonempty_event_ids": duplicated_event_ids,
+        "statuses": {k: counts.get(k, 0) for k in sorted(expected)},
+        "capture_first_utc": first.isoformat() if first else None,
+        "capture_last_utc": last.isoformat() if last else None,
+        "scheduled_first_utc": first_start.isoformat() if first_start else None,
+        "scheduled_last_utc": last_start.isoformat() if last_start else None,
+        "capture_utc_days": dict(sorted(capture_days.items())),
+        "scheduled_utc_days": dict(sorted(scheduled_days.items())),
+        "settled_utc_days": dict(sorted(settled_days.items())),
+        "prestart_lead_buckets": dict(sorted(lead_buckets.items())),
+        "by_tour_status": {k: dict(sorted(v.items())) for k, v in sorted(by_tour.items())},
+        "by_surface_status": {k: dict(sorted(v.items())) for k, v in sorted(by_surface.items())},
+        "void_reason_counts": dict(sorted(void_reasons.items())),
+        "excluded_reason_counts": dict(sorted(excluded_reasons.items())),
+        "paired_winner_outcomes": dict(sorted(agreement.items())),
+        "changed_winner_by_tour": {k: {
+            "candidate_only_correct": v.get("candidate_only_correct", 0),
+            "champion_only_correct": v.get("champion_only_correct", 0)}
+            for k, v in sorted(agree_by_tour.items())},
+        "changed_winner_by_surface": {k: {
+            "candidate_only_correct": v.get("candidate_only_correct", 0),
+            "champion_only_correct": v.get("champion_only_correct", 0)}
+            for k, v in sorted(agree_by_surface.items())},
+        "tournament_label_count_by_tour": {
+            k: len(v) for k, v in sorted(tournament_labels_by_tour.items())},
+        "most_frequent_tournament_labels": [
+            {"tour": k[0], "tournament": k[1], "captured": n}
+            for k, n in sorted(tournament_counts.items(),
+                               key=lambda kv: (-kv[1], kv[0]))[:15]],
+        "rows_missing_embedded_two_way_quote": missing_pricing,
+        "available_context_field_counts": dict(sorted(feature_fields.items())),
+        "competition_level_status": (
+            "NOT_IN_SHADOW_LEDGER" if not feature_fields.get("competition_level")
+            else "PARTIALLY_PRESENT_USE_VERIFIED_SOURCE"),
+        "selection_scope": (
+            "Same-match model winner probabilities only; own TOP choice and "
+            "priced >=1.50 selection require separate issued quote evidence."),
+        "no_provider_requests": True,
+        "no_model_fit_or_deploy": True,
+    }
+
+
 def _metrics(rows):
     if not rows:
         return {}
@@ -199,6 +347,7 @@ def summarize(rows, production_version, challenger_version, source_ts=None):
         "production_model_version": production_version,
         "challenger_model_version": challenger_version,
         "cohort": summary["cohort"],
+        "ledger_forensics": cohort_forensics(rows, production_version, challenger_version),
         "overall": _metrics(settled),
         "paired": summary["paired"],
         "calibration_research": research_comparison(cohort, production_version, challenger_version),
