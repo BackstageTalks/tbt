@@ -262,8 +262,8 @@ def test_combined_scorecard_daily_win_loss_void_pending_and_roi():
     assert "🟪 VOID 1 | ⏳ PENDING 1" in message
     assert "🏆 Víťazi TOP+VALUE 1/2 | 50.0% | -0.20u | ROI -10.0%" in message
     assert "🎾 ESÁ 1/1 | 100.0% | +0.80u | ROI +80.0%" in message
-    assert "🎯 Úspešnosť celkom 66.7%" in message
-    assert "💰 Zisk celkom +0.60u | 📈 ROI +20.0%" in message
+    assert "🎯 Úspešnosť 66.7%" in message
+    assert "💰 Zisk +0.60u | 📈 ROI +20.0%" in message
     assert "📊 Denný súhrn" not in message
     assert "TOP · WIN" not in message
     assert "VALUE · WIN" not in message
@@ -302,8 +302,8 @@ def test_winner_only_accounting_2026_11_19_style_does_not_hide_loss():
     msg = posts[0]["text"]
     assert "🏆 Víťazi TOP+VALUE 3/8 | 37.5% | -3.13u | ROI -39.1%" in msg
     assert "🎾 ESÁ 9/9 | 100.0% | +6.17u | ROI +68.6%" in msg
-    assert "🎯 Úspešnosť celkom 70.6%" in msg
-    assert "💰 Zisk celkom +3.04u | 📈 ROI +17.9%" in msg
+    assert "🎯 Úspešnosť 70.6%" in msg
+    assert "💰 Zisk +3.04u | 📈 ROI +17.9%" in msg
     assert entries == frozen and graded == evidence
 
 
