@@ -159,4 +159,9 @@ def test_exact_top_needs_real_valid_opposite_quote(invalid_opposite):
     item["market_publications"][0]["issued_snapshot"]["two_way_match_winner"]["player2_odds"] = invalid_opposite
     kept, reasons = exact_issued_top([item])
     assert kept == []
-    assert reasons["unverified_selected_price"] == 1
+    # The signed prepared/confirmed snapshot can reject a tampered opposite
+    # side before the later explicit two-sided price check is even reached.
+    assert sum(reasons.values()) == 1
+    assert set(reasons).issubset({
+        "no_exact_prematch_issuance", "unverified_selected_price"
+    })
