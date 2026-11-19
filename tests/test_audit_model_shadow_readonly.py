@@ -185,6 +185,36 @@ def test_forensics_fails_closed_on_result_identity_mismatch():
         cohort_forensics([wrong], "champion", "candidate")
 
 
+def test_duplicate_event_provenance_and_level_are_explicit_not_inferred():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    first = {**row(1), "event_id": "e", "tournament": "ITF M15 Somewhere"}
+    duplicate = {**first, "match_id": "provider-duplicate", "status": "excluded",
+                 "excluded_reason": "duplicate_provider_event_snapshot"}
+    different = {**row(2), "event_id": "another",
+                 "tournament": "ATP Challenger Something"}
+    result = cohort_forensics([first, duplicate, different], "champion", "candidate")
+    detail = result["duplicate_event_readback"]
+    assert detail["extra_records_by_event_id"] == 1
+    assert detail["status"] == "CONSISTENT_WITH_EXCLUDED_REPEATS"
+    assert detail["repeated_nonexcluded_records"] == 0
+    assert result["explicit_competition_by_status"]["ITF_EXPLICIT"]["excluded"] == 1
+    assert result["explicit_competition_by_status"]["CHALLENGER_EXPLICIT"]["settled"] == 1
+    broken = {**duplicate, "player1_id": "unexpected"}
+    detail = cohort_forensics([first, broken], "champion", "candidate")["duplicate_event_readback"]
+    assert detail["status"] == "REVIEW_DUPLICATE_EVENT_IDENTITY_OR_CLOCK"
+    assert detail["conflicting_player_pair_event_groups"] == 1
+
+
+def test_orphan_duplicate_exclusion_is_flagged_without_repairing_history():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    orphan = {**row(1, status="excluded"), "event_id": "only-this-event",
+              "excluded_reason": "duplicate_provider_event_snapshot"}
+    result = cohort_forensics([orphan], "champion", "candidate")
+    audit = result["duplicate_event_readback"]
+    assert audit["duplicate_exclusions_without_repeated_event_id"] == 1
+    assert audit["status"] == "REVIEW_DUPLICATE_EVENT_IDENTITY_OR_CLOCK"
+
+
 def test_near_start_capture_is_reported_not_backdated():
     from scripts.audit_model_shadow_readonly import cohort_forensics
     near = {**row(status="pending"), "player1_id": "p1", "player2_id": "p2"}
