@@ -68,6 +68,61 @@ def validate_cohort(rows, production_version, challenger_version):
 
 
 
+def _observed_competition_label(row):
+    """Only explicit event labels, never tour or a present-day external ranking."""
+    label = str(row.get("competition_level") or row.get("tournament") or "").strip().lower()
+    if label.startswith("itf ") or label.startswith("itf-"):
+        return "ITF_EXPLICIT"
+    if "challenger" in label:
+        return "CHALLENGER_EXPLICIT"
+    if label.startswith("atp ") or label.startswith("atp-"):
+        return "ATP_EXPLICIT"
+    if label.startswith("wta ") or label.startswith("wta-"):
+        return "WTA_EXPLICIT"
+    return "UNVERIFIED"
+
+
+def _duplicate_event_readback(cohort):
+    """Observe exclusion provenance without inferring an unrecorded match."""
+    from collections import defaultdict
+    grouped = defaultdict(list)
+    for row in cohort:
+        event = str(row.get("event_id") or "").strip()
+        if event:
+            grouped[event].append(row)
+    repeated = [group for group in grouped.values() if len(group) > 1]
+    anomalous_player_groups = 0
+    anomalous_start_groups = 0
+    repeated_nonexcluded = 0
+    excluded_with_no_repeated_event = 0
+    for group in repeated:
+        player_pairs = {frozenset((str(row.get("player1_id") or ""),
+                                   str(row.get("player2_id") or ""))) for row in group}
+        starts = {str(row.get("scheduled_at") or "") for row in group}
+        anomalous_player_groups += int(len(player_pairs) != 1)
+        anomalous_start_groups += int(len(starts) != 1)
+        repeated_nonexcluded += max(0, sum(
+            row.get("status") != "excluded" for row in group) - 1)
+    for row in cohort:
+        if (row.get("status") == "excluded"
+                and row.get("excluded_reason") == "duplicate_provider_event_snapshot"
+                and len(grouped.get(str(row.get("event_id") or "").strip(), ())) < 2):
+            excluded_with_no_repeated_event += 1
+    return {
+        "event_ids_with_multiple_records": len(repeated),
+        "extra_records_by_event_id": sum(len(group) - 1 for group in repeated),
+        "conflicting_player_pair_event_groups": anomalous_player_groups,
+        "conflicting_scheduled_time_event_groups": anomalous_start_groups,
+        "repeated_nonexcluded_records": repeated_nonexcluded,
+        "duplicate_exclusions_without_repeated_event_id": excluded_with_no_repeated_event,
+        "status": ("CONSISTENT_WITH_EXCLUDED_REPEATS" if
+                   not (anomalous_player_groups or anomalous_start_groups
+                        or repeated_nonexcluded or excluded_with_no_repeated_event)
+                   else "REVIEW_DUPLICATE_EVENT_IDENTITY_OR_CLOCK"),
+        "not_proof_of_provider_identity": True,
+    }
+
+
 def cohort_forensics(rows, production_version, challenger_version):
     """Independent, aggregate-only ledger accounting; no outcome-driven selection.
 
@@ -82,6 +137,7 @@ def cohort_forensics(rows, production_version, challenger_version):
     by_tour, by_surface = {}, {}
     excluded_reasons, void_reasons = Counter(), Counter()
     tournament_counts, tournament_labels_by_tour = Counter(), {}
+    explicit_competition, changed_competition = Counter(), {}
     agreement = Counter()
     agree_by_tour, agree_by_surface = {}, {}
     lead_buckets = Counter()
@@ -123,6 +179,21 @@ def cohort_forensics(rows, production_version, challenger_version):
             if label not in out:
                 out[label] = Counter()
             out[label][state] += 1
+        competition = _observed_competition_label(row)
+        explicit_competition[(competition, state)] += 1
+        if state == "settled":
+            changed_competition.setdefault(competition, Counter())[
+                "candidate_only_correct" if (
+                    (float(row["challenger_player1_probability"]) >= .5) ==
+                    bool(row["target_player1_win"]) and
+                    (float(row["production_player1_probability"]) >= .5) !=
+                    bool(row["target_player1_win"])) else
+                "champion_only_correct" if (
+                    (float(row["production_player1_probability"]) >= .5) ==
+                    bool(row["target_player1_win"]) and
+                    (float(row["challenger_player1_probability"]) >= .5) !=
+                    bool(row["target_player1_win"])) else "unchanged_result"
+            ] += 1
         tournament = str(row.get("tournament") or "").strip()
         if tournament:
             tournament_counts[(tour, tournament)] += 1
@@ -202,6 +273,20 @@ def cohort_forensics(rows, production_version, challenger_version):
             {"tour": k[0], "tournament": k[1], "captured": n}
             for k, n in sorted(tournament_counts.items(),
                                key=lambda kv: (-kv[1], kv[0]))[:15]],
+        "duplicate_event_readback": _duplicate_event_readback(cohort),
+        "explicit_competition_by_status": {
+            key: {s: explicit_competition.get((key, s), 0)
+                  for s in ("settled", "pending", "void", "excluded")}
+            for key in sorted({label for label, state in explicit_competition})
+        },
+        "changed_winner_by_explicit_competition": {
+            key: {"candidate_only_correct": v.get("candidate_only_correct", 0),
+                  "champion_only_correct": v.get("champion_only_correct", 0),
+                  "unchanged_result": v.get("unchanged_result", 0)}
+            for key, v in sorted(changed_competition.items())
+        },
+        "competition_label_scope": ("Only explicit historical tournament strings, "
+                                    "not reconstructed level or main-tour status."),
         "rows_missing_embedded_two_way_quote": missing_pricing,
         "available_context_field_counts": dict(sorted(feature_fields.items())),
         "competition_level_status": (
