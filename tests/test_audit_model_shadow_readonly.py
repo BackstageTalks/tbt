@@ -144,3 +144,58 @@ def test_segment_sample_missing_is_a_blocker():
     actual = _segment_release_screen([], {"ready_for_promotion_review": True}, {"tour": {}})
     assert "atp_sample_below_50_or_unpaired" in actual["reasons"]
     assert "wta_sample_below_50_or_unpaired" in actual["reasons"]
+
+
+def test_cohort_forensics_reconciles_pair_status_and_disagreements():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    one = {**row(1), "event_id": "evt1", "player1_id": "p1",
+           "player2_id": "p2", "result_winner_id": "p1",
+           "tournament": "ATP Challenger", "excluded_reason": None}
+    two = {**row(2, p_prod=.8, p_chal=.4, target=1),
+           "event_id": "evt2", "player1_id": "q1",
+           "player2_id": "q2", "result_winner_id": "q1"}
+    three = {**row(3, status="void"), "event_id": "evt3",
+             "player1_id": "z1", "player2_id": "z2",
+             "excluded_reason": "retirement"}
+    four = {**row(4, status="excluded"), "event_id": "evt4",
+            "player1_id": "w1", "player2_id": "w2",
+            "excluded_reason": "winner_identity_mismatch"}
+    five = {**row(5, status="pending"), "event_id": "evt5",
+            "player1_id": "v1", "player2_id": "v2"}
+    result = cohort_forensics([one, two, three, four, five], "champion", "candidate")
+    assert result["active_pair_captured"] == 5
+    assert result["unique_match_ids"] == 5
+    assert result["statuses"] == {"excluded": 1, "pending": 1, "settled": 2, "void": 1}
+    assert result["excluded_reason_counts"] == {"winner_identity_mismatch": 1}
+    assert result["void_reason_counts"] == {"retirement": 1}
+    assert result["paired_winner_outcomes"]["candidate_only_correct"] == 1
+    assert result["paired_winner_outcomes"]["champion_only_correct"] == 1
+    assert result["capture_utc_days"]["2026-10-10"] == 1
+    assert result["competition_level_status"] == "NOT_IN_SHADOW_LEDGER"
+    assert result["rows_missing_embedded_two_way_quote"] == 5
+
+
+def test_forensics_fails_closed_on_result_identity_mismatch():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    wrong = {**row(), "player1_id": "p1", "player2_id": "p2",
+             "result_winner_id": "unknown"}
+    with pytest.raises(ValueError, match="Canonical winner ID"):
+        cohort_forensics([wrong], "champion", "candidate")
+
+
+def test_near_start_capture_is_reported_not_backdated():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    near = {**row(status="pending"), "player1_id": "p1", "player2_id": "p2"}
+    start = datetime.fromisoformat(near["scheduled_at"])
+    near["captured_at"] = (start - timedelta(minutes=5)).isoformat()
+    counts = cohort_forensics([near], "champion", "candidate")
+    assert counts["prestart_lead_buckets"]["under_15m"] == 1
+    assert counts["statuses"]["pending"] == 1
+
+
+def test_no_fitted_features_are_inferred_from_raw_shadow_rows():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    pending = {**row(status="pending"), "player1_id": "p1", "player2_id": "p2"}
+    result = cohort_forensics([pending], "champion", "candidate")
+    assert result["available_context_field_counts"] == {}
+    assert result["selection_scope"].startswith("Same-match")
