@@ -67,6 +67,12 @@ jobs:
           assert len(r['publication_ledger_sha256']) == 64
           assert r['overall']['wins'] + r['overall']['losses'] == r['overall']['settled']
           assert r['overall']['settled'] <= r['overall']['published']
+          for market in (r, r['value']):
+              for dimension in ('issued_price_band', 'published_p_vs_break_even'):
+                  groups = market['subgroups'][dimension]
+                  assert sum(v['published'] for v in groups.values()) == market['overall']['published']
+                  assert sum(v['settled'] for v in groups.values()) == market['overall']['settled']
+              assert market['price_breakeven_interpretation']['not_a_calibrated_edge_or_trading_signal'] is True
           value = r['value']
           assert value['overall']['wins'] + value['overall']['losses'] == value['overall']['settled']
           assert value['overall']['settled'] <= value['overall']['published']
