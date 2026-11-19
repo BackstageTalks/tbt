@@ -327,7 +327,7 @@ def _pct(numerator, denominator, signed=False):
     return (f"{numerator / denominator * 100:+.1f}%" if signed else f"{numerator / denominator * 100:.1f}%") if denominator else "—"
 
 
-def combined_daily_report(rows, archive_rows, day_text, footer, *, postponed_keys=frozenset()):
+def combined_daily_report(rows, archive_rows, day_text, footer, *, postponed_keys=frozenset(), include_market_breakdown=True):
     """One premium daily results scorecard for the entire confirmed sent offer.
 
     Free picks are a separate audience and must never inflate premium totals.
@@ -398,20 +398,21 @@ def combined_daily_report(rows, archive_rows, day_text, footer, *, postponed_key
         f"✅ WIN {total['won']} | ❌ LOSS {total['lost']}",
         f"🟪 VOID {total['void']} | ⏳ PENDING {total['pending']}",
     ]
-    if any(section in ("top", "value") for section, _ in ordered):
+    if include_market_breakdown and any(section in ("top", "value") for section, _ in ordered):
         winner_roi = _pct(winner["units"], winner["priced"], signed=True) if winner["priced"] else "—"
         summary_tail.append(
             f"🏆 Víťazi TOP+VALUE {winner['won']}/{winner_decisions} | "
             f"{_pct(winner['won'], winner_decisions)} | {winner['units']:+.2f}u | ROI {winner_roi}"
         )
-    if any(section == "aces" for section, _ in ordered):
+    if include_market_breakdown and any(section == "aces" for section, _ in ordered):
         ace_roi = _pct(ace["units"], ace["priced"], signed=True) if ace["priced"] else "—"
         summary_tail.append(
             f"🎾 ESÁ {ace['won']}/{ace_decisions} | "
             f"{_pct(ace['won'], ace_decisions)} | {ace['units']:+.2f}u | ROI {ace_roi}"
         )
+    if include_market_breakdown:
+        summary_tail.append("📊 Celkom TOP+VALUE+ESÁ")
     summary_tail.extend([
-        "📊 Celkom TOP+VALUE+ESÁ",
         f"🎯 Úspešnosť {win}",
         f"💰 Zisk {total_profit:+.2f}u | 📈 ROI {roi}",
     ])
