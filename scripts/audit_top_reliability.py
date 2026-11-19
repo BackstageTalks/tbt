@@ -238,6 +238,29 @@ def probability_band(value):
     return "85_plus"
 
 
+def issued_price_band(odds):
+    """Bet-price cohort, descriptive only and not a model feature."""
+    if odds is None or odds <= 1:
+        return "unknown_or_unpriced"
+    if odds < 1.50:
+        return "below_150"
+    if odds <= 2.0:
+        return "150_to_200"
+    return "above_200"
+
+
+def published_probability_vs_breakeven(probability, odds, *, verified_quote):
+    """Ex-ante quoted probability vs 1/odds, NOT a calibrated edge or win claim.
+
+    Only the strict originally issued two-way, side-matched price path can
+    generate a numeric comparison. Legacy publication/odds data remain unknown.
+    """
+    if not verified_quote or probability is None or odds is None or odds <= 1:
+        return "not_verified"
+    return ("below_break_even_if_calibrated" if probability * odds < 1.0 - 1e-12
+            else "at_or_above_if_calibrated")
+
+
 def observed_stats(row, publication=None):
     snapshot = issued_snapshot(publication)
     value = snapshot.get("stats_available") if snapshot is not None else row.get("stats_available")
@@ -385,6 +408,10 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
             daily_publications[betting_day] += 1
             entries.append({
                 "correct": correct, "odds": odds, "probability": p,
+                "issued_price_band": issued_price_band(odds),
+                "published_p_vs_break_even": published_probability_vs_breakeven(
+                    p, odds, verified_quote=model_version is not None),
+
                 "competition": competition(row),
                 "itf_grade": itf_grade(row, pub),
                 "serve_return_evidence": issued_serve_return_coverage(pub),
@@ -422,6 +449,7 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
               }}
     for dimension in ("competition", "itf_grade", "serve_return_evidence",
                       "market_disagreement", "confidence_70_75",
+                      "issued_price_band", "published_p_vs_break_even",
                       "ranking", "ranking_500", "ranking_1000",
                       "picked_rank", "stats", "rank_and_stats", "confidence_band",
                       "surface_evidence", "rank_and_surface"):
@@ -429,6 +457,13 @@ def analyze(ledger, *, now=None, window_days=90, model_version=None, section="to
         for entry in entries:
             groups[entry[dimension]].append(entry)
         report["subgroups"][dimension] = {key: summarize(group) for key, group in sorted(groups.items())}
+    report["price_breakeven_interpretation"] = {
+        "quoted_probability_only": True,
+        "not_a_calibrated_edge_or_trading_signal": True,
+        "only_exact_current_model_quotes_classified": model_version is not None,
+        "odds_are_not_model_inputs": True,
+        "settled_roi_is_descriptive_not_future_test": True,
+    }
     if model_version is not None:
         # Strict snapshot, version and two-sided quote were checked above.
         # Legacy mixed-model audits cannot certify originally issued scores.

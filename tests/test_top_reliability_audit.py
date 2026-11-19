@@ -211,6 +211,31 @@ def _with_confirmed_model_quote(row, version="v7.2.1-test"):
     return row
 
 
+def test_exact_issued_breakeven_diagnostic_is_post_score_and_noncausal():
+    from audit_top_reliability import issued_price_band, published_probability_vs_breakeven
+    assert issued_price_band(1.50) == "150_to_200"
+    assert issued_price_band(2.00) == "150_to_200"
+    assert issued_price_band(2.01) == "above_200"
+    assert issued_price_band(1.49) == "below_150"
+    assert published_probability_vs_breakeven(.60, 1.5, verified_quote=True) == "below_break_even_if_calibrated"
+    assert published_probability_vs_breakeven(.70, 1.5, verified_quote=True) == "at_or_above_if_calibrated"
+    assert published_probability_vs_breakeven(.90, 3.0, verified_quote=False) == "not_verified"
+    low = _with_confirmed_model_quote(fixture("below", adjusted=.60, raw=.66, odds=1.50))
+    above = _with_confirmed_model_quote(fixture("above", adjusted=.75, raw=.80, odds=1.55))
+    unsettled = _with_confirmed_model_quote(fixture("unsettled", adjusted=.55, raw=.60, odds=2.10, result=None))
+    original = deepcopy([low, above, unsettled])
+    out = analyze([low, above, unsettled], now=NOW, model_version="v7.2.1-test")
+    assert out["subgroups"]["issued_price_band"]["150_to_200"]["published"] == 2
+    assert out["subgroups"]["issued_price_band"]["above_200"]["void_or_unsettled"] == 1
+    assert out["subgroups"]["published_p_vs_break_even"]["below_break_even_if_calibrated"]["published"] == 1
+    assert out["subgroups"]["published_p_vs_break_even"]["at_or_above_if_calibrated"]["settled"] == 1
+    assert out["subgroups"]["published_p_vs_break_even"]["at_or_above_if_calibrated"]["void_or_unsettled"] == 1
+    assert out["price_breakeven_interpretation"]["odds_are_not_model_inputs"]
+    assert [low, above, unsettled] == original
+    legacy = analyze([fixture("legacy")], now=NOW)
+    assert legacy["subgroups"]["published_p_vs_break_even"]["not_verified"]["published"] == 1
+
+
 def test_current_model_top_audit_uses_only_exact_binary_version_and_quoted_price():
     current = _with_confirmed_model_quote(fixture("current"))
     previous = _with_confirmed_model_quote(fixture("previous"), "v201-previous")
