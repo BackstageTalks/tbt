@@ -50,7 +50,10 @@ def exact_issued_top(ledger):
                         isinstance(p, dict) and str(p.get("id") or "") == pick), None)
             odds = number(pub.get("odds"))
             quote_odds = number(market.get("player1_odds" if idx == 0 else "player2_odds")) if idx is not None else None
-            if (odds is None or quote_odds is None or odds < 1.50
+            opposite_odds = number(market.get("player2_odds" if idx == 0 else "player1_odds")) if idx is not None else None
+            # Two independently quoted sides must be present and physically valid.
+            if (odds is None or quote_odds is None or opposite_odds is None
+                    or odds < 1.50 or quote_odds <= 1 or opposite_odds <= 1
                     or not math.isclose(odds, quote_odds, abs_tol=1e-4, rel_tol=0)):
                 reasons["unverified_selected_price"] += 1
                 continue
