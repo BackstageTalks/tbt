@@ -45,8 +45,7 @@ def _real_price(row: dict) -> float | None:
     source = str(row.get("odds_source") or "").lower()
     bookmaker = bool(row.get("odds_bookmaker"))
     if not ((source == "rapidapi" and provider == 1)
-            or (source == "propline" and provider == 2 and bookmaker)
-            or (source == "moviodds" and provider == 3 and row.get("odds_bookmaker") == "bet365")):
+            or (source == "propline" and provider == 2 and bookmaker)):
         return None
     return price
 
