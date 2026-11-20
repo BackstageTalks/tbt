@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "experiment": "market_only_shadow_research_2026-11-20",
+  "mode": "SHADOW_READ_ONLY_NEVER_PUBLISH",
+  "source_package_sha256": "b22b27af2693be969ca0b11d18e5dba55f3c978a0b70728116fd0b86ecf11f1f",
+  "source_params_sha256": "e08f26aecf5fe0e40eee94d0ca03e8b70197272b73a5c854b34498d94d02280f",
+  "calibrator": {
+    "formula": "q = sigmoid(slope * logit(fair) + intercept), fair clip [0.01, 0.99]",
+    "slope": 1.102,
+    "intercept": -0.009
+  },
+  "source_evidence": {
+    "description": "data/oddstrader/atp/2016-2026.csv, market_id=match_winner, de-vig priemer 6 knih, FINAL, n=45903",
+    "historical_fit_n_claimed": 45903,
+    "source_data_in_uploaded_package": false,
+    "source_capture_timestamp_verified": false,
+    "historical_bookmaker_state": "end_of_day_unverified_prematch",
+    "wta_historical_source_verified": false,
+    "independent_fit_reproduction": "BLOCKED_SOURCE_NOT_IN_UPLOAD"
+  },
+  "selector_experiments": {
+    "rank_only_market": true,
+    "veto_market_outsider_fair_below": 0.5,
+    "market_min_fair": 0.75,
+    "gap_absolute_max": 0.1,
+    "experiment_variants": [
+      "A1_market_rank_veto",
+      "A2_market_min_0_75",
+      "A3_gap_0_10",
+      "A1_A2_A3_combined"
+    ]
+  },
+  "prospective": {
+    "freeze_after_utc": "2026-11-20T22:34:54Z",
+    "minimum_new_valid_matches": 400,
+    "no_metrics_before_minimum": true,
+    "no_refit": true
+  },
+  "activation_approved": false,
+  "production_model_modified": false,
+  "writer": "existing_provider_native_only",
+  "notes": [
+    "The chosen-side intercept is not player-swap symmetric; an exact decision on favorite can change around 0.5.",
+    "Market-only monotonic sorting cannot outperform fair market sorting on the same candidates.",
+    "No actual prospective full-slate capture integration or production scheduling authorized."
+  ]
+}
