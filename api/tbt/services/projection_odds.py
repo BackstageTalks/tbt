@@ -485,7 +485,7 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
     eligible = {"aces": 0, "double_faults": 0, "sets": 0, "games": 0}
     reasons: dict[str, dict[str, int]] = {key: {} for key in eligible}
     observed_market_names: dict[str, int] = {}
-    attached_by_provider = {"rapidapi": 0, "propline": 0, "moviodds": 0}
+    attached_by_provider = {"rapidapi": 0, "propline": 0}
 
     # Record what the provider actually exposed on the exact projection events.
     # This makes missing Sets/Aces/DF prices diagnosable without guessing market
@@ -521,7 +521,7 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
             ) if payload is not None else (deepcopy(row), False, "primary_payload_unavailable")
 
             used_alternate = False
-            if not ok and alternate:
+            if not ok and alternate and str(alternate.get("source") or "propline").lower() == "propline":
                 alt_payload = alternate.get("payload")
                 alt_provider = int(alternate.get("provider_id") or 2)
                 alt_captured = str(alternate.get("captured_at") or captured_at)

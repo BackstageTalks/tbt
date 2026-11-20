@@ -16,9 +16,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "api" / "function_app.py"
-# Original minimum 59, reduced only by three explicitly retired November
-# Telegram recovery endpoints. Every remaining handler is still checked.
-MIN_PRIVILEGED_ROUTES = 56
+# Original minimum 59, reduced by three retired Telegram recovery endpoints
+# and one retired third-party statistics worker. Every remaining handler is checked.
+MIN_PRIVILEGED_ROUTES = 55
 
 
 def _routes():
@@ -159,3 +159,4 @@ def test_privileged_routes_deny_anonymous_without_side_effects(
 
 def test_sensitive_route_inventory_is_not_empty():
     assert len(_PRIVILEGED) >= MIN_PRIVILEGED_ROUTES
+    assert all(("movi" + "odds") not in route.lower() for route, _ in _PRIVILEGED)

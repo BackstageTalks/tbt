@@ -36,8 +36,8 @@ historical prices.
 - Daily immutable files: `propline-YYYY-MM-DD-RUNID-HASH16.json`.
 - Reuses `BLINQ_DRIVE_WRITER_JSON`, or the existing `BLINQ_DRIVE_READER_JSON`
   service-account credentials as a fallback. The identity requires **Editor** on
-  the PropLine folder. The MoviOdds folder's existing ACL does not confer
-  permission here. No credential is logged or copied to the repo.
+  the PropLine folder; access to other folders does not grant permission here.
+  No credential is logged or copied to the repo.
 - Any upload or readback mismatch fails the workflow; private recovery data
   and Actions evidence remain accessible. A GitHub 204 or workflow green
   alone is not proof of a Drive archive.
@@ -45,12 +45,12 @@ historical prices.
 ## Removed legacy code
 Fortuna HTML scraper, browser preflight, its specialized morning reader and
 their Fortuna-only tests are retired. The morning pipeline already uses
-API Pro -> PropLine -> MoviOdds pre-start fallback where contracts match;
+Tennis API Pro -> PropLine fallback where contracts match;
 this collector is research-only and does not override that live enrichment.
 
 ## Morning attachment from the nightly PropLine archive (17 Nov 2026)
-- The existing live priority is unchanged: Tennis API Pro -> live PropLine
-  -> MoviOdds, followed by the approved statistical ESÁ fallback.
+- The live priority is Tennis API Pro -> live PropLine, followed by
+  the approved statistical ESÁ fallback.
 - Only during the *new morning refresh*, the optional reader uses the latest
   same-betting-day JSON in `tbt-data:research/propline-evening-odds/YYYY-MM-DD/`.
   It consumes no PropLine or RapidAPI requests; Google Drive remains the
