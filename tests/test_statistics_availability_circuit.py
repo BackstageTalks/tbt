@@ -274,3 +274,48 @@ def test_missing_current_candidate_inventory_disables_fast_recheck():
     gate = StatisticsAvailabilityCircuit(
         verified_prior=_verified_no_gain_prior())
     assert gate.summary()["prior_zero_gain_recheck_eligible"] is False
+
+def test_diverse_nonempty_paid_responses_stop_after_240_zero_cdb_gains():
+    """Nonempty provider results may still be useless for filling CDB NULLs."""
+    gate = StatisticsAvailabilityCircuit()
+    matches = (row("atp", 2024, "some_supported_fields"),
+               row("wta", 2023, "some_supported_fields"),
+               row("atp", 2026, "some_supported_fields"))
+    for index in range(239):
+        assert not gate.observe(matches[index % 3], "enriched", 1,
+                                {"new_statistic_values": 0})
+    assert gate.observe(matches[239 % 3], "enriched", 1,
+                        {"new_statistic_values": 0})
+    result = gate.summary()
+    assert result["trigger"]["reason"] == "cross_tour_paid_zero_cdb_yield_plateau"
+    assert result["trigger"]["recent_paid_matches"] == 240
+    assert result["trigger"]["recent_unavailable_matches"] == 0
+    assert result["trigger"]["sampled_tours"] == 2
+    assert result["trigger"]["sampled_cohorts"] == 3
+
+
+def test_zero_yield_plateau_requires_diverse_paid_evidence_not_cache():
+    gate = StatisticsAvailabilityCircuit()
+    for _ in range(500):
+        assert not gate.observe(row("wta", 2024), "enriched", 0,
+                                {"new_statistic_values": 0})
+    for _ in range(300):
+        assert not gate.observe(row("wta", 2024), "enriched", 1,
+                                {"new_statistic_values": 0})
+    assert not gate.tripped
+    assert gate.summary()["paid_matches_observed"] == 300
+
+
+def test_one_new_field_delays_zero_yield_plateau_until_new_240_match_window():
+    gate = StatisticsAvailabilityCircuit()
+    matches = (row("atp", 2024, "some_supported_fields"),
+               row("wta", 2023, "some_supported_fields"),
+               row("atp", 2026, "some_supported_fields"))
+    for index in range(440):
+        gain = int(index == 200)
+        assert not gate.observe(matches[index % 3], "enriched", 1,
+                                {"new_statistic_values": gain})
+    assert gate.observe(matches[440 % 3], "enriched", 1,
+                        {"new_statistic_values": 0})
+    assert gate.summary()["trigger"]["reason"] == (
+        "cross_tour_paid_zero_cdb_yield_plateau")
