@@ -67,9 +67,7 @@ def verified_ace_odds(row: Mapping[str, Any]) -> float | None:
         return None
     valid = ((source == "rapidapi" and provider == 1)
              or (source == "propline" and provider == 2
-                 and bool(row.get("odds_bookmaker")))
-             or (source == "moviodds" and provider == 3
-                 and row.get("odds_bookmaker") == "bet365"))
+                 and bool(row.get("odds_bookmaker"))))
     if not valid:
         return None
     if row.get("price_contract") == "player_total_ou":
