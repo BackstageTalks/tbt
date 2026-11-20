@@ -2626,41 +2626,6 @@ def internal_live_radar_worker(req):
         return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
 
 
-@app.route(route="v1/internal/moviodds-stats-worker", methods=["POST", "GET"])
-def internal_moviodds_stats_worker(req):
-    """Protected durable MoviOdds collector and independently verifiable final export."""
-    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
-        return response({"error": "moviodds_stats_worker_not_configured"}, 503)
-    if not _live_worker_token_ok(req):
-        return response({"error": "forbidden"}, 403)
-    from tbt.services.moviodds_stats import collect, export_final
-    try:
-        if str(getattr(req, "method", "POST")).upper() == "GET":
-            day = str((getattr(req, "params", {}) or {}).get("date") or "").strip()
-            # A short day window avoids accidental bulk export. This source is
-            # private and data is NEVER accessible via an ordinary feed route.
-            from datetime import date as calendar_date
-            requested = calendar_date.fromisoformat(day)
-            if abs((datetime.now(timezone.utc).date() - requested).days) > 7:
-                return response({"error": "date_window_outside_recent_results"}, 400)
-            export = export_final(days=[day])
-            return response(export)
-        mode = str((getattr(req, "params", {}) or {}).get("mode") or "all").lower()
-        if mode not in ("all", "live", "final"):
-            return response({"error": "invalid_collection_mode"}, 400)
-        # Accept a provider key only after validating the private worker token.
-        # It is never copied to a URL, a feed or an application log.
-        worker_key = (getattr(req, "headers", {}) or {}).get("X-MoviOdds-API-Key")
-        result = collect(collect_live=mode != "final", collect_finished=mode != "live",
-                         api_key=worker_key)
-        return response(result, 200 if result.get("ok") else 503)
-    except (ValueError, TypeError):
-        return response({"error": "invalid_moviodds_stats_request"}, 400)
-    except Exception as exc:
-        logging.exception("MoviOdds stats storage/readback failed")
-        return response({"error": "moviodds_stats_unavailable", "detail": type(exc).__name__}, 503)
-
-
 @app.route(route="v1/internal/match-status-worker", methods=["POST"])
 def internal_match_status_worker(req):
     """Reconcile prestart fixture times and settle verified finished predictions."""
