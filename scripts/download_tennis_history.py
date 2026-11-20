@@ -298,7 +298,7 @@ def _statistics_segment_yield(segments):
     return result
 
 
-def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
+def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready, *, verified_prior=None):
     """Keep 2024-26 front and centre without abandoning productive older cohorts.
 
     The 20-slot deterministic baseline allocates 8 slots to verified 2024
@@ -309,6 +309,20 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     Canonical identity and provider retry/cooldown gates ran before this step.
     """
     from collections import defaultdict, deque
+
+    # Only a separately validated, independently CDB-read-back prior is used.
+    # Prior scores adjust *ordering*, never eligibility, API limits or writes.
+    verified_prior = verified_prior or {}
+
+    def observed_priority(tour, year):
+        item = verified_prior.get(f"{tour}:{year}:serve_return", {})
+        if not isinstance(item, dict):
+            return None
+        paid = int(item.get("api_requests", 0))
+        fields = int(item.get("new_fields", 0))
+        if paid < 12:
+            return None  # insufficient paid evidence: retain historical order
+        return fields / paid if fields > 0 else 0.0
 
     families = ("recent_verified", "recent_gap", "historic_verified",
                 "historic_gap", "other")
@@ -346,9 +360,14 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
         }
 
         def bucket_priority(bucket):
+            observed = observed_priority(*bucket)
+            # Positive CDB gains outrank stale static priors, while confirmed
+            # zero-gain groups stay in the rotation with lower preference.
+            if observed is not None:
+                return (0 if observed > 0 else 2, -observed,
+                        -bucket[1], bucket[0])
             if family == "recent_gap":
-                return (0 if bucket == ("wta", 2025) else 1,
-                        bucket_ready[bucket] / max(1, bucket_total[bucket]),
+                return (1, 0 if bucket == ("wta", 2025) else 1,
                         -bucket[1], bucket[0])
             prior = (VERIFIED_HIGH_YIELD_COHORTS.index(bucket)
                      if family in {"recent_verified", "historic_verified"}
@@ -386,10 +405,12 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready):
     return result
 
 
-def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False, target_tour=None, break_points_focus=False):
+def _statistics_candidates(matches, start, end, *, targeted=False, historical_high_yield=False, target_tour=None, break_points_focus=False, verified_prior=None):
     """Prioritize verified gaps; optional high-yield historical cohort first."""
     if historical_high_yield and not targeted:
         raise ValueError("High-yield priority requires identity-checked targeted statistics")
+    if verified_prior is not None and not (targeted and historical_high_yield):
+        raise ValueError("Verified cohort preferences require hourly high-yield statistics")
     if break_points_focus and (not targeted or historical_high_yield):
         raise ValueError("Break-point focus is isolated targeted statistics, not the hourly adaptive queue")
     if target_tour not in (None, "atp", "wta"):
@@ -456,9 +477,18 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         # not the historic ATP-2025 preference after repeated zero-yield calls.
         # Prefer incomplete serve/return quality; ace/DF-only rows are explored
         # by the baseline and adaptively if empirical value warrants it.
+        prior = (verified_prior or {}).get(
+            f"{key[0]}:{key[1]}:serve_return", {})
+        paid = int(prior.get("api_requests", 0)) if isinstance(prior, dict) else 0
+        new = int(prior.get("new_fields", 0)) if isinstance(prior, dict) else 0
+        observed = paid >= 12
+        # Zero gain is only a *demotion*, never permanent exclusion. A fresh
+        # paid gain can restore the cohort through the adaptive queue.
         high_yield = bool(historical_high_yield
-                          and key in VERIFIED_HIGH_YIELD_COHORTS
-                          and not (p1_ready and p2_ready))
+                          and not (p1_ready and p2_ready)
+                          and ((observed and new > 0)
+                               or (key in VERIFIED_HIGH_YIELD_COHORTS
+                                   and not (observed and new == 0))))
         candidates.append((
             0 if break_points_focus else (0 if high_yield else 1),
             int(not verified_identity) if break_points_focus else (-match.scheduled_at.year if targeted else coverage),
@@ -472,7 +502,9 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         ))
     candidates.sort(key=lambda row: row[:-1])
     if historical_high_yield:
-        candidates = _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready)
+        candidates = _balanced_targeted_gap_order(
+            candidates, bucket_total, bucket_ready,
+            verified_prior=verified_prior)
     first_1000 = candidates[:1000]
     priority_preview = dict(Counter(
         f"{str(entry[-1].tour or 'unknown').lower()}:{entry[-1].scheduled_at.year}"
@@ -489,6 +521,13 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "preferred_verified_cohort": "atp:2024:serve_return_incomplete" if historical_high_yield else None,
         "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
         "priority_policy": "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other" if historical_high_yield else None,
+        "verified_cohort_preference_active": bool(verified_prior) if historical_high_yield else False,
+        "verified_cohort_yield_per_paid_call": {
+            name: round(int(item["new_fields"]) / int(item["api_requests"]), 4)
+            for name, item in sorted((verified_prior or {}).items())
+            if (name.endswith(":serve_return") and isinstance(item, dict)
+                and int(item.get("api_requests", 0)) >= 12)
+        } if historical_high_yield else {},
         "first_1000_by_tour_year": priority_preview,
         "recent_focus_years": [2024, 2025, 2026] if historical_high_yield else [],
         "planned_recent_baseline_share_if_all_families_available": 0.7 if historical_high_yield else None,
@@ -866,18 +905,23 @@ def main():
                                          targeted=args.targeted_statistics,
                                          break_points_focus=args.break_points_focus)
             changed = set()
+            # Load CDB-verified cohort evidence BEFORE choosing the initial
+            # baseline order, not only after the paid queue has been built.
+            prior = {}
+            if args.targeted_statistics and high_yield_setting == "true":
+                prior_path = os.getenv("BLINQ_ADAPTIVE_VERIFIED_PRIOR_FILE", "").strip()
+                prior = read_prior(prior_path, parser_version=STATISTICS_SCHEMA_VERSION)
             statistics_candidates, statistics_plan = _statistics_candidates(
                 eligible_rows_for_enrichment(), start, end, targeted=args.targeted_statistics,
                 historical_high_yield=high_yield_setting == "true",
-                target_tour=args.target_tour, break_points_focus=args.break_points_focus)
+                target_tour=args.target_tour, break_points_focus=args.break_points_focus,
+                verified_prior=prior if high_yield_setting == "true" else None)
             write_json(directory / "statistics_gap_plan.json", statistics_plan)
             report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
             report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
             # Only the scheduled hourly high-yield mode self-tunes; manual
             # statistics requests retain their existing deterministic order.
             if args.targeted_statistics and high_yield_setting == "true":
-                prior_path = os.getenv("BLINQ_ADAPTIVE_VERIFIED_PRIOR_FILE", "").strip()
-                prior = read_prior(prior_path, parser_version=STATISTICS_SCHEMA_VERSION)
                 statistics_adaptive_queue = AdaptiveStatisticsQueue(
                     statistics_candidates, statistics_plan["bucket_coverage"],
                     verified_prior=prior)
