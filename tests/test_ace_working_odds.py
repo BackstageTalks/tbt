@@ -115,8 +115,8 @@ def test_provider_quote_first_fallback_only_when_not_verified():
     assert not is_provider and 1.60 <= fallback <= 1.80
     assert selected_ace_odds({**base, "odds_source": ""}) == (fallback, False)
     assert verified_ace_odds({**base, "odds_source": "rapidapi", "provider_id": 1}) == 2.125
-    assert verified_ace_odds({**base, "odds_source": "moviodds", "provider_id": 3,
-                              "odds_bookmaker": "bet365"}) == 2.125
+    assert verified_ace_odds({**base, "odds_source": "unsupported", "provider_id": 3,
+                              "odds_bookmaker": "bet365"}) is None
 
 
 def test_telegram_prices_verified_aces_and_fallback_without_model_changes():
