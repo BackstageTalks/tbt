@@ -150,7 +150,7 @@ def paired(y, new, old, *, seed):
                 k: {"delta": float(d.mean()),
                     "mean": float(d[idx].mean(axis=1).mean()),
                     "ci95": [float(x) for x in np.quantile(d[idx].mean(axis=1), (.025, .975))]}
-                for k, d in components.items(),
+                for k, d in components.items()
             }}
 
 
