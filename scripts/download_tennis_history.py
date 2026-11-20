@@ -368,6 +368,7 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready, *, veri
                         -bucket[1], bucket[0])
             if family == "recent_gap":
                 return (1, 0 if bucket == ("wta", 2025) else 1,
+                        bucket_ready[bucket] / max(1, bucket_total[bucket]),
                         -bucket[1], bucket[0])
             prior = (VERIFIED_HIGH_YIELD_COHORTS.index(bucket)
                      if family in {"recent_verified", "historic_verified"}
@@ -518,7 +519,10 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
         "break_points_focus": break_points_focus,
         "focus_fields": ("break_point_serve_win", "break_point_return_win") if break_points_focus else ("service_points_won", "return_points_won", "aces", "double_faults"),
         "historical_high_yield": historical_high_yield,
-        "preferred_verified_cohort": "atp:2024:serve_return_incomplete" if historical_high_yield else None,
+        "preferred_verified_cohort": (
+            (f"{str(candidates[0][-1].tour).lower()}:{candidates[0][-1].scheduled_at.year}:serve_return_incomplete"
+             if verified_prior and candidates else "atp:2024:serve_return_incomplete")
+            if historical_high_yield else None),
         "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
         "priority_policy": "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other" if historical_high_yield else None,
         "verified_cohort_preference_active": bool(verified_prior) if historical_high_yield else False,
