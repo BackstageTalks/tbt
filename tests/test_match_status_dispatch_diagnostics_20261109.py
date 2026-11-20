@@ -15,7 +15,13 @@ WORKFLOWS = ROOT / ".github" / "workflows"
 def test_match_status_never_dispatches_deleted_or_nonmanual_workflow():
     source = (WORKFLOWS / "match-status.yml").read_text(encoding="utf-8")
     destinations = re.findall(r"(?m)^\s*gh workflow run\s+([a-z0-9_-]+\.yml)\b", source)
-    assert len(destinations) >= 9, "Unexpectedly missing Match Status dispatch coverage"
+    expected = {
+        "telegram-results.yml", "propline-clv-pilot.yml",
+        "the-odds-clv.yml", "model-calibration-monitor.yml",
+        "frozen-721-settlement.yml", "cdb-drive-inbox.yml",
+        "blinq-ui-production-watchdog.yml", "data-hourly-quota-gapfill.yml",
+    }
+    assert set(destinations) == expected, "Unexpected Match Status dispatch drift"
     assert "model-711-forward-blind.yml" not in source, "Retired 7.1.1 dispatch returned HTTP 422"
     for name in destinations:
         path = WORKFLOWS / name
