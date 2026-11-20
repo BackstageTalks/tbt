@@ -3042,7 +3042,6 @@
     const source=String(row?.odds_source||'').toLowerCase(),id=Number(row?.provider_id);
     const verified=(source==='rapidapi'&&id===1)
       ||(source==='propline'&&id===2&&Boolean(row?.odds_bookmaker))
-      ||(source==='moviodds'&&id===3&&row?.odds_bookmaker==='bet365')
       ||(source==='fortuna_sk'&&id===4&&row?.odds_bookmaker==='Fortuna SK'
         &&String(row?.odds_provider_event_id||'').startsWith('ufo:mtch:'));
     if(!verified)return NaN;
