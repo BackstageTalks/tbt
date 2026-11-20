@@ -101,7 +101,7 @@ jobs:
         run: |
           set -euo pipefail
           retired='movi''odds'
-          if git grep -ni "$retired" -- '*.py' '*.yml' '*.yaml' '*.js' '*.cjs' '*.ts' '*.tsx'; then
+          if git grep -ni "$retired" -- '*.py' '*.yml' '*.yaml' '*.js' '*.cjs' '*.ts' '*.tsx' '*.md' '*.html' '*.css' '*.sh'; then
             echo '::error::Retired provider still referenced in source'
             exit 1
           fi
