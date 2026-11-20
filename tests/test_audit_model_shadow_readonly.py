@@ -231,3 +231,43 @@ def test_no_fitted_features_are_inferred_from_raw_shadow_rows():
     result = cohort_forensics([pending], "champion", "candidate")
     assert result["available_context_field_counts"] == {}
     assert result["selection_scope"].startswith("Same-match")
+
+
+def test_duplicate_exclusion_links_earliest_same_event_identity_without_scoring():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    base = {**row(1, status="pending"), "event_id": "provider-1",
+            "player1_id": "p1", "player2_id": "p2",
+            "tournament": "ITF M15 Verified Men"}
+    repeat = {**row(2, status="excluded"), "event_id": "provider-1",
+              "tour": "ATP", "player1_id": "p1", "player2_id": "p2",
+              "tournament": "ITF M15 Verified Men",
+              "excluded_reason": "duplicate_provider_event_snapshot",
+              "primary_match_id": base["match_id"]}
+    result = cohort_forensics([base, repeat], "champion", "candidate")
+    assert result["excluded_duplicate_link_status"] == "VERIFIED_FIRST_EVENT_SNAPSHOT_LINKS"
+    assert result["excluded_duplicate_link_counts"]["verified_original_event_pair"] == 1
+    assert result["excluded_duplicate_link_counts"]["schedule_changed"] == 1
+    assert result["duplicate_primary_status_counts"] == {"pending": 1}
+    assert result["explicit_itf_label_by_tour"]["ATP"] == {"explicit_itf": 2}
+    assert result["explicit_itf_label_by_tour_status"]["ATP"]["explicit_itf"]["excluded"] == 1
+
+    broken = {**repeat, "primary_match_id": "missing"}
+    found = cohort_forensics([base, broken], "champion", "candidate")
+    assert found["excluded_duplicate_link_status"] == "REVIEW_MISSING_OR_CONFLICTING_DUPLICATE_LINKS"
+    assert found["excluded_duplicate_link_counts"]["missing_primary"] == 1
+
+    wrong_players = {**repeat, "player2_id": "different"}
+    found = cohort_forensics([base, wrong_players], "champion", "candidate")
+    assert found["excluded_duplicate_link_counts"]["player_or_model_identity_mismatch"] == 1
+
+
+def test_prematch_betting_competition_is_not_inferred_from_gender_tour():
+    from scripts.audit_model_shadow_readonly import cohort_forensics
+    main = {**row(1, status="pending"), "player1_id": "a", "player2_id": "b",
+            "tour": "ATP", "tournament": "ATP 250 Example"}
+    itf = {**row(2, status="pending"), "player1_id": "c", "player2_id": "d",
+           "tour": "ATP", "tournament": "ITF M25 Example"}
+    result = cohort_forensics([main, itf], "champion", "candidate")
+    assert result["explicit_itf_label_by_tour"]["ATP"] == {
+        "explicit_itf": 1, "not_explicit_itf": 1}
+    assert result["competition_level_status"] == "NOT_IN_SHADOW_LEDGER"
