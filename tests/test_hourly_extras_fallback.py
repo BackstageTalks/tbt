@@ -13,7 +13,8 @@ CUTOFF = datetime(2026, 11, 16, 17, 7, tzinfo=timezone.utc)
 
 
 def verified(*, paid=215, gained=52, reason="cross_tour_paid_statistics_unavailable"):
-    sample = 24 if reason == "verified_prior_zero_gain_cross_tour_recheck" else 120
+    sample = (240 if reason == "cross_tour_paid_zero_cdb_yield_plateau" else
+              24 if reason == "verified_prior_zero_gain_cross_tour_recheck" else 120)
     download = {
         "requests_including_retries": paid,
         "statistics_availability_circuit": {
@@ -170,3 +171,32 @@ def test_external_cron_and_orchestrator_contract_are_unchanged():
     assert "from scripts.api_writer_wait import read_cdb_writer_lock" in hourly
     assert "from scripts.api_writer_wait import wait_for_writer" in hourly
     assert "BLINQ_NATIVE_SCHEDULES_ENABLED == 'true'" in hourly
+
+def test_verified_paid_zero_gain_plateau_can_use_residual_extras_budget():
+    data = verified(paid=300, gained=8,
+                    reason="cross_tour_paid_zero_cdb_yield_plateau")
+    # Provider returned fields (not necessarily empty bodies), but none of
+    # the last 240 paid rows produced a new canonical CDB cell.
+    data[0]["statistics_availability_circuit"]["trigger"][
+        "recent_unavailable_matches"] = 0
+    outcome = select(data, max_calls=1000)
+    assert outcome["status"] == "ELIGIBLE"
+    assert outcome["reason"] == "verified_statistics_zero_cdb_yield"
+    assert outcome["max_requests"] == 700
+    assert outcome["evidence"] == (
+        "same_run_remote_CDB_readback_and_paid_zero_gain_plateau")
+
+
+@pytest.mark.parametrize("change", [
+    {"recent_paid_matches": 239},
+    {"recent_paid_attempts": 239},
+    {"sampled_cohorts": 2},
+    {"sampled_tours": 1},
+    {"recent_new_canonical_fields": 1},
+    {"recent_paid_attempts": 301},
+])
+def test_paid_zero_gain_fallback_rejects_inadequate_plateau_evidence(change):
+    data = verified(paid=300, gained=0,
+                    reason="cross_tour_paid_zero_cdb_yield_plateau")
+    data[0]["statistics_availability_circuit"]["trigger"].update(change)
+    assert select(data, max_calls=1000)["allowed"] is False
