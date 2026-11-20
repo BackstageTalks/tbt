@@ -10,15 +10,17 @@ from collections import Counter, deque
 
 
 class StatisticsAvailabilityCircuit:
-    """Stop only after broad, recent, paid, independently empty observations.
+    """Stop after broad paid empty evidence or a sustained zero-CDB-gain plateau.
 
     A cohort with no statistics is not sufficient evidence of a provider-wide
     outage. Require both tours and three materially sampled tour/year cohorts.
     Only paid observations count; cache hits and unspent allocations do not.
     """
 
-    WINDOW = 160
+    WINDOW = 240
     MIN_PAID_MATCHES = 120
+    NO_GAIN_WINDOW = 240  # independent paid attempts, not an API cap
+    NO_GAIN_MIN_COHORT_MATCHES = 12
     MIN_PAID_ATTEMPTS = 120
     MIN_COHORT_MATCHES = 8
     MIN_COHORTS = 3
@@ -120,6 +122,34 @@ class StatisticsAvailabilityCircuit:
                     "sampled_tours": len({key[0] for key in sampled}),
                     "scope": "current_high_yield_statistics_run_only",
                     "prior_evidence": "independently_verified_previous_CDB_readback",
+                }
+                return True
+
+        # Some provider responses contain fields already present in CDB. The
+        # enricher can report "enriched" despite zero *new* canonical cells.
+        # Avoid repeating such paid responses indefinitely; unlike the empty-
+        # body circuit below this is evidence of low CDB yield, NOT provider
+        # downtime. Cache-only rows are excluded by the early return above.
+        plateau = list(self.samples)[-self.NO_GAIN_WINDOW:]
+        if (len(plateau) == self.NO_GAIN_WINDOW
+                and all(row[4] == 0 for row in plateau)):
+            sampled = {
+                key for key, count in self.paid_cohort_counts.items()
+                if count >= self.NO_GAIN_MIN_COHORT_MATCHES
+                and key[0] in {"atp", "wta"}
+            }
+            tours = {key[0] for key in sampled}
+            if len(sampled) >= self.MIN_COHORTS and len(tours) >= self.MIN_TOURS:
+                self.tripped = True
+                self.trigger = {
+                    "reason": "cross_tour_paid_zero_cdb_yield_plateau",
+                    "recent_paid_matches": len(plateau),
+                    "recent_paid_attempts": sum(row[2] for row in plateau),
+                    "recent_unavailable_matches": sum(int(row[3]) for row in plateau),
+                    "recent_new_canonical_fields": 0,
+                    "sampled_cohorts": len(sampled),
+                    "sampled_tours": len(tours),
+                    "scope": "current_high_yield_statistics_run_only",
                 }
                 return True
 

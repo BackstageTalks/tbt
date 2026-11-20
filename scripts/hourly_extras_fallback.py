@@ -17,6 +17,7 @@ from pathlib import Path
 REASONS = frozenset({
     "cross_tour_paid_statistics_unavailable",
     "verified_prior_zero_gain_cross_tour_recheck",
+    "cross_tour_paid_zero_cdb_yield_plateau",
 })
 
 
@@ -80,15 +81,19 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
     sampled = trigger.get("sampled_cohorts")
     tours = trigger.get("sampled_tours")
     attempts = trigger.get("recent_paid_attempts")
-    expected_min = (24 if trigger.get("reason") ==
-                    "verified_prior_zero_gain_cross_tour_recheck" else 120)
-    if (trigger.get("reason") not in REASONS
+    reason = trigger.get("reason")
+    zero_gain_plateau = reason == "cross_tour_paid_zero_cdb_yield_plateau"
+    expected_min = (240 if zero_gain_plateau else
+                    24 if reason == "verified_prior_zero_gain_cross_tour_recheck"
+                    else 120)
+    if (reason not in REASONS
             or trigger.get("scope") != "current_high_yield_statistics_run_only"
             or any(type(v) is not int for v in
                    (recent, unavailable, sampled, tours, attempts))
             or recent < expected_min or attempts < expected_min
             or not 0 <= unavailable <= recent
-            or unavailable * 100 < 95 * recent
+            or (not zero_gain_plateau and unavailable * 100 < 95 * recent)
+            or (zero_gain_plateau and (attempts > paid or recent > paid))
             or trigger.get("recent_new_canonical_fields") != 0
             or sampled < 3 or tours < 2):
         return skip("insufficient_cross_tour_paid_unavailability_evidence")
@@ -96,11 +101,15 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
     if remaining < 1:
         return skip("original_run_allowance_exhausted")
     return {
-        **result, "status": "ELIGIBLE", "reason": "verified_statistics_unavailable",
+        **result, "status": "ELIGIBLE",
+        "reason": ("verified_statistics_zero_cdb_yield" if zero_gain_plateau
+                   else "verified_statistics_unavailable"),
         "allowed": True, "max_requests": remaining,
         "statistics_paid_requests": paid,
         "cutoff_utc": cutoff.isoformat(),
-        "evidence": "same_run_remote_CDB_readback_and_paid_cross_tour_circuit",
+        "evidence": ("same_run_remote_CDB_readback_and_paid_zero_gain_plateau"
+                     if zero_gain_plateau else
+                     "same_run_remote_CDB_readback_and_paid_cross_tour_circuit"),
     }
 
 
