@@ -63,6 +63,24 @@ def proof():
             "status": "NOT_EVALUATED", "promotion_ready_for_top": False,
         },
     }
+
+    report["pit_evidence_holdout"] = {
+        "status": "PAIRED_UNSEEN_HOLDOUT",
+        "holdout_only": True,
+        "never_select_on_holdout": True,
+        "cohorts": {
+            "stats_0_rank_0": {
+                "n": 200,
+                "candidate": {"n": 200, "accuracy": .66, "brier_score": .20,
+                              "mean_confidence": .78},
+                "champion": {"n": 200, "accuracy": .65, "brier_score": .21,
+                             "mean_confidence": .76},
+            },
+            "stats_0_rank_1": {"n": 0, "candidate": None, "champion": None},
+            "stats_1_rank_0": {"n": 0, "candidate": None, "champion": None},
+            "stats_1_rank_1": {"n": 0, "candidate": None, "champion": None},
+        },
+    }
     return report, cert, leakage
 
 
@@ -140,3 +158,40 @@ def test_archive_cli_is_read_only_and_never_returns_a_promotion(tmp_path, capsys
                       "--out", str(output)]) == 0
     assert json.loads(output.read_text())["status"] == "BLOCKED_PRODUCTION_PROMOTION"
     assert not (tmp_path / "model.joblib").exists()
+
+
+def test_quality_evidence_is_independent_of_count_depth():
+    r, c, l = proof()
+    audited = gate.analyze(r, c, l, expected_commit=SHA)
+    quality = audited["feature_quality_holdout"]
+    assert quality["status"] == "VERIFIED_DESCRIPTIVE_ONLY"
+    assert quality["total"] == 200
+    assert quality["paired_serve_return_available"] == 0
+    assert quality["paired_weekly_ranks_available"] == 0
+    assert quality["paired_both_available"] == 0
+    assert quality["groups"]["stats_0_rank_0"]["candidate_confidence_minus_accuracy"] == pytest.approx(.12)
+    assert quality["supported_group_brier_nonregression"] is True
+    assert quality["training_or_publication_authorized"] is False
+
+
+@pytest.mark.parametrize("corruption", ["count", "rank", "scores", "missing", "not_frozen"])
+def test_untrusted_quality_cohorts_fail_closed(corruption):
+    r, c, l = proof()
+    evidence = r["pit_evidence_holdout"]
+    if corruption == "count":
+        evidence["cohorts"]["stats_0_rank_0"]["n"] = 199
+    elif corruption == "rank":
+        evidence["cohorts"]["stats_0_rank_0"]["n"] = 199
+        evidence["cohorts"]["stats_0_rank_1"] = {
+            "n": 1,
+            "candidate": {"n": 1, "accuracy": 1., "brier_score": 0., "mean_confidence": .9},
+            "champion": {"n": 1, "accuracy": 1., "brier_score": 0., "mean_confidence": .9},
+        }
+    elif corruption == "scores":
+        evidence["cohorts"]["stats_0_rank_0"]["candidate"]["brier_score"] = .35
+    elif corruption == "missing":
+        del evidence["cohorts"]["stats_1_rank_1"]
+    else:
+        evidence["never_select_on_holdout"] = False
+    with pytest.raises(ValueError):
+        gate.analyze(r, c, l, expected_commit=SHA)
