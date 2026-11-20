@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Immutable, read-back-verified PropLine evening odds archives on Google Drive.
 
-Separate from canonical CDB, predictions, pricing and the MoviOdds stats archive.
+Separate from canonical CDB, predictions and pricing.
 The GitHub workflow preserves its private research JSON before invoking this writer.
 """
 from __future__ import annotations
