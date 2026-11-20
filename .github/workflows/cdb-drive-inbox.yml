@@ -38,8 +38,6 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - tests/test_tml_uploaded_archive.py
       - scripts/cdb_native_sackmann_stage.py
       - tests/test_cdb_native_sackmann_stage.py
-      -
-      -
       - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
@@ -69,8 +67,6 @@ run-name: "CDB guarded import ${{ inputs.request_id || github.run_id }}"
       - tests/test_tml_uploaded_archive.py
       - scripts/cdb_native_sackmann_stage.py
       - tests/test_cdb_native_sackmann_stage.py
-      -
-      -
       - scripts/cdb_drive_identity_registry.py
       - scripts/link_offline_serve_return.py
       - tests/test_cdb_drive_multischema.py
