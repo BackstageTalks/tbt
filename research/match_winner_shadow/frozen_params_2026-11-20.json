@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "mode": "read_only_shadow_no_activation",
+  "frozen_at_utc": "2026-11-20T22:34:54Z",
+  "source_pr": 1727,
+  "source_head_before_freeze": "61515bc24bc7632e0c63510d2d78cc0955021ca1",
+  "adapter_blob_sha1": "4ab1bcbbf3a4e9f26432ac065e59541ef65c4f4e",
+  "model": "market_shadow_calibration.MarketShadowParams",
+  "calibration_formula": "0.5 * (sigmoid(z+c)+sigmoid(z-c)); z=a*logit(p_model)+b*logit(fair)",
+  "params": {
+    "a": 0.058883431874891985,
+    "b": 1.5190747404944331,
+    "c": -0.12775926576102908
+  },
+  "fit_export_sha256": "2ef1fcd835b1381024f64475a21efcbf7d2102c32eb71998c480592f4c9e2eb4",
+  "fit_source": "blinq_vysledky_2026-11-20.csv",
+  "fit_unique_prestart_priced": 574,
+  "fit_first_scheduled_utc": "2026-10-08T05:00:00Z",
+  "fit_last_scheduled_utc": "2026-11-05T23:50:00Z",
+  "historical_test_from_utc": "2026-11-08T09:00:00Z",
+  "historical_test_n": 371,
+  "minimum_new_settled_tips": 400,
+  "minimum_new_prestart_fair_pairs": 400,
+  "prospective_gate": "after_freeze_scheduled_and_issued_and_captured_only",
+  "no_refit_before_400": true,
+  "production_activation": false,
+  "provider_requests": 0,
+  "writer": false,
+  "decision": {
+    "green": "shadow has negative paired log-loss bootstrap CI vs both original and market in ATP and WTA; overall ECE increase <=0.01",
+    "yellow": "shadow is better than original but not proven better than market; suggest only abs(original-market) <=0.08 agreement filter as an unactivated proposal",
+    "red": "shadow not better than original or worse log loss in ATP/WTA"
+  },
+  "warnings": [
+    "Older OCT-NOV issued cohort is development-influenced and cannot validate prospective performance",
+    "Do not select or fit on future settled labels before the frozen prospective check",
+    "No market EV/odds selection modifications"
+  ]
+}
