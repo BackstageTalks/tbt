@@ -685,3 +685,67 @@ def test_hourly_live_verified_wta_2021_eligible_in_full_2016_2026_window(match_f
     assert '"start": "2022-01-01"' not in workflow
     assert '"max_requests": str(proposed)' in workflow
     assert 'min(5000, limit-spent, remaining, history_remaining)' in workflow
+
+def test_hourly_prefers_recent_verified_paid_yield_over_stale_cohort_prior(
+    match_factory,
+):
+    """The initial rotation must respond to CDB readback, without extra calls."""
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    matches = []
+    for tour, year in (("ATP", 2024), ("WTA", 2024),
+                       ("ATP", 2026), ("WTA", 2026)):
+        for index in range(15):
+            match = match_factory(f"{tour}-{year}-{index}", "A", "B", "A")
+            match.tour = tour
+            match.scheduled_at = datetime(year, 8, 1, tzinfo=timezone.utc) + timedelta(days=index)
+            match.stats = {"p1_service_points_won": 0.6}
+            match.provider_payload = {"id": str(30000 + len(matches))}
+            matches.append(match)
+    prior = {
+        "atp:2024:serve_return": {
+            "api_requests": 28, "new_fields": 0, "full_serve_return_rows": 0},
+        "wta:2024:serve_return": {
+            "api_requests": 28, "new_fields": 0, "full_serve_return_rows": 0},
+        "atp:2026:serve_return": {
+            "api_requests": 279, "new_fields": 3832, "full_serve_return_rows": 186},
+        "wta:2026:serve_return": {
+            "api_requests": 221, "new_fields": 2549, "full_serve_return_rows": 128},
+    }
+    ordered, report = _statistics_candidates(
+        matches, date(2024, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True, verified_prior=prior)
+    assert ordered[0].scheduled_at.year == 2026
+    assert {m.tour.lower() for m in ordered[:4]} == {"atp", "wta"}
+    assert sum(m.scheduled_at.year == 2026 for m in ordered[:12]) > 6
+    assert {m.match_id for m in ordered} == {m.match_id for m in matches}
+    assert report["verified_cohort_preference_active"] is True
+    assert report["verified_cohort_yield_per_paid_call"]["atp:2024:serve_return"] == 0
+    assert report["verified_cohort_yield_per_paid_call"]["wta:2026:serve_return"] > 11
+
+
+def test_hourly_verified_zero_gain_keeps_old_cohorts_eligible(match_factory):
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    for year in (2024, 2026):
+        for index in range(10):
+            match = match_factory(f"ATP-{year}-{index}", "A", "B", "A")
+            match.tour = "ATP"
+            match.scheduled_at = datetime(year, 6, 1, tzinfo=timezone.utc) + timedelta(days=index)
+            match.stats = {}
+            match.provider_payload = {"id": str(40000 + len(rows))}
+            rows.append(match)
+    ordered, plan = _statistics_candidates(
+        rows, date(2024, 1, 1), date(2026, 12, 31), targeted=True,
+        historical_high_yield=True,
+        verified_prior={"atp:2024:serve_return":
+                        {"api_requests": 40, "new_fields": 0,
+                         "full_serve_return_rows": 0}})
+    assert len(ordered) == len(rows)
+    assert len({m.match_id for m in ordered}) == len(rows)
+    assert ordered[0].scheduled_at.year == 2026
+    assert any(m.scheduled_at.year == 2024 for m in ordered[:15])
+    assert plan["verified_cohort_yield_per_paid_call"]["atp:2024:serve_return"] == 0
