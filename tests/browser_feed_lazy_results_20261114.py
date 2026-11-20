@@ -101,6 +101,27 @@ def main():
                 page.on("pageerror", lambda e: errors.append(str(e)))
                 page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
                 page.wait_for_function("window.lazyResultsTest && window.lazyResultsTest.state.ui")
+                # The shared BlinQ logo uses an embedded compact WebP raster.
+                # Verify it decodes to visible pixels at mobile and desktop
+                # viewport sizes, not merely that its image request returned 200.
+                logo = page.evaluate("""async () => {
+                  const img = new Image();
+                  img.src = '/assets/blinq_logo.svg';
+                  await img.decode();
+                  const canvas = document.createElement('canvas');
+                  canvas.width = 450; canvas.height = 225;
+                  const ctx = canvas.getContext('2d');
+                  ctx.drawImage(img, 0, 0, 450, 225);
+                  const rgba = ctx.getImageData(0, 0, 450, 225).data;
+                  let visible = 0;
+                  for (let n = 3; n < rgba.length; n += 4) {
+                    if (rgba[n] > 10) visible++;
+                  }
+                  return {naturalWidth: img.naturalWidth,
+                    naturalHeight: img.naturalHeight, visible};
+                }""")
+                assert logo["naturalWidth"] > 0 and logo["naturalHeight"] > 0, (width, logo)
+                assert logo["visible"] > 1000, (width, logo)
                 assert page.locator("#bootSplash img[src*='blinq-loader.gif']").count() in (0, 1)
                 scheduled_at = time.monotonic()
                 before = page.evaluate("""(row) => {
