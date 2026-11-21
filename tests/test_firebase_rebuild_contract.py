@@ -42,7 +42,7 @@ def test_rebuild_keeps_unchanged_value_prime_and_ranked_top_market_contract():
     assert "TOP_MIN_COUNT = 3" in source
     assert "VALUE_MIN_ODDS = 1.80" in source
     assert "VALUE_MAX_ODDS_DIFFERENCE = 0.15" in source
-    assert "sports_tiered_top5_60_v24" in source
+    assert "sports_main_tour_top5_60_v25" in source
     assert 'SECTION_PRIORITY = ("value", "top_daily", "prime")' in source
     assert '"top200_picks": []' in source
 
