@@ -2317,7 +2317,13 @@
     const raw=String(ent.visible_picks??'').toUpperCase();
     const zeroAllocation=raw!==''&&raw!=='ALL'&&Number(raw)===0
       &&ent.blur_remaining!==false&&!dailyHubHasAllocatedRows(ent);
-    return zeroAllocation||(ent.blur_remaining!==false&&Number(ent.locked_count||0)>0)||display==='blurred'
+    // ELITE keeps the ordered, redacted positions visible as locked teasers.
+    // The server never sends pick details for those positions.
+    const eliteHasRestrictedPositions=accountPlan()==='elite'
+      &&(ent.slot_states||[]).some((state,index)=>state==='hidden'
+        &&String(ent.row_overrides?.[String(index+1)]||'').toLowerCase()!=='hidden');
+    return zeroAllocation||eliteHasRestrictedPositions
+      ||(ent.blur_remaining!==false&&Number(ent.locked_count||0)>0)||display==='blurred'
       ||(Array.isArray(ent.slot_states)&&ent.slot_states.includes('blurred'));
   }
   function dailyHubEntitlement(tab){
@@ -3214,7 +3220,7 @@
   function dailyHubLockedRow(tab,index,requiredPlan='pro'){
     const colspan=Math.max(1,dailyHubColumns(tab).length),required=String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
     if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="SEE ALL"><td colspan="${colspan}"><span>◆</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>SEE ALL</b><small>Rozšírený kvalifikovaný výber podľa nastavenej úrovne prístupu.</small></div></td></tr>`;
-    return `<tr class="hub-row-locked access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span>🔒</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>${escapeHtml(uiCopy('access.locked_row',lcopy('Next pick is locked','Ďalší pick je zamknutý','Další tip je zamčený')))}</b><small>${escapeHtml(uiCopy('access.locked_row_body',lcopy('A higher tier unlocks more rows and prediction detail.','Vyššia úroveň odomkne ďalšie riadky a detail predikcie.','Vyšší úroveň odemkne další řádky a detail predikce.')))}</small></div></td></tr>`;
+    return `<tr class="hub-row-locked access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span class="hub-locked-rank" aria-label="Pozícia ${index+1}">${index+1}.</span><span aria-hidden="true">🔒</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>${escapeHtml(uiCopy('access.locked_row',lcopy('Next pick is locked','Ďalší pick je zamknutý','Další tip je zamčený')))}</b><small>${escapeHtml(uiCopy('access.locked_row_body',lcopy('A higher tier unlocks more rows and prediction detail.','Vyššia úroveň odomkne ďalšie riadky a detail predikcie.','Vyšší úroveň odemkne další řádky a detail predikce.')))}</small></div></td></tr>`;
   }
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
@@ -3274,11 +3280,7 @@
     const out=[];
     {
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
-      if(plan==='elite'&&!state.previewPlan&&!includedButUnavailable){
-        // ELITE is a curated offer: render only the server-authorized rows,
-        // not global locked placeholders or original source positions.
-        rows.slice(0,limit).forEach((row,index)=>out.push(dailyHubRow(row,tab,false,index)));
-      }else if(slotStates.length&&!includedButUnavailable){
+      if(slotStates.length&&!includedButUnavailable){
         // Server-authorized rows carry their original source slot. Search,
         // surface and tournament filters must never compact slot 7 into slot 2.
         const bySlot=new Map(),unmapped=[];
@@ -3288,18 +3290,25 @@
           else unmapped.push(row);
         });
         slotStates.slice(0,limit).forEach((slotState,slotIndex)=>{
-          if(slotState==='hidden')return;
-          if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
-          else {
+          // ELITE shows its full ordered offer, but without restricted data.
+          // Respect an explicit Admin HIDE override; other unavailable slots
+          // render as redacted locks even if old Admin config disabled blur.
+          const explicitlyHidden=String(ent.row_overrides?.[String(slotIndex+1)]||'').toLowerCase()==='hidden';
+          const eliteTeaser=plan==='elite'&&!explicitlyHidden&&slotState==='hidden';
+          if(slotState==='hidden'&&!eliteTeaser)return;
+          if(slotState==='blurred'||eliteTeaser){
+            out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
+          }else{
             const row=bySlot.get(slotIndex)??unmapped[dataIndex++];
             if(row)out.push(dailyHubRow(row,tab,false,slotIndex));
           }
         });
       }else if(!includedButUnavailable)for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
-      if(plan!=='elite'||state.previewPlan){
-        if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
-        else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
+      if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length)){
+        out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
+      }else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false){
+        out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
       }
     }
     body.innerHTML=out.join('');
@@ -3594,7 +3603,18 @@
       const target=event.target instanceof Element?event.target:null;
       if(!target)return;
       const tab=target.closest('[data-daily-hub-tab]');
-      if(tab){ if(tab.dataset.upgradePlan){showAccessHint(tab,tab.dataset.upgradePlan,tab.dataset.upgradeSection||'SEE ALL',true);return;} state.dailyHubTab=tab.dataset.dailyHubTab; state.dailyHubExpanded=false; renderDailyHub(); return; }
+      if(tab){
+        // ELITE can inspect ordered locked placeholders. Opening a locked
+        // category never grants its predictions; clicking a lock upsells.
+        if(tab.dataset.upgradePlan&&accountPlan()!=='elite'){
+          showAccessHint(tab,tab.dataset.upgradePlan,tab.dataset.upgradeSection||'SEE ALL',true);return;
+        }
+        state.dailyHubTab=tab.dataset.dailyHubTab;state.dailyHubExpanded=false;renderDailyHub();return;
+      }
+      const lockedRow=target.closest('tr.hub-row-locked[data-upgrade-plan]');
+      if(lockedRow){
+        showAccessHint(lockedRow,lockedRow.dataset.upgradePlan,lockedRow.dataset.upgradeSection||'SEE ALL',true);return;
+      }
       const detailLock=target.closest('[data-detail-locked]');
       if(detailLock){showAccessHint(detailLock,detailLock.dataset.upgradePlan||firstMatchDetailUnlockPlan(),detailLock.dataset.upgradeSection||lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
       if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
