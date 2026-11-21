@@ -7,7 +7,7 @@ from tbt.services.feed import ace_eligibility_reason
 NOW = datetime(2026, 11, 15, 9, tzinfo=timezone.utc)
 
 
-def match(*, r1=None, r2=None, tour="ATP", tournament="Sofia Challenger"):
+def match(*, r1=None, r2=None, tour="ATP", tournament="Sofia ATP 250"):
     return {
         "tour": tour, "tournament": tournament,
         "player1": {"id": "200", "name": "Player One", "rank": r1},
