@@ -110,7 +110,7 @@ def test_one_shot_new_aces_and_ball_are_from_exact_live_website(tmp_path, monkey
     assert not (tmp_path/"out"/"ready").exists()
 
 
-def test_challenger_excluded_but_stale_website_and_receipts_fail_closed():
+def test_legacy_nov10_challenger_kept_and_stale_website_receipts_fail_closed():
     old=state()
     _,old_attempt,original,_=task.checked_original(old)
     altered=deepcopy(old)
@@ -125,7 +125,7 @@ def test_challenger_excluded_but_stale_website_and_receipts_fail_closed():
             **snapshot(),
             "source_feed_generated_at":old_attempt["source_feed_generated_at"]
         },site(),datetime.fromisoformat(NOW),old_attempt)
-    assert task.main_tour_aces(candidate("c","ATP","Challenger Open")) is False
+    assert task.main_tour_aces(candidate("c","ATP","Challenger Open")) is True
     assert task.main_tour_aces(candidate("w","WTA","WTA 125")) is True
     assert task.main_tour_aces(candidate("w-main","WTA","WTA 250")) is True
     assert task.main_tour_aces(candidate("i","ATP","ITF Futures Open")) is False

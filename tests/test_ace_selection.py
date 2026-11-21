@@ -190,7 +190,7 @@ def test_aces_and_most_aces_require_two_known_top_1000_ranks():
 
 def test_aces_and_derived_most_aces_exclude_sub_250_tiers():
     from tbt.services.ace_selection import select_ace_winner_picks
-    now = datetime(2026, 11, 21, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 22, 12, tzinfo=timezone.utc)
     history = []
     for i in range(10):
         when = now - timedelta(days=20 + i * 8)
@@ -217,6 +217,26 @@ def test_aces_and_derived_most_aces_exclude_sub_250_tiers():
     assert not any(row["event_id"] in blocked for row in cards if row["market"] == "aces")
     assert not any(row["event_id"] in blocked for row in more)
 
+
+def test_atp_250_forward_only_cutoff_preserves_frozen_nov21_telegram_aces():
+    from tbt.services.feed import ace_eligibility_reason
+
+    row = prediction(datetime(2026, 11, 21, 14, tzinfo=timezone.utc))
+    row.update(tour="ATP", tournament="ATP Challenger", competition="ATP Challenger")
+    # Already reserved/sent before the rule change: must not disappear from
+    # the confirmed November 21 website snapshot during deployment.
+    for stamp in ("2026-11-21T14:00:00+00:00", "2026-11-22T04:59:59+00:00"):
+        assert ace_eligibility_reason({**row, "scheduled_at": stamp}) == "eligible"
+    # 22 Nov 06:00 Bratislava is the first new day restricted to ATP 250+.
+    for stamp in ("2026-11-22T05:00:00+00:00", "2026-11-22T14:00:00+00:00"):
+        assert ace_eligibility_reason({**row, "scheduled_at": stamp}) == "excluded_atp_below_250"
+    assert ace_eligibility_reason({**row, "scheduled_at": None}) == "excluded_atp_below_250"
+    assert ace_eligibility_reason({**row, "competition": "ATP 250",
+                                   "tournament": "Main Draw",
+                                   "scheduled_at": "2026-11-22T05:00:00+00:00"}) == "eligible"
+    # Grandfathering never permits ITF/Futures, even on a frozen betting day.
+    assert ace_eligibility_reason({**row, "competition": "ITF Men",
+                                   "scheduled_at": "2026-11-21T14:00:00+00:00"}) == "excluded_itf_futures"
 
 def test_wta_aces_grade_requires_verified_250_plus_and_rejects_generic_wta():
     from tbt.services.feed import ace_eligibility_reason, main_tour_aces

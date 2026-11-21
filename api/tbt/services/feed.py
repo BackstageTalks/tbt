@@ -17,9 +17,12 @@ MAX_ACES_PLAYER_RANK = 1000  # Both players, ATP/WTA active Aces / Most Aces onl
 # daily offer across a same-day deployment. 18 Nov 06:00 local (CET) starts
 # the first betting day under the new WTA250+ selection rule.
 WTA_GRADE_GATE_EFFECTIVE_UTC = datetime(2026, 11, 18, 5, 0, tzinfo=timezone.utc)
+# Activation is the first *new* Bratislava betting day. Exact November 21
+# Telegram reserved/sent Aces O/U must still match the frozen website offer.
+ATP_GRADE_GATE_EFFECTIVE_UTC = datetime(2026, 11, 22, 5, 0, tzinfo=timezone.utc)
 
 
-def _legacy_wta_offer(row):
+def _legacy_offer_before(row, cutoff):
     """Only events from betting days before the explicit activation cutoff."""
     raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
     if not raw:
@@ -29,7 +32,15 @@ def _legacy_wta_offer(row):
     except (ValueError, TypeError, OverflowError):
         return False
     return (stamp.tzinfo is not None and
-            stamp.astimezone(timezone.utc) < WTA_GRADE_GATE_EFFECTIVE_UTC)
+            stamp.astimezone(timezone.utc) < cutoff)
+
+
+def _legacy_wta_offer(row):
+    return _legacy_offer_before(row, WTA_GRADE_GATE_EFFECTIVE_UTC)
+
+
+def _legacy_atp_offer(row):
+    return _legacy_offer_before(row, ATP_GRADE_GATE_EFFECTIVE_UTC)
 
 
 def _wta_aces_level_reason(row):
@@ -82,7 +93,7 @@ def ace_eligibility_reason(row):
         label = str(row.get(field) or "").strip().casefold()
         if any(tag in label for tag in ("itf", "futures")):
             return "excluded_itf_futures"
-    if tour in atp_tours and (tour == "atp challenger" or any(
+    if tour in atp_tours and not _legacy_atp_offer(row) and (tour == "atp challenger" or any(
         "challenger" in str(row.get(field) or "").casefold()
         for field in ("tournament", "tournament_name", "competition", "tournament_level", "category", "tour_level")
     )):
