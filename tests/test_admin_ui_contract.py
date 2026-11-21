@@ -175,12 +175,13 @@ def test_hero_manager_uses_current_desktop_mobile_creative_contract():
 def test_dashboard_market_structure_matches_approved_order_and_rules():
     cfg = _cfg()
     rules = cfg["market_rules"]
+    assert rules["prime"]["label"] == "ACCA"
     assert rules["prime"]["market"] == "match_winner"
     assert rules["prime"]["objective"] == "accuracy_first"
     assert rules["prime"]["min_win_probability"] == 0.68
     assert rules["prime"]["preferred_probability"] == 0.85
     assert rules["prime"]["minimum_dashboard_count"] == 5
-    assert rules["prime"]["min_data_depth"] == 0.80
+    assert rules["prime"]["min_data_depth"] == 0.50
     assert rules["prime"]["min_surface_matches"] == 5
     assert rules["prime"]["preferred_min_odds"] is None
     assert rules["prime"]["preferred_max_odds"] == 1.49
@@ -201,7 +202,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["objective"] == "competition_tier_then_probability_desc"
     assert rules["value"]["selection_mode"] == "probability_plus_close_odds"
     assert rules["value"]["min_probability"] == 0.65
-    assert rules["value"]["min_data_depth"] == 0.75
+    assert rules["value"]["min_data_depth"] == 0.50
     assert rules["value"]["min_surface_matches"] == 3
     assert rules["value"]["min_odds"] == 1.80
     assert rules["value"]["min_edge"] is None
