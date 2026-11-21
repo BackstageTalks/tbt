@@ -19,7 +19,7 @@ import unicodedata
 from zoneinfo import ZoneInfo
 
 from ace_working_odds import local_player_aces_ou
-from propline_evening_odds import _single_book_quotes
+from propline_evening_odds import _single_book_quotes, SOURCE_URL, event_odds_url
 
 TZ = ZoneInfo("Europe/Bratislava")
 DATA_REPO = "BackstageTalks/tbt-data"
@@ -77,11 +77,16 @@ def _valid_report(report, *, betting_day, now):
         report.get("target_betting_day")
     ) != (1, "propline_free", betting_day):
         return False
+    calls = report.get("provider_requests")
+    details = report.get("provider_event_requests", 0)
     if (report.get("status") not in ("audited", "no_exact_aces_market_available")
             or report.get("cdb_writes") != 0
             or report.get("published_picks_changed") != 0
             or report.get("provider_paid_calls") != 0
-            or report.get("provider_requests") != 1
+            or not isinstance(calls, int) or isinstance(calls, bool)
+            or not isinstance(details, int) or isinstance(details, bool)
+            or calls != 1 + details or details < 0
+            or details > len(report.get("events_in_target_window") or [])
             or report.get("coverage_truncated") is not False):
         return False
     captured = _stamp(report.get("captured_at"))
@@ -104,6 +109,9 @@ def validated_events(report, *, betting_day, now):
                 timedelta(0) <= now - captured <= timedelta(hours=24)
                 or captured >= scheduled or now >= scheduled
                 or _betting_day(scheduled) != betting_day):
+            continue
+        if event.get("source_url") not in {
+                SOURCE_URL, event_odds_url(event.get("event_id"))}:
             continue
         raw = event.get("provider_raw_event")
         players = event.get("players")
