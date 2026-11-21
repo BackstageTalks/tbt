@@ -24,4 +24,4 @@
 
 ### Stop / rollback
 
-Set `BLINQ_PROPLINE_ACES_SHADOW_ENABLED=false` for a research-only disable, or revert the scoped workflow/pipeline hook. Do not delete immutable private research evidence or change the canonical CDB.
+Set repository variable `BLINQ_PROPLINE_ACES_SHADOW_DISABLED=true` to stop this research-only pilot on future morning refreshes, or revert the scoped workflow/pipeline hook. Do not delete immutable private research evidence or change the canonical CDB.
