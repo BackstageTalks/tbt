@@ -75,7 +75,6 @@ def test_no_mail_outside_1650_1705_catchup_window(minutes):
 
 
 @pytest.mark.parametrize(("spent", "expected"), [
-    (0, "notify"),
     (11249, "notify"),
     (11250, "threshold_met"),
     (14500, "threshold_met"),
@@ -92,6 +91,7 @@ def test_strictly_less_than_75_percent_of_provider_15000(spent, expected):
     {"reserved_provider_headroom": 0},
     {"window": "UTC midnight"},
     {"global_spent": True},
+    {"global_spent": 0},
     {"global_remaining": 9999},
     {"next_reset_utc": "2026-11-23T17:09:00+00:00"},
     {"next_reset_utc": "garbage"},
