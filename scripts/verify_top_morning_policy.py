@@ -1,7 +1,11 @@
 """Offline fail-closed check of the approved morning TOP policy."""
 import json
 from _bootstrap import ROOT
-from tbt.services.market_selection import _rank_full_slate_top, select_market_sections
+from tbt.services.market_selection import (
+    _rank_full_slate_top, enrich_current_betting_day_odds,
+    select_market_sections,
+)
+import inspect
 
 
 def verify():
@@ -10,6 +14,15 @@ def verify():
     ui = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]["top_daily"]
     assert rule["policy"] == ui["policy"] == "sports_tiered_top5_60_v24"
     assert rule["limit"] == ui["limit"] == 5
+    config = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]
+    empty = select_market_sections([])["market_selection"]
+    assert rule["min_data_depth"] == ui["min_data_depth"] == 0.50
+    assert rule["backup_min_data_depth"] == ui["backup_min_data_depth"] == 0.50
+    assert empty["prime_rule"]["min_data_depth"] == config["prime"]["min_data_depth"] == 0.50
+    assert empty["value_rule"]["min_data_depth"] == config["value"]["min_data_depth"] == 0.50
+    assert config["prime"]["label"] == "ACCA"
+    assert inspect.signature(enrich_current_betting_day_odds).parameters[
+        "candidate_min_data_depth"].default == 0.50
     assert rule["core_min_probability"] == ui["min_probability"] == .60
     assert rule["probability_tiers"] == ui["confidence_tiers"] == [.60]
     assert rule["daily_minimum_target"] == ui["target_count"] == 3
