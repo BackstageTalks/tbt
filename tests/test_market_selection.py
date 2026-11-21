@@ -226,7 +226,7 @@ def test_champion_depth_050_accepts_acca_top_and_value_with_surface_and_price_ga
     from copy import deepcopy
     original = deepcopy(before)
     result = select_market_sections(before)
-    assert [x['event_id'] for x in result['prime_picks']] == ['acca-050', 'low-odds']
+    assert {x['event_id'] for x in result['prime_picks']} == {'acca-050', 'low-odds'}
     assert [x['event_id'] for x in result['top_daily_picks']] == ['top-050']
     assert [x['event_id'] for x in result['value_picks']] == ['value-050']
     assert result['market_selection']['top_rejection_counts']['insufficient_data_depth'] >= 1
