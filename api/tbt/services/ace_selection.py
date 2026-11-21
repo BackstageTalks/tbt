@@ -17,7 +17,7 @@ from .feed import ace_eligibility_reason, main_tour_aces
 
 
 def _main_tour_for_aces(row: dict[str, Any]) -> bool:
-    """Shared ESÁ and Viac Es market gate: ATP/Challenger, WTA 250+.
+    """Shared ESÁ and Viac Es market gate: ATP 250+, WTA 250+.
 
     WTA 125, ITF/Futures, ambiguous women's grades, and either player without
     a known TOP1000 rank are excluded. Match Winner, Value, DF unchanged.
