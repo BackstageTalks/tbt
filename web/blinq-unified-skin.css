@@ -405,3 +405,14 @@ body#blinqPremium.blinq-admin .admin-accounts-simple .admin-simple-stats>span {
     box-shadow:none!important;
   }
 }
+
+/* Results: the category <details> popover must escape the route panel.
+   Limit its scrollable height on short desktop windows and on mobile. */
+body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel:has(.results-category-picker[open]) {
+  overflow:visible!important;
+  position:relative!important;
+  z-index:2!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-category-options {
+  max-height:min(360px, 50dvh)!important;
+}
