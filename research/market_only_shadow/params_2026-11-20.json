@@ -34,7 +34,9 @@
     "freeze_after_utc": "2026-11-20T22:34:54Z",
     "minimum_new_valid_matches": 400,
     "no_metrics_before_minimum": true,
-    "no_refit": true
+    "no_refit": true,
+    "n_min_daily_shadow": 5,
+    "daily_minimum_requires_all_observed_days": true
   },
   "activation_approved": false,
   "production_model_modified": false,
@@ -42,6 +44,25 @@
   "notes": [
     "The chosen-side intercept is not player-swap symmetric; an exact decision on favorite can change around 0.5.",
     "Market-only monotonic sorting cannot outperform fair market sorting on the same candidates.",
-    "No actual prospective full-slate capture integration or production scheduling authorized."
-  ]
+    "No actual prospective full-slate capture integration or production scheduling authorized.",
+    "A0 shadow always emits up to n_min per observed UTC day by tiered ordering; days with fewer eligible slate candidates stay below minimum and must block B2 review."
+  ],
+  "opener_fallback": {
+    "formula": "q = sigmoid(1.088 * logit(opener_no_vig) - 0.008)",
+    "slope": 1.088,
+    "intercept": -0.008,
+    "claimed_fit_n": 36972,
+    "source": "BackstageTalks/tbt-data/data/oddstrader/atp (opener column; historical annual files)",
+    "source_market": "match_winner",
+    "source_tour": "ATP",
+    "source_field": "opener",
+    "requires_original_two_sided_no_vig": true,
+    "requires_verified_captured_before_start": true,
+    "independent_fit_reproduced": false,
+    "source_timestamp_verified": false,
+    "wta_verified": false,
+    "production_enabled": false,
+    "status": "CLAIMED_UNVERIFIED_RESEARCH_VARIANT",
+    "notes": "Source directory exists, but row count, opener de-vig fit and per-fixture pre-start provenance have not been independently reproduced from the private archive. No silent fallback to opener."
+  }
 }
