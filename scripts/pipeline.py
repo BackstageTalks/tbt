@@ -784,7 +784,7 @@ def _publish_predictions(
     if os.getenv("TBT_MARKET_RANK_SHADOW_ENABLED", "").lower() == "true":
         try:
             from tbt.services.market_rank_shadow import (
-                first_day_shadow, settled_comparison)
+                first_day_shadow, settled_comparison, markdown_summary)
             from tempfile import TemporaryDirectory
             if new_market_rank_shadow is not None:
                 # Independent remote byte read-back from a new ReleaseStore,
@@ -821,6 +821,10 @@ def _publish_predictions(
                 candidate_history, settlement_source, asof=now)
             print(json.dumps({"market_rank_shadow_comparison": comparison},
                              ensure_ascii=False, allow_nan=False), flush=True)
+            summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+            if summary_path:
+                with Path(summary_path).open("a", encoding="utf-8") as handle:
+                    handle.write("\n" + markdown_summary(comparison))
         except Exception as exc:
             print(json.dumps({"warning": "market_rank_shadow_readback_unverified",
                               "error_type": type(exc).__name__,
