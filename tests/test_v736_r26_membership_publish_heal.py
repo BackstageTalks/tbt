@@ -59,6 +59,9 @@ def test_locked_and_hidden_tier_panels_cannot_claim_full_offer():
         rule = tabs[tab]["plans"][plan]
         rule.update({"display_state": state, "tab_enabled": state != "hidden",
                      "see_all": True, "visible_rows": 0})
+    # Legacy disabled tab with stale active display is also effectively hidden.
+    tabs["games"]["plans"]["elite"].update({"display_state": "active",
+                                             "tab_enabled": False, "see_all": True})
     # An actually open panel may retain see_all; the change is strictly scoped.
     open_panel = tabs["ace"]["plans"]["legend"]
     open_panel.update({"display_state": "active", "tab_enabled": True,
@@ -70,6 +73,7 @@ def test_locked_and_hidden_tier_panels_cannot_claim_full_offer():
         assert rule["display_state"] == state
         assert rule["visible_rows"] == 0
         assert rule["see_all"] is False
+    assert effective["dashboard"]["daily_hub"]["tabs"]["games"]["plans"]["elite"]["see_all"] is False
     assert effective["dashboard"]["daily_hub"]["tabs"]["ace"]["plans"]["legend"]["see_all"] is True
 
     saved = validate_ui_config(deepcopy(payload))
