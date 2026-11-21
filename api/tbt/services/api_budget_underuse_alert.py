@@ -109,7 +109,7 @@ def send_underuse_alert(cfg, *, now: datetime | None = None,
         })
     except Exception as exc:
         if _conflict(exc):
-            return {"status": "already_claimed", **decision}
+            return {**decision, "status": "already_claimed"}
         raise BudgetAlertUnavailable("Atomic daily mail claim unavailable") from exc
 
     accepted = 0
@@ -166,4 +166,4 @@ def send_underuse_alert(cfg, *, now: datetime | None = None,
         raise BudgetAlertUnavailable("Mail outcome not durably verified; no auto retry") from exc
     if state != "smtp_accepted":
         raise BudgetAlertUnavailable("SMTP result uncertain or partially accepted; no auto retry")
-    return {"status": "smtp_accepted", "accepted_count": accepted, **decision}
+    return {**decision, "status": "smtp_accepted", "accepted_count": accepted}
