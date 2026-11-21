@@ -117,14 +117,14 @@ def test_400_without_independent_issuance_blocks_all_metrics():
 
 def test_400_with_only_four_issued_shadows_blocks_result():
     fixtures = [fixture(i) for i in range(400)]
-    for i in range(5, 400):
+    for i in range(4, 400):
         fixtures[i]["scheduled_at"] = "2026-11-22T08:00:00Z"
     snapshots = prepare_all_singles_shadow_rows(fixtures, PARAMS)
     result = audit.evaluate(snapshots, [settled(n) for n in range(400)],
                             issued_shadow=[issuance(n) for n in range(400)])
     assert result["status"] == "BLOCKED_A0_DAILY_MINIMUM"
-    assert result["a0_daily_issuance"]["computed_per_day"]["2026-11-21"] == 5
-    # A0 on the next day would select 395; no outcome metrics can be exposed.
+    assert result["a0_daily_issuance"]["computed_per_day"]["2026-11-21"] == 4
+    # A0 on the next day would select 396; no outcome metrics can be exposed.
     assert "overall" not in result
 
 
