@@ -261,8 +261,12 @@ def a0_daily_issued_gate(snapshots, conf, freeze, issued_shadow):
             raise ValueError("Unknown or duplicate issued shadow event/side")
         row = expected[key]
         issued_at, start = _utc(receipt.get("shadow_issued_at")), _utc(row["scheduled_at"])
+        model_time = _utc(row.get("created_at"))
+        quote_time = _utc(row["betting"].get("captured_at"))
+        price_issued = _utc(row.get("issued_at"))
+        first_possible = max(t for t in (model_time, quote_time, price_issued) if t is not None)
         if (issued_at is None or start is None
-                or not freeze < issued_at < start
+                or not freeze < issued_at < start or issued_at < first_possible
                 or receipt.get("selection_tier") != row["selection_tier"]
                 or receipt.get("selection_basis") != row["selection_basis"]
                 or receipt.get("day_utc") != row["shadow_selection_day_utc"]
