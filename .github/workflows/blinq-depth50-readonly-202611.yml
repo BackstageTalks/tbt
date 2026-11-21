@@ -1,0 +1,164 @@
+name: BlinQ one-off depth 50 read-only counterfactual
+on:
+  pull_request:
+    paths:
+      - .github/workflows/blinq-depth50-readonly-202611.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  retrospective:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: scripts:api
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - name: Verify immutable source and run matched 80 vs 50 simulation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python - <<'PY'
+          import gzip, hashlib, json, math, subprocess
+          from datetime import date, timedelta
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+          from audit_top_721_funnel import aware, number, quote_evidence
+          from tbt.services.top_policy import competition_group
+
+          repo = "BackstageTalks/tbt-data"
+          tag = "tbt-predictions-v1"
+          name = "selection_candidates_2026-11.json.gz"
+          def release():
+              return json.loads(subprocess.check_output(
+                  ["gh", "api", f"repos/{repo}/releases/tags/{tag}"], text=True))
+          before = release()
+          assert any(a["name"] == name for a in before["assets"]), "source missing"
+          directory = Path(".cache/tbt/depth50-replay")
+          directory.mkdir(parents=True, exist_ok=True)
+          for asset in (name, "_tbt_bundle_manifest.json"):
+              subprocess.run(
+                  ["gh","release","download",tag,"--repo",repo,
+                   "--pattern",asset,"--dir",str(directory),"--clobber"],
+                  check=True, stdout=subprocess.DEVNULL)
+          manifest = json.loads((directory / "_tbt_bundle_manifest.json").read_text())
+          digest = hashlib.sha256((directory / name).read_bytes()).hexdigest()
+          assert digest == manifest["files"][name]["sha256"], "bundle hash mismatch"
+          after = release()
+          ids = lambda rel: {a["name"]: (a["id"], a["size"]) for a in rel["assets"]}
+          assert ids(before)[name] == ids(after)[name], "source release changed"
+          if "digest" in next(a for a in after["assets"] if a["name"] == name):
+              remote_digest = next(a for a in after["assets"] if a["name"] == name)["digest"]
+              assert remote_digest == "sha256:" + digest, "asset hash mismatch"
+          with gzip.open(directory / name, "rt", encoding="utf-8") as handle:
+              archive = json.load(handle)
+          assert isinstance(archive.get("snapshots"), list)
+
+          tz = ZoneInfo("Europe/Bratislava")
+          start_day, end_day = date(2026, 11, 15), date(2026, 11, 21)
+          report = {"source": name, "sha256": digest, "status": "READ_ONLY_REPLAY_NOT_ISSUED",
+                    "production_changes": 0, "provider_requests": 0, "days": []}
+          for idx in range((end_day-start_day).days + 1):
+              day = (start_day + timedelta(days=idx)).isoformat()
+              snapshots = []
+              for s in archive["snapshots"]:
+                  if not isinstance(s, dict) or not isinstance(s.get("rows"), list):
+                      continue
+                  at = aware(s.get("generated_at"))
+                  if at and at.astimezone(tz).date().isoformat() == day and at.astimezone(tz).hour >= 6:
+                      snapshots.append((at, s))
+              if not snapshots:
+                  report["days"].append({"day": day, "status": "NO_FROZEN_SNAPSHOT"})
+                  continue
+              stamp, snapshot = min(snapshots, key=lambda item:item[0])
+              counters = {str(x): {"potential": [], "strict_quoted": [], "no_quote": 0}
+                          for x in (0.8, 0.5)}
+              day_total, main_total, invalid_probability = 0, 0, 0
+              for row in snapshot["rows"]:
+                  if not isinstance(row, dict):
+                      continue
+                  start = aware(row.get("scheduled_at"))
+                  if not start or start.astimezone(tz).date().isoformat() != day or start.astimezone(tz).hour < 6:
+                      continue
+                  day_total += 1
+                  if start <= stamp or competition_group(row) not in {"ATP", "WTA"}:
+                      continue
+                  main_total += 1
+                  raw = number(row.get("raw_model_probability"))
+                  public = number(row.get("blinq_probability"))
+                  depth = number(row.get("data_depth"))
+                  if (raw is None or public is None or depth is None
+                      or not 0.5 <= raw < 1 or not 0.5 <= public < 1
+                      or not 0 <= depth <= 1
+                      or not math.isclose(public, 0.5 + (raw-0.5)*depth,
+                                          rel_tol=0, abs_tol=0.005)):
+                      invalid_probability += 1
+                      continue
+                  if public < 0.6:
+                      continue
+                  samples = row.get("samples") or {}
+                  sf = [number(samples.get(k)) for k in
+                        ("player1_surface_matches", "player2_surface_matches")]
+                  if any(x is None or x < 5 for x in sf):
+                      continue
+                  reasons = set(str(v) for v in row.get("top_rejection_reasons") or [] if v)
+                  nonprice_exceptions = {
+                      "insufficient_data_depth", "missing_match_winner_quote",
+                      "missing_or_low_odds", "missing_prematch_quote_evidence",
+                      "probability_below_fixed_floor", "competition_not_approved"}
+                  if reasons - nonprice_exceptions or row.get("selected_section") == "value":
+                      continue
+                  key = str(row.get("event_id") or "")
+                  if not key or not str(row.get("model_version") or "").strip():
+                      continue
+                  quote = quote_evidence(row, stamp)
+                  for t in (0.8, 0.5):
+                      if depth + 1e-12 < t:
+                          continue
+                      item = counters[str(t)]
+                      item["potential"].append((public, key))
+                      if quote == "verified_prestart_selected_price_ge_150":
+                          item["strict_quoted"].append((public, key))
+                      else:
+                          item["no_quote"] += 1
+              out = {"day":day,"status":"ANALYZED","source_generated_at":snapshot["generated_at"],
+                     "today_singles":day_total, "classified_main_tour":main_total,
+                     "invalid_probability_evidence":invalid_probability,
+                     "observed_top_snapshot":sum(
+                         isinstance(x,dict) and x.get("selected_section")=="top_daily"
+                         for x in snapshot["rows"])}
+              for t,label in ((0.8,"depth80"),(0.5,"depth50")):
+                  c = counters[str(t)]
+                  ranked = sorted(c["strict_quoted"],key=lambda pair:(-pair[0],pair[1]))
+                  out[label] = {"model_qualified_before_price":len(c["potential"]),
+                                "verified_quoted_candidates":len(ranked),
+                                "top5_ranked_count":len(ranked[:5]),
+                                "without_verified_quote":c["no_quote"]}
+              out["additional_quoted_candidates"] = (
+                  out["depth50"]["verified_quoted_candidates"] -
+                  out["depth80"]["verified_quoted_candidates"])
+              out["additional_top5_slots"] = (
+                  out["depth50"]["top5_ranked_count"] -
+                  out["depth80"]["top5_ranked_count"])
+              assert out["additional_quoted_candidates"] >= 0
+              assert out["additional_top5_slots"] >= 0
+              report["days"].append(out)
+          Path(".cache/tbt/depth50-summary.json").write_text(json.dumps(
+              report,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+          print("BLINQ_DEPTH50_AUDIT",json.dumps(report,sort_keys=True))
+          PY
+      - name: Upload aggregate-only outcome
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: blinq-depth50-readonly-${{ github.run_id }}
+          path: .cache/tbt/depth50-summary.json
+          if-no-files-found: warn
+          retention-days: 7
