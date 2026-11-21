@@ -185,6 +185,10 @@ def a0_daily_issued_gate(snapshots, conf, freeze, issued_shadow):
         raise ValueError("Frozen A0 minimum changed")
     cards = []
     for raw in snapshots:
+        # Later-discovered fixtures stay in the paired score cohort, but cannot
+        # retroactively re-rank the first immutable daily A0 issued slate.
+        if raw.get("a0_first_daily_slate") is False:
+            continue
         start, made = _utc(raw.get("scheduled_at")), _utc(raw.get("model_captured_at"))
         if start is None or made is None or not freeze < made < start:
             continue
