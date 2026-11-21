@@ -519,6 +519,9 @@
       &&runtime?.config?.schema===2?runtime.config:null;
     state.uiStorageAvailable=storageAvailable;
     state.runtimeConfigLoaded=Boolean(liveRuntime);
+    // Keep issued membership terms pinned to the last actually published
+    // Azure configuration, never an unpublished Admin draft or release fallback.
+    state.membershipPublishedPlans=liveRuntime?.plans?clone(liveRuntime.plans):null;
     state.uiRuntimeNotice=storageAvailable?'':(runtimeResult.status==='rejected'
       ?'Nepodarilo sa overiť publikovanú konfiguráciu.'
       :'Úložisko publikovanej konfigurácie nie je dostupné.');
@@ -4993,7 +4996,7 @@
     if(planIsUnlimited(planId))return null;
     // The loaded, Admin-published runtime config is authoritative. Never
     // silently grant 30 days when this value is absent or invalid.
-    const days=state.ui?.plans?.[planId]?.duration_days;
+    const days=state.membershipPublishedPlans?.[planId]?.duration_days;
     return Number.isInteger(days)&&days>0&&days<=3650&&(planId!=='legend'||days>=180)?days:null;
   }
   function planDefaultExpiry(planId,from=new Date()){
@@ -7510,6 +7513,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         return false;
       }
       state.uiPublishedRevision=String(verified.config_revision);
+      state.membershipPublishedPlans=verified.config?.plans?clone(verified.config.plans):null;
       state.telegramPublishedOriginal=clone(verified.config?.telegram_groups||{});
       try{localStorage.removeItem(draftKey());}catch{}
       state.runtimeConfigLoaded=true;
@@ -8457,6 +8461,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(existingAdmin){status='active';}
       else if(plan==='rookie'){status='active';expires_at=null;}
       else if(plan){if(!rawExpiry)throw new Error('Pre tento level nastav platnosť do.');expires_at=new Date(rawExpiry).toISOString();status=new Date(expires_at).getTime()>Date.now()?'active':'expired';}
+      if(plan&&plan!=='rookie'){
+        const published=await getJSON('/api/v1/ui-config',{timeoutMs:5000});
+        if(published?.runtime_configured!==true||published?.storage_available!==true||
+           published?.config_revision!==state.uiPublishedRevision||!state.membershipPublishedPlans?.[plan]){
+          throw new Error('Členstvá sa medzičasom zmenili alebo Azure nie je dostupný. Obnov Admin pred uložením plateného levelu.');
+        }
+      }
       const restoreLegend=plan==='legend'&&status==='active'&&String(user.plan||'').toLowerCase()!=='legend'&&new Date(expires_at).getTime()-Date.now()<180*86400000-5*60000;
       if(restoreLegend&&!window.confirm('LEGEND má štandardne 180 dní. Nastavený dátum je kratší. Potvrď iba obnovu zostávajúcej platnosti podľa pôvodného pridelenia, nie nové 30-dňové členstvo.')){message.textContent='Obnova platnosti bola zrušená.';return;}
       let updated=await BlinqAuth.adminUpdateUserProfile(user.id,{email,telegram_nick});
