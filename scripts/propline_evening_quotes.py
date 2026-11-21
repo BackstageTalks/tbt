@@ -110,8 +110,9 @@ def validated_events(report, *, betting_day, now):
                 or captured >= scheduled or now >= scheduled
                 or _betting_day(scheduled) != betting_day):
             continue
-        if event.get("source_url") not in {
-                SOURCE_URL, event_odds_url(event.get("event_id"))}:
+        event_id = str(event.get("event_id") or "")
+        if not event_id.isdecimal() or event.get("source_url") not in {
+                SOURCE_URL, event_odds_url(event_id)}:
             continue
         raw = event.get("provider_raw_event")
         players = event.get("players")
