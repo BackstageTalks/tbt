@@ -979,7 +979,7 @@
         "match_winner"
       ],
       "requires_odds": true,
-      "objective": "competition_tier_then_probability_desc",
+      "objective": "probability_desc",
       "min_probability": 0.6,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
@@ -989,11 +989,11 @@
       "min_expected_value": null,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "sort": "competition_tier_then_probability_desc_then_event_id",
+      "sort": "probability_desc_then_event_id",
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "Target three, publish at most five quality-approved TOP picks at 60% or above. Main ATP/WTA first, then ATP Challenger. WTA 125, all ITF, UTR, juniors and exhibitions excluded. No forced fill.",
+      "cascade": "Target three, publish at most five quality-approved TOP picks at 60% or above. Main ATP/WTA tour through 250 only. ATP Challenger, WTA 125, all ITF, UTR, juniors and exhibitions excluded. No forced fill.",
       "confidence_tiers": [
         0.6
       ],
@@ -1008,14 +1008,12 @@
         [
           "ATP",
           "WTA"
-        ],
-        [
-          "Challenger"
         ]
       ],
       "quality_fallback": false,
-      "policy": "sports_tiered_top5_60_v24",
+      "policy": "sports_main_tour_top5_60_v25",
       "excluded_competitions": [
+        "Challenger",
         "ITF",
         "WTA 125",
         "UTR",
