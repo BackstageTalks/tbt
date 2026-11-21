@@ -165,6 +165,10 @@ jobs:
       # Separate owner approval; a market disagreement may LOWER TOP coverage.
       # A merge never enables this non-silence-affecting product rule.
       TBT_TOP_REQUIRE_MARKET_SIDE: ${{ vars.TBT_TOP_REQUIRE_MARKET_SIDE_OWNER_APPROVED == 'true' && (vars.TBT_TOP_REQUIRE_MARKET_SIDE == 'true' || vars.TBT_TOP_REQUIRE_MARKET_SIDE == '1') && 'true' || 'false' }}
+      # Explicit owner instruction 2026-11-21: run research-only candidate
+      # comparisons on already-authorized refreshes. No provider job is added.
+      # Kill switch can disable shadow without reverting code or changing offers.
+      TBT_MARKET_RANK_SHADOW_ENABLED: ${{ vars.TBT_MARKET_RANK_SHADOW_DISABLED != 'true' && ((github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')) || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'refresh' || inputs.mode == 'current-refresh'))) && 'true' || 'false' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
