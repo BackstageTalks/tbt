@@ -84,6 +84,37 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     assert 'p1_aces' not in serialized
 
 
+def test_top_tour_boundary_includes_250_excludes_challenger_itf_wta125():
+    allowed = [
+        ("atp-1000", "ATP", "ATP 1000"),
+        ("atp-500", "ATP", "ATP 500"),
+        ("atp-250", "ATP", "ATP 250"),
+        ("wta-1000", "WTA", "WTA 1000"),
+        ("wta-500", "WTA", "WTA 500"),
+        ("wta-250", "WTA", "WTA 250"),
+        ("slam", "ATP", "Grand Slam"),
+    ]
+    excluded = [
+        ("challenger", "ATP", "ATP Challenger"),
+        ("wta125", "WTA", "WTA 125"),
+        ("itf-men", "ATP", "ITF M25"),
+        ("itf-women", "WTA", "ITF W100"),
+        ("utr", "ATP", "UTR"),
+    ]
+    predictions = []
+    for event, tour, competition in allowed + excluded:
+        card = row(event, .73, 1.65, 2.65, depth=1.0)
+        card.update(tour=tour, competition=competition)
+        predictions.append(card)
+    sections = select_market_sections(predictions, top_limit=None)
+    assert {c["event_id"] for c in sections["top_daily_picks"]} == {
+        event for event, _, _ in allowed
+    }
+    assert sections["market_selection"]["top_daily_rule"]["competition_priority"] == [["ATP", "WTA"]]
+    assert "Challenger" in sections["market_selection"]["top_daily_rule"]["excluded_competitions"]
+    assert sections["market_selection"]["top_rejection_counts"]["competition_not_approved"] >= 5
+
+
 def test_decimal_odds_supports_fractional_and_decimal():
     assert decimal_odds('7/10') == 1.7
     assert decimal_odds(1.85) == 1.85
@@ -161,7 +192,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'sports_tiered_top5_60_v24'
+    assert meta['selection_policy'] == 'sports_main_tour_top5_60_v25'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
@@ -188,7 +219,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'sports_tiered_top5_60_v24'
+    assert meta['selection_policy'] == 'sports_main_tour_top5_60_v25'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
