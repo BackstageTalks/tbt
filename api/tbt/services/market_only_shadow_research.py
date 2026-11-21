@@ -250,3 +250,58 @@ def prepare_all_singles_shadow_rows(fixtures: Iterable[dict], params: dict) -> l
             "result_winner_id": None, "shadow_read_only_no_publication": True,
         })
     return result
+
+
+def select_daily_shadow_picks(cards: Iterable[dict], params: dict, *, n_min: int = 5) -> list[dict]:
+    """A0: always return a ranked daily shadow shortlist, never publish it.
+
+    N for each UTC match day is min(slate, max(n_min, number_of_T0)).
+    Market conflict and missing quotes only lower rank; they do not remove
+    otherwise valid single-match candidates. This is NOT an issuance/writer.
+    """
+    if type(n_min) is not int or n_min < 1:
+        raise ValueError("n_min must be a positive integer")
+    grouped: dict[str, list[dict]] = {}
+    identities = set()
+    for source in cards:
+        candidate = shadow_card(source, params)
+        day = _utc(candidate.get("scheduled_at"))
+        if day is None:
+            raise ValueError("Shadow day requires an unambiguous scheduled UTC time")
+        date_utc = day.date().isoformat()
+        betting = candidate["betting"]
+        key = (date_utc, str(candidate["event_id"]),
+               str(betting["selection_id"]))
+        if key in identities:
+            raise ValueError("Duplicate day/event/selection in shadow slate")
+        identities.add(key)
+        research = candidate["shadow_research"]
+        decisions = research["shadow_decisions"]
+        if decisions["A1_A2_A3_combined"]:
+            tier = "T0"
+        elif research["shadow_fair_missing_or_invalid"]:
+            tier = "T3"
+        elif decisions["A1_market_rank_veto"]:
+            tier = "T1"
+        else:
+            tier = "T2"
+        basis = "fallback_model" if tier == "T3" else "rank_market"
+        research["selection_tier"] = tier
+        research["selection_basis"] = basis
+        candidate["selection_tier"] = tier
+        candidate["selection_basis"] = basis
+        candidate["shadow_selection_day_utc"] = date_utc
+        # Keep public fields/offer attributes untouched.
+        grouped.setdefault(date_utc, []).append(candidate)
+    selected = []
+    for day in sorted(grouped):
+        slate = sorted(grouped[day], key=lambda row: (
+            row["selection_tier"],
+            -row["shadow_research"]["shadow_probability"],
+            str(row["event_id"]),
+            str(row["betting"]["selection_id"]),
+        ))
+        t0 = sum(row["selection_tier"] == "T0" for row in slate)
+        wanted = min(len(slate), max(n_min, t0))
+        selected.extend(slate[:wanted])
+    return selected
