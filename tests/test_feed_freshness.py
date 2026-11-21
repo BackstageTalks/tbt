@@ -160,6 +160,42 @@ def test_active_aces_rank_1000_boundary_only_and_historical_results_preserved():
     assert payload["ace_picks"] == cards
 
 
+
+def test_20261121_issued_aces_are_not_removed_by_next_day_atp250_scope():
+    from tbt.services.feed import ace_eligibility_reason, main_tour_aces, visible_feed
+
+    def card(event, start, tournament):
+        return {
+            "event_id": event, "tour": "ATP", "competition": "ATP Challenger",
+            "tournament": tournament, "market": "aces",
+            "scheduled_at": start,
+            "player1": {"id": "p1", "rank": 200},
+            "player2": {"id": "p2", "rank": 300},
+        }
+
+    frozen = card("old-verified", "2026-11-21T12:00:00+00:00", "ATP Challenger")
+    next_day = card("new-blocked", "2026-11-22T12:00:00+00:00", "ATP Challenger")
+    generic = card("generic", "2026-11-21T12:00:00+00:00", "ATP 250")
+    generic["competition"] = "ATP 250"
+    historical = card("historical", "2026-11-20T12:00:00+00:00", "ATP Challenger")
+    no_clock = {**frozen, "scheduled_at": None}
+
+    assert ace_eligibility_reason(frozen) == "eligible"
+    assert main_tour_aces(frozen)
+    for item in (next_day, historical, no_clock):
+        assert ace_eligibility_reason(item) == "excluded_atp_below_250"
+    assert main_tour_aces(generic)
+
+    payload = {"generated_at": "2026-11-21T06:00:00+00:00",
+               "upcoming": [], "ace_picks": [frozen, generic],
+               "results": []}
+    public = visible_feed(payload, now=datetime(2026, 11, 21, 8, tzinfo=timezone.utc))
+    assert [r["event_id"] for r in public["ace_picks"]] == [
+        "old-verified", "generic",
+    ]
+    assert len(payload["ace_picks"]) == 2  # Preserve frozen source bytes
+
+
 def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
     now=datetime.fromisoformat("2026-11-10T09:00:00+00:00")
     start="2026-11-10T14:00:00+00:00"

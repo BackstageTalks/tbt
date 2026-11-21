@@ -17,6 +17,28 @@ MAX_ACES_PLAYER_RANK = 1000  # Both players, ATP/WTA active Aces / Most Aces onl
 # daily offer across a same-day deployment. 18 Nov 06:00 local (CET) starts
 # the first betting day under the new WTA250+ selection rule.
 WTA_GRADE_GATE_EFFECTIVE_UTC = datetime(2026, 11, 18, 5, 0, tzinfo=timezone.utc)
+# ATP Challenger Aces already issued on 21 Nov must remain visible until
+# that frozen betting day ends. This is not an exception for new 22 Nov offers.
+FROZEN_20261121_ATP_ACES_DAY = "2026-11-21"
+
+
+def _previously_issued_20261121_atp_aces_day(row):
+    """Preserve the day's already-frozen ATP Challenger ESÁ/Viac Es.
+
+    This exact historical betting day predates the new ATP250-only rule.
+    The publication/Telegram ledger fences still require exact issued records;
+    future betting days remain strictly ATP 250+.
+    """
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+    try:
+        start = datetime.fromisoformat(str(raw or "").replace("Z", "+00:00"))
+        if start.tzinfo is None:
+            return False
+        local = start.astimezone(ZoneInfo("Europe/Bratislava"))
+        return (local.date().isoformat() == FROZEN_20261121_ATP_ACES_DAY
+                and local.hour >= 6)
+    except (ValueError, TypeError, OverflowError):
+        return False
 
 
 def _legacy_wta_offer(row):
@@ -85,7 +107,7 @@ def ace_eligibility_reason(row):
     if tour in atp_tours and (tour == "atp challenger" or any(
         "challenger" in str(row.get(field) or "").casefold()
         for field in ("tournament", "tournament_name", "competition", "tournament_level", "category", "tour_level")
-    )):
+    )) and not _previously_issued_20261121_atp_aces_day(row):
         return "excluded_atp_below_250"
     if tour in wta_tours and not _legacy_wta_offer(row):
         level_reason = _wta_aces_level_reason(row)
