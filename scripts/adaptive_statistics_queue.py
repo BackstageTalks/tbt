@@ -168,8 +168,10 @@ class AdaptiveStatisticsQueue:
         reward = self._recent_reward[group] + self._prior_reward[group]
         per_call = (18.0 + reward) / (6.0 + self._recent_requests[group] + self._prior_paid[group])
         age = max(0, self._reference_year - int(group.split(":")[1]))
-        recency = (1.25 if age == 0 else 1.30 if age == 1 else
-                   1.32 if age == 2 else 0.94 if age == 3 else 0.82)
+        # Favor 2025-26 mildly at comparable verified paid-field yield.
+        # Reward per paid request stays dominant: history can still win.
+        recency = (1.32 if age == 0 else 1.27 if age == 1 else
+                   1.12 if age == 2 else 0.94 if age == 3 else 0.82)
         return per_call * (1.0 + 0.25 * (1.0 - self._coverage[group])) * recency
 
     def __next__(self):

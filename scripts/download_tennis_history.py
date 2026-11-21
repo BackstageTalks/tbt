@@ -299,12 +299,12 @@ def _statistics_segment_yield(segments):
 
 
 def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready, *, verified_prior=None):
-    """Keep 2024-26 front and centre without abandoning productive older cohorts.
+    """Favour eligible 2025-26 NULL gaps without abandoning valuable history.
 
-    The 20-slot deterministic baseline allocates 8 slots to verified 2024
-    cohorts, 6 to under-covered 2025-26 cohorts, 3 to verified 2022-23
-    providers, 1 to other underserved historical cohorts, and 2 to broad
-    exploration. These are *baseline* slots, not fixed paid API quotas: the
+    The 20-slot deterministic baseline samples 2025-26 incomplete rates
+    more often (8 slots), while retaining 6 verified recent-cohort slots,
+    4 historical slots and 2 broad exploration slots. These are *baseline*
+    slots, not fixed paid API quotas: the
     online adaptive queue still follows measured new CDB values per call.
     Canonical identity and provider retry/cooldown gates ran before this step.
     """
@@ -337,11 +337,14 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready, *, veri
             _quality_ready(stats, "p1") and _quality_ready(stats, "p2")
         )
         coverage = bucket_ready[bucket] / max(1, bucket_total[bucket])
-        if candidate[0] == 0:
+        # A still-missing 2026 row is eligible even when the *overall* year's
+        # quality-ready rate exceeds 75%. Identity/cooldown gates already ran.
+        # A proven productive cohort still receives the verified lane.
+        if (incomplete_rates and year in (2025, 2026)
+                and tour in {"atp", "wta"}):
+            family = "recent_verified" if candidate[0] == 0 else "recent_gap"
+        elif candidate[0] == 0:
             family = "recent_verified" if year >= 2024 else "historic_verified"
-        elif (incomplete_rates and 2025 <= year <= 2026 and
-              tour in {"atp", "wta"} and coverage < 0.75):
-            family = "recent_gap"
         elif (incomplete_rates and 2022 <= year <= 2023 and
               tour in {"atp", "wta"} and coverage < 0.55):
             family = "historic_gap"
@@ -379,14 +382,15 @@ def _balanced_targeted_gap_order(candidates, bucket_total, bucket_ready, *, veri
         years[family] = deque(sorted(pending[family], key=bucket_priority))
 
     # Interleave families so each gets early paid samples before adaptation.
-    # Of 20 available slots: 14 recent, 4 historical and 2 other. Empty
-    # families simply yield their slots; no requests are made to fill quotas.
+    # 8 eligible 2025-26 gap slots, 6 verified recent, 4 historical and
+    # 2 broad slots. This is a soft ranking, not an API allowance or limit;
+    # actual provider consumption still follows online observed CDB yield.
     schedule = (
-        "recent_verified", "recent_gap", "recent_verified", "historic_verified",
+        "recent_gap", "recent_verified", "recent_gap", "historic_verified",
         "recent_gap", "recent_verified", "historic_gap", "recent_gap",
         "recent_verified", "other",
-        "recent_verified", "recent_gap", "historic_verified", "recent_verified",
         "recent_gap", "recent_verified", "historic_verified", "recent_gap",
+        "recent_verified", "recent_gap", "historic_verified", "recent_gap",
         "recent_verified", "other",
     )
     result = []
@@ -524,7 +528,8 @@ def _statistics_candidates(matches, start, end, *, targeted=False, historical_hi
              if verified_prior and candidates else "atp:2024:serve_return_incomplete")
             if historical_high_yield else None),
         "verified_high_yield_cohorts": [f"{tour}:{year}" for tour, year in VERIFIED_HIGH_YIELD_COHORTS] if historical_high_yield else [],
-        "priority_policy": "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other" if historical_high_yield else None,
+        "priority_policy": "6_recent_verified_8_recent_gap_3_historic_verified_1_historic_gap_2_other" if historical_high_yield else None,
+        "preferred_recent_gap_years": [2025, 2026] if historical_high_yield else [],
         "verified_cohort_preference_active": bool(verified_prior) if historical_high_yield else False,
         "verified_cohort_yield_per_paid_call": {
             name: round(int(item["new_fields"]) / int(item["api_requests"]), 4)

@@ -236,7 +236,7 @@ def test_hourly_priority_favors_verified_yield_over_depleted_atp_2025(match_fact
         targeted=True, historical_high_yield=True,
     )
     assert default[0].match_id == 'wta-2026'
-    assert preferred[0].match_id == 'wta-2024'
+    assert preferred[0].match_id == 'wta-2026'
     assert preferred[-1].match_id == 'atp-2025-ace'
     assert report['preferred_verified_cohort'] == 'atp:2024:serve_return_incomplete'
     assert report['verified_high_yield_cohorts'] == [
@@ -275,15 +275,15 @@ def test_hourly_97_percent_queue_gives_undercovered_atp_wta_years_a_budget_share
     # Initial baseline samples recent gaps while retaining older ATP/WTA work.
     first_twenty = Counter((m.tour.lower(), m.scheduled_at.year)
                            for m in selected[:20])
-    assert first_twenty == {
-        ("wta", 2024): 9,
-        ("wta", 2023): 3,
-        ("atp", 2022): 1,
-        ("atp", 2025): 7,
-    }
+    assert first_twenty[("atp", 2025)] >= 8
+    assert first_twenty[("wta", 2024)] >= 5
+    assert first_twenty[("wta", 2023)] >= 2
+    assert first_twenty[("atp", 2022)] >= 1
+    assert sum(first_twenty.values()) == 20
     assert report["priority_policy"] == (
-        "8_recent_verified_6_recent_gap_3_historic_verified_1_historic_gap_2_other"
+        "6_recent_verified_8_recent_gap_3_historic_verified_1_historic_gap_2_other"
     )
+    assert report["preferred_recent_gap_years"] == [2025, 2026]
     assert report["recent_focus_years"] == [2024, 2025, 2026]
     assert report["planned_recent_baseline_share_if_all_families_available"] == 0.7
     assert sum(report["first_1000_by_tour_year"].values()) == len(rows)
@@ -323,8 +323,10 @@ def test_full_baseline_cycle_protects_recent_2024_2026_and_older_evidence(match_
     assert sum(row.scheduled_at.year >= 2024 for row in first) == 16
     assert sum(row.scheduled_at.year <= 2023 for row in first) == 4
     buckets = Counter((row.tour.lower(), row.scheduled_at.year) for row in first)
-    assert buckets[("wta", 2024)] == 4
-    assert buckets[("atp", 2024)] == 4
+    assert buckets[("wta", 2024)] == 3
+    assert buckets[("atp", 2024)] == 3
+    assert sum(n for (tour, year), n in buckets.items()
+               if year in (2025, 2026)) >= 8
     assert buckets[("wta", 2025)] >= 1
     assert buckets[("wta", 2026)] >= 1
     assert buckets[("atp", 2026)] >= 1
@@ -374,8 +376,8 @@ def test_wta_older_underserved_years_rotate_instead_of_starving(match_factory):
         targeted=True, historical_high_yield=True,
     )
     # Recent gaps get the front slots; older proven WTA work is still sampled.
-    assert ordered[0].scheduled_at.year == 2024
-    assert 2025 in [m.scheduled_at.year for m in ordered[:6]]
+    assert ordered[0].scheduled_at.year == 2025
+    assert 2024 in [m.scheduled_at.year for m in ordered[:6]]
     assert 2023 in [m.scheduled_at.year for m in ordered[:6]]
     assert {m.scheduled_at.year for m in ordered[:12]} == {2023, 2024, 2025}
 
@@ -749,3 +751,45 @@ def test_hourly_verified_zero_gain_keeps_old_cohorts_eligible(match_factory):
     assert ordered[0].scheduled_at.year == 2026
     assert any(m.scheduled_at.year == 2024 for m in ordered[:15])
     assert plan["verified_cohort_yield_per_paid_call"]["atp:2024:serve_return"] == 0
+
+def test_recent_2026_eligible_gaps_keep_priority_above_75pct_coverage(match_factory):
+    """High season-level completeness cannot demote still-missing 2026 rows."""
+    from collections import Counter
+    from datetime import date
+    from download_tennis_history import _statistics_candidates
+
+    rows = []
+    for tour, year, count in (("ATP", 2026, 30), ("WTA", 2026, 30),
+                              ("ATP", 2024, 30), ("WTA", 2023, 30)):
+        for index in range(count):
+            m = match_factory(f"{tour}-{year}-{index}", "A", "B", "A")
+            m.tour = tour
+            m.scheduled_at = datetime(year, 7, 1, tzinfo=timezone.utc) + timedelta(days=index)
+            m.provider_payload = {"id": str(90000 + len(rows))}
+            m.stats = {"p1_service_points_won": .6}
+            rows.append(m)
+        if year == 2026:
+            # Both 2026 seasons exceed 75% ready, but still contain 30
+            # individual eligible NULL gaps each.
+            for index in range(120):
+                m = match_factory(f"ready-{tour}-{index}", "A", "B", "A")
+                m.tour = tour
+                m.scheduled_at = datetime(year, 1, 1, tzinfo=timezone.utc) + timedelta(days=index)
+                m.provider_payload = {"id": str(95000 + len(rows))}
+                m.stats = {f"{side}_{field}": .6
+                           for side in ("p1", "p2")
+                           for field in ("service_points_won", "return_points_won")}
+                m.stats.update({"p1_aces": 0, "p2_aces": 0,
+                                "p1_double_faults": 0, "p2_double_faults": 0})
+                rows.append(m)
+    selected, report = _statistics_candidates(
+        rows, date(2023, 1, 1), date(2026, 12, 31),
+        targeted=True, historical_high_yield=True)
+    first = Counter((m.tour.lower(), m.scheduled_at.year) for m in selected[:20])
+    assert report["bucket_coverage"]["atp:2026"]["quality_ready_rate"] > .75
+    assert report["bucket_coverage"]["wta:2026"]["quality_ready_rate"] > .75
+    assert first[("atp", 2026)] + first[("wta", 2026)] >= 8
+    assert first[("atp", 2024)] > 0
+    assert first[("wta", 2023)] > 0
+    assert len(selected) == 120
+    assert len({m.match_id for m in selected}) == 120
