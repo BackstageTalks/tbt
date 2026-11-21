@@ -211,3 +211,36 @@ PYTHONPATH=api:scripts python -m pytest -q \
   tests/test_audit_market_only_shadow_readonly.py \
   tests/test_market_only_a0_private_capture.py
 \`\`\`
+
+
+## Owner opt-in / merge safety gate (2026-11-21)
+
+The previous research workflow automatically set
+\`BLINQ_MARKET_A0_SHADOW_ENABLED=true\` for every approved refresh. This
+would create new private shadow release writes and lengthen the active
+global CDB writer lock immediately upon merge, without a separate owner
+approval. That behavior is **rejected**.
+
+Corrected workflow adds independent
+\`vars.BLINQ_MARKET_A0_OWNER_APPROVED == 'true'\` gating **and** requires
+the original authorized refresh/current-refresh event. The new
+repository variable is OFF/empty unless an operator explicitly enables
+it. The exact workflow expression is protected by an executable test.
+PR merge alone therefore does not opt in when this variable is unset.
+
+This branch remains **DRAFT**. Do not activate that variable or merge as
+a deployment step without explicit operator permission. The operator
+should review lock duration and verify independent checksum-manifest
+read-back of \`market_only_a0_shadow.json\` after the first genuine
+refresh. Offline/mock read-back and passing GitHub CI are **not** proof of
+a real release write. No additional provider calls, no champion or
+TOP/VALUE edits, no CDB value changes.
+
+Separately, the sensitive credential file
+\`BackstageTalks/tbt-data:backup/CDB_OFFSITE_ZIP_PASSWORD_20261022.txt\`
+is still in the current private repository HEAD as independently
+verified. **It is outside this PR.** Removing it from HEAD cannot expunge
+history; a coordinated secret rotation and safe Git history rewrite
+need independent evidence of offsite backup recovery, authorized
+administrator support and downstream clone/ref cleanup. Do not echo its
+contents, force-push production refs or revoke an unidentified token.
