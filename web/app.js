@@ -4967,18 +4967,23 @@
     if(next)next.onclick=()=>{state.resultsPage+=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});};
   }
 
-  function planIsUnlimited(planId,plan=state.ui?.plans?.[planId]||{}){return planId==='rookie'||plan.unlimited===true;}
-  function planDefaultExpiry(planId, from=new Date()){
-    const plan=state.ui?.plans?.[planId]||{};
-    if(plan.lifetime||planIsUnlimited(planId,plan))return null;
-    const days=Number(plan.duration_days); if(!Number.isFinite(days)||days<=0)return null;
-    return new Date(from.getTime()+days*86400000);
+  // Only FREE/ROOKIE is unlimited; legacy paid-tier flags cannot bypass expiry.
+  function planIsUnlimited(planId){return planId==='rookie';}
+  function planDurationDays(planId){
+    if(planIsUnlimited(planId))return null;
+    // The loaded, Admin-published runtime config is authoritative. Never
+    // silently grant 30 days when this value is absent or invalid.
+    const days=state.ui?.plans?.[planId]?.duration_days;
+    return Number.isInteger(days)&&days>0&&days<=3650&&(planId!=='legend'||days>=180)?days:null;
+  }
+  function planDefaultExpiry(planId,from=new Date()){
+    const days=planDurationDays(planId);
+    return days===null?null:new Date(from.getTime()+days*86400000);
   }
   function planTermLabel(planId){
-    const plan=state.ui?.plans?.[planId]||{};
-    if(planIsUnlimited(planId,plan))return 'Bez časového obmedzenia';
-    if(plan.lifetime)return 'Doživotne';
-    const days=Number(plan.duration_days); return Number.isFinite(days)&&days>0?`${days} dní`:'Vlastná platnosť';
+    if(planIsUnlimited(planId))return 'Bez časového obmedzenia';
+    const days=planDurationDays(planId);
+    return days===null?'Platnosť nie je nastavená':`${days} dní`;
   }
   function adminLevelChips(selected,attr='admin-plan-chip',includeExpired=true){
     const ids=includeExpired?accessContexts:membershipHierarchy;
@@ -7609,17 +7614,19 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const current=expiry.value?new Date(expiry.value).getTime():0;
     if(force||!current||current<=Date.now()){
       const date=planDefaultExpiry(planId);expiry.value=userDateValue(date?.toISOString());
+      if(!date)showStatus('Platnosť levelu nie je správne nastavená. Najprv publikuj platnú dĺžku v Admin → Členstvá.');
     }
   }
   function adminAddDaysToExpiry(days){
     const expiry=$('adminUserExpires');if(!expiry)return;
     const planId=String($('adminUserPlan')?.value||''),plan=state.ui?.plans?.[planId]||{};
     if(planIsUnlimited(planId,plan)){setAdminPlanDefaults(planId,true);showStatus('ROOKIE je bez časového obmedzenia.');return;}
+    if(!Number.isInteger(days)||days<1||days>3650){showStatus('Predvolená platnosť nie je správne nastavená v Admin → Členstvá.');return;}
     const current=expiry.value?new Date(expiry.value).getTime():0,base=Math.max(Date.now(),Number.isFinite(current)?current:0);
-    expiry.disabled=false;expiry.value=userDateValue(new Date(base+Math.max(1,Number(days)||1)*86400000).toISOString());
+    expiry.disabled=false;expiry.value=userDateValue(new Date(base+days*86400000).toISOString());
   }
   function adminDefaultPlanDays(){
-    const planId=String($('adminUserPlan')?.value||'');const plan=state.ui?.plans?.[planId]||{};return planIsUnlimited(planId,plan)?0:Math.max(1,Number(plan.duration_days)||30);
+    const planId=String($('adminUserPlan')?.value||'');return planDurationDays(planId);
   }
   function decorateAdminMediaUploads(host){
     if(!host)return;
