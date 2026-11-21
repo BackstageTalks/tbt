@@ -21,8 +21,9 @@ from .price_integrity import (
     unsubstantiated_high_confidence_winner,
 )
 from .market_anchored_rank import (
-    EMERGENCY_TIER, MODE_MARKET, annotate_rank_probability, emergency_fill,
-    rank_mode, rank_value,
+    EMERGENCY_TIER, MODE_MARKET, TOP_REJECT_REASON,
+    annotate_rank_probability, emergency_fill, rank_mode, rank_value,
+    top_market_side_violation,
 )
 
 
@@ -1215,6 +1216,10 @@ def select_market_sections(
             min_surface=max(TOP_MIN_SURFACE_MATCHES, int(top_min_surface_matches)),
             min_odds=max(TOP_FALLBACK_MIN_ODDS, float(top_min_odds or 1.50)),
         )
+        if top_market_side_violation(card):
+            # Optional, owner-gated TOP-only veto; VALUE and PRIME unchanged.
+            # This rule may reduce the day's TOP count. It never adds picks.
+            reasons = list(reasons) + [TOP_REJECT_REASON]
         for reason in reasons:
             top_rejection_counts[reason] = top_rejection_counts.get(reason, 0) + 1
         if not reasons:
