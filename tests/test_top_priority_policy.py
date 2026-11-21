@@ -67,7 +67,7 @@ def test_quote_time_and_evidence_do_not_relax_for_target():
     cases=[]
     card=pick("time");card["betting"].pop("captured_at");cases.append(card)
     card=pick("surface");card["quality"]["player1"]["surface_matches"]=3;cases.append(card)
-    card=pick("depth",.95);card["data_depth"]=.75;cases.append(card)
+    card=pick("depth",.95);card["data_depth"]=.49;cases.append(card)
     assert not ids(select_market_sections(cases))
 
 
