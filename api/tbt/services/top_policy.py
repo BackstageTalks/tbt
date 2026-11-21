@@ -116,7 +116,7 @@ def unverified_top_market_outsider(card):
                 and public - fair > TOP_MARKET_OUTSIDER_CONFLICT_GAP + 1e-12)
 
 
-def rejection_reasons(card, *, min_probability=.60, min_depth=.80, min_surface=5, min_odds=1.50):
+def rejection_reasons(card, *, min_probability=.60, min_depth=.50, min_surface=5, min_odds=1.50):
     from .price_integrity import extreme_winner_price_inversion, unsubstantiated_high_confidence_winner
 
     reasons = []
