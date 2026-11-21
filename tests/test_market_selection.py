@@ -522,7 +522,7 @@ def test_top_never_bypasses_150_price_and_safe_evidence_backup():
             row("backup75", .77, 1.60, 3.00, depth=.75, surface1=3, surface2=3),
             row("backup77", .76, 1.60, 3.00, depth=.78, surface1=4, surface2=4),
             row("short", .85, 1.49, 3.00, depth=1.0),
-            row("shallow", .90, 1.60, 3.00, depth=.60),
+            row("shallow", .90, 1.60, 3.00, depth=.49),
             row("no-surface", .90, 1.60, 3.00, depth=1.0, surface1=2)]
     result = select_market_sections(rows)
     assert {x['event_id'] for x in result['top_daily_picks']} == {
