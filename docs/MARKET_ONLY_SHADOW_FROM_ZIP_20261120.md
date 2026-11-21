@@ -30,7 +30,7 @@ below. Do not reinterpret a green CI run as a private ledger write or live pick.
   `shadow_ledger.json`, `shadow_report.json` and
   `_tbt_bundle_manifest.json`, but **no**
   `market_only_a0_shadow.json`. Actual A0 first-capture/read-back count
-  independently confirmed: **0**.
+  independently available for verification: **0** (asset absent; this does\n  not prove that no capture happened in any other storage location).
 - The C1–C5 PIT gate is still closed. The private ATP Oddstrader annual
   CSV archive exists, but `data/oddstrader/atp/2026.run_metadata.json`
   states generation at 2026-10-07T02:08:20Z for dates starting
