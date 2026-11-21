@@ -208,3 +208,13 @@ def test_later_same_day_fixture_is_captured_but_cannot_rewrite_first_issue():
     assert r2["new_issued"] == 0
     assert result["snapshots"][-1]["a0_first_daily_slate"] is False
     assert json.dumps(result["issued_shadow"], sort_keys=True) == first_receipts
+
+
+def test_market_a0_refresh_workflow_requires_separate_owner_opt_in():
+    workflow = (ROOT / ".github/workflows/data.yml").read_text(encoding="utf-8")
+    lines = [line for line in workflow.splitlines()
+             if line.strip().startswith("BLINQ_MARKET_A0_SHADOW_ENABLED:")]
+    assert len(lines) == 1
+    assert "vars.BLINQ_MARKET_A0_OWNER_APPROVED == 'true'" in lines[0]
+    assert "inputs.mode == 'refresh'" in lines[0]
+    assert "inputs.mode == 'current-refresh'" in lines[0]
