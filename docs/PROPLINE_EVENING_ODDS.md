@@ -8,9 +8,16 @@ with verified private GitHub recovery storage. This is a market evidence archive
 historical prices.
 
 ## Provider and quote validity
-- One PropLine FREE tennis odds API request each capture. Preserve provider raw
-  payload and API capture timestamp. Require provider quota header and reserve
-  at least 150 requests, serialize with PropLine nightly closeout.
+- Start with one PropLine FREE bulk tennis odds API request. For still-upcoming
+  target-day events, use the provider's primary player-props endpoint
+  `/v1/sports/tennis/events/{id}/odds?markets=player_aces,total_aces`.
+  These are distinct provider calls, serialized with the existing nightly
+  closeout group; no new cron or unmanaged writer is introduced.
+- Preserve each source's exact URL, raw payload, event identity, SHA and capture
+  time. Require the provider remaining-quota header after every response and
+  stop event probes once 250 calls remain (200 shared closeout reserve plus
+  50 other-consumer headroom). 429/transport/identity failure stops the sweep
+  with no retry and marks coverage truncated, so morning enrichment fails closed.
 - Store bookmaker N+ ace milestones separately from verified **complete**
   bookmaker same-line O/U pairs. N+ threshold equivalence is metadata, not an
   independently available Over/Under offer. DFS/pick'em stays research-only.
@@ -56,7 +63,9 @@ this collector is research-only and does not override that live enrichment.
   It consumes no PropLine or RapidAPI requests; Google Drive remains the
   independently checked archival destination.
 - The read is fail-closed for missing files, stale (>24 h) captures, partial
-  scans, malformed source, timestamp or player identity collisions.
+  scans, malformed source, endpoint/URL mismatch, timestamp or player identity
+  collisions. The provider request count and per-event calls are reconciled
+  before any unpublished price enrichment.
   Provider raw-event SHA and parsed quote equivalence are checked before use.
 - It attaches only a genuine complete two-sided *sportsbook player Aces O/U*
   at the same model-derived half-ace line, to the same selected player in the
