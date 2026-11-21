@@ -5504,6 +5504,10 @@ body#blinqPremium [data-ui-element].ui-state-hidden{display:none!important}
 
 /* Daily locked rows: redacted premium teaser, no underlying pick data. */
 body#blinqPremium .hub-row-locked td{padding:12px 14px!important;background:linear-gradient(90deg,rgba(24,14,46,.42),rgba(6,27,23,.34))!important;border-top:1px solid rgba(139,92,246,.18)!important;cursor:pointer!important}
+/* Restricted ELITE positions keep the same stable number on desktop and mobile. */
+body#blinqPremium .hub-row-locked td{position:relative!important}
+body#blinqPremium .hub-row-locked .hub-locked-rank{position:absolute!important;left:12px;top:50%;transform:translateY(-50%);display:inline-flex!important;min-width:25px;align-items:center;justify-content:center;color:#91aaa1!important;font-size:10px!important;font-weight:850!important;font-variant-numeric:tabular-nums!important}
+
 body#blinqPremium .hub-row-locked td>div{display:inline-grid!important;gap:2px!important;margin-left:8px!important;vertical-align:middle!important}
 body#blinqPremium .hub-row-locked em{width:max-content;padding:3px 7px;border:1px solid rgba(139,92,246,.35);border-radius:999px;background:rgba(66,35,120,.22);color:#bba6ff;font-size:7px;font-style:normal;font-weight:900;letter-spacing:.05em;text-transform:uppercase}
 body#blinqPremium .hub-row-locked b{color:#dde8e3!important;font-size:9px!important}
