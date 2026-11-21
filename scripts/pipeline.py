@@ -593,6 +593,7 @@ def _publish_predictions(
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
     settlement_matches=None, comparator_artifact=None,
     betting_day_start_hour=6, morning_refresh=False,
+    champion_sha256=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -709,6 +710,44 @@ def _publish_predictions(
         if not isinstance(existing, dict) or not isinstance(existing.get("snapshots"), list):
             raise ValueError("Invalid selection candidate history; refusing to overwrite replay evidence")
         candidate_history = existing
+    # The owner approved prospective selector shadow, NOT public champion
+    # promotion. Reuse the existing single-writer private monthly candidate
+    # partition instead of creating a new ledger, scheduler, API or writer.
+    new_market_rank_shadow = None
+    if os.getenv("TBT_MARKET_RANK_SHADOW_ENABLED", "").lower() == "true":
+        try:
+            from tbt.services.market_rank_shadow import (
+                build_market_rank_shadow, first_day_shadow)
+            frozen = first_day_shadow(candidate_history, public_offer_day=public_offer_day)
+            if frozen is None:
+                new_market_rank_shadow, shadow_counts = build_market_rank_shadow(
+                    predictions, observed_at=now,
+                    public_offer_day=public_offer_day,
+                    champion_sha256=champion_sha256,
+                )
+                if new_market_rank_shadow is not None:
+                    candidate_snapshot["market_rank_shadow"] = new_market_rank_shadow
+                print(json.dumps({"market_rank_shadow_capture": {
+                    "status": "FIRST_CAPTURE_PREPARED" if new_market_rank_shadow else "NO_PRESTART_SINGLES",
+                    "counts": shadow_counts, "public_offer_day": public_offer_day,
+                    "incremental_provider_requests": 0,
+                    "production_modified": False,
+                }}), flush=True)
+            else:
+                print(json.dumps({"market_rank_shadow_capture": {
+                    "status": "FROZEN_DAY_UNCHANGED",
+                    "public_offer_day": public_offer_day,
+                    "original_sha256": frozen["sha256"],
+                    "incremental_provider_requests": 0,
+                    "production_modified": False,
+                }}), flush=True)
+        except Exception as exc:
+            # Report research failure; do not block a valid public prediction
+            # transaction or silently mark a failed shadow capture as success.
+            print(json.dumps({"warning": "market_rank_shadow_capture_failed",
+                              "error_type": type(exc).__name__,
+                              "detail": str(exc)[:280],
+                              "production_modified": False}), flush=True)
     candidate_history["snapshots"].append(candidate_snapshot)
     with gzip.open(candidate_month_path, "wt", encoding="utf-8", compresslevel=6) as handle:
         json.dump(clean(candidate_history), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
@@ -742,6 +781,51 @@ def _publish_predictions(
         before_upload=_telegram_offer_before_upload,
         remove_names=("comparator.json.gz",) if not isinstance(comparator_artifact, dict) else (),
     )
+    if os.getenv("TBT_MARKET_RANK_SHADOW_ENABLED", "").lower() == "true":
+        try:
+            from tbt.services.market_rank_shadow import (
+                first_day_shadow, settled_comparison)
+            from tempfile import TemporaryDirectory
+            if new_market_rank_shadow is not None:
+                # Independent remote byte read-back from a new ReleaseStore,
+                # not simply an upload success message or local file parse.
+                with TemporaryDirectory(prefix="blinq-rank-shadow-readback-") as temp:
+                    reader = ReleaseStore(store.repository, store.tag, Path(temp))
+                    reader.download(
+                        extra_names=(candidate_month_path.name,),
+                        required_names=(candidate_month_path.name,),
+                        require_bundle_manifest=True,
+                    )
+                    remote = reader.directory / candidate_month_path.name
+                    if sha256(remote.read_bytes()).hexdigest() != sha256(
+                            candidate_month_path.read_bytes()).hexdigest():
+                        raise RuntimeError("Private shadow monthly release byte mismatch")
+                    with gzip.open(remote, "rt", encoding="utf-8") as handle:
+                        remote_history = json.load(handle)
+                    remote_capture = first_day_shadow(
+                        remote_history, public_offer_day=public_offer_day)
+                    if remote_capture != new_market_rank_shadow:
+                        raise RuntimeError("Remote immutable shadow receipt mismatch")
+                print(json.dumps({"market_rank_shadow_readback": {
+                    "status": "PRIVATE_READBACK_VERIFIED",
+                    "source_asset": candidate_month_path.name,
+                    "asset_sha256": sha256(candidate_month_path.read_bytes()).hexdigest(),
+                    "capture_sha256": new_market_rank_shadow["sha256"],
+                    "variants": list(new_market_rank_shadow["variants"]),
+                    "real_provider_requests_added": 0,
+                    "production_modified": False,
+                }}), flush=True)
+            # Canonical completed winners are only read, never appended to the
+            # immutable pre-match candidate/receipt snapshots.
+            comparison = settled_comparison(
+                candidate_history, settlement_source, asof=now)
+            print(json.dumps({"market_rank_shadow_comparison": comparison},
+                             ensure_ascii=False, allow_nan=False), flush=True)
+        except Exception as exc:
+            print(json.dumps({"warning": "market_rank_shadow_readback_unverified",
+                              "error_type": type(exc).__name__,
+                              "detail": str(exc)[:280],
+                              "production_modified": False}), flush=True)
     return feed
 
 
@@ -2030,6 +2114,11 @@ def main():
         comparator_artifact=comparator_artifact,
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
+        champion_sha256=(
+            sha256((model_dir / "model.joblib").read_bytes()).hexdigest()
+            if os.getenv("TBT_MARKET_RANK_SHADOW_ENABLED", "").lower() == "true"
+            else None
+        ),
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
