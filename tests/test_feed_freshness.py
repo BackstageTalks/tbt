@@ -1,5 +1,5 @@
 """Regression guards for the daily serving snapshot's 06:00 Bratislava boundary."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from tbt.services.feed import visible_feed
 
