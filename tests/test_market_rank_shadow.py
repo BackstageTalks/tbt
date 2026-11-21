@@ -97,6 +97,19 @@ def test_actual_provider_two_sided_quote_validation_and_capture_time():
     assert shadow._quote_fair(bad_quote_clock, NOW) is None
 
 
+def test_next_betting_day_candidates_cannot_fill_today_shadow_slots():
+    today = src("today")
+    tomorrow = src("tomorrow")
+    tomorrow["scheduled_at"] = "2026-09-08T12:00:00+00:00"
+    receipt, counts = capture([today, tomorrow])
+    assert receipt["input_event_ids"] == ["today"]
+    assert counts["outside_offer_day"] == 1
+    assert counts["future_prestart"] == 1
+    for sections in receipt["variants"].values():
+        for items in sections.values():
+            assert all(row["event_id"] == "today" for row in items)
+
+
 def test_missing_or_late_fixture_does_not_issue_shadow():
     late = src("a")
     late["scheduled_at"] = "2026-09-07T09:05:00Z"
