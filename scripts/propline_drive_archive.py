@@ -37,7 +37,11 @@ def validated_archive(path: Path, target_day: str) -> bytes:
     if (report.get("cdb_writes") != 0 or
         report.get("published_picks_changed") != 0 or
         report.get("provider_paid_calls") != 0 or
-        report.get("provider_requests") != 1 or
+        not isinstance(report.get("provider_requests"), int) or
+        not isinstance(report.get("provider_event_requests", 0), int) or
+        report["provider_requests"] != 1 + report.get("provider_event_requests", 0) or
+        report.get("provider_event_requests", 0) > len(report.get("events_in_target_window") or []) or
+        report.get("provider_event_requests", 0) < 0 or
         report.get("status") not in ("audited", "no_exact_aces_market_available")):
         raise ValueError("Unsafe or incomplete evening quote snapshot")
     if not isinstance(report.get("events_in_target_window"), list):

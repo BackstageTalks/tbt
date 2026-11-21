@@ -29,6 +29,8 @@ SOURCE_URL = API + ODDS_PATH + "?" + urlencode(QUERY)
 DFS = frozenset(("dabble", "sleeper", "prizepicks", "underdog",
                  "parlayplay", "draftkings_pick6"))
 MIN_REMAINING = 150
+# Reserve 200 for shared nightly closeout plus 50 overlapping-call headroom.
+EVENT_DETAIL_MIN_REMAINING = 250
 MAX_RESPONSE = 20_000_000
 MILESTONE = re.compile(r"^([1-9][0-9]*)\s*\+\s*aces$", re.I)
 MOST = re.compile(r"(?:^|[_\\s-])(most|more|higher|superiority|winner)(?:$|[_\\s-])", re.I)
@@ -68,11 +70,11 @@ def _price(value):
         return None
 
 
-def fetch():
+def _fetch_url(url):
     key = os.environ.get("PROPL")
     if not key:
         raise RuntimeError("existing_prop_line_secret_unavailable")
-    req = Request(SOURCE_URL, headers={
+    req = Request(url, headers={
         "X-API-Key": key, "Accept": "application/json",
         "User-Agent": "BlinQ-evening-propline-archive/1.0"})
     try:
@@ -97,6 +99,23 @@ def fetch():
         return json.loads(raw), left
     except ValueError:
         raise RuntimeError("prop_line_invalid_json") from None
+
+
+def fetch():
+    """Single bulk discovery request: current quota header is authoritative."""
+    return _fetch_url(SOURCE_URL)
+
+
+def event_odds_url(event_id):
+    event_id = str(event_id)
+    if not event_id.isdecimal():
+        raise ValueError("invalid PropLine event ID")
+    return API + "/sports/tennis/events/" + event_id + "/odds?" + urlencode(QUERY)
+
+
+def fetch_event(event_id):
+    """One no-retry, provider-native player-props request for an identified event."""
+    return _fetch_url(event_odds_url(event_id))
 
 
 def _events(payload):
@@ -221,7 +240,7 @@ def _single_book_quotes(event, book):
 
 
 def collect(target_day, *, max_events=0, allow_same_day=False,
-            now=None, get=fetch):
+            now=None, get=fetch, get_event=None):
     now = now or datetime.now(timezone.utc)
     start = datetime.combine(target_day, time(6), TZ).astimezone(timezone.utc)
     end = datetime.combine(target_day + timedelta(days=1), time(6), TZ).astimezone(timezone.utc)
@@ -252,7 +271,9 @@ def collect(target_day, *, max_events=0, allow_same_day=False,
         "probed_urls": len(selected),
         "candidate_events": len(valid), "probed_events": len(selected),
         "provider_remaining": remaining,
-        "provider_requests": 1, "provider_paid_calls": 0,
+        "provider_requests": 1, "provider_event_requests": 0,
+        "event_detail_enabled": get_event is not None,
+        "event_detail_skipped_quota": 0, "provider_paid_calls": 0,
         "events_in_target_window": [],
         "out_of_target_window_events": 0,
         "already_started_target_events": 0,
@@ -283,6 +304,42 @@ def collect(target_day, *, max_events=0, allow_same_day=False,
             else:
                 report["out_of_target_window_events"] += 1
             continue
+        # Bulk odds are game-line-oriented. Per-event odds is the primary
+        # player-props surface according to the provider's API reference.
+        # Only probe this day's still-upcoming fixtures while the provider's
+        # verified remaining quota protects the shared closeout.
+        source_url = SOURCE_URL
+        if in_target and get_event is not None:
+            if remaining <= EVENT_DETAIL_MIN_REMAINING:
+                report["coverage_truncated"] = True
+                report["event_detail_skipped_quota"] += 1
+                get_event = None  # Stop: shared closeout owns the reserve.
+            else:
+                report["provider_requests"] += 1  # Count attempts including HTTP errors.
+                report["provider_event_requests"] += 1
+                try:
+                    detail, left = get_event(str(event["id"]))
+                    if (not isinstance(left, int) or isinstance(left, bool)
+                            or left < MIN_REMAINING):
+                        raise RuntimeError("prop_line_daily_quota_header_invalid")
+                    remaining = left
+                    report["provider_remaining"] = left
+                    if (not isinstance(detail, dict)
+                            or str(detail.get("id") or "") != str(event["id"])
+                            or _norm(detail.get("home_team")) != _norm(event["home_team"])
+                            or _norm(detail.get("away_team")) != _norm(event["away_team"])
+                            or _stamp(detail.get("commence_time") or detail.get("start_time")) != scheduled
+                            or not isinstance(detail.get("bookmakers"), list)):
+                        raise ValueError("prop_line_event_identity_mismatch")
+                    event = detail
+                    source_url = event_odds_url(event["id"])
+                except (RuntimeError, ValueError, OSError, TypeError) as exc:
+                    # Preserve bulk evidence but disallow partial-price publishing.
+                    # In particular 429 triggers no further requests or retries.
+                    report["errors"].append({"event_id": str(event["id"]),
+                                             "error": str(exc)[:120]})
+                    report["coverage_truncated"] = True
+                    get_event = None
         groups, labels = [], []
         for book in event.get("bookmakers") or []:
             if isinstance(book, dict):
@@ -300,7 +357,7 @@ def collect(target_day, *, max_events=0, allow_same_day=False,
             "players": [str(event["home_team"]), str(event["away_team"])],
             "scheduled_at": scheduled.isoformat(),
             "captured_at": now.isoformat(),
-            "source_url": SOURCE_URL,
+            "source_url": source_url,
             "source_sha256": sha256(raw).hexdigest(),
             "market_groups_seen": len(labels),
             "market_group_titles_sample": list(dict.fromkeys(labels))[:80],
@@ -354,7 +411,7 @@ def main():
     p.add_argument("--out", default="reports/propline-evening/odds.json")
     args = p.parse_args()
     report = collect(args.target_day, max_events=args.max_events,
-                     allow_same_day=args.allow_same_day)
+                     allow_same_day=args.allow_same_day, get_event=fetch_event)
     destination = Path(args.out)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(
@@ -363,7 +420,8 @@ def main():
     print(json.dumps({k: report[k] for k in (
         "source", "status", "target_betting_day", "probed_events",
         "events_in_target_window", "milestone_quotes", "exact_aces_pairs",
-        "dfs_pairs", "provider_remaining", "cdb_writes") if k !=
+        "dfs_pairs", "provider_remaining", "provider_requests",
+        "provider_event_requests", "coverage_truncated", "cdb_writes") if k !=
         "events_in_target_window"} | {
             "eligible_events": len(report["events_in_target_window"]),
         }, sort_keys=True))

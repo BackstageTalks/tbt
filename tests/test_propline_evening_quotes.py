@@ -124,6 +124,33 @@ class EveningQuoteAttachment(unittest.TestCase):
         self.assertEqual(result, [card()])
         self.assertEqual(stats["matched_aces"], 0)
 
+    def test_per_event_complete_bookmaker_pair_attaches_after_bulk_only_milestones(self):
+        full = source()
+        bulk = deepcopy(full)
+        bulk["events"][0]["bookmakers"][0]["markets"][0]["outcomes"] = [
+            {"description": "Alexander Zverev", "name": "11+ Aces",
+             "price": 140}]
+        captured = collect(date.fromisoformat(DAY), now=CAPTURE,
+                           get=lambda: (bulk, 360),
+                           get_event=lambda event_id: (full["events"][0], 359))
+        self.assertEqual((captured["provider_requests"], captured["exact_aces_pairs"]), (2, 1))
+        priced, counts = attach_prices([card()], captured, now=MORNING, betting_day=DAY)
+        self.assertEqual(counts["matched_aces"], 1)
+        self.assertEqual(priced[0]["odds_source"], "propline")
+        self.assertEqual(priced[0]["odds_market_name"], "player_aces")
+        self.assertEqual(priced[0]["price_contract"], "player_total_ou")
+        self.assertEqual(priced[0]["market_line"], 10.5)
+        self.assertEqual(priced[0]["ou_side"], "over")
+        self.assertIsNotNone(verified_ace_odds(priced[0]))
+
+    def test_event_detail_source_mismatch_fails_closed(self):
+        full = source()
+        captured = collect(date.fromisoformat(DAY), now=CAPTURE,
+                           get=lambda: (full, 360),
+                           get_event=lambda event_id: (full["events"][0], 359))
+        captured["events_in_target_window"][0]["source_url"] += "&invented=true"
+        self.assertEqual(validated_events(captured, betting_day=DAY, now=MORNING), [])
+
     def test_dfs_only_never_becomes_bookmaker_quote(self):
         p = source()
         p["events"][0]["bookmakers"] = p["events"][0]["bookmakers"][1:]

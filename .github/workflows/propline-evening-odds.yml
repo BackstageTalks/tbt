@@ -101,7 +101,9 @@ jobs:
           assert report["target_betting_day"] == os.environ["BETTING_DAY"]
           assert report["cdb_writes"] == 0 and report["published_picks_changed"] == 0
           assert report["provider_paid_calls"] == 0
-          assert report["source"] == "propline_free" and report["provider_requests"] == 1
+          assert report["source"] == "propline_free"
+          assert report["provider_requests"] == 1 + report["provider_event_requests"]
+          assert 0 <= report["provider_event_requests"] <= len(report["events_in_target_window"])
           assert isinstance(report["provider_remaining"], int) and report["provider_remaining"] >= 150
           assert report["probed_events"] == report["probed_urls"] and report["probed_events"] <= report["candidate_events"]
           assert report["milestone_quotes"] == sum(
@@ -128,7 +130,10 @@ jobs:
               assert captured.tzinfo and scheduled.tzinfo and captured < scheduled
               assert event["provider"] == "propline"
               assert str(event["event_id"]).isdigit()
-              assert event["source_url"] == "https://api.prop-line.com/v1/sports/tennis/odds?markets=player_aces%2Ctotal_aces"
+              bulk_url = "https://api.prop-line.com/v1/sports/tennis/odds?markets=player_aces%2Ctotal_aces"
+              detail_url = ("https://api.prop-line.com/v1/sports/tennis/events/"
+                            + str(event["event_id"]) + "/odds?markets=player_aces%2Ctotal_aces")
+              assert event["source_url"] in {bulk_url, detail_url}
               assert len(event["source_sha256"]) == 64
               raw_event = event.get("provider_raw_event")
               assert isinstance(raw_event, dict)
@@ -188,6 +193,9 @@ jobs:
                             "milestone_quotes": report["milestone_quotes"],
                             "dfs_pairs": report["dfs_pairs"],
                             "provider_remaining": report["provider_remaining"],
+                            "provider_requests": report["provider_requests"],
+                            "provider_event_requests": report["provider_event_requests"],
+                            "coverage_truncated": report["coverage_truncated"],
                             "exact_aces_pairs": report["exact_aces_pairs"],
                             "aces_market_groups": report["aces_market_groups"],
                             "archived_verified_prematch_pairs": total,
