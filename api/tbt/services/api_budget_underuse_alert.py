@@ -49,7 +49,7 @@ def check_due(now: datetime, budget: dict | None) -> dict:
         raise BudgetAlertUnavailable("Unrecognized provider-day budget contract")
     spent, remaining = budget.get("global_spent"), budget.get("global_remaining")
     if (type(spent) is not int or type(remaining) is not int or
-            not 0 <= spent <= SHARED_LIMIT or remaining != SHARED_LIMIT - spent):
+            not 0 < spent <= SHARED_LIMIT or remaining != SHARED_LIMIT - spent):
         raise BudgetAlertUnavailable("Inconsistent shared API ledger")
     try:
         reset = datetime.fromisoformat(str(budget["next_reset_utc"]).replace("Z", "+00:00"))
@@ -99,14 +99,15 @@ def send_underuse_alert(cfg, *, now: datetime | None = None,
     recipients = admin_recipients(cfg)
     if not recipients or not _smtp_ready(cfg):
         raise BudgetAlertUnavailable("Admin recipients or SMTP are not configured")
+    claim = {
+        "PartitionKey": ALERT_PARTITION, "RowKey": decision["betting_date"],
+        "state": "claimed", "claimed_utc": now.astimezone(timezone.utc).isoformat(),
+        "tracked_spent": decision["global_spent"],
+        "recipient_count": len(recipients),
+    }
     try:
         client = table if table is not None else _table(ALERT_TABLE)
-        client.create_entity({
-            "PartitionKey": ALERT_PARTITION, "RowKey": decision["betting_date"],
-            "state": "claimed", "claimed_utc": now.astimezone(timezone.utc).isoformat(),
-            "tracked_spent": decision["global_spent"],
-            "recipient_count": len(recipients),
-        })
+        client.create_entity(claim)
     except Exception as exc:
         if _conflict(exc):
             return {**decision, "status": "already_claimed"}
@@ -155,12 +156,14 @@ def send_underuse_alert(cfg, *, now: datetime | None = None,
     state = "smtp_accepted" if not failure and accepted == len(recipients) else "outcome_uncertain"
     try:
         client.upsert_entity({
-            "PartitionKey": ALERT_PARTITION, "RowKey": decision["betting_date"],
-            "state": state, "accepted_count": accepted, "failure_type": failure[:60],
+            **claim, "state": state, "accepted_count": accepted,
+            "failure_type": failure[:60],
         }, mode=UpdateMode.MERGE)
         persisted = client.get_entity(partition_key=ALERT_PARTITION,
                                       row_key=decision["betting_date"])
-        if str(persisted.get("state")) != state or int(persisted.get("accepted_count", -1)) != accepted:
+        if (str(persisted.get("state")) != state or
+                int(persisted.get("accepted_count", -1)) != accepted or
+                persisted.get("claimed_utc") != claim["claimed_utc"]):
             raise BudgetAlertUnavailable("SMTP claim read-back inconsistent")
     except Exception as exc:
         raise BudgetAlertUnavailable("Mail outcome not durably verified; no auto retry") from exc
