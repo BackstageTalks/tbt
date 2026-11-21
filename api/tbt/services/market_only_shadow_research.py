@@ -292,10 +292,11 @@ def select_daily_shadow_picks(cards: Iterable[dict], params: dict, *, n_min: int
             raise ValueError("Shadow day requires an unambiguous scheduled UTC time")
         date_utc = day.date().isoformat()
         betting = candidate["betting"]
-        key = (date_utc, str(candidate["event_id"]),
-               str(betting["selection_id"]))
+        # One tip per canonical event across the entire captured slate;
+        # opposite-side duplicates cannot inflate the A0 daily minimum.
+        key = str(candidate["event_id"])
         if key in identities:
-            raise ValueError("Duplicate day/event/selection in shadow slate")
+            raise ValueError("Duplicate canonical event in shadow slate")
         identities.add(key)
         research = candidate["shadow_research"]
         decisions = research["shadow_decisions"]
