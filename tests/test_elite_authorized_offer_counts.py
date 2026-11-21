@@ -11,7 +11,8 @@ SOURCE = Path(__file__).resolve().parents[1] / "web" / "app.js"
 def test_elite_counts_remain_authorized_only():
     source = SOURCE.read_text(encoding="utf-8")
     assert "plan==='elite'&&!state.previewPlan?rows.length" in source
-    assert "const allCount=plan==='elite'&&!state.previewPlan?rows.length:" in source
+    assert "const allCount=plan==='elite'&&!state.previewPlan" in source
+    assert "?Math.max(rows.length,Array.isArray(ent.slot_states)?ent.slot_states.length:0)" in source
     assert "const total=accountPlan()==='elite'&&!state.previewPlan?rows.length:" in source
     assert "total=accountPlan()==='elite'&&!state.previewPlan?allRows.length:" in source
 
