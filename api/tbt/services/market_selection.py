@@ -56,14 +56,14 @@ PRIME_TOP_FALLBACK_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
 TOP_DYNAMIC_FALLBACK_TIERS = ()
 
-# PRIME: any decimal price below 1.50 (no lower odds bound).
+# ACCA (legacy internal key: prime): decimal odds below 1.50 (no lower bound).
 PRIME_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
 PRIME_DAILY_FLOOR = PRIME_TOP_FALLBACK_PROBABILITY
 PRIME_PREFERRED_PROBABILITY = 0.80
 PRIME_FALLBACK_PROBABILITIES = (0.78, 0.76, 0.74, 0.72, 0.70, 0.68)
 PRIME_TARGET_COUNT = 10
 PRIME_MIN_COUNT = 5
-PRIME_MIN_DATA_DEPTH = 0.80
+PRIME_MIN_DATA_DEPTH = 0.50
 PRIME_MIN_SURFACE_MATCHES = 5
 PRIME_MAX_NEGATIVE_EV = -1.0  # compatibility only; EV is not a publication gate
 PRIME_PREFERRED_MIN_ODDS = 1.01
@@ -79,7 +79,7 @@ TOP_FALLBACK_PROBABILITIES = ()
 TOP_MIN_PROBABILITY = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
 TOP_TARGET_COUNT = 3
 TOP_MIN_COUNT = 3
-TOP_MIN_DATA_DEPTH = 0.80
+TOP_MIN_DATA_DEPTH = 0.50
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
 TOP_FALLBACK_MIN_ODDS = 1.50
@@ -92,7 +92,7 @@ TOP_BACKUP_MIN_SURFACE_MATCHES = TOP_MIN_SURFACE_MATCHES
 # VALUE: >=1.80 and a close two-way market. "15% odds difference" is measured
 # symmetrically as abs(o1-o2) / mean(o1,o2), avoiding home/away asymmetry.
 VALUE_MIN_PROBABILITY = PUBLICATION_MIN_PROBABILITY
-VALUE_MIN_DATA_DEPTH = 0.75
+VALUE_MIN_DATA_DEPTH = 0.50
 VALUE_MIN_SURFACE_MATCHES = 3
 VALUE_MIN_ODDS = 1.80  # exclusive; exactly 1.80 remains TOP
 VALUE_MAX_ODDS_DIFFERENCE = 0.15
@@ -374,7 +374,7 @@ def _overall_samples(row: dict[str, Any]) -> tuple[int, int]:
 
 
 def _prime_display_rank(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rank PRIME for presentation without changing the eligible radar pool."""
+    """Rank ACCA for presentation without changing the eligible radar pool."""
     if not cards:
         return []
 
@@ -984,7 +984,7 @@ def _fill_to_minimum(
     minimum_count: int,
     rank_key,
 ) -> tuple[list[dict[str, Any]], int]:
-    """PRIME compatibility helper: fill from its existing fallback pool."""
+    """ACCA compatibility helper: fill from its existing fallback pool."""
     selected = list(core)
     if len(selected) >= int(minimum_count):
         selected.sort(key=rank_key, reverse=True)
@@ -1136,7 +1136,7 @@ def select_market_sections(
     doubles_picks: list[dict[str, Any]] | None = None,
     public_offer_day: str | None = None,
 ) -> dict[str, Any]:
-    """Publish existing TOP/PRIME/VALUE with unchanged markets and price contracts.
+    """Publish existing TOP/ACCA/VALUE with unchanged markets and price contracts.
 
     TOP ranks the entire safe priced Match Winner slate, aiming for three
     quality-qualified picks. VALUE remains higher priority; ACES is untouched.
@@ -1269,14 +1269,14 @@ def select_market_sections(
     if len(selected_identities) != len(set(selected_identities)):
         raise ValueError("Market section exclusivity invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in prime):
-        raise ValueError("Prime fallback probability floor invariant failed")
+        raise ValueError("ACCA fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < top_core_floor
            and card.get("selection_tier") != EMERGENCY_TIER for card in top):
         raise ValueError("Top fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PUBLICATION_MIN_PROBABILITY for card in value):
         raise ValueError("Value probability floor invariant failed")
     if any((_number(card.get("odds")) or 0.0) >= PRIME_MAX_ODDS_EXCLUSIVE for card in prime):
-        raise ValueError("Prime odds bucket invariant failed")
+        raise ValueError("ACCA odds bucket invariant failed")
     if any((_number(card.get("odds")) or 0.0) < TOP_FALLBACK_MIN_ODDS for card in top):
         raise ValueError("Top odds floor invariant failed")
 
