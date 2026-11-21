@@ -12,7 +12,7 @@ _SLAM_CATEGORY = -100
 _BELOW_250_CATEGORY = {72, 213, 785, 871}  # Challenger, ITF W/M, WTA 125
 _BELOW_250 = re.compile(
     r"\b(?:itf|futures?|challengers?|utr|juniors?|wheelchair|"
-    r"exhibitions?|next[\s_-]*gen)\b|\bwta[\s_-]*125\b",
+    r"exhibitions?|next[\s_-]*gen)\b|\b(?:atp|wta)[\s_-]*(?:15|25|35|50|60|75|80|100|110|125|150|175)\b",
     re.I,
 )
 _EXPLICIT_250_PLUS = re.compile(
