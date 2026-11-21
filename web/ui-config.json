@@ -939,10 +939,11 @@
   },
   "market_rules": {
     "prime": {
+      "label": "ACCA",
       "market": "match_winner",
       "objective": "accuracy_first",
       "min_win_probability": 0.68,
-      "min_data_depth": 0.8,
+      "min_data_depth": 0.5,
       "min_surface_matches": 5,
       "preferred_min_odds": null,
       "preferred_max_odds": 1.49,
@@ -981,7 +982,7 @@
       "requires_odds": true,
       "objective": "competition_tier_then_probability_desc",
       "min_probability": 0.6,
-      "min_data_depth": 0.8,
+      "min_data_depth": 0.5,
       "min_surface_matches": 5,
       "min_odds": 1.5,
       "max_odds": null,
@@ -1002,7 +1003,7 @@
       "fallback_only_if_core_count_below": null,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
-      "backup_min_data_depth": 0.8,
+      "backup_min_data_depth": 0.5,
       "backup_min_surface_matches": 5,
       "competition_priority": [
         [
@@ -1027,7 +1028,7 @@
       "selection_mode": "probability_plus_close_odds",
       "objective": "probability_plus_close_odds",
       "min_probability": 0.65,
-      "min_data_depth": 0.75,
+      "min_data_depth": 0.5,
       "min_surface_matches": 3,
       "min_odds": 1.8,
       "min_edge": null,
