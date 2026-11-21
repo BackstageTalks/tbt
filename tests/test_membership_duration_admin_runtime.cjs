@@ -23,7 +23,8 @@ const plans = {
   legend: {duration_days:180, unlimited:false},
   goat: {duration_days:180, unlimited:true, lifetime:true}
 };
-let state = {ui:{plans}};
+const publishedPlans = JSON.parse(JSON.stringify(plans));
+let state = {ui:{plans},membershipPublishedPlans:publishedPlans};
 let fns = memberFns(state);
 for (const [plan, days] of [['pro',30],['elite',30],['legend',180],['goat',180]]) {
   assert.equal(fns.planDurationDays(plan), days, plan);
@@ -31,12 +32,15 @@ for (const [plan, days] of [['pro',30],['elite',30],['legend',180],['goat',180]]
 }
 assert.equal(fns.planDefaultExpiry('rookie', origin), null);
 assert.equal(fns.planTermLabel('goat'), '180 dní');
-plans.goat.duration_days = null;
-assert.equal(fns.planDefaultExpiry('goat', origin), null, 'Missing runtime duration must fail closed');
+plans.goat.duration_days = 365;
+assert.equal(fns.planDurationDays('goat'), 180, 'Unpublished Admin draft must not alter a grant');
 plans.goat.duration_days = 180;
-plans.legend.duration_days = 30;
+publishedPlans.goat.duration_days = null;
+assert.equal(fns.planDefaultExpiry('goat', origin), null, 'Missing runtime duration must fail closed');
+publishedPlans.goat.duration_days = 180;
+publishedPlans.legend.duration_days = 30;
 assert.equal(fns.planDefaultExpiry('legend', origin), null, 'LEGEND cannot grant 30 days');
-plans.legend.duration_days = 180;
+publishedPlans.legend.duration_days = 180;
 
 const pad = value => String(value).padStart(2,'0');
 function localInput(value) {
@@ -56,12 +60,12 @@ const before = new Date(expiry.value).getTime();
 adminFns.adminAddDaysToExpiry(adminFns.adminDefaultPlanDays());
 const after = new Date(expiry.value).getTime();
 assert.ok(Math.abs((after-before)-180*86400000)<60000, 'Extend exactly 180 days from existing expiry');
-plans.goat.duration_days = null;
+publishedPlans.goat.duration_days = null;
 const unchanged = expiry.value;
 adminFns.adminAddDaysToExpiry(adminFns.adminDefaultPlanDays());
 assert.equal(expiry.value, unchanged, 'Invalid duration does not grant access');
 assert.ok(messages.length > 0);
-plans.goat.duration_days = 180;
+publishedPlans.goat.duration_days = 180;
 
 const slotStart = '        slotStates.slice(0,limit).forEach((slotState,slotIndex)=>{';
 const start = source.indexOf(slotStart), end = source.indexOf('\n        });', start);
