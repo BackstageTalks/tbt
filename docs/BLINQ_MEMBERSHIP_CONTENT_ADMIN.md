@@ -135,3 +135,35 @@ matrices, hidden/active row overrides, pending positions, individualized
 same-day random selections, an unchanged ADMIN audit, and denominator
 regressions. Final status requires green CI, merge, production deployment
 SHA read-back and an independent runtime contract check.
+
+## Admin membership term calculation and ELITE ordered locks — 2026-11-21
+
+**Goal and completion criteria:** A newly issued or extended paid membership uses the
+verified Admin-published `plans.<tier>.duration_days`, never a stale release
+fallback, unpublished browser draft, or implicit 30-day grant. ELITE preserves
+the original server-issued offer positions with redacted locks, on desktop and
+mobile. Authorized bet counts and Results/KPIs do not include locked slots.
+
+**Authority and non-goals:** Live `/api/v1/ui-config` with
+`storage_available=true` and `runtime_configured=true` is authoritative
+for term defaults. ROOKIE is unlimited; paid terms are finite. Do not rewrite
+existing Firebase `expires_at` timestamps, change settled bets, grant hidden
+picks, or alter the CDB. Explicit Admin `HIDE` for a row remains hidden.
+
+**Verified inputs (21 Nov):** Production membership term defaults read back as
+ROOKIE unlimited, PRO 30, ELITE 30, LEGEND 180, GOAT 180 days. The
+release-only fallback still has GOAT 365 days; this is not the currently
+published term.
+
+**Implementation reference:** [PR #1745](https://github.com/BackstageTalks/tbt/pull/1745).
+Browser account expiry defaults and extensions use a pinned published term.
+Server-authenticated access still follows the exact existing expiry timestamp,
+and lifecycle mail/auto-downgrade use that timestamp. ELITE retains server
+`_access_slot` and `slot_states` order; restricted slots are represented by
+numbered locked placeholders without details.
+
+**Evidence:** Added executable JS duration/slot regression and revised ELITE
+and browser zero-allocation contracts. Local isolated execution passed; the
+branch CI, merge, production deployment, and independent live browser read-back
+are separate required gates. Do not claim production completion until those
+gates are observed.
