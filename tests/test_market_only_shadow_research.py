@@ -262,3 +262,19 @@ def test_opener_is_explicit_variant_not_default_and_never_wta_verified():
         .8, PARAMS, variant="opener")
     with pytest.raises(ValueError):
         calibrate_market_only(.8, PARAMS, variant="unknown")
+
+def test_a0_rejects_duplicate_event_on_both_selected_sides():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    first = card(event="same-event", fair=.8, model=.85)
+    other = card(event="same-event", fair=.8, model=.85)
+    other["winner_id"] = "p2"
+    other["betting"]["selection_id"] = "p2"
+    with pytest.raises(ValueError, match="Duplicate canonical event"):
+        select_daily_shadow_picks([first, other], PARAMS)
+
+
+def test_a0_invalid_minimum_rejected():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    for n_min in (0, -1, True, 2.5):
+        with pytest.raises(ValueError, match="positive integer"):
+            select_daily_shadow_picks([card()], PARAMS, n_min=n_min)
