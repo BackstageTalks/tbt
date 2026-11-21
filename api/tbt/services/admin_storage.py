@@ -396,26 +396,6 @@ def _normalize_membership_invariants(payload: object) -> object:
             if not isinstance(days, int) or isinstance(days, bool) or days <= 0:
                 goat["duration_days"] = 365
 
-    # A locked/hidden panel cannot also grant "Celá ponuka". Earlier Admin
-    # publications left see_all=true after switching the display to ZAMKNÚŤ,
-    # which produced contradictory ELITE/LEGEND audit warnings. Normalize
-    # effective read/publish state without unlocking any row or rewriting the
-    # original Azure entity during GET; its existing CAS revision stays intact.
-    tabs = ((((payload.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}))
-    if isinstance(tabs, dict):
-        for tab in tabs.values():
-            rules = tab.get("plans") if isinstance(tab, dict) else None
-            if not isinstance(rules, dict):
-                continue
-            for rule in rules.values():
-                if not isinstance(rule, dict):
-                    continue
-                display = str(rule.get("display_state") or (
-                    "hidden" if rule.get("tab_enabled") is False else "active"
-                )).strip().lower()
-                if display in {"blurred", "hidden"}:
-                    rule["see_all"] = False
-
     # Access contract v1 aligns legacy runtime rows with the approved product
     # matrix once. After Admin republishes the migrated config, the marker
     # preserves future intentional changes instead of reapplying defaults.
@@ -582,6 +562,26 @@ def _normalize_membership_invariants(payload: object) -> object:
                 "row_overrides": {},
             })
         payload["elite_see_all_access_revision"] = 1
+    # A locked/hidden panel cannot also grant "Celá ponuka". Earlier Admin
+    # publications left see_all=true after switching the display to ZAMKNÚŤ,
+    # which produced contradictory ELITE/LEGEND audit warnings. Normalize
+    # effective read/publish state without unlocking any row or rewriting the
+    # original Azure entity during GET; its existing CAS revision stays intact.
+    tabs = ((((payload.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}))
+    if isinstance(tabs, dict):
+        for tab in tabs.values():
+            rules = tab.get("plans") if isinstance(tab, dict) else None
+            if not isinstance(rules, dict):
+                continue
+            for rule in rules.values():
+                if not isinstance(rule, dict):
+                    continue
+                display = str(rule.get("display_state") or (
+                    "hidden" if rule.get("tab_enabled") is False else "active"
+                )).strip().lower()
+                if display in {"blurred", "hidden"}:
+                    rule["see_all"] = False
+
     return payload
 
 
