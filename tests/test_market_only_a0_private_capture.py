@@ -167,7 +167,9 @@ class FakeStore:
             self.remote[Path(path).name] = Path(path).read_bytes()
 
 
-def test_existing_single_writer_fake_store_roundtrip_readback(tmp_path):
+def test_existing_single_writer_fake_store_roundtrip_readback(tmp_path, monkeypatch):
+    # Fake store is an in-memory unit fixture, never a real GitHub Actions writer.
+    monkeypatch.setenv("GITHUB_ACTIONS", "false")
     remote = {}
     store = FakeStore(remote, tmp_path / "writer")
     def factory(repo, tag, folder):
