@@ -16,6 +16,7 @@ from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
 from .score import parse_event_score
 from ..schemas import MatchRecord
+from ..tour_scope import is_250_plus
 from ..match_format import exact_best_of_from_score_stats, explicit_best_of_from_event, infer_best_of
 from ..utils import (
     deterministic_id,
@@ -1069,6 +1070,7 @@ class RapidTennisClient:
             if isinstance(tournament.get("category"), dict)
             else {}
         )
+        rank = tournament.get("rank") if isinstance(tournament.get("rank"), dict) else {}
         fields = [
             raw.get("name"),
             raw.get("eventName"),
@@ -1079,6 +1081,10 @@ class RapidTennisClient:
             unique.get("slug"),
             category.get("name"),
             category.get("slug"),
+            rank.get("name"),
+            rank.get("slug"),
+            raw.get("tournamentLevel"),
+            raw.get("rankName"),
         ]
         return " ".join(str(value or "") for value in fields).lower()
 
@@ -1309,6 +1315,9 @@ class RapidTennisClient:
 
             if category_tour is not None and category_tour != tour:
                 continue
+            # Exclude lower tiers *before* paying for category/date events.
+            if not is_250_plus(tour, category_id=category_id, labels=(category_name,)):
+                continue
 
             for raw in self.category_events(category_id, day):
                 if not self._is_singles_event(raw):
@@ -1320,6 +1329,11 @@ class RapidTennisClient:
                     category_name,
                 )
                 if event_tour != tour:
+                    continue
+                # Native category can be overly broad; fail closed on an explicit
+                # WTA 125 / Challenger / ITF event label even within ATP/WTA.
+                if not is_250_plus(tour, category_id=category_id,
+                                   labels=(category_name, self._event_text(raw))):
                     continue
 
                 event = self._annotate_event(
@@ -1395,6 +1409,9 @@ class RapidTennisClient:
                 or first_present(nested_category, "name", "title", "slug")
                 or ""
             )
+            if not any(is_250_plus(tour, category_id=category_id, labels=(category_name,))
+                       for tour in ("atp", "wta")):
+                continue
             for raw in self.category_events(category_id, day):
                 if self._is_singles_event(raw):
                     continue
@@ -1404,6 +1421,9 @@ class RapidTennisClient:
                     continue
                 event_tour = self._event_tour(raw, category_id, category_name)
                 if event_tour not in {"atp", "wta"}:
+                    continue
+                if not is_250_plus(event_tour, category_id=category_id,
+                                   labels=(category_name, text)):
                     continue
                 event = self._annotate_event(raw, category_id, category_name)
                 event["_tbt_doubles"] = True
