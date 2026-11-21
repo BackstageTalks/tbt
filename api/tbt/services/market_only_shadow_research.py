@@ -57,6 +57,21 @@ def load_shadow_params(path: str | Path) -> dict:
     if (any(isinstance(v, bool) or not isinstance(v, (int, float))
             or not math.isfinite(v) for v in (a, b)) or a <= 0):
         raise ValueError("Invalid unverified market-only calibrator")
+    # The alternative is traceable research metadata, never an implicit switch.
+    opener = conf.get("opener_fallback") or {}
+    if (opener.get("slope") != 1.088
+            or opener.get("intercept") != -.008
+            or opener.get("claimed_fit_n") != 36972
+            or opener.get("source_tour") != "ATP"
+            or opener.get("source_field") != "opener"
+            or opener.get("production_enabled") is not False
+            or opener.get("wta_verified") is not False
+            or opener.get("independent_fit_reproduced") is not False):
+        raise ValueError("ATP opener research variant lost its frozen provenance")
+    prospective = conf.get("prospective") or {}
+    if (prospective.get("n_min_daily_shadow") != 5
+            or prospective.get("daily_minimum_requires_all_observed_days") is not True):
+        raise ValueError("A0 daily non-silence gate must remain enforced")
     selector = conf.get("selector_experiments") or {}
     if (selector.get("veto_market_outsider_fair_below") != .5
             or selector.get("market_min_fair") != .75
@@ -65,13 +80,20 @@ def load_shadow_params(path: str | Path) -> dict:
     return conf
 
 
-def calibrate_market_only(fair: float, params: dict) -> float:
-    """Strictly research-only q=sigmoid(slope*logit(fair)+intercept)."""
+def calibrate_market_only(fair: float, params: dict, *, variant: str = "main") -> float:
+    """Research only; ATP opener is explicit, never a silent fallback."""
     p = _prob(fair)
     if p is None:
         raise ValueError("Both sides' real no-vig market fair must be known")
     p = _clip(p)
-    cal = params["calibrator"]
+    if variant == "main":
+        cal = params["calibrator"]
+    elif variant == "opener":
+        cal = params["opener_fallback"]
+        if cal.get("production_enabled") is not False:
+            raise ValueError("Opener fallback must never activate serving")
+    else:
+        raise ValueError("Unknown market-only research calibration variant")
     return _clip(_sigmoid(cal["slope"] * math.log(p/(1-p)) + cal["intercept"]))
 
 
