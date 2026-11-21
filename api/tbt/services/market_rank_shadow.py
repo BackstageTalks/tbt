@@ -266,13 +266,20 @@ def settled_comparison(history, matches, *, asof):
             captures.append(c)
     seen_days = set()
     totals = {v: {s: {"issued": 0, "settled": 0, "correct": 0,
-                       "staked": 0, "gross_return": 0.0}
+                       "staked": 0, "gross_return": 0.0,
+                       "priced_settled": 0, "fair_expected_wins": 0.0}
                   for s in SECTIONS} for v in VARIANTS}
+    top_shortfall_days = {v: 0 for v in VARIANTS}
+    same_n_top_days = 0
     for c in captures:
         day = c["public_offer_day"]
         if day in seen_days:
             raise ValueError("Duplicate shadow capture betting day in history")
         seen_days.add(day)
+        top_sizes = {v: len(rows.get("top", [])) for v, rows in c["variants"].items()}
+        same_n_top_days += int(len(set(top_sizes.values())) == 1)
+        for variant, size in top_sizes.items():
+            top_shortfall_days[variant] += int(size < 3)
         for variant, sections in c["variants"].items():
             for section, receipts in sections.items():
                 dest = totals[variant][section]
@@ -290,11 +297,17 @@ def settled_comparison(history, matches, *, asof):
                             {item["player1_id"], item["player2_id"]}):
                         continue
                     dest["settled"] += 1
-                    dest["staked"] += 1
+                    fair = _num(item.get("fair_probability"))
+                    if fair is not None and 0 < fair < 1:
+                        dest["priced_settled"] += 1
+                        dest["fair_expected_wins"] += fair
+                    odds = _num(item.get("bookmaker_odds"))
+                    if odds is not None and odds > 1:
+                        dest["staked"] += 1
                     if str(match.winner_id) == item["selected_player_id"]:
                         dest["correct"] += 1
-                        if (_num(item.get("bookmaker_odds")) or 0) > 1:
-                            dest["gross_return"] += float(item["bookmaker_odds"])
+                        if odds is not None and odds > 1:
+                            dest["gross_return"] += odds
     for v in totals.values():
         for s in v.values():
             s["hit_rate"] = (s["correct"] / s["settled"]
@@ -303,7 +316,46 @@ def settled_comparison(history, matches, *, asof):
                                    if s["staked"] and s["settled"] == s["staked"] else None)
     return {
         "schema": SCHEMA, "status": "DIAGNOSTIC_NOT_A_MODEL_PROMOTION",
-        "frozen_days": len(seen_days), "variants": totals,
+        "frozen_days": len(seen_days), "same_n_top_days": same_n_top_days,
+        "top_shortfall_days_below_three": top_shortfall_days,
+        "prospective_gate": "WAIT_FOR_400_FULL_SLATE_PAIRED_SETTLEMENTS",
+        "variants": totals,
         "provider_requests": 0, "production_modified": False,
         "limitations": "no guaranteed full-provider universe; no causal or holdout proof",
     }
+
+
+
+def markdown_summary(report):
+    """Small human-readable Actions summary; no public feed or provider writes."""
+    lines = [
+        "### BlinQ — prospective market-rank shadow",
+        "",
+        f"Frozen days: **{report['frozen_days']}**; "
+        f"same-N TOP days: **{report['same_n_top_days']}**. "
+        "**Diagnostic only; 400-paired-match gate not met by CI.**",
+        "",
+        "| Variant | TOP issued | TOP settled | TOP correct | TOP hit | "
+        "TOP below 3 days | PRIME settled | VALUE settled |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for variant in VARIANTS:
+        v = report["variants"][variant]
+        top = v["top"]
+        rate = ("—" if top["hit_rate"] is None
+                else f"{100*top['hit_rate']:.1f}%")
+        lines.append(
+            f"| {variant} | {top['issued']} | {top['settled']} | "
+            f"{top['correct']} | {rate} | "
+            f"{report['top_shortfall_days_below_three'][variant]} | "
+            f"{v['prime']['settled']} | {v['value']['settled']} |"
+        )
+    lines.extend([
+        "",
+        "Captured from the same first daily model-discovered slate. "
+        "Missing provider matches/quotes, unequal daily counts and "
+        "unsettled outcomes are NOT interpreted as losses or wins.",
+        "Public champion / TOP / VALUE / CDB were not changed by shadow.",
+        "",
+    ])
+    return "\n".join(lines)
