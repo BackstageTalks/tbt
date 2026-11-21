@@ -716,7 +716,8 @@ def select_ace_picks(
     eligible_matches = 0
     ace_gate_counts = {
         "eligible": 0, "unsupported_tour": 0,
-        "excluded_itf_futures": 0, "excluded_wta_below_250": 0,
+        "excluded_itf_futures": 0, "excluded_atp_below_250": 0,
+        "excluded_wta_below_250": 0,
         "unverified_wta_level": 0, "missing_player_rank": 0,
         "invalid_player_rank": 0, "outside_top1000": 0,
     }
