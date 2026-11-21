@@ -519,6 +519,9 @@
       &&runtime?.config?.schema===2?runtime.config:null;
     state.uiStorageAvailable=storageAvailable;
     state.runtimeConfigLoaded=Boolean(liveRuntime);
+    // Keep issued membership terms pinned to the last actually published
+    // Azure configuration, never an unpublished Admin draft or release fallback.
+    state.membershipPublishedPlans=liveRuntime?.plans?clone(liveRuntime.plans):null;
     state.uiRuntimeNotice=storageAvailable?'':(runtimeResult.status==='rejected'
       ?'Nepodarilo sa overiť publikovanú konfiguráciu.'
       :'Úložisko publikovanej konfigurácie nie je dostupné.');
@@ -2317,7 +2320,13 @@
     const raw=String(ent.visible_picks??'').toUpperCase();
     const zeroAllocation=raw!==''&&raw!=='ALL'&&Number(raw)===0
       &&ent.blur_remaining!==false&&!dailyHubHasAllocatedRows(ent);
-    return zeroAllocation||(ent.blur_remaining!==false&&Number(ent.locked_count||0)>0)||display==='blurred'
+    // ELITE keeps the ordered, redacted positions visible as locked teasers.
+    // The server never sends pick details for those positions.
+    const eliteHasRestrictedPositions=accountPlan()==='elite'
+      &&(ent.slot_states||[]).some((state,index)=>state==='hidden'
+        &&String(ent.row_overrides?.[String(index+1)]||'').toLowerCase()!=='hidden');
+    return zeroAllocation||eliteHasRestrictedPositions
+      ||(ent.blur_remaining!==false&&Number(ent.locked_count||0)>0)||display==='blurred'
       ||(Array.isArray(ent.slot_states)&&ent.slot_states.includes('blurred'));
   }
   function dailyHubEntitlement(tab){
@@ -3214,7 +3223,7 @@
   function dailyHubLockedRow(tab,index,requiredPlan='pro'){
     const colspan=Math.max(1,dailyHubColumns(tab).length),required=String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
     if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="SEE ALL"><td colspan="${colspan}"><span>◆</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>SEE ALL</b><small>Rozšírený kvalifikovaný výber podľa nastavenej úrovne prístupu.</small></div></td></tr>`;
-    return `<tr class="hub-row-locked access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span>🔒</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>${escapeHtml(uiCopy('access.locked_row',lcopy('Next pick is locked','Ďalší pick je zamknutý','Další tip je zamčený')))}</b><small>${escapeHtml(uiCopy('access.locked_row_body',lcopy('A higher tier unlocks more rows and prediction detail.','Vyššia úroveň odomkne ďalšie riadky a detail predikcie.','Vyšší úroveň odemkne další řádky a detail predikce.')))}</small></div></td></tr>`;
+    return `<tr class="hub-row-locked access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span class="hub-locked-rank" aria-label="Pozícia ${index+1}">${index+1}.</span><span aria-hidden="true">🔒</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>${escapeHtml(uiCopy('access.locked_row',lcopy('Next pick is locked','Ďalší pick je zamknutý','Další tip je zamčený')))}</b><small>${escapeHtml(uiCopy('access.locked_row_body',lcopy('A higher tier unlocks more rows and prediction detail.','Vyššia úroveň odomkne ďalšie riadky a detail predikcie.','Vyšší úroveň odemkne další řádky a detail predikce.')))}</small></div></td></tr>`;
   }
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
@@ -3261,8 +3270,12 @@
     }
     const includedButUnavailable=dailyHubIncludedButUnavailable(tab,ent,sourceRows.length);
     const preview=Math.max(1,Number(cfg.preview_rows)||10);
-    const allCount=plan==='elite'&&!state.previewPlan?rows.length:Math.max(Number(ent.total)||0,rows.length);
-    const canExpand=ent.see_all===true&&allCount>preview;
+    // ELITE tab badges count only authorized rows, but preview/expansion must
+    // span their original server positions (a pick may be at slot #62).
+    const allCount=plan==='elite'&&!state.previewPlan
+      ?Math.max(rows.length,Array.isArray(ent.slot_states)?ent.slot_states.length:0)
+      :Math.max(Number(ent.total)||0,rows.length);
+    const canExpand=(ent.see_all===true||plan==='elite')&&allCount>preview;
     let limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;
     // Stable-random FREE rows stay at their ORIGINAL server slot (e.g. #8).
     // Only one authorized row is returned, but its slot may be anywhere in
@@ -3274,11 +3287,7 @@
     const out=[];
     {
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
-      if(plan==='elite'&&!state.previewPlan&&!includedButUnavailable){
-        // ELITE is a curated offer: render only the server-authorized rows,
-        // not global locked placeholders or original source positions.
-        rows.slice(0,limit).forEach((row,index)=>out.push(dailyHubRow(row,tab,false,index)));
-      }else if(slotStates.length&&!includedButUnavailable){
+      if(slotStates.length&&!includedButUnavailable){
         // Server-authorized rows carry their original source slot. Search,
         // surface and tournament filters must never compact slot 7 into slot 2.
         const bySlot=new Map(),unmapped=[];
@@ -3288,18 +3297,25 @@
           else unmapped.push(row);
         });
         slotStates.slice(0,limit).forEach((slotState,slotIndex)=>{
-          if(slotState==='hidden')return;
-          if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
-          else {
+          // ELITE shows its full ordered offer, but without restricted data.
+          // Respect an explicit Admin HIDE override; other unavailable slots
+          // render as redacted locks even if old Admin config disabled blur.
+          const explicitlyHidden=String(ent.row_overrides?.[String(slotIndex+1)]||'').toLowerCase()==='hidden';
+          const eliteTeaser=plan==='elite'&&!explicitlyHidden&&slotState==='hidden';
+          if(slotState==='hidden'&&!eliteTeaser)return;
+          if(slotState==='blurred'||eliteTeaser){
+            out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
+          }else{
             const row=bySlot.get(slotIndex)??unmapped[dataIndex++];
             if(row)out.push(dailyHubRow(row,tab,false,slotIndex));
           }
         });
       }else if(!includedButUnavailable)for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
-      if(plan!=='elite'||state.previewPlan){
-        if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length))out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
-        else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
+      if(!out.length&&dailyHubAccessLocked(tab,ent,sourceRows.length)){
+        out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
+      }else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false){
+        out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
       }
     }
     body.innerHTML=out.join('');
@@ -3324,7 +3340,7 @@
       const options=[...new Set(sourceRows.map(row=>String(row?.tournament||row?.competition||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));const current=String(state.dailyHubTournament||'');
       tournamentSelect.innerHTML=`<option value="">${escapeHtml(lcopy('All tournaments','Všetky turnaje','Všechny turnaje'))}</option>`+options.map(name=>`<option value="${escapeHtml(name)}"${name===current?' selected':''}>${escapeHtml(name)}</option>`).join('');if(current&&!options.includes(current)){state.dailyHubTournament='';tournamentSelect.value='';}
     }
-    if(expand){const hasMore=allCount>preview;expand.hidden=!hasMore;expand.dataset.locked=ent.see_all===true?'0':'1';expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false');expand.title=state.dailyHubExpanded?lcopy('Show first 10','Zobraziť prvých 10','Zobrazit prvních 10'):lcopy('Show all rows','Zobraziť všetky riadky','Zobrazit všechny řádky');}
+    if(expand){const hasMore=allCount>preview;expand.hidden=!hasMore;expand.dataset.locked=ent.see_all===true||plan==='elite'?'0':'1';expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false');expand.title=state.dailyHubExpanded?lcopy('Show first 10','Zobraziť prvých 10','Zobrazit prvních 10'):lcopy('Show all rows','Zobraziť všetky riadky','Zobrazit všechny řádky');}
   }
 
 
@@ -3594,10 +3610,21 @@
       const target=event.target instanceof Element?event.target:null;
       if(!target)return;
       const tab=target.closest('[data-daily-hub-tab]');
-      if(tab){ if(tab.dataset.upgradePlan){showAccessHint(tab,tab.dataset.upgradePlan,tab.dataset.upgradeSection||'SEE ALL',true);return;} state.dailyHubTab=tab.dataset.dailyHubTab; state.dailyHubExpanded=false; renderDailyHub(); return; }
+      if(tab){
+        // ELITE can inspect ordered locked placeholders. Opening a locked
+        // category never grants its predictions; clicking a lock upsells.
+        if(tab.dataset.upgradePlan&&accountPlan()!=='elite'){
+          showAccessHint(tab,tab.dataset.upgradePlan,tab.dataset.upgradeSection||'SEE ALL',true);return;
+        }
+        state.dailyHubTab=tab.dataset.dailyHubTab;state.dailyHubExpanded=false;renderDailyHub();return;
+      }
+      const lockedRow=target.closest('tr.hub-row-locked[data-upgrade-plan]');
+      if(lockedRow){
+        showAccessHint(lockedRow,lockedRow.dataset.upgradePlan,lockedRow.dataset.upgradeSection||'SEE ALL',true);return;
+      }
       const detailLock=target.closest('[data-detail-locked]');
       if(detailLock){showAccessHint(detailLock,detailLock.dataset.upgradePlan||firstMatchDetailUnlockPlan(),detailLock.dataset.upgradeSection||lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
-      if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
+      if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true&&accountPlan()!=='elite'){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
       const row=target.closest('tr[data-hub-event]');
       if(row){
         const key=String(row.dataset.hubEvent||'');
@@ -4967,18 +4994,23 @@
     if(next)next.onclick=()=>{state.resultsPage+=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});};
   }
 
-  function planIsUnlimited(planId,plan=state.ui?.plans?.[planId]||{}){return planId==='rookie'||plan.unlimited===true;}
-  function planDefaultExpiry(planId, from=new Date()){
-    const plan=state.ui?.plans?.[planId]||{};
-    if(plan.lifetime||planIsUnlimited(planId,plan))return null;
-    const days=Number(plan.duration_days); if(!Number.isFinite(days)||days<=0)return null;
-    return new Date(from.getTime()+days*86400000);
+  // Only FREE/ROOKIE is unlimited; legacy paid-tier flags cannot bypass expiry.
+  function planIsUnlimited(planId){return planId==='rookie';}
+  function planDurationDays(planId){
+    if(planIsUnlimited(planId))return null;
+    // The loaded, Admin-published runtime config is authoritative. Never
+    // silently grant 30 days when this value is absent or invalid.
+    const days=state.membershipPublishedPlans?.[planId]?.duration_days;
+    return Number.isInteger(days)&&days>0&&days<=3650&&(planId!=='legend'||days>=180)?days:null;
+  }
+  function planDefaultExpiry(planId,from=new Date()){
+    const days=planDurationDays(planId);
+    return days===null?null:new Date(from.getTime()+days*86400000);
   }
   function planTermLabel(planId){
-    const plan=state.ui?.plans?.[planId]||{};
-    if(planIsUnlimited(planId,plan))return 'Bez časového obmedzenia';
-    if(plan.lifetime)return 'Doživotne';
-    const days=Number(plan.duration_days); return Number.isFinite(days)&&days>0?`${days} dní`:'Vlastná platnosť';
+    if(planIsUnlimited(planId))return 'Bez časového obmedzenia';
+    const days=planDurationDays(planId);
+    return days===null?'Platnosť nie je nastavená':`${days} dní`;
   }
   function adminLevelChips(selected,attr='admin-plan-chip',includeExpired=true){
     const ids=includeExpired?accessContexts:membershipHierarchy;
@@ -7451,6 +7483,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       state.telegramPublishedOriginal=clone(wanted);
       state.ui.telegram_groups=clone(wanted);
       state.uiPublishedRevision=String(verified.config_revision||'');
+      // Telegram-only publishing can incorporate concurrent membership edits.
+      // Refresh the verified duration snapshot with the same Azure read-back.
+      state.membershipPublishedPlans=verified.config?.plans?clone(verified.config.plans):null;
       try{localStorage.setItem(VERIFIED_RUNTIME_UI_KEY,JSON.stringify(verified.config));}catch{}
       renderTelegramGroupsPanel();rerenderAdmin();
       showStatus('Telegram skupiny publikované a nezávisle overené v Azure.');
@@ -7485,6 +7520,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         return false;
       }
       state.uiPublishedRevision=String(verified.config_revision);
+      state.membershipPublishedPlans=verified.config?.plans?clone(verified.config.plans):null;
       state.telegramPublishedOriginal=clone(verified.config?.telegram_groups||{});
       try{localStorage.removeItem(draftKey());}catch{}
       state.runtimeConfigLoaded=true;
@@ -7609,17 +7645,19 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const current=expiry.value?new Date(expiry.value).getTime():0;
     if(force||!current||current<=Date.now()){
       const date=planDefaultExpiry(planId);expiry.value=userDateValue(date?.toISOString());
+      if(!date)showStatus('Platnosť levelu nie je správne nastavená. Najprv publikuj platnú dĺžku v Admin → Členstvá.');
     }
   }
   function adminAddDaysToExpiry(days){
     const expiry=$('adminUserExpires');if(!expiry)return;
     const planId=String($('adminUserPlan')?.value||''),plan=state.ui?.plans?.[planId]||{};
     if(planIsUnlimited(planId,plan)){setAdminPlanDefaults(planId,true);showStatus('ROOKIE je bez časového obmedzenia.');return;}
+    if(!Number.isInteger(days)||days<1||days>3650){showStatus('Predvolená platnosť nie je správne nastavená v Admin → Členstvá.');return;}
     const current=expiry.value?new Date(expiry.value).getTime():0,base=Math.max(Date.now(),Number.isFinite(current)?current:0);
-    expiry.disabled=false;expiry.value=userDateValue(new Date(base+Math.max(1,Number(days)||1)*86400000).toISOString());
+    expiry.disabled=false;expiry.value=userDateValue(new Date(base+days*86400000).toISOString());
   }
   function adminDefaultPlanDays(){
-    const planId=String($('adminUserPlan')?.value||'');const plan=state.ui?.plans?.[planId]||{};return planIsUnlimited(planId,plan)?0:Math.max(1,Number(plan.duration_days)||30);
+    const planId=String($('adminUserPlan')?.value||'');return planDurationDays(planId);
   }
   function decorateAdminMediaUploads(host){
     if(!host)return;
@@ -8430,6 +8468,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(existingAdmin){status='active';}
       else if(plan==='rookie'){status='active';expires_at=null;}
       else if(plan){if(!rawExpiry)throw new Error('Pre tento level nastav platnosť do.');expires_at=new Date(rawExpiry).toISOString();status=new Date(expires_at).getTime()>Date.now()?'active':'expired';}
+      if(plan&&plan!=='rookie'){
+        const published=await getJSON('/api/v1/ui-config',{timeoutMs:5000});
+        if(published?.runtime_configured!==true||published?.storage_available!==true||
+           published?.config_revision!==state.uiPublishedRevision||!state.membershipPublishedPlans?.[plan]){
+          throw new Error('Členstvá sa medzičasom zmenili alebo Azure nie je dostupný. Obnov Admin pred uložením plateného levelu.');
+        }
+      }
       const restoreLegend=plan==='legend'&&status==='active'&&String(user.plan||'').toLowerCase()!=='legend'&&new Date(expires_at).getTime()-Date.now()<180*86400000-5*60000;
       if(restoreLegend&&!window.confirm('LEGEND má štandardne 180 dní. Nastavený dátum je kratší. Potvrď iba obnovu zostávajúcej platnosti podľa pôvodného pridelenia, nie nové 30-dňové členstvo.')){message.textContent='Obnova platnosti bola zrušená.';return;}
       let updated=await BlinqAuth.adminUpdateUserProfile(user.id,{email,telegram_nick});
