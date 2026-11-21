@@ -679,7 +679,7 @@ def test_web_telegram_top_parity_same_cutoff():
     assert {item["event_id"] for item in website_full_day} == {"301", "302"}
 
 
-def test_telegram_aces_accepts_ranked_challengers_but_rejects_itf_unknown():
+def test_telegram_aces_excludes_ranked_challengers_and_itf():
     snapshot=offer()
     snapshot["ace_picks"]=[
         priced_ou(row(201,"ATP Player","aces")|{"tour":"ATP"}),
@@ -690,11 +690,11 @@ def test_telegram_aces_accepts_ranked_challengers_but_rejects_itf_unknown():
         priced_ou(row(206,"Unknown Player","aces")|{"tour":None}),
     ]
     chosen=tg.select_groups(snapshot,settings(),NOW)
-    assert [r["event_id"] for r in chosen["aces"]]==["201","202","204","205"]
+    assert [r["event_id"] for r in chosen["aces"]]==["201","202","205"]
     assert len(chosen["top"])==5 and len(chosen["value"])==1
 
 
-def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
+def test_telegram_excludes_named_challengers_like_serving():
     from tbt.services.feed import main_tour_aces
     snapshot=offer()
     rows=[
@@ -705,7 +705,7 @@ def test_telegram_uses_same_tour_policy_as_serving_for_named_challengers():
     ]
     snapshot["ace_picks"]=rows
     chosen=tg.select_groups(snapshot,settings(),NOW)["aces"]
-    assert [x["event_id"] for x in chosen]==["301","302","303","304"]
+    assert [x["event_id"] for x in chosen]==["301","302","304"]
     assert [x["event_id"] for x in chosen]==[x["event_id"] for x in rows if main_tour_aces(x)]
 
 
@@ -722,7 +722,7 @@ def test_next_day_wta_aces_web_and_telegram_share_finalized_grade_filter():
         ("wta125", "WTA", "WTA 125", "WTA 125", False),
         ("generic", "WTA", "WTA", "Unknown Women's", False),
         ("itf", "ITF", "ITF Women", "ITF W100", False),
-        ("atp_ch", "ATP", "ATP Challenger", "ATP Challenger", True),
+        ("atp_ch", "ATP", "ATP Challenger", "ATP Challenger", False),
         ("atp", "ATP", "ATP 250", "ATP Main", True),
     ]
     cards = []
