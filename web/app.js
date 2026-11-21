@@ -7483,6 +7483,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       state.telegramPublishedOriginal=clone(wanted);
       state.ui.telegram_groups=clone(wanted);
       state.uiPublishedRevision=String(verified.config_revision||'');
+      // Telegram-only publishing can incorporate concurrent membership edits.
+      // Refresh the verified duration snapshot with the same Azure read-back.
+      state.membershipPublishedPlans=verified.config?.plans?clone(verified.config.plans):null;
       try{localStorage.setItem(VERIFIED_RUNTIME_UI_KEY,JSON.stringify(verified.config));}catch{}
       renderTelegramGroupsPanel();rerenderAdmin();
       showStatus('Telegram skupiny publikované a nezávisle overené v Azure.');
