@@ -80,3 +80,4 @@ def test_locked_and_hidden_tier_panels_cannot_claim_full_offer():
 def test_admin_lock_selector_auto_clears_full_offer_in_browser_draft():
     source = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "if(['blurred','hidden'].includes(String(rule.display_state||'')))rule.see_all=false;" in source
+    assert "if(state==='active'&&bestLower&&count<bestLower.count)" in source
