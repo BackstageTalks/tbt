@@ -157,9 +157,10 @@ def main():
                     throw new Error('Missing included pick needs an availability explanation');
                   }
                 }''')
-                # Exercise the actual desktop/mobile DOM, not just source
-                # string assertions. ELITE must see its three API-authorized
-                # rows, never the 62-row source total or fake locked rows.
+                # Real desktop/mobile DOM: ELITE retains server-authorized
+                # count 3 and original pick positions #6/#13/#62. The first
+                # 10 slots show nine redacted locks; expand reveals the other
+                # two authorized picks without exposing any restricted row.
                 # LEGEND retains a genuinely full 62-row server offer.
                 page.evaluate('''() => {
                   const app=accessTest, state=app.state;
@@ -202,19 +203,32 @@ def main():
                     );
                     if(!count||count.textContent.trim()!=='3')
                       throw new Error(tab+': ELITE tab exposed global total');
-                    const visible=document.querySelectorAll(
-                      '#dailyHubBody tr[data-hub-event]'
-                    );
-                    if(visible.length!==3)
-                      throw new Error(tab+': ELITE rendered '+visible.length+' instead of three authorized rows');
-                    if(document.querySelector('#dailyHubBody .hub-row-locked'))
-                      throw new Error(tab+': ELITE rendered a fake global locked placeholder');
-                    const expected=new Set(allowed.map(row=>row.event_id));
-                    for(const tr of visible){
-                      if(!expected.delete(tr.dataset.hubEvent))
-                        throw new Error(tab+': unexpected or duplicated ELITE event '+tr.dataset.hubEvent);
+                    const visible=[...document.querySelectorAll('#dailyHubBody tr[data-hub-event]')];
+                    const locks=[...document.querySelectorAll('#dailyHubBody tr.hub-row-locked')];
+                    if(visible.length!==1||visible[0].dataset.hubEvent!=='tier-regression-5')
+                      throw new Error(tab+': first-ten preview must retain only the authorized #6 pick');
+                    if(visible[0].querySelector('.hub-rank')?.textContent.trim()!=='6')
+                      throw new Error(tab+': ELITE preview compacted original #6 slot');
+                    if(locks.length!==9||document.querySelector('#dailyHubExpand')?.hidden)
+                      throw new Error(tab+': ELITE preview requires nine redacted locks and expand');
+                    if(locks.some(row=>row.hasAttribute('data-hub-event')))
+                      throw new Error(tab+': locked placeholder leaked a match ID');
+                    state.dailyHubExpanded=true;
+                    app.renderDailyHub();
+                    const allVisible=[...document.querySelectorAll('#dailyHubBody tr[data-hub-event]')];
+                    const allLocks=[...document.querySelectorAll('#dailyHubBody tr.hub-row-locked')];
+                    if(allVisible.length!==3||allLocks.length!==59)
+                      throw new Error(tab+': expanded ELITE must render three picks and 59 locks');
+                    const expected=new Map([[5,'6'],[12,'13'],[61,'62']]);
+                    for(const tr of allVisible){
+                      const id=Number(String(tr.dataset.hubEvent||'').split('-').at(-1));
+                      const rank=tr.querySelector('.hub-rank')?.textContent.trim();
+                      if(expected.get(id)!==rank)
+                        throw new Error(tab+': original order mismatch for ELITE '+id+'/'+rank);
+                      expected.delete(id);
                     }
                     if(expected.size)throw new Error(tab+': some authorized ELITE rows were hidden');
+                    state.dailyHubExpanded=false;
                   }
                   setOffer('legend',rows,{
                     ...ent,visible_picks:62,returned:62,locked_count:0,
