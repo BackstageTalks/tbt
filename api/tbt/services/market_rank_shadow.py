@@ -15,7 +15,7 @@ import math
 import os
 from unittest.mock import patch
 
-from .market_selection import select_market_sections
+from .market_selection import select_market_sections, _belongs_to_public_offer_day
 from .market_anchored_rank import _ts, _num
 
 SCHEMA = 1
@@ -98,13 +98,16 @@ def build_market_rank_shadow(predictions, *, observed_at, public_offer_day,
     if not isinstance(public_offer_day, str) or not public_offer_day:
         raise ValueError("Public betting-day key required")
     prepared, eligible = [], {}
-    counts = {"all_model_singles": 0, "future_prestart": 0,
+    counts = {"all_model_singles": 0, "outside_offer_day": 0, "future_prestart": 0,
               "complete_prestart_fair": 0, "model_fallback": 0,
               "near_start_or_late": 0, "invalid_identity": 0}
     for source in predictions:
         if not isinstance(source, dict) or source.get("prediction_family") == "doubles":
             continue
         counts["all_model_singles"] += 1
+        if not _belongs_to_public_offer_day(source, public_offer_day):
+            counts["outside_offer_day"] += 1
+            continue
         start, created = _ts(source.get("scheduled_at")), _ts(source.get("created_at"))
         if start is None or created is None or created > clock or (
                 start - clock).total_seconds() <= MIN_LEAD_SECONDS:
