@@ -1,0 +1,74 @@
+name: BlinQ API underuse admin notice (16:50 Bratislava)
+# Reuse existing externally scheduled 15-minute match-status clock.
+# No native GitHub cron and no paid tennis-provider call.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-api-underuse-1650
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Wait for local 16:50 and require same-day notification window
+        id: clock
+        shell: bash
+        run: |
+          set -euo pipefail
+          delay="$(python - <<'PY'
+          from datetime import datetime, time
+          from math import ceil
+          from zoneinfo import ZoneInfo
+          local = datetime.now(ZoneInfo("Europe/Bratislava"))
+          target = local.replace(hour=16, minute=50, second=0, microsecond=0)
+          if local.time() < time(16, 45) or local.time() >= time(17, 6):
+              print(-1)
+          else:
+              print(max(0, ceil((target - local).total_seconds())))
+          PY
+          )"
+          if (( delay < 0 )); then
+            echo "due=false" >> "$GITHUB_OUTPUT"
+            echo "Skipped: outside 16:45–17:05 Bratislava window"
+            exit 0
+          fi
+          if (( delay > 0 )); then
+            echo "Waiting ${delay}s until 16:50 Europe/Bratislava"
+            sleep "$delay"
+          fi
+          echo "due=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check shared ledger and send one admin email if below 75%
+        if: steps.clock.outputs.due == 'true'
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo 'Missing BLINQ_LIVE_WORKER_TOKEN'; exit 1; }
+          base="${BLINQ_BASE_URL%/}"
+          curl --fail-with-body --silent --show-error \
+            --retry 0 --connect-timeout 5 --max-time 65 \
+            -X POST -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN" \
+            "$base/api/v1/internal/api-budget/underuse-alert" \
+            -o "$RUNNER_TEMP/underuse-result.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          result=json.loads((Path(os.environ["RUNNER_TEMP"])/"underuse-result.json").read_text())
+          if result.get("status") not in {"smtp_accepted", "threshold_met", "already_claimed", "not_due"}:
+              raise RuntimeError("Unexpected API budget notice result")
+          print("BLINQ_API_LOW_USE_1650",json.dumps({
+              "status":result["status"],
+              "global_spent":result.get("global_spent"),
+              "percent":result.get("percent"),
+              "accepted_count":result.get("accepted_count"),
+          },sort_keys=True))
+          PY
