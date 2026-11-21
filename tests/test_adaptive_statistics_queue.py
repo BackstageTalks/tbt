@@ -413,3 +413,15 @@ def test_a_paid_recovery_from_verified_zero_yield_reenables_adaptation():
     queue.record(second, 1, _gain(12, 1, 4))
     assert queue.summary()["adaptive_choices"] == 1
     assert not queue._low_yield("atp:2024:serve_return")
+
+def test_newest_season_wins_only_when_verified_paid_yield_is_comparable():
+    rows = [_match("new", "ATP", 2026), _match("old", "WTA", 2024)]
+    q = AdaptiveStatisticsQueue(rows, {
+        "atp:2026": {"quality_ready_rate": .55},
+        "wta:2024": {"quality_ready_rate": .55},
+    })
+    assert q._score("atp:2026:serve_return") > q._score("wta:2024:serve_return")
+    for match in q:
+        q.record(match, 1,
+                 _gain(24, 1) if match.scheduled_at.year == 2024 else _gain(4))
+    assert q._score("wta:2024:serve_return") > q._score("atp:2026:serve_return")
