@@ -127,12 +127,18 @@ approval gates and the corrected 945-prestart-quote replay. Only the new
   logic, TOP price floor and public model probability remain unchanged.
   A candidate vetoed for market disagreement cannot re-enter through
   emergency TOP fill, even if both optional features are enabled.
-- **Trade-off:** the supplied separate analysis reports 8 vs 6 days
-  with fewer than three TOP picks when the veto is applied, without
-  additional observed hit-rate benefit beyond market-anchored ordering.
-  This conflicts with the user's daily no-silence objective. The flag
-  must therefore **remain disabled** until explicitly and separately
-  approved; this PR is NOT approval.
+- **Corrected trade-off (independently computed on the supplied 2026-11-20
+  issued-results CSV):** among 1,140 settled Match Winner event IDs,
+  945 have valid pre-start fair (195 fallback). TOP-like eligibility
+  p >= .60 and odds >= 1.50 spans 43 observed days. Rank-only selects
+  **73/121 (60.3%)**, whereas the veto selects **69/116 (59.5%)**.
+  Shortfall days with fewer than 3 TOP-like picks rise **6 -> 10**.
+  The supplied ZIP's **6 -> 8** figure used the stale 649-prestart-price
+  parsing and does not reproduce under the corrected 945-price parsing.
+  The 116-vs-121 denominator changes, so these rates cannot establish
+  causal superiority or non-inferiority. It conflicts with the user's
+  no-silence objective. Keep this veto **disabled**; this PR is not
+  permission to activate it.
 - **Evidence distinction:** the reported 7,635 ATP historical full-slate
   selections (2016–2026) and 139 BlinQ TOP picks are *different cohorts*,
   not an interchangeable head-to-head experiment. The supplied claims
