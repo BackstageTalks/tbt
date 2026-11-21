@@ -167,3 +167,24 @@ and browser zero-allocation contracts. Local isolated execution passed; the
 branch CI, merge, production deployment, and independent live browser read-back
 are separate required gates. Do not claim production completion until those
 gates are observed.
+
+## Locked-panel full-offer consistency — 2026-11-22
+
+**Scope:** The published daily-hub UI may contain `display_state=blurred`/`hidden`
+together with `see_all=true`, for instance ELITE/LEGEND DVOJCHYBY, SETY,
+ŠTVORHRA, GAMY and ACCA. Such rows are intentionally locked but Admin reports
+contradictory full access. See [PR #1748](https://github.com/BackstageTalks/tbt/pull/1748).
+
+**Invariant:** A locked or hidden panel has `see_all=false`. The effective
+runtime read and the Admin publish validator normalize that exact flag only;
+the in-browser editor clears it when selecting ZAMKNÚŤ/SKRYŤ. Global category
+order, enabled status, existing pick authorizations, row overrides and all
+Firebase paid expiries are unchanged. Intentional higher-tier locks do not
+trigger the active-row hierarchy audit. A separate PRO/ACCA zero-versus-FREE
+warning may remain and requires a product entitlement decision rather than an
+automatic upgrade.
+
+**Evidence and handoff:** Regression tests cover ELITE/LEGEND hidden/blurred
+normalization and active full-offer preservation. Required completion gates:
+successful PR CI, merge, Azure deploy, live API read-back of the effective
+per-tier flags and public frontend asset version.
