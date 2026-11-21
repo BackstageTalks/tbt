@@ -155,7 +155,7 @@ ROOKIE unlimited, PRO 30, ELITE 30, LEGEND 180, GOAT 180 days. The
 release-only fallback still has GOAT 365 days; this is not the currently
 published term.
 
-**Implementation reference:** [PR #1745](https://github.com/BackstageTalks/tbt/pull/1745).
+**Implementation reference:** [PR #1747](https://github.com/BackstageTalks/tbt/pull/1747).
 Browser account expiry defaults and extensions use a pinned published term.
 Server-authenticated access still follows the exact existing expiry timestamp,
 and lifecycle mail/auto-downgrade use that timestamp. ELITE retains server
