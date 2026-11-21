@@ -145,8 +145,10 @@ def main():
                       for(const kind of ['empty','hierarchy','contradiction'])
                         if(!issues.some(item=>item.kind===kind))
                           throw Error('Admin audit missed '+kind);
-                      if(!issues.some(item=>item.tab==='prime'&&item.plan==='elite'&&item.kind==='hierarchy'))
-                        throw Error('Admin hierarchy audit ignored ROOKIE->ELITE gap across PRO');
+                      if(issues.some(item=>item.tab==='prime'&&item.plan==='elite'&&item.kind==='hierarchy'))
+                        throw Error('Intentional ELITE lock must not be reported as a hierarchy regression');
+                      if(!issues.some(item=>item.tab==='prime'&&item.plan==='pro'&&item.kind==='hierarchy'))
+                        throw Error('Admin hierarchy audit ignored active ROOKIE->PRO inversion');
                       if(!issues.some(item=>item.tab==='double_faults'&&item.plan==='pro'&&item.kind==='empty'))
                         throw Error('Admin audit missed PRO double faults');
                       if(!app.adminDailyHubAccessAuditHtml().includes('Prístupy na kontrolu'))
