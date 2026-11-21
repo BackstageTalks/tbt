@@ -7,6 +7,7 @@ import math
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from pathlib import Path
 
 from _bootstrap import ROOT
@@ -1806,6 +1807,9 @@ def main():
                     market_a0_status = capture_using_existing_shadow_store(
                         shadow_store, predictions, matches,
                         observed_at=datetime.now(timezone.utc),
+                        model_sha256=sha256(
+                            (model_dir / "model.joblib").read_bytes()
+                        ).hexdigest(),
                     )
                     print(json.dumps({"market_a0_private_shadow": market_a0_status},
                                      ensure_ascii=False), flush=True)
