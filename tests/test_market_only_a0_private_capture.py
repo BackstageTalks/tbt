@@ -177,7 +177,7 @@ def test_existing_single_writer_fake_store_roundtrip_readback(tmp_path, monkeypa
         return FakeStore(remote, folder)
     result = capture_using_existing_shadow_store(
         store, [prediction(0), prediction(1)], [], observed_at=NOW,
-        readback_factory=factory)
+        readback_factory=factory, model_sha256="a"*64)
     assert result["status"] == "PRIVATE_READBACK_VERIFIED"
     assert result["provider_requests"] == 0
     assert result["production_modified"] is False
@@ -187,8 +187,12 @@ def test_existing_single_writer_fake_store_roundtrip_readback(tmp_path, monkeypa
     before = remote[ASSET]
     again = capture_using_existing_shadow_store(
         store, [prediction(0), prediction(1)], [], observed_at=NOW,
-        readback_factory=factory)
+        readback_factory=factory, model_sha256="a"*64)
     assert again["status"] == "NO_CHANGE"
+    with pytest.raises(ValueError, match="champion artifact digest"):
+        capture_using_existing_shadow_store(
+            store, [prediction(0)], [], observed_at=NOW,
+            readback_factory=factory, model_sha256="b"*64)
     assert remote[ASSET] == before
 
 
