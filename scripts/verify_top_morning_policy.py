@@ -14,7 +14,7 @@ def verify():
     assert rule["probability_tiers"] == ui["confidence_tiers"] == [.60]
     assert rule["daily_minimum_target"] == ui["target_count"] == 3
     assert rule["min_odds"] == ui["min_odds"] == 1.50 and ui["max_odds"] is None
-    assert ui["competition_priority"] == rule["competition_priority"] == [["ATP", "WTA"], ["Challenger"]]
+    assert ui["competition_priority"] == rule["competition_priority"] == [["ATP", "WTA"]]
     assert "ITF" in rule["excluded_competitions"] == ui["excluded_competitions"]
     def card(event, competition, probability):
         return dict(event_id=event, competition=competition,
@@ -24,12 +24,12 @@ def verify():
             card("main-65", "ATP", .65), card("main-68", "ATP", .69),
             card("main-70", "WTA", .79), card("excluded", "WTA 125", .99)]
     selected, _, details = _rank_full_slate_top(pool, [])
-    assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65", "secondary"]
+    assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65"]
     assert all(c["selection_tier"] == "sports_0.60" for c in selected[:3])
     assert details["shortfall"] == 0
     selected, _, details = _rank_full_slate_top([pool[0], pool[1], pool[4]], [])
-    assert [c["event_id"] for c in selected] == ["main-70", "secondary"]
-    assert details["shortfall"] == 1
+    assert [c["event_id"] for c in selected] == ["main-70"]
+    assert details["shortfall"] == 2
     selected, _, details = _rank_full_slate_top([card("none", "ATP", .59)], [])
     assert selected == [] and details["shortfall"] == 3
 
