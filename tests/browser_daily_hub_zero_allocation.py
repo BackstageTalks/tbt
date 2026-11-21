@@ -93,9 +93,9 @@ def main():
                          ||document.querySelector('#dailyHubBody tr.hub-row-locked'))
                         throw Error('Unblurred zero-allocation panel must not claim a lock: '+total);
                     }
-                    // All market tabs and all paid/free levels: when zero rows
-                    // are deliberately hidden instead of blurred, never claim a
-                    // provider outage or display a misleading paywall lock.
+                    // Unavailable ELITE slots remain ordered, redacted locks;
+                    // other plans retain the Admin HIDE/no-paywall semantics.
+                    // An empty source (total=0) never invents locked positions.
                     for(const level of levels){
                       for(const tab of ['daily','prime','value',...markets]){
                         for(const total of [0,3]){
@@ -112,10 +112,18 @@ def main():
                           s.dailyHubTab=tab;app.renderDailyHub();
                           const empty=document.querySelector('#dailyHubEmpty');
                           const tabNode=document.querySelector('#dailyHubTabs [data-daily-hub-tab="'+tab+'"]');
-                          if(!empty||empty.hidden||!empty.textContent.includes('odomknuté')
-                            ||tabNode?.classList.contains('is-locked')
-                            ||document.querySelector('#dailyHubBody tr.hub-row-locked'))
+                          const lockedRows=[...document.querySelectorAll('#dailyHubBody tr.hub-row-locked')];
+                          if(level==='elite'&&total>0){
+                            // ELITE sees only redacted ordinal positions, not a
+                            // single leaked pick or an invented provider result.
+                            const indices=lockedRows.map(row=>row.querySelector('.hub-locked-rank')?.textContent.trim());
+                            if(!empty?.hidden||!tabNode?.classList.contains('is-locked')
+                              ||JSON.stringify(indices)!==JSON.stringify(['1.','2.','3.']))
+                              throw Error('ELITE ordered locked positions missing: '+tab+'/'+total);
+                          }else if(!empty||empty.hidden||!empty.textContent.includes('odomknuté')
+                            ||tabNode?.classList.contains('is-locked')||lockedRows.length){
                             throw Error('Zero unlocked hidden rows confused with paywall/outage: '+level+'/'+tab+'/'+total);
+                          }
                         }
                       }
                     }
