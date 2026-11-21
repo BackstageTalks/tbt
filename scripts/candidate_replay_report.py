@@ -97,6 +97,22 @@ def evaluate(path):
               f"diff {delta*100:+.1f} pp 95% day-CI [{lo*100:+.1f}, {hi*100:+.1f}]"
               f" | overlap {overlap:.2f} | same N/day {same_n} | days {len(days)}")
         results.append(lo*100 > -1.0 and same_n)
+    # Optional TOP veto is a coverage trade-off, not evidence of superiority.
+    # This diagnostic is issued-only, NOT a replay of unselected full-slate cards.
+    pool = m[(m.p >= .60) & (m.odds >= 1.50)]
+    if not pool.empty:
+        baseline = pick(pool, "rank_p", 3)
+        with_veto = pick(pool[~((pool.rank_src == "market_anchored") &
+                                (pool.fair < 0.5))], "rank_p", 3)
+        dates = sorted(pool.day.unique())
+        base_counts = baseline.groupby("day").size().reindex(dates, fill_value=0)
+        veto_counts = with_veto.groupby("day").size().reindex(dates, fill_value=0)
+        print("\\nOPTIONAL TOP market-side veto (RESEARCH / do not activate): "
+              f"baseline {len(baseline)} vs veto {len(with_veto)} picks; "
+              f"days <3: {(base_counts < 3).sum()} vs {(veto_counts < 3).sum()}; "
+              f"baseline hit {baseline.y.mean():.3f}, "
+              f"veto hit {with_veto.y.mean() if len(with_veto) else float('nan'):.3f}; "
+              "same daily N: " + str(base_counts.equals(veto_counts)))
     success = len(results) == 2 and all(results)
     print("\nRETROSPECTIVE NON-INFERIORITY GATE:", "PASS" if success else "FAIL")
     return success
