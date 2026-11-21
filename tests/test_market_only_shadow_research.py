@@ -178,3 +178,87 @@ def test_full_slate_identity_and_pit_guard():
     late["model_captured_at"] = START
     with pytest.raises(ValueError):
         prepare_all_singles_shadow_rows([late], PARAMS)
+
+
+def test_a0_all_a1_a2_a3_vetoes_still_emit_minimum_five():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    pool = [card(event=f"reject-{i}", model=.85, fair=.35 + i*.01)
+            for i in range(9)]
+    original = deepcopy(pool)
+    selected = select_daily_shadow_picks(pool, PARAMS, n_min=5)
+    assert len(selected) == 5
+    assert all(row["selection_tier"] == "T2" for row in selected)
+    assert all(row["selection_basis"] == "rank_market" for row in selected)
+    assert all(row["shadow_research"]["shadow_eligible_for_actual_publication"] is False
+               for row in selected)
+    assert pool == original
+
+
+def test_a0_no_fair_returns_five_ordered_model_fallbacks():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    pool = [card(event=f"fallback-{i}", model=.61 + .02*i, fair=None)
+            for i in range(8)]
+    selected = select_daily_shadow_picks(pool, PARAMS)
+    assert len(selected) == 5
+    assert [row["event_id"] for row in selected] == [
+        "fallback-7", "fallback-6", "fallback-5", "fallback-4", "fallback-3"]
+    assert all(row["selection_tier"] == "T3"
+               and row["selection_basis"] == "fallback_model" for row in selected)
+
+
+def test_a0_smaller_than_minimum_returns_all_candidates():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    pool = [card(event=f"short-{i}", model=.85, fair=.35) for i in range(3)]
+    assert len(select_daily_shadow_picks(pool, PARAMS, n_min=5)) == 3
+
+
+def test_a0_deterministic_per_utc_day_and_all_t0_above_minimum():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    import random
+    pool = [card(event=f"T0-{i}", model=.81, fair=.80) for i in range(7)]
+    pool += [card(event=f"T2-{i}", model=.88, fair=.44) for i in range(4)]
+    late = card(event="next-day", model=.82, fair=None)
+    late["scheduled_at"] = "2026-11-22T15:00:00Z"
+    pool.append(late)
+    canonical = select_daily_shadow_picks(pool, PARAMS)
+    assert len(canonical) == 8
+    assert [x["event_id"] for x in canonical[:7]] == [
+        f"T0-{i}" for i in range(7)]
+    assert canonical[-1]["shadow_selection_day_utc"] == "2026-11-22"
+    shuffled = list(pool)
+    random.Random(20261121).shuffle(shuffled)
+    assert [(x["event_id"], x["selection_tier"], x["selection_basis"])
+            for x in select_daily_shadow_picks(shuffled, PARAMS)] == [
+        (x["event_id"], x["selection_tier"], x["selection_basis"])
+        for x in canonical]
+
+
+def test_a0_tiers_prioritized_and_publication_never_modified():
+    from tbt.services.market_only_shadow_research import select_daily_shadow_picks
+    pool = [
+        card(event="T0", fair=.8, model=.83),
+        card(event="T1", fair=.60, model=.86),
+        card(event="T2", fair=.40, model=.88),
+        card(event="T3", fair=None, model=.95),
+    ]
+    before = deepcopy(pool)
+    selected = select_daily_shadow_picks(pool, PARAMS, n_min=5)
+    assert [x["selection_tier"] for x in selected] == ["T0","T1","T2","T3"]
+    assert [x["selection_basis"] for x in selected] == [
+        "rank_market","rank_market","rank_market","fallback_model"]
+    assert pool == before
+    for row in selected:
+        assert row["shadow_research"]["shadow_eligible_for_actual_publication"] is False
+        assert row["probability"] == before[
+            [x["event_id"] for x in before].index(row["event_id"])]["probability"]
+
+
+def test_opener_is_explicit_variant_not_default_and_never_wta_verified():
+    from tbt.services.market_only_shadow_research import calibrate_market_only
+    assert PARAMS["opener_fallback"]["claimed_fit_n"] == 36972
+    assert PARAMS["opener_fallback"]["independent_fit_reproduced"] is False
+    assert PARAMS["opener_fallback"]["wta_verified"] is False
+    assert calibrate_market_only(.8, PARAMS) != calibrate_market_only(
+        .8, PARAMS, variant="opener")
+    with pytest.raises(ValueError):
+        calibrate_market_only(.8, PARAMS, variant="unknown")
