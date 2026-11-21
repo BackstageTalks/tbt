@@ -20,6 +20,10 @@ from .price_integrity import (
     extreme_winner_price_inversion, post_start_winner_quote,
     unsubstantiated_high_confidence_winner,
 )
+from .market_anchored_rank import (
+    EMERGENCY_TIER, MODE_MARKET, annotate_rank_probability, emergency_fill,
+    rank_mode, rank_value,
+)
 
 
 MATCH_WINNER_MARKET_NAMES = {
@@ -381,12 +385,12 @@ def _prime_display_rank(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
         last = len(ordered) - 1 - ordered[::-1].index(value)
         return ((first + last) / 2.0) / (len(ordered) - 1)
 
-    probabilities = [float(_number(card.get("probability")) or 0.0) for card in cards]
+    probabilities = [float(rank_value(card)) for card in cards]
     odds_values = [float(_number(card.get("odds")) or 0.0) for card in cards]
     ranked = []
     for card in cards:
         item = deepcopy(card)
-        p = float(_number(card.get("probability")) or 0.0)
+        p = float(rank_value(card))
         odds = float(_number(card.get("odds")) or 0.0)
         probability_percentile = percentile(probabilities, p)
         odds_percentile = percentile(odds_values, odds)
@@ -398,7 +402,7 @@ def _prime_display_rank(cards: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ranked.sort(
         key=lambda card: (
             _number(card.get("prime_display_score")) or 0.0,
-            _number(card.get("probability")) or 0.0,
+            rank_value(card),
             _number(card.get("odds")) or 0.0,
             _depth(card),
             min(_surface_samples(card)),
@@ -419,7 +423,7 @@ def _top_rank_key(card: dict[str, Any]) -> tuple[float, float, int, int, float]:
     p1_surface, p2_surface = _surface_samples(card)
     p1_matches, p2_matches = _overall_samples(card)
     return (
-        _number(card.get("probability")) or 0.0,
+        rank_value(card),
         _depth(card),
         min(p1_surface, p2_surface),
         min(p1_matches, p2_matches),
@@ -882,6 +886,9 @@ def _market_card(row: dict[str, Any]) -> dict[str, Any] | None:
     card["probability"] = adjusted_probability
     card["fair_implied_probability"] = betting.get("fair_implied_probability")
     card["betting_day"] = betting.get("betting_day")
+    if rank_mode() == MODE_MARKET:
+        # Ordering-only annotation, never a public probability/eligibility edit.
+        annotate_rank_probability(card)
     return card
 
 
@@ -1017,7 +1024,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     tier = {"ATP": 0, "WTA": 0, "Challenger": 1}
     ranked = sorted(core, key=lambda card: (
         tier.get(competition_group(card), 99),
-        -float(_number(card.get("probability")) or 0),
+        -float(rank_value(card)),
         str(card.get("event_id") or "")))
     for card in ranked:
         event = str(card.get("event_id") or "")
@@ -1161,6 +1168,7 @@ def select_market_sections(
     top_core: list[dict[str, Any]] = []
     top_fallback: list[dict[str, Any]] = []
     top_rejection_counts: dict[str, int] = {}
+    top_emergency_pool: list[dict[str, Any]] = []
 
     extreme_inversion_quarantined = 0
     market_conflict_missing_rank_quarantined = 0
@@ -1213,9 +1221,13 @@ def select_market_sections(
             tagged = deepcopy(card)
             tagged["selection_tier"] = "ranked_core"
             top_core.append(tagged)
+        elif set(reasons) == {"probability_below_fixed_floor"}:
+            # Rejected ONLY by model floor; never include unless separate
+            # emergency-fill owner flag is explicitly enabled.
+            top_emergency_pool.append(deepcopy(card))
 
     rank = lambda card: (
-        _number(card.get("probability")) or 0.0,
+        rank_value(card),
         _depth(card),
         min(_surface_samples(card)),
         min(_overall_samples(card)),
@@ -1233,6 +1245,11 @@ def select_market_sections(
     top_qualified, top_fallback_added, top_fallback_applied = _rank_full_slate_top(
         top_core, top_fallback, target=top_limit, minimum=TOP_MIN_COUNT,
     )
+    top_qualified = emergency_fill(
+        top_qualified,
+        [card for card in top_emergency_pool if _selection_identity(card) not in value_ids],
+        minimum=TOP_MIN_COUNT, identity=_selection_identity, rank_key=rank,
+    )
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
         {"value": value_qualified, "prime": prime_qualified, "top_daily": top_qualified},
@@ -1248,7 +1265,8 @@ def select_market_sections(
         raise ValueError("Market section exclusivity invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in prime):
         raise ValueError("Prime fallback probability floor invariant failed")
-    if any((_number(card.get("probability")) or 0.0) + 1e-12 < top_core_floor for card in top):
+    if any((_number(card.get("probability")) or 0.0) + 1e-12 < top_core_floor
+           and card.get("selection_tier") != EMERGENCY_TIER for card in top):
         raise ValueError("Top fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PUBLICATION_MIN_PROBABILITY for card in value):
         raise ValueError("Value probability floor invariant failed")
