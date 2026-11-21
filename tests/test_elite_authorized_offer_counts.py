@@ -1,28 +1,37 @@
-"""Regression contract: ELITE counts and rendered cards use the authorized offer.
+"""ELITE retains server-authorized counts and redacted, ordered positions.
 
-The API has already redacted rows; the browser must not reintroduce the
-global source total as a member-visible match count or locked placeholder.
-LEGEND/GOAT deliberately retain the full-offer presentation.
+The API never sends locked pick details. The UI may display the original slot
+numbers and a locked teaser, but must not synthesize extra pick records.
 """
 from pathlib import Path
 
 SOURCE = Path(__file__).resolve().parents[1] / "web" / "app.js"
 
 
-def test_elite_daily_tab_count_uses_authorized_rows():
+def test_elite_counts_remain_authorized_only():
     source = SOURCE.read_text(encoding="utf-8")
     assert "plan==='elite'&&!state.previewPlan?rows.length" in source
     assert "const allCount=plan==='elite'&&!state.previewPlan?rows.length:" in source
-
-
-def test_elite_daily_table_does_not_render_hidden_global_slots():
-    source = SOURCE.read_text(encoding="utf-8")
-    assert "if(plan==='elite'&&!state.previewPlan&&!includedButUnavailable)" in source
-    assert "rows.slice(0,limit).forEach((row,index)=>out.push(dailyHubRow(row,tab,false,index)))" in source
-    assert "if(plan!=='elite'||state.previewPlan)" in source
-
-
-def test_elite_cards_do_not_count_global_entitlement_total():
-    source = SOURCE.read_text(encoding="utf-8")
     assert "const total=accountPlan()==='elite'&&!state.previewPlan?rows.length:" in source
     assert "total=accountPlan()==='elite'&&!state.previewPlan?allRows.length:" in source
+
+
+def test_elite_uses_original_server_slot_positions_with_redacted_locks():
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "if(slotStates.length&&!includedButUnavailable)" in source
+    assert "const raw=Number(row?._access_slot);" in source
+    assert "slotStates.slice(0,limit).forEach((slotState,slotIndex)=>{" in source
+    assert "const eliteTeaser=plan==='elite'&&!explicitlyHidden&&slotState==='hidden';" in source
+    assert "if(slotState==='hidden'&&!eliteTeaser)return;" in source
+    assert "out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));" in source
+    assert "if(row)out.push(dailyHubRow(row,tab,false,slotIndex));" in source
+    assert 'class="hub-locked-rank"' in source
+    assert "rows.slice(0,limit).forEach((row,index)=>out.push(dailyHubRow(row,tab,false,index)))" not in source
+
+
+def test_elite_locked_tab_can_show_teasers_but_lock_action_still_upgrades():
+    source = SOURCE.read_text(encoding="utf-8")
+    assert "if(tab.dataset.upgradePlan&&accountPlan()!=='elite')" in source
+    assert "target.closest('tr.hub-row-locked[data-upgrade-plan]')" in source
+    assert "showAccessHint(lockedRow,lockedRow.dataset.upgradePlan" in source
+    assert "String(ent.row_overrides?.[String(slotIndex+1)]||'').toLowerCase()==='hidden'" in source
