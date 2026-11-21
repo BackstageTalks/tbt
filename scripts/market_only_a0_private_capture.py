@@ -269,6 +269,7 @@ def first_capture_update(previous, stage, completed, *, now, params):
 def capture_using_existing_shadow_store(
     store, predictions, completed, *, observed_at, params_path=PARAMS,
     readback_factory=ReleaseStore,
+    model_sha256=None,
 ):
     """Use existing provider-native ReleaseStore and its SINGLE writer/lock.
 
@@ -280,16 +281,27 @@ def capture_using_existing_shadow_store(
         from cdb_global_writer_lock import verify
         verify(store.repository, Path(".cdb-global-writer-lock.json"))
     params = load_shadow_params(params_path)
+    param_hash = hashlib.sha256(Path(params_path).read_bytes()).hexdigest()
+    if os.getenv("GITHUB_ACTIONS") == "true" and (
+            not isinstance(model_sha256, str) or len(model_sha256) != 64
+            or any(c not in "0123456789abcdef" for c in model_sha256)):
+        raise ValueError("Exact serving model SHA256 required for A0 capture")
     stage, coverage = staged_full_slate(predictions, observed_at=observed_at, params=params)
     names = store._asset_names()
     if ASSET in names:
         store.download(extra_names=(ASSET,), required_names=(ASSET,),
                        require_bundle_manifest=True)
         prior = json.loads((store.directory / ASSET).read_text("utf-8"))
+        if prior.get("frozen_params_sha256") != param_hash:
+            raise ValueError("Immutable A0 calibration parameter digest changed")
+        if prior.get("frozen_model_sha256") != model_sha256:
+            raise ValueError("Immutable A0 champion artifact digest changed")
     else:
         prior = None
     updated, counters = first_capture_update(
         prior, stage, completed, now=observed_at, params=params)
+    updated["frozen_params_sha256"] = param_hash
+    updated["frozen_model_sha256"] = model_sha256
     out = {"coverage": coverage, **counters, "provider_requests": 0,
            "production_modified": False, "writer": "existing_private_shadow_store",
            "schema": 1, "status": "NO_CHANGE"}
