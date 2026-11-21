@@ -101,3 +101,54 @@ PYTHONPATH=api:scripts python -m pytest -q tests/test_market_anchored_rank.py
    changed public eligibility, bad provider provenance or regression.
 
 **Merge of default-OFF research implementation is not activation**.
+
+
+
+## 2026-11-21 follow-up: optional TOP market-side veto
+
+The owner supplied a second ZIP (`candidate_market_anchored_rank2.zip`,
+SHA256 `60b872915c47de57d1ecca1756dfbe9e75d6b032250530e6614b48ae7778c241`).
+It targets the **older** `main` commit `116241a`; do NOT reapply it over
+the merged PR #1733, because doing so would overwrite the independent
+approval gates and the corrected 945-prestart-quote replay. Only the new
+`TBT_TOP_REQUIRE_MARKET_SIDE` option is carried forward.
+
+- **Default OFF, independent approval:** the existing workflow emits
+  `TBT_TOP_REQUIRE_MARKET_SIDE=true` only when
+  `vars.TBT_TOP_REQUIRE_MARKET_SIDE_OWNER_APPROVED == 'true'` **and**
+  the owner-supplied value `TBT_TOP_REQUIRE_MARKET_SIDE` is `1` or `true`.
+  Merge alone cannot enable it.
+- **Behavior when explicitly approved:** TOP rejects a picked side if
+  `betting.fair_implied_probability < 0.5`, provided the fair value is
+  finite, in (0,1), and `betting.captured_at < scheduled_at` with
+  timezone-aware timestamps. A missing, invalid, or post-start price
+  causes no side veto. TOP rejection audit counts
+  `market_favours_opponent`. Existing VALUE and PRIME selection
+  logic, TOP price floor and public model probability remain unchanged.
+  A candidate vetoed for market disagreement cannot re-enter through
+  emergency TOP fill, even if both optional features are enabled.
+- **Corrected trade-off (independently computed on the supplied 2026-11-20
+  issued-results CSV):** among 1,140 settled Match Winner event IDs,
+  945 have valid pre-start fair (195 fallback). TOP-like eligibility
+  p >= .60 and odds >= 1.50 spans 43 observed days. Rank-only selects
+  **73/121 (60.3%)**, whereas the veto selects **69/116 (59.5%)**.
+  Shortfall days with fewer than 3 TOP-like picks rise **6 -> 10**.
+  The supplied ZIP's **6 -> 8** figure used the stale 649-prestart-price
+  parsing and does not reproduce under the corrected 945-price parsing.
+  The 116-vs-121 denominator changes, so these rates cannot establish
+  causal superiority or non-inferiority. It conflicts with the user's
+  no-silence objective. Keep this veto **disabled**; this PR is not
+  permission to activate it.
+- **Evidence distinction:** the reported 7,635 ATP historical full-slate
+  selections (2016–2026) and 139 BlinQ TOP picks are *different cohorts*,
+  not an interchangeable head-to-head experiment. The supplied claims
+  about their hit rates, significance and VALUE market ceiling have not
+  been independently reproduced in this patch. Even the corrected
+  replay uses issued-only, same-period selected picks and is exploratory.
+  Do not represent any estimated improvement as validated prospective edge.
+
+**Verification:** use the exact-head GitHub Actions backend/CI tests and
+`tests/test_market_anchored_rank.py`. Check that setting all new flags
+OFF yields unchanged selector outputs. No provider requests, CDB writes,
+champion fitting, price-threshold changes or live refresh are part of
+this small optional-feature PR.

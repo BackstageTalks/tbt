@@ -22,6 +22,8 @@ MODE_MODEL = "model"
 MODE_MARKET = "market_anchored"
 ENV_RANK = "TBT_RANK_SOURCE"
 ENV_FILL = "TBT_TOP_EMERGENCY_FILL"
+ENV_TOP_SIDE = "TBT_TOP_REQUIRE_MARKET_SIDE"
+TOP_REJECT_REASON = "market_favours_opponent"
 EMERGENCY_MIN_FAIR = 0.50
 EMERGENCY_MIN_MODEL_NO_FAIR = 0.55
 EMERGENCY_TIER = "emergency_fill"
@@ -152,3 +154,20 @@ def emergency_fill(
         if len(out) >= int(minimum):
             break
     return out
+
+def top_require_market_side_enabled(env: dict[str, str] | None = None) -> bool:
+    """Separate opt-in TOP market-side veto, default OFF."""
+    raw = (os.environ if env is None else env).get(ENV_TOP_SIDE, "")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def top_market_side_violation(card: dict[str, Any]) -> bool:
+    """Veto only a TOP underdog supported by genuine pre-start fair.
+
+    Missing/invalid quote cannot prove disagreement and never vetoes. This
+    optional rule changes TOP eligibility; it is not part of rank ordering.
+    """
+    if not top_require_market_side_enabled():
+        return False
+    fair = valid_prestart_fair(card)
+    return fair is not None and fair < 0.5

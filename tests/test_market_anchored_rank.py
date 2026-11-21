@@ -26,6 +26,7 @@ def _sig(z):
 def _clean_env(monkeypatch):
     monkeypatch.delenv(mar.ENV_RANK, raising=False)
     monkeypatch.delenv(mar.ENV_FILL, raising=False)
+    monkeypatch.delenv(mar.ENV_TOP_SIDE, raising=False)
 
 
 def _slate():
@@ -149,3 +150,70 @@ def test_workflow_both_features_fail_closed_without_independent_owner_approval()
     assert "vars.TBT_TOP_EMERGENCY_FILL_OWNER_APPROVED == 'true'" in fill[0]
     assert "vars.TBT_TOP_EMERGENCY_FILL == 'true'" in fill[0]
     assert "|| 'false'" in fill[0]
+
+def test_market_side_gate_defaults_off_even_when_rank_enabled(monkeypatch):
+    pool = [row("u", .72, 2.60, 1.52), row("f", .70, 1.60, 2.40)]
+    base = select_market_sections(copy.deepcopy(pool), top_limit=3)
+    assert "u" in _ids(base)
+    assert mar.top_market_side_violation(base["top_daily_picks"][0]) is False
+    monkeypatch.setenv(mar.ENV_RANK, "market_anchored")
+    assert mar.top_require_market_side_enabled() is False
+
+
+def test_market_side_flag_only_vetoes_top_market_underdog(monkeypatch):
+    pool = [row("u", .72, 2.60, 1.52), row("f", .70, 1.60, 2.40)]
+    off = select_market_sections(copy.deepcopy(pool), top_limit=3)
+    monkeypatch.setenv(mar.ENV_TOP_SIDE, "1")
+    on = select_market_sections(copy.deepcopy(pool), top_limit=3)
+    assert "u" in _ids(off)
+    assert _ids(on) == ["f"]
+    assert on["market_selection"]["top_rejection_counts"][
+        mar.TOP_REJECT_REASON] == 1
+    for section in ("prime_picks", "value_picks"):
+        assert on[section] == off[section]
+
+
+def test_market_side_no_valid_prestart_evidence_never_vetoes(monkeypatch):
+    monkeypatch.setenv(mar.ENV_TOP_SIDE, "1")
+    case = row("u", .72, 2.60, 1.52)
+    assert mar.top_market_side_violation(case) is True
+    case["betting"]["captured_at"] = case["scheduled_at"]
+    assert mar.top_market_side_violation(case) is False
+    case["betting"]["captured_at"] = "2026-09-07T13:00:00Z"
+    assert mar.top_market_side_violation(case) is False
+    case["betting"]["captured_at"] = None
+    assert mar.top_market_side_violation(case) is False
+    case["betting"]["fair_implied_probability"] = None
+    assert mar.top_market_side_violation(case) is False
+
+
+def test_market_side_fair_boundary_and_toggle_handling(monkeypatch):
+    import pytest
+    monkeypatch.setenv(mar.ENV_TOP_SIDE, "yes")
+    c = row("u", .72, 2.60, 1.52)
+    c["betting"]["fair_implied_probability"] = .5
+    assert not mar.top_market_side_violation(c)
+    c["betting"]["fair_implied_probability"] = .49999
+    assert mar.top_market_side_violation(c)
+    monkeypatch.setenv(mar.ENV_TOP_SIDE, "false")
+    assert not mar.top_market_side_violation(c)
+
+
+def test_market_side_veto_not_bypassed_by_emergency_top_fill(monkeypatch):
+    monkeypatch.setenv(mar.ENV_TOP_SIDE, "true")
+    monkeypatch.setenv(mar.ENV_FILL, "true")
+    pool = [row("u", .72, 2.60, 1.52), row("f", .70, 1.60, 2.40),
+            row("small", .58, 1.70, 2.20)]
+    on = select_market_sections(copy.deepcopy(pool), top_limit=3)
+    assert "u" not in _ids(on)
+    assert len(_ids(on)) <= 3
+    assert len(_ids(on)) == len(set(_ids(on)))
+
+
+def test_market_side_workflow_requires_separate_owner_approval():
+    lines = Path(".github/workflows/data.yml").read_text(encoding="utf-8").splitlines()
+    side = [s for s in lines if s.strip().startswith("TBT_TOP_REQUIRE_MARKET_SIDE:")]
+    assert len(side) == 1
+    assert "vars.TBT_TOP_REQUIRE_MARKET_SIDE_OWNER_APPROVED == 'true'" in side[0]
+    assert "vars.TBT_TOP_REQUIRE_MARKET_SIDE == '1'" in side[0]
+    assert "|| 'false'" in side[0]
