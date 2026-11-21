@@ -5087,7 +5087,8 @@
         if(rule.see_all===true&&state!=='active'){
           issues.push({tab,plan,kind:'contradiction',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: Celá ponuka je zapnutá, no panel je ${state==='blurred'?'ZAMKNUTÝ':'SKRYTÝ'}.`});
         }
-        if(bestLower&&count<bestLower.count){
+        // A deliberate ZAMKNÚŤ/SKRYŤ is not an accidental loss of active picks.
+        if(state==='active'&&bestLower&&count<bestLower.count){
           issues.push({tab,plan,kind:'hierarchy',text:`${accessLabel(plan)} / ${dailyHubTabLabel(tab)}: ${count===11?'VŠETKY':count} riadkov, menej než ${accessLabel(bestLower.plan)} (${bestLower.count===11?'VŠETKY':bestLower.count}).`});
         }
         if(!bestLower||count>bestLower.count)bestLower={plan,count};
