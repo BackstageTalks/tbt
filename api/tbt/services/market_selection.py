@@ -40,13 +40,15 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME remains unchanged. TOP ranks ATP/WTA main-tour 250+ by calibrated
-# sports probability. Challenger, WTA 125 and ITF are excluded from new TOP.
-# VALUE/PRIME and already-issued records are unchanged.
+# The active champion/model features and probability shrink are unchanged.
+# Lower only the historical-count eligibility floor to 0.50 for ACCA, TOP,
+# VALUE and pre-price winner-odds discovery. Surface/price/identity guards stay.
+# TOP remains ATP/WTA main-tour 250+; lower grades and old issued records stay
+# untouched. The ACCA public name uses legacy prime keys in JSON and Python.
 #
-# VALUE has assignment priority because close-odds candidates are intentionally
-# scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
-# branch (<1.50).
+# VALUE has assignment priority because close-odds candidates are scarce.
+# TOP receives remaining >=1.50 selections; ACCA is the short-price (<1.50)
+# branch.
 SECTION_PRIORITY = ("value", "top_daily", "prime")
 
 PUBLICATION_MIN_PROBABILITY = 0.65
