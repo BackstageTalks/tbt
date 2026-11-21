@@ -1,5 +1,60 @@
 # Market-only shadow experiment — 2026-11-20
 
+
+## Current source-of-truth status — 2026-11-21
+
+**MERGED / CODE-VERIFIED / RUNTIME A0 CAPTURE OFF; NOT PROSPECTIVELY VERIFIED.**
+This section supersedes the draft-PR wording in historical development notes
+below. Do not reinterpret a green CI run as a private ledger write or live pick.
+
+- PR [#1730](https://github.com/BackstageTalks/tbt/pull/1730) merged
+  2026-11-21T08:48:38Z as `c8089ea22d33862ce6e0d2663b18de1e13fdfe80`.
+  Its 11 changed files include the isolated A0 scorer, B2 evaluation,
+  B1 full-slate private capture hook, tests and guarded `data.yml` entry.
+  The exact-head code test run
+  [44884524462](https://github.com/BackstageTalks/tbt/actions/runs/44884524462)
+  succeeded on `87a66240a7265bc4a35e3bcf2f8f24d46518621b`;
+  the crossrepo lock test run 44884524461 also succeeded.
+- PR [#1736](https://github.com/BackstageTalks/tbt/pull/1736) merged
+  2026-11-21T13:08:22Z as
+  `59e4355c78deab9a6e71f9a7635a49cb99bb3bd5`.
+  Its champion/market/TOP shadow comparison remains separate from any A0 issuance.
+- Production `data.yml` run
+  [44925900100](https://github.com/BackstageTalks/tbt/actions/runs/44925900100),
+  begun 2026-11-21T16:40:59Z on
+  `cd8581b2a615434c9c73ff143f8947a6035947a5`, completed successfully.
+  Its pipeline job logs explicitly report
+  `BLINQ_MARKET_A0_SHADOW_ENABLED: false`. This is a disabled research
+  capture, **not** a successful A0 write. The existing private
+  `tbt-data` Release `tbt-model-shadow-v1` at inspection contained
+  `shadow_ledger.json`, `shadow_report.json` and
+  `_tbt_bundle_manifest.json`, but **no**
+  `market_only_a0_shadow.json`. Actual A0 first-capture/read-back count
+  independently confirmed: **0**.
+- The C1–C5 PIT gate is still closed. The private ATP Oddstrader annual
+  CSV archive exists, but `data/oddstrader/atp/2026.run_metadata.json`
+  states generation at 2026-10-07T02:08:20Z for dates starting
+  2026-01-01. This retrieval timestamp does not prove an archived price
+  existed before the respective match. No WTA historical directory at
+  `data/oddstrader/wta` was found. The claimed 45,903 ATP observations,
+  1.102 slope and 36,972 opener observations remain unverified PIT fits.
+- There are no independently read-back A0 issuance receipts; therefore B2
+  cannot report prospective 400-match metrics, ATP/WTA acceptance or a
+  green activation decision. No new provider requests, CDB writes,
+  champion promotion, TOP/VALUE selector changes or production feature
+  activation were performed as part of this status verification.
+
+**Next gated step:** explicit owner opt-in for private research capture only
+(`BLINQ_MARKET_A0_OWNER_APPROVED=true`) on an otherwise authorized
+refresh/current-refresh. Then verify real provider/model/quote timestamps,
+the global lock, the release manifest, fresh remote asset read-back and
+actual issued daily counts. Retain production champion and public picks.
+Only after 400 new valid settled pairs and A0 receipt completeness may
+the read-only B2 evaluator be run; C stays blocked until independent
+pre-match odds and CDB feature PIT evidence exists. Do not enable the
+variable merely to satisfy a documentation milestone.
+
+
 ## State and restrictions
 
 **PREPARED / READ-ONLY research. No publication or model promotion.**
