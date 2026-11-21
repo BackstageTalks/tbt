@@ -337,15 +337,31 @@ def evaluate(snapshots, settlements, params=PARAMS, *, issued_shadow=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--snapshots", required=True, type=Path)
-    parser.add_argument("--settlements", required=True, type=Path)
+    parser.add_argument("--private-ledger", type=Path,
+                        help="Read-only copy of the checksum-verified private A0 release asset")
+    parser.add_argument("--snapshots", type=Path)
+    parser.add_argument("--settlements", type=Path)
     parser.add_argument("--issued-shadow", type=Path, help="Read-only private shadow issuance receipts")
     parser.add_argument("--params", default=PARAMS, type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    receipts = _json_rows(args.issued_shadow) if args.issued_shadow else None
-    report = evaluate(_json_rows(args.snapshots), _json_rows(args.settlements),
-                      args.params, issued_shadow=receipts)
+    if args.private_ledger is not None:
+        if args.snapshots or args.settlements or args.issued_shadow:
+            parser.error("--private-ledger cannot be mixed with separate inputs")
+        ledger = json.loads(args.private_ledger.read_text(encoding="utf-8"))
+        if (not isinstance(ledger, dict) or ledger.get("schema") != 1
+                or ledger.get("experiment") != "market_only_A0"
+                or any(not isinstance(ledger.get(k), list) for k in
+                       ("snapshots", "settlements", "issued_shadow"))):
+            raise ValueError("Invalid or incomplete private A0 shadow release")
+        snapshots, settlements, receipts = (
+            ledger["snapshots"], ledger["settlements"], ledger["issued_shadow"])
+    else:
+        if args.snapshots is None or args.settlements is None:
+            parser.error("Provide --private-ledger or both --snapshots/--settlements")
+        snapshots, settlements = _json_rows(args.snapshots), _json_rows(args.settlements)
+        receipts = _json_rows(args.issued_shadow) if args.issued_shadow else None
+    report = evaluate(snapshots, settlements, args.params, issued_shadow=receipts)
     data = json.dumps(report, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
