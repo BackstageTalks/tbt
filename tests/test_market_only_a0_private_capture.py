@@ -190,3 +190,17 @@ def test_existing_single_writer_fake_store_roundtrip_readback(tmp_path, monkeypa
         readback_factory=factory)
     assert again["status"] == "NO_CHANGE"
     assert remote[ASSET] == before
+
+
+def test_later_same_day_fixture_is_captured_but_cannot_rewrite_first_issue():
+    initial, _ = stage([prediction(i, fair=.40) for i in range(6)])
+    first, r1 = first_capture_update(None, initial, [], now=NOW, params=PARAMS)
+    assert r1["new_issued"] == 5
+    first_receipts = json.dumps(first["issued_shadow"], sort_keys=True)
+    later, _ = stage([prediction(99, fair=.99)])
+    result, r2 = first_capture_update(
+        first, later, [], now=NOW, params=PARAMS)
+    assert r2["new_captured"] == 1
+    assert r2["new_issued"] == 0
+    assert result["snapshots"][-1]["a0_first_daily_slate"] is False
+    assert json.dumps(result["issued_shadow"], sort_keys=True) == first_receipts
