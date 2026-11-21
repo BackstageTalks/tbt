@@ -159,6 +159,7 @@ from tbt.services.account_telemetry import (
     prune_account_telemetry,
 )
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
+from tbt.services.api_budget_underuse_alert import send_underuse_alert, BudgetAlertUnavailable
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
@@ -2271,6 +2272,22 @@ def internal_api_budget_reserve(req):
     except Exception:
         logging.exception("Unexpected API budget reservation error")
         return response({"error":"api_budget_unavailable"},503)
+
+
+
+@app.route(route="v1/internal/api-budget/underuse-alert", methods=["POST"])
+def internal_api_budget_underuse_alert(req):
+    """Existing external match-status clock; no paid API request or CDB writer."""
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        return response(send_underuse_alert(settings))
+    except BudgetAlertUnavailable as exc:
+        logging.error("BlinQ 16:50 API budget notice unavailable: %s", exc)
+        return response({"error": "api_budget_alert_unavailable", "detail": str(exc)}, 503)
+    except Exception:
+        logging.exception("Unexpected 16:50 API budget alert failure")
+        return response({"error": "api_budget_alert_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/api-budget", methods=["GET"])
