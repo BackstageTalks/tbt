@@ -22,6 +22,7 @@ from tbt.data.history_snapshot import (
 from tbt.data.history_safety import sanitize_history_identities, quarantine_budget, merge_trusted_history_batch
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.tour_scope import match_is_250_plus
 from tbt.services.statistics_enrichment import StatisticsEnricher
 from tbt.services.statistics_enrichment import STATISTICS_SCHEMA_VERSION
 from tbt.services.statistics_gapfill import event_id, missing_fields, retry_due, recent_score_identity_conflict
@@ -680,7 +681,8 @@ def main():
     def eligible_rows_for_enrichment():
         return [
             row for row in matches
-            if str(_provider_event_id(row) or "") not in protected_provider_ids
+            if (str(_provider_event_id(row) or "") not in protected_provider_ids
+                and match_is_250_plus(row))
         ]
     progress_file = directory / "download_progress.json"
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
@@ -785,7 +787,7 @@ def main():
             # Missing provider IDs != native-calendar eligibility. Preserve a
             # machine-readable blocker inventory on every zero-gain run.
             gaps = identity_gap_inventory(
-                matches, start=start, end=end, attempts=attempts,
+                eligible_rows_for_enrichment(), start=start, end=end, attempts=attempts,
                 max_days=args.identity_max_days)
             report["identity_gap_inventory"] = gaps
             print(json.dumps({"identity_gap_inventory": gaps}, sort_keys=True), flush=True)
@@ -819,7 +821,7 @@ def main():
             report["identity_parallel_statistics_opportunity"] = identity_statistics_opportunity
             print(json.dumps({"identity_parallel_statistics_opportunity":
                               identity_statistics_opportunity}, sort_keys=True), flush=True)
-            planned = candidate_days(matches, start=start, end=end,
+            planned = candidate_days(eligible_rows_for_enrichment(), start=start, end=end,
                                      attempts=attempts, max_days=args.identity_max_days)
             if (len(planned) != gaps["scheduled_days"] or
                     sum(r[2] for r in planned) != gaps["scheduled_eligible_rows"]):

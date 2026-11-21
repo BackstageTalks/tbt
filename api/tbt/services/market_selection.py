@@ -40,8 +40,8 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME remains unchanged. TOP ranks qualified ATP/WTA before Challenger,
-# within each tier rank by calibrated sports probability. ITF is excluded from TOP.
+# PRIME remains unchanged. TOP ranks ATP/WTA main-tour 250+ by calibrated
+# sports probability. Challenger, WTA 125 and ITF are excluded from new TOP.
 # VALUE/PRIME and already-issued records are unchanged.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
@@ -1014,7 +1014,7 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int | None = None,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Rank eligible ATP/WTA, then Challenger; never force fill.
+    """Rank eligible ATP/WTA main tour only; never force fill.
 
     Identity, competition and quote guards run before this stage.
     Odds and outcomes never contribute to ranking.
@@ -1022,7 +1022,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     from .top_policy import competition_group
     selected = []
     seen = set()
-    tier = {"ATP": 0, "WTA": 0, "Challenger": 1}
+    tier = {"ATP": 0, "WTA": 0}
     ranked = sorted(core, key=lambda card: (
         tier.get(competition_group(card), 99),
         -float(rank_value(card)),
@@ -1030,7 +1030,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     for card in ranked:
         event = str(card.get("event_id") or "")
         group = competition_group(card)
-        if group not in {"ATP", "WTA", "Challenger"}:
+        if group not in {"ATP", "WTA"}:
             continue
         probability = _number(card.get("probability")) or 0
         if probability < TOP_MIN_PROBABILITY:
@@ -1336,7 +1336,7 @@ def select_market_sections(
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
                 "top_probability_tiers": [TOP_MIN_PROBABILITY],
-                "top_competition_order": ["ATP/WTA", "Challenger"],
+                "top_competition_order": ["ATP/WTA 250+"],
                 "secondary_competition_probability_floor": TOP_MIN_PROBABILITY,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
@@ -1371,7 +1371,6 @@ def select_market_sections(
                 "probability_tiers": [TOP_MIN_PROBABILITY],
                 "competition_tiers": [
                     {"group": "ATP/WTA", "thresholds": [TOP_MIN_PROBABILITY]},
-                    {"group": "Challenger", "thresholds": [TOP_MIN_PROBABILITY]},
                 ],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": top_limit is None,
@@ -1390,14 +1389,14 @@ def select_market_sections(
                 "core_min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
                 "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
                 "min_odds": TOP_FALLBACK_MIN_ODDS,
-                "excluded_competitions": ["ITF", "WTA 125", "UTR", "other", "unknown"],
+                "excluded_competitions": ["Challenger", "ITF", "WTA 125", "UTR", "other", "unknown"],
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
                 "sort": "competition_tier_then_probability_desc_then_event_id",
                 "ranked_full_slate": True,
                 "policy": "sports_tiered_top5_60_v24",
-                "competition_priority": [["ATP", "WTA"], ["Challenger"]],
+                "competition_priority": [["ATP", "WTA"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
                 "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,

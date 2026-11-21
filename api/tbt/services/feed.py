@@ -62,7 +62,7 @@ def _wta_aces_level_reason(row):
 def ace_eligibility_reason(row):
     """Explain the active singles ESÁ/Viac Es gate, without changing thresholds.
 
-    ATP main-tour/Challenger remain eligible with both players TOP-1000;
+    ATP main-tour 250+ remains eligible with both players TOP-1000;
     WTA requires positive evidence of WTA 250/500/1000, Finals or Grand Slam.
     WTA 125, ITF/Futures and unknown WTA grades are excluded.
     Existing historical issued Results are not regraded.
@@ -82,6 +82,11 @@ def ace_eligibility_reason(row):
         label = str(row.get(field) or "").strip().casefold()
         if any(tag in label for tag in ("itf", "futures")):
             return "excluded_itf_futures"
+    if tour in atp_tours and (tour == "atp challenger" or any(
+        "challenger" in str(row.get(field) or "").casefold()
+        for field in ("tournament", "tournament_name", "competition", "tournament_level", "category", "tour_level")
+    )):
+        return "excluded_atp_below_250"
     if tour in wta_tours and not _legacy_wta_offer(row):
         level_reason = _wta_aces_level_reason(row)
         if level_reason != "eligible":

@@ -184,8 +184,7 @@ def test_active_aces_and_most_aces_only_main_atp_wta_but_results_immutable():
              "results":[{"event_id":"historical-itf","market":"aces","tour":"ITF"}]}
     visible=visible_feed(payload,now=now)
     assert [x["event_id"] for x in visible["ace_picks"]]==[
-        "atp", "wta", "comp_challenger", "comp_wta125", "challenger",
-        "wta125", "atp_challenger", "df",
+        "atp", "wta", "comp_wta125", "wta125", "df",
     ]
     assert visible["results"]==payload["results"]
     assert len(visible["upcoming"])==11  # Match Winner discovery remains unchanged.

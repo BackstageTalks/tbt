@@ -188,9 +188,9 @@ def test_aces_and_most_aces_require_two_known_top_1000_ranks():
     assert {row["event_id"] for row in winners} == good
 
 
-def test_aces_and_derived_most_aces_accept_ranked_challengers_but_not_itf():
+def test_aces_and_derived_most_aces_exclude_sub_250_tiers():
     from tbt.services.ace_selection import select_ace_winner_picks
-    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 21, 12, tzinfo=timezone.utc)
     history = []
     for i in range(10):
         when = now - timedelta(days=20 + i * 8)
@@ -209,15 +209,13 @@ def test_aces_and_derived_most_aces_accept_ranked_challengers_but_not_itf():
     ])
     cards, _ = select_ace_picks(history, future, now=now,
                                  per_market_limit=20,total_limit=40)
-    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA","ATP Challenger","WTA 125"}
+    assert {row["tour"] for row in cards if row["market"]=="aces"} == {"ATP","WTA"}
     assert any(row["tour"]=="ITF" and row["market"]=="double_faults" for row in cards)
     more, _ = select_ace_winner_picks(history,future,now=now)
-    assert {row["tour"] for row in more} == {"ATP","WTA","ATP Challenger","WTA 125"}
-    blocked = {"mislabelled-itf"}
+    assert {row["tour"] for row in more} == {"ATP","WTA"}
+    blocked = {"mislabelled-itf", "mislabelled-challenger"}
     assert not any(row["event_id"] in blocked for row in cards if row["market"] == "aces")
     assert not any(row["event_id"] in blocked for row in more)
-    assert any(row["event_id"] == "mislabelled-challenger" and row["market"] == "aces" for row in cards)
-    assert any(row["event_id"] == "mislabelled-challenger" for row in more)
 
 
 def test_wta_aces_grade_requires_verified_250_plus_and_rejects_generic_wta():

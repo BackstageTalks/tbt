@@ -23,14 +23,14 @@ def test_top60_global_sports_order_cap_and_odds_independence():
             for i, p in enumerate((.61, .62, .63, .64, .64))]
     rows[3]['competition'] = 'Challenger'
     out = select_market_sections(rows)
-    assert [r['event_id'] for r in out['top_daily_picks']] == ['4', '2', '1', '0', '3']
-    assert [r['event_id'] for r in _daily_rows(out)] == ['4', '2', '1', '0', '3']
+    assert [r['event_id'] for r in out['top_daily_picks']] == ['4', '2', '1', '0']
+    assert [r['event_id'] for r in _daily_rows(out)] == ['4', '2', '1', '0']
     changed = deepcopy(rows)
     changed[0]['betting']['odds'] = 1.75
-    assert [r['event_id'] for r in select_market_sections(changed)['top_daily_picks']] == ['4', '2', '1', '0', '3']
+    assert [r['event_id'] for r in select_market_sections(changed)['top_daily_picks']] == ['4', '2', '1', '0']
 
 
-def test_tiered_five_honors_atp_wta_then_challenger_and_excludes_itf():
+def test_top_five_keeps_atp_wta_and_excludes_challenger_and_itf():
     from test_top_priority_policy import verified_w35, pick
     rows = [
         verified_w35("itf", .99),
@@ -42,7 +42,7 @@ def test_tiered_five_honors_atp_wta_then_challenger_and_excludes_itf():
     ]
     before = deepcopy(rows)
     out = select_market_sections(rows)
-    expected = ["extra", "atp", "wta", "challenger", "last"]
+    expected = ["extra", "atp", "wta"]
     assert [r["event_id"] for r in out["top_daily_picks"]] == expected
     assert [r["event_id"] for r in _daily_rows(out)] == expected
     assert out["market_selection"]["top_daily_rule"]["limit"] == 5
@@ -65,6 +65,6 @@ def test_low_itf_m15_w15_remain_protected_pending_evidence():
     out = select_market_sections([m15, w15])
     assert out["top_daily_picks"] == []
     assert out["market_selection"]["top_daily_rule"]["competition_priority"] == [
-        ["ATP", "WTA"], ["Challenger"]
+        ["ATP", "WTA"]
     ]
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3

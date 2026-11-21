@@ -248,7 +248,7 @@ def test_more_aces_keeps_ranked_atp_wta_250_but_rejects_unsupported_tours():
     assert [r["event_id"] for r in result]==["atp","wta","wta125"]
 
 
-def test_more_aces_includes_ranked_challenger_and_verified_wta_250():
+def test_more_aces_excludes_ranked_challenger_and_preserves_legacy_wta125():
     examples=[
         row(event="atp")|{"tour":"ATP","tournament":"Main draw"},
         row(event="wta")|{"tour":"WTA","tournament":"WTA 500 Tour"},
@@ -256,4 +256,4 @@ def test_more_aces_includes_ranked_challenger_and_verified_wta_250():
         row(event="wta125")|{"tour":"WTA","tournament":"WTA 125 Mumbai"},
     ]
     rows=more.offered_rows(snapshot(examples),NOW)
-    assert [r["event_id"] for r in rows]==["atp","wta","challenger","wta125"]
+    assert [r["event_id"] for r in rows]==["atp","wta","wta125"]

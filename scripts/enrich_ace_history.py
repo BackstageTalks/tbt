@@ -20,6 +20,7 @@ from tbt.data.history_snapshot import load_partitions, sync_year_partition
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.tour_scope import match_is_250_plus
 from tbt.services.statistics_enrichment import StatisticsEnricher
 
 
@@ -122,6 +123,8 @@ def main() -> None:
     candidates = []
     for match in sorted(matches, key=lambda item: item.scheduled_at, reverse=True):
         if not oldest <= match.scheduled_at < cutoff:
+            continue
+        if not match_is_250_plus(match):
             continue
         if str(match.status or "").lower() in EXCLUDED:
             continue

@@ -29,6 +29,7 @@ from tbt.errors import ProviderError
 from tbt.match_format import exact_best_of_from_score_stats, provider_best_of_from_context
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.tour_scope import match_is_250_plus
 from tbt.services.score_enrichment import SCORE_SCHEMA_VERSION, ScoreEnricher
 from tbt.services.sg_selection import select_sg_picks
 
@@ -291,6 +292,8 @@ def main() -> None:
     candidate_rows: list[tuple[int, float, object]] = []
     for match in matches:
         if not oldest <= match.scheduled_at < cutoff:
+            continue
+        if not match_is_250_plus(match):
             continue
         if str(match.status or "").lower() in EXCLUDED:
             continue
