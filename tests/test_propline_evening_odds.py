@@ -203,6 +203,81 @@ class PropLineEvening(unittest.TestCase):
         self.assertEqual(result["probed_events"], 2)
         self.assertTrue(result["coverage_truncated"])
 
+    def test_per_event_player_props_are_used_without_cross_book_synthesis(self):
+        from copy import deepcopy
+        bulk = example()
+        original = deepcopy(bulk["events"][0])
+        # The bulk game-line surface has no complete player O/U.
+        bulk["events"][0]["bookmakers"] = []
+        visited = []
+        def detail(event_id):
+            visited.append(event_id)
+            return deepcopy(original), 379
+        result = collect(DAY, now=NOW, get=lambda: (bulk, 380),
+                         get_event=detail)
+        self.assertEqual(visited, ["1234"])
+        self.assertEqual((result["provider_requests"], result["provider_event_requests"]), (2, 1))
+        self.assertEqual(result["provider_remaining"], 379)
+        self.assertEqual(result["exact_aces_pairs"], 1)
+        self.assertFalse(result["coverage_truncated"])
+        event = result["events_in_target_window"][0]
+        self.assertIn("/events/1234/odds?markets=", event["source_url"])
+        self.assertEqual(event["provider_raw_event"], original)
+
+    def test_per_event_never_spends_shared_reserve(self):
+        invoked = []
+        result = collect(DAY, now=NOW, get=lambda: (example(), 250),
+                         get_event=lambda event_id: invoked.append(event_id))
+        self.assertEqual(invoked, [])
+        self.assertEqual(result["provider_requests"], 1)
+        self.assertEqual(result["event_detail_skipped_quota"], 1)
+        self.assertTrue(result["coverage_truncated"])
+
+    def test_http_429_never_retries_or_probes_next_event(self):
+        from copy import deepcopy
+        bulk = example()
+        other = deepcopy(bulk["events"][0])
+        other["id"] = "5678"
+        bulk["events"].append(other)
+        calls = []
+        def detail(event_id):
+            calls.append(event_id)
+            raise RuntimeError("prop_line_http_429")
+        result = collect(DAY, now=NOW, get=lambda: (bulk, 450),
+                         get_event=detail)
+        self.assertEqual(calls, ["1234"])
+        self.assertEqual(result["provider_requests"], 2)
+        self.assertTrue(result["coverage_truncated"])
+        self.assertEqual(result["events_in_target_window"][0]["source_url"],
+                         "https://api.prop-line.com/v1/sports/tennis/odds?markets=player_aces%2Ctotal_aces")
+        self.assertEqual(result["errors"][0]["error"], "prop_line_http_429")
+
+    def test_wrong_per_event_identity_never_replaces_raw_bulk_evidence(self):
+        from copy import deepcopy
+        wrong = deepcopy(example()["events"][0])
+        wrong["id"] = "9999"
+        result = collect(DAY, now=NOW, get=lambda: (example(), 450),
+                         get_event=lambda event_id: (wrong, 449))
+        self.assertTrue(result["coverage_truncated"])
+        self.assertEqual(result["events_in_target_window"][0]["provider_raw_event"]["id"], "1234")
+
+    def test_event_detail_only_targets_future_betting_day(self):
+        from copy import deepcopy
+        payload = example()
+        tomorrow = deepcopy(payload["events"][0])
+        tomorrow["id"] = "5678"
+        tomorrow["commence_time"] = "2026-11-19T12:00:00Z"
+        payload["events"].append(tomorrow)
+        calls = []
+        def event_get(event_id):
+            calls.append(event_id)
+            return payload["events"][0], 349
+        result = collect(DAY, now=NOW, get=lambda: (payload, 350),
+                         get_event=event_get)
+        self.assertEqual(calls, ["1234"])
+        self.assertEqual(result["provider_requests"], 2)
+        self.assertEqual(result["out_of_target_window_events"], 1)
+
     def test_empty_ace_market_is_true_zero(self):
         data = example()
         data["events"][0]["bookmakers"] = []
