@@ -151,3 +151,12 @@ def test_incomplete_or_invalid_issued_receipts_fail_closed():
     wrong[0]["shadow_issued_at"] = "2026-11-21T12:01:00Z"
     with pytest.raises(ValueError, match="pre-start"):
         audit.evaluate(snapshots, settled_rows, issued_shadow=wrong)
+
+def test_shadow_receipt_cannot_precede_issued_quote_or_model():
+    snapshots = prepare_all_singles_shadow_rows(
+        (fixture(n) for n in range(400)), PARAMS)
+    all_receipts = [issuance(n) for n in range(400)]
+    all_receipts[0]["shadow_issued_at"] = "2026-11-21T09:30:00Z"
+    with pytest.raises(ValueError, match="pre-start"):
+        audit.evaluate(snapshots, [settled(n) for n in range(400)],
+                       issued_shadow=all_receipts)
