@@ -89,3 +89,67 @@ PYTHONPATH=api:scripts python -m pytest -q \
   pre-start priced match pairs, separately assessed ATP/WTA, and an
   independent exact-same-N market benchmark. This code never auto-promotes.
 - Production activation requires explicit owner permission.
+
+
+## A0 no-silence daily shadow shortlist (2026-11-21 correction)
+
+`select_daily_shadow_picks(cards, params, *, n_min=5)` is a PURE research
+function. Groups by **UTC scheduled match day**, applies a stable
+`(tier, -shadow_probability, event_id, selection_id)` order and returns
+`min(slate size, max(n_min, count_T0))` per observed day.
+Each returned card carries `selection_tier` and `selection_basis`, both
+top-level and in `shadow_research`. Source cards and all public fields are
+untouched; `shadow_eligible_for_actual_publication=False`.
+
+- **T0:** market shares the model favorite, fair >= .75, abs(model-fair) <= .10.
+- **T1:** valid pre-start two-way fair and same favorite, not T0.
+- **T2:** valid pre-start two-way fair and different favorite.
+- **T3:** missing/unverifiable fair; falls back to frozen original model-p.
+- Tier ranking demotes old A1/A2/A3 vetoes instead of dropping candidates.
+  With fewer than n_min unique events in a day, return all, but mark this
+  as an A0 coverage shortfall rather than claiming the minimum was met.
+- Duplicate canonical event IDs, including two opposite sides of one match,
+  are fail-closed; daily selection cannot be inflated by duplication.
+
+### ATP opener variant provenance
+
+The source-claimed `opener_fallback` uses slope **1.088**, intercept
+**-0.008**, claimed fit **36,972** ATP match_winner observations,
+`BackstageTalks/tbt-data/data/oddstrader/atp`, opener column and de-vig
+two-way odds. This is **not** an independently reproduced or timestamp-proven
+pre-start fit in this PR. It can only be evaluated with explicit
+`calibrate_market_only(fair, params, variant="opener")`, never silently.
+The main 1.102/-0.009 variant remains unchanged.
+**Neither main nor opener is certified for WTA.**
+
+### B2: receipt-backed daily minimum before outcomes
+
+`scripts/audit_market_only_shadow_readonly.py` now accepts optional
+`--issued-shadow private_issued_receipts.json`. For >=400 post-freeze,
+settled, exact-matched, pre-start two-way fair observations it derives A0
+shortlists from the **whole provided pre-match slate**, not from settled
+outcomes. It refuses to score when any observed UTC slate day has fewer
+than 5 computed candidates; when issuance receipts are absent, incomplete,
+duplicated, after-start, or fail to match (event_id, selection_id, tier,
+basis, UTC day), it also refuses to score. Receipts are read-only JSON and
+require `receipt_id` and `shadow_issued_at`; the helper **does not
+write or fabricate receipts**.
+
+An empty day **not present in the captured slate is not observable**;
+full-slate source completeness and independent release read-back are still
+mandatory external evidence before claiming the real system never goes
+silent. This branch is not a real issuer or a new writer.
+
+The frozen A0 minimum (5) and absence of WTA fit verification are
+executable fail-closed guards in `load_shadow_params`.
+
+### Focused local and exact-head testing
+
+```bash
+PYTHONPATH=api:scripts python -m pytest -q \
+  tests/test_market_only_shadow_research.py \
+  tests/test_audit_market_only_shadow_readonly.py
+```
+
+Verify the current PR HEAD and exact GitHub Actions run; do not report
+previous green CI runs as proof for newly committed A0/B2 changes.
