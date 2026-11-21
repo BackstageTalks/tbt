@@ -576,9 +576,8 @@ def _normalize_membership_invariants(payload: object) -> object:
             for rule in rules.values():
                 if not isinstance(rule, dict):
                     continue
-                display = str(rule.get("display_state") or (
-                    "hidden" if rule.get("tab_enabled") is False else "active"
-                )).strip().lower()
+                display = ("hidden" if rule.get("tab_enabled") is False
+                           else str(rule.get("display_state") or "active").strip().lower())
                 if display in {"blurred", "hidden"}:
                     rule["see_all"] = False
 
