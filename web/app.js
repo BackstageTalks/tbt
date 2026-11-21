@@ -3270,8 +3270,12 @@
     }
     const includedButUnavailable=dailyHubIncludedButUnavailable(tab,ent,sourceRows.length);
     const preview=Math.max(1,Number(cfg.preview_rows)||10);
-    const allCount=plan==='elite'&&!state.previewPlan?rows.length:Math.max(Number(ent.total)||0,rows.length);
-    const canExpand=ent.see_all===true&&allCount>preview;
+    // ELITE tab badges count only authorized rows, but preview/expansion must
+    // span their original server positions (a pick may be at slot #62).
+    const allCount=plan==='elite'&&!state.previewPlan
+      ?Math.max(rows.length,Array.isArray(ent.slot_states)?ent.slot_states.length:0)
+      :Math.max(Number(ent.total)||0,rows.length);
+    const canExpand=(ent.see_all===true||plan==='elite')&&allCount>preview;
     let limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;
     // Stable-random FREE rows stay at their ORIGINAL server slot (e.g. #8).
     // Only one authorized row is returned, but its slot may be anywhere in
@@ -3336,7 +3340,7 @@
       const options=[...new Set(sourceRows.map(row=>String(row?.tournament||row?.competition||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));const current=String(state.dailyHubTournament||'');
       tournamentSelect.innerHTML=`<option value="">${escapeHtml(lcopy('All tournaments','Všetky turnaje','Všechny turnaje'))}</option>`+options.map(name=>`<option value="${escapeHtml(name)}"${name===current?' selected':''}>${escapeHtml(name)}</option>`).join('');if(current&&!options.includes(current)){state.dailyHubTournament='';tournamentSelect.value='';}
     }
-    if(expand){const hasMore=allCount>preview;expand.hidden=!hasMore;expand.dataset.locked=ent.see_all===true?'0':'1';expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false');expand.title=state.dailyHubExpanded?lcopy('Show first 10','Zobraziť prvých 10','Zobrazit prvních 10'):lcopy('Show all rows','Zobraziť všetky riadky','Zobrazit všechny řádky');}
+    if(expand){const hasMore=allCount>preview;expand.hidden=!hasMore;expand.dataset.locked=ent.see_all===true||plan==='elite'?'0':'1';expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false');expand.title=state.dailyHubExpanded?lcopy('Show first 10','Zobraziť prvých 10','Zobrazit prvních 10'):lcopy('Show all rows','Zobraziť všetky riadky','Zobrazit všechny řádky');}
   }
 
 
@@ -3620,7 +3624,7 @@
       }
       const detailLock=target.closest('[data-detail-locked]');
       if(detailLock){showAccessHint(detailLock,detailLock.dataset.upgradePlan||firstMatchDetailUnlockPlan(),detailLock.dataset.upgradeSection||lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
-      if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
+      if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true&&accountPlan()!=='elite'){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
       const row=target.closest('tr[data-hub-event]');
       if(row){
         const key=String(row.dataset.hubEvent||'');
