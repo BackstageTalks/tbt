@@ -153,3 +153,61 @@ PYTHONPATH=api:scripts python -m pytest -q \
 
 Verify the current PR HEAD and exact GitHub Actions run; do not report
 previous green CI runs as proof for newly committed A0/B2 changes.
+
+
+## B1 existing-writer capture hook — 2026-11-21
+
+**IMPLEMENTED IN DRAFT PR, NOT A VERIFIED LIVE CAPTURE.** 
+The guarded existing \`data.yml\` refresh/current-refresh pipeline now
+invokes \`scripts/market_only_a0_private_capture.py\` AFTER existing
+Tennis API Pro/PropLine market enrichment, under the same external scheduler,
+\`tbt-production-deploy\` serialization and CDB global writer lock. There
+is NO second cron, provider request, CDB importer, model fit, public
+\`top_policy\` or \`market_selection\` mutation.
+
+- Source: the **whole model-discovered same-UTC-day singles fixture slate**,
+  not just the issued TOP/VALUE cards. Capture pre-start original model p,
+  exact internal CDB match ID, provider event ID, exact players, tour,
+  surface, model version and timestamp.
+- Market: only actual primary-provider two-way, same-source H2H prices
+  (\`match_winner_market.source_id_known=True\`), with both no-vig
+  probabilities summing to one. Never silently replace missing fair with
+  \`1/odds\` or make a fake bookmaker. A conservative real observation clock
+  AFTER quote enrichment establishes strict pre-start evidence; the
+  historical publication clock may be an intentionally projected 06:01
+  selection time and is NOT a real quote capture stamp.
+- Quote-missing model fixtures enter the immutable full-slate cohort with
+  \`fair_* = null\`, T3 shadow fallback to original model probability.
+  They do NOT count toward 400 priced paired B2 observations.
+- First-capture snapshots and issued A0 \`selection_tier\`/\`selection_basis\`
+  receipts are append-only by identity. Source/model-version changes
+  and conflicting IDs fail closed. A first daily slate's issuance is
+  immutable; later discovered events remain in the broader evaluation
+  population with \`a0_first_daily_slate=false\` but cannot rewrite the
+  already frozen issue.
+- CDB settlement only by the exact canonical \`match_id\`, same players and
+  scheduled start; ambiguous/postponed cases are not guessed from names.
+- Persistence: only **existing** \`tbt-model-shadow-v1\` ReleaseStore writer,
+  adding \`market_only_a0_shadow.json\` inside the same globally locked
+  refresh. After checksum-manifest upload, a separate fresh ReleaseStore
+  instance downloads and **byte-compares** the remote asset. No new
+  backup or parallel writer.
+- Full-slate status is relative to the provider-discovered available model
+  predictions on that day. An unseen match or a day without a successful
+  refresh cannot be declared covered; report this limitation.
+- B2 accepts a verified read-only private release asset via
+  \`--private-ledger market_only_a0_shadow.json\`, with 400 new valid
+  settled pre-match paired matches and receipt-backed A0 daily minimum.
+  It does not train, re-fit or auto-promote.
+- **Activation boundary:** the PR is still draft and not merged. No live
+  A0 receipt/read-back metrics yet. A successfully completed CI only
+  verifies code/tests, not real daily capture. Do not claim the 400-match
+  prospective evaluation has started without an actual persisted receipt.
+
+Focused verification and scope:
+\`\`\`bash
+PYTHONPATH=api:scripts python -m pytest -q \
+  tests/test_market_only_shadow_research.py \
+  tests/test_audit_market_only_shadow_readonly.py \
+  tests/test_market_only_a0_private_capture.py
+\`\`\`
