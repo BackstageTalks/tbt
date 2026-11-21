@@ -222,3 +222,24 @@ jobs:
           done
           echo '::error::API gapfill dispatched but no new orchestrator run was independently visible'
           exit 1
+
+      - name: Dispatch 16:50 budget-underuse admin notice from external clock
+        # Existing active external quarter-hour tick owns scheduling, including DST.
+        # 16:45 prepares the alert to evaluate at 16:50; 17:00 is a catch-up.
+        # Azure durable create-only claim makes repeated dispatches harmless.
+        if: always() && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          hour="$(TZ=Europe/Bratislava date +%H)"
+          minute="$(TZ=Europe/Bratislava date +%M)"
+          if ! (( (10#$hour == 16 && 10#$minute >= 45) ||
+                  (10#$hour == 17 && 10#$minute <= 5) )); then
+            echo "API_1650_ALERT_NOT_DUE"
+            exit 0
+          fi
+          gh workflow run api-budget-underuse-notify.yml \
+            --repo "$GITHUB_REPOSITORY" --ref main
+          echo "API_1650_ALERT_DISPATCH_SUBMITTED; Azure claim controls at-most-once delivery"
