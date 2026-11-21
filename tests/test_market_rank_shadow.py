@@ -153,6 +153,12 @@ def test_shadow_settlement_exact_cdb_match_and_read_only():
     now = datetime(2026, 9, 8, 12, tzinfo=timezone.utc)
     result = shadow.settled_comparison(hist, [match], asof=now)
     assert result["frozen_days"] == 1
+    assert result["same_n_top_days"] in (0, 1)
+    assert result["top_shortfall_days_below_three"]["champion"] == 1
+    assert result["prospective_gate"] == "WAIT_FOR_400_FULL_SLATE_PAIRED_SETTLEMENTS"
+    summary = shadow.markdown_summary(result)
+    assert "champion" in summary and "market_anchored_top_veto" in summary
+    assert "TOP below 3 days" in summary
     assert result["variants"]["champion"]["top"]["settled"] == 1
     assert result["variants"]["champion"]["top"]["correct"] == 1
     assert json.dumps(hist, sort_keys=True) == frozen
