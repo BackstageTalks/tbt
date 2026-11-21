@@ -190,7 +190,7 @@ def test_aces_and_most_aces_require_two_known_top_1000_ranks():
 
 def test_aces_and_derived_most_aces_exclude_sub_250_tiers():
     from tbt.services.ace_selection import select_ace_winner_picks
-    now = datetime(2026, 11, 21, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 11, 22, 12, tzinfo=timezone.utc)
     history = []
     for i in range(10):
         when = now - timedelta(days=20 + i * 8)
