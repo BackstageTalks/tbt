@@ -170,6 +170,10 @@ def first_capture_update(previous, stage, completed, *, now, params):
             raise ValueError("Duplicate/blank prior A0 canonical event identity")
         existing_events[event] = row
     accepted = []
+    # A0 selection is fixed by the first daily slate. Later discovered
+    # matches remain in the unbiased model/market cohort, but cannot rewrite
+    # that day's immutable issued selections.
+    issued_days = {str(r.get("day_utc") or "") for r in issued}
     freeze = _utc(params["prospective"]["freeze_after_utc"])
     if freeze is None or clock <= freeze:
         raise ValueError("No snapshots may precede frozen research date")
@@ -189,8 +193,11 @@ def first_capture_update(previous, stage, completed, *, now, params):
             continue
         if version is None:
             version = row["model_version"]
-        accepted.append(row)
-        existing_events[event] = row
+        immutable = dict(row)
+        day = _utc(row["scheduled_at"]).date().isoformat()
+        immutable["a0_first_daily_slate"] = day not in issued_days
+        accepted.append(immutable)
+        existing_events[event] = immutable
     # First available full-slate capture freezes the daily candidate selection.
     # Later same-day fixtures may be logged, but do not replace issued tips.
     snapshots_after = snaps + accepted
@@ -198,7 +205,7 @@ def first_capture_update(previous, stage, completed, *, now, params):
     new_by_day = {}
     for row in accepted:
         day = _utc(row["scheduled_at"]).date().isoformat()
-        if day not in already_issued_days:
+        if row["a0_first_daily_slate"] and day not in already_issued_days:
             new_by_day.setdefault(day, []).append(row)
     for day in sorted(new_by_day):
         ranked = select_daily_shadow_picks(_cards(new_by_day[day]), params, n_min=5)
