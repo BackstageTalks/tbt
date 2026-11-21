@@ -212,6 +212,45 @@ def test_prime_and_value_floors_unchanged_while_top_ranks_full_slate():
     assert sections['market_selection']['selection_counts']['top_daily_shortfall'] == 0
     assert all(x['odds'] >= 1.50 for x in sections['top_daily_picks'])
 
+
+def test_champion_depth_050_accepts_acca_top_and_value_with_surface_and_price_gates():
+    # Changing the eligibility floor does not retrain the model or remove its
+    # existing count-based probability adjustment.
+    acca = row('acca-050', .90, 1.30, 3.20, depth=.50, surface1=5, surface2=5)
+    top = row('top-050', .90, 1.60, 2.60, depth=.50, surface1=5, surface2=5)
+    value = row('value-050', .90, 1.90, 1.95, depth=.50, surface1=5, surface2=5)
+    too_shallow = row('top-049', .90, 1.60, 2.60, depth=.49, surface1=5, surface2=5)
+    no_surface = row('top-no-surface', .90, 1.60, 2.60, depth=.50, surface1=4, surface2=5)
+    low_odds = row('low-odds', .90, 1.49, 2.60, depth=.50, surface1=5, surface2=5)
+    before = [acca, top, value, too_shallow, no_surface, low_odds]
+    from copy import deepcopy
+    original = deepcopy(before)
+    result = select_market_sections(before)
+    assert [x['event_id'] for x in result['prime_picks']] == ['acca-050', 'low-odds']
+    assert [x['event_id'] for x in result['top_daily_picks']] == ['top-050']
+    assert [x['event_id'] for x in result['value_picks']] == ['value-050']
+    assert result['market_selection']['top_rejection_counts']['insufficient_data_depth'] >= 1
+    assert result['market_selection']['top_rejection_counts']['insufficient_surface_history'] >= 1
+    assert before == original
+    assert result['market_selection']['prime_rule']['min_data_depth'] == .50
+    assert result['market_selection']['top_daily_rule']['min_data_depth'] == .50
+    assert result['market_selection']['value_rule']['min_data_depth'] == .50
+
+
+def test_depth_050_is_also_considered_before_any_paid_winner_odds_requests():
+    provider = _OddsProvider()
+    rows = [row('quote-050', .90, 1.60, 2.60, depth=.50, surface1=5, surface2=5),
+            row('quote-049', .90, 1.60, 2.60, depth=.49, surface1=5, surface2=5)]
+    for item in rows:
+        item.pop('betting', None)
+        item.pop('match_winner_market', None)
+    _, report = enrich_current_betting_day_odds(
+        provider, rows, now=datetime(2026, 9, 7, 8, tzinfo=timezone.utc))
+    assert provider.called == [('quote-050', 1)]
+    assert report['candidate_gate']['min_data_depth'] == .50
+    assert report['provider_call_attempts'] == 1
+    assert report['candidate_gate']['min_surface_matches_each'] == 3
+
 def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
     shallow = row('shallow90', .90, 1.90, 2.00, depth=.30, surface1=20, surface2=20)
     deep = row('deep90', .90, 1.90, 2.00, depth=1.0, surface1=20, surface2=20)
@@ -336,7 +375,7 @@ def test_morning_odds_discovery_prices_entire_new_top_60pct_slate_with_existing_
         row('eligible', .70, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
         row('top60', .63, 1.60, 2.20, depth=.80, surface1=5, surface2=5),  # adjusted BlinQ p=.604
         row('weak', .59, 1.60, 2.20, depth=1.0, surface1=20, surface2=20),
-        row('shallow', .80, 1.60, 2.20, depth=.74, surface1=20, surface2=20),
+        row('shallow', .80, 1.60, 2.20, depth=.49, surface1=20, surface2=20),
         row('surface', .80, 1.60, 2.20, depth=1.0, surface1=2, surface2=20),
     ]
     for item in rows:
@@ -345,7 +384,7 @@ def test_morning_odds_discovery_prices_entire_new_top_60pct_slate_with_existing_
         provider, rows, now=datetime(2026,9,7,8,0,tzinfo=timezone.utc))
     assert provider.called == [('eligible', 1), ('top60', 1)]
     assert report['candidate_gate']['min_probability'] == .60
-    assert report['candidate_gate']['min_data_depth'] == .75
+    assert report['candidate_gate']['min_data_depth'] == .50
     assert report['candidate_gate']['min_surface_matches_each'] == 3
     assert report['odds_available'] == 2
     assert all(next(x for x in enriched if x['event_id'] == k).get('betting')
@@ -370,7 +409,7 @@ def test_value_audit_reports_filter_bottlenecks_without_changing_selection():
     good = row('value-good', .72, 1.90, 2.00, depth=.90, surface1=10, surface2=10)
     low_odds = row('value-low-odds', .72, 1.70, 1.80, depth=.90, surface1=10, surface2=10)
     wide_market = row('value-wide', .72, 1.90, 2.50, depth=.90, surface1=10, surface2=10)
-    shallow = row('value-shallow', .72, 1.90, 2.00, depth=.60, surface1=10, surface2=10)
+    shallow = row('value-shallow', .72, 1.90, 2.00, depth=.49, surface1=10, surface2=10)
     poor_surface = row('value-surface', .72, 1.90, 2.00, depth=.90, surface1=2, surface2=10)
     no_quote = row('value-no-quote', .72, 1.90, 2.00, depth=.90, surface1=10, surface2=10)
     no_quote.pop('betting', None)
@@ -389,7 +428,7 @@ def test_value_audit_reports_filter_bottlenecks_without_changing_selection():
     assert audit['qualified'] == 1
     assert audit['thresholds'] == {
         'min_probability': .65,
-        'min_data_depth': .75,
+        'min_data_depth': .50,
         'min_surface_matches_each': 3,
         'min_odds': 1.80,
         'max_two_way_odds_difference': .15,
