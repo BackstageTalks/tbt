@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 from tbt.services.market_only_shadow_research import (
     _utc, load_shadow_params, calibrate_market_only,
+    select_daily_shadow_picks,
 )
 
 PARAMS = ROOT / "research/market_only_shadow/params_2026-11-20.json"
@@ -172,7 +173,113 @@ def compare(rows, params, *, seed=20261120):
     }
 
 
-def evaluate(snapshots, settlements, params=PARAMS):
+
+def a0_daily_issued_gate(snapshots, conf, freeze, issued_shadow):
+    """Verify daily full-slate A0 tiers and independent pre-start issuance receipts.
+
+    This only validates provided evidence: it never creates a receipt, modifies
+    a production card or knows whether an unobserved slate day was missing.
+    """
+    n_min = conf["prospective"]["n_min_daily_shadow"]
+    if type(n_min) is not int or n_min != 5:
+        raise ValueError("Frozen A0 minimum changed")
+    cards = []
+    for raw in snapshots:
+        start, made = _utc(raw.get("scheduled_at")), _utc(raw.get("model_captured_at"))
+        if start is None or made is None or not freeze < made < start:
+            continue
+        try:
+            p = float(raw["model_player1_probability"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not np.isfinite(p) or not 0 < p < 1:
+            continue
+        a, b = str(raw.get("player1_id") or ""), str(raw.get("player2_id") or "")
+        if not a or not b or a == b or raw.get("schema") != 1:
+            raise ValueError("Invalid canonical full-slate A0 identity")
+        pick = a if p >= .5 else b
+        quote, issue = _utc(raw.get("market_captured_at")), _utc(raw.get("issued_at"))
+        fair = None
+        try:
+            f1, f2 = float(raw["fair_player1"]), float(raw["fair_player2"])
+            if (raw.get("shadow_market_missing") is False
+                    and np.isfinite(f1) and np.isfinite(f2)
+                    and 0 < f1 < 1 and 0 < f2 < 1
+                    and abs(f1 + f2 - 1) <= .0001
+                    and quote is not None and issue is not None
+                    and freeze < quote <= issue < start
+                    and str(raw.get("bookmaker") or "").strip()):
+                fair = f1 if p >= .5 else f2
+        except (ValueError, TypeError, KeyError):
+            pass
+        cards.append({
+            "event_id": str(raw.get("event_id") or ""),
+            "prediction_family": "singles",
+            "model_version": str(raw.get("model_version") or ""),
+            "tour": str(raw.get("tour") or ""),
+            "competition": str(raw.get("competition") or ""),
+            "scheduled_at": start.isoformat(),
+            "issued_at": issue.isoformat() if fair is not None else None,
+            "created_at": made.isoformat(),
+            "player1": {"id": a}, "player2": {"id": b},
+            "winner_id": pick, "probability": max(p, 1-p),
+            "betting": {
+                "market": "match_winner", "selection_id": pick,
+                "fair_implied_probability": fair,
+                "captured_at": quote.isoformat() if fair is not None else None,
+            },
+        })
+    selected = select_daily_shadow_picks(cards, conf, n_min=n_min)
+    expected = {}
+    daily = {}
+    for row in selected:
+        day = row["shadow_selection_day_utc"]
+        daily[day] = daily.get(day, 0) + 1
+        key = (str(row["event_id"]), str(row["betting"]["selection_id"]))
+        if key in expected:
+            raise ValueError("Duplicate A0 selected fixture/side")
+        expected[key] = row
+    summary = {
+        "minimum_per_observed_day": n_min,
+        "observed_days": len(daily),
+        "computed_per_day": dict(sorted(daily.items())),
+        "shortfall_days": sorted(d for d, n in daily.items() if n < n_min),
+        "issued_receipts_verified": False,
+        "unobserved_days_not_proven": True,
+    }
+    if summary["shortfall_days"]:
+        return "BLOCKED_A0_DAILY_MINIMUM", summary
+    if issued_shadow is None:
+        return "BLOCKED_A0_ISSUANCE_NOT_VERIFIED", summary
+    actual = {}
+    for receipt in issued_shadow:
+        if not isinstance(receipt, dict):
+            raise ValueError("Malformed shadow issuance evidence")
+        key = (str(receipt.get("event_id") or ""),
+               str(receipt.get("selection_id") or ""))
+        if key not in expected or key in actual:
+            raise ValueError("Unknown or duplicate issued shadow event/side")
+        row = expected[key]
+        issued_at, start = _utc(receipt.get("shadow_issued_at")), _utc(row["scheduled_at"])
+        if (issued_at is None or start is None
+                or not freeze < issued_at < start
+                or receipt.get("selection_tier") != row["selection_tier"]
+                or receipt.get("selection_basis") != row["selection_basis"]
+                or receipt.get("day_utc") != row["shadow_selection_day_utc"]
+                or not str(receipt.get("receipt_id") or "").strip()):
+            raise ValueError("Invalid shadow issuance proof or pre-start timing")
+        actual[key] = receipt
+    if set(actual) != set(expected):
+        summary["issued_per_day"] = {
+            day: sum(row["day_utc"] == day for row in actual.values())
+            for day in sorted(daily)}
+        return "BLOCKED_A0_INCOMPLETE_ISSUANCE", summary
+    summary["issued_per_day"] = dict(sorted(daily.items()))
+    summary["issued_receipts_verified"] = True
+    return "A0_ISSUANCE_VERIFIED_OBSERVED_DAYS", summary
+
+
+def evaluate(snapshots, settlements, params=PARAMS, *, issued_shadow=None):
     conf = load_shadow_params(params)
     freeze = _utc(conf["prospective"]["freeze_after_utc"])
     if (freeze is None or conf["prospective"].get("minimum_new_valid_matches") != 400
@@ -188,6 +295,12 @@ def evaluate(snapshots, settlements, params=PARAMS):
     }
     if counts["valid_two_way_prestart_settled"] < 400:
         return output
+    a0_state, a0_proof = a0_daily_issued_gate(
+        snapshots, conf, freeze, issued_shadow)
+    output["a0_daily_issuance"] = a0_proof
+    if a0_state != "A0_ISSUANCE_VERIFIED_OBSERVED_DAYS":
+        output["status"] = a0_state
+        return output  # Seal outcome metrics until every observed day passes.
     overall = compare(rows, conf)
     groups = {}
     for i, (label, field, value) in enumerate((
@@ -222,10 +335,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshots", required=True, type=Path)
     parser.add_argument("--settlements", required=True, type=Path)
+    parser.add_argument("--issued-shadow", type=Path, help="Read-only private shadow issuance receipts")
     parser.add_argument("--params", default=PARAMS, type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args(argv)
-    report = evaluate(_json_rows(args.snapshots), _json_rows(args.settlements), args.params)
+    receipts = _json_rows(args.issued_shadow) if args.issued_shadow else None
+    report = evaluate(_json_rows(args.snapshots), _json_rows(args.settlements),
+                      args.params, issued_shadow=receipts)
     data = json.dumps(report, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)
