@@ -18,6 +18,7 @@ from tbt.providers.rapidapi import RapidTennisClient
     ("wta", 213, "ITF Women", False),
     ("atp", 3, "ATP Challenger 100", False),
     ("wta", 6, "WTA 125", False),
+    ("atp", 3, "ATP 125", False),
     ("wta", 6, "Wimbledon Juniors", False),
     ("atp", 6, "ATP", False),
     ("wta", 3, "WTA", False),
