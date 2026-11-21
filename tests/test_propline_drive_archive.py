@@ -71,6 +71,20 @@ class DriveArchiveTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validated_archive(path, "2026-11-18")
 
+    def test_multi_request_per_event_archive_provenance_is_bounded(self):
+        with TemporaryDirectory() as temp:
+            path = Path(temp) / "odds.json"
+            item = report()
+            item["events_in_target_window"] = [{"event_id": "123"}]
+            item["provider_requests"] = 2
+            item["provider_event_requests"] = 1
+            path.write_text(json.dumps(item))
+            self.assertEqual(validated_archive(path, "2026-11-18"), path.read_bytes())
+            item["provider_requests"] = 3
+            path.write_text(json.dumps(item))
+            with self.assertRaises(ValueError):
+                validated_archive(path, "2026-11-18")
+
     def test_create_and_readback(self):
         data = json.dumps(report()).encode()
         s = Session(expected=data)
