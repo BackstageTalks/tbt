@@ -12,7 +12,7 @@ import re
 POLICY = "priority_tours_top_v20"
 # Owner-authorized 60% sports floor; ITF retains its separate strict >65% gate.
 MIN_PROBABILITY = .60
-# TOP only: ITF fallback prices are capped, ATP/WTA and Challenger unchanged.
+# TOP only: competition floor is ATP/WTA main tour, 250 and higher.
 MIN_ODDS = 1.50
 ITF_MAX_ODDS = 1.70
 # Temporary TOP-only evidence hold; not an odds ceiling or calibrated profitability claim.
@@ -123,7 +123,7 @@ def rejection_reasons(card, *, min_probability=.60, min_depth=.80, min_surface=5
     group = competition_group(card)
     # ITF of every grade is held out of NEW TOP picks, independent of probability.
     # Previously issued snapshots and VALUE/PRIME selection are unaffected.
-    if group not in {"ATP", "WTA", "Challenger"}:
+    if group not in {"ATP", "WTA"}:
         reasons.append("competition_not_approved")
     # Temporary TOP-only hold pending independently graded M15/M25 calibration.
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.
