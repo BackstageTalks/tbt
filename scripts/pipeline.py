@@ -7,6 +7,7 @@ import math
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from hashlib import sha256
 from pathlib import Path
 
 from _bootstrap import ROOT
@@ -1790,6 +1791,38 @@ def main():
                         "PROPL_secret_missing" if not prop_key else "disabled_by_event_cap"
                     ), "calls": 0,
                 }
+        # Read-only model/market shadow capture; shares the existing guarded
+        # provider refresh, canonical writer lock and private shadow release.
+        # No new API calls, model promotion, or public prediction mutation.
+        if os.getenv("BLINQ_MARKET_A0_SHADOW_ENABLED", "").strip().lower() == "true":
+            if shadow_store is None:
+                print(json.dumps({"market_a0_private_shadow": {
+                    "status": "BLOCKED_EXISTING_SHADOW_STORE_UNAVAILABLE",
+                    "incremental_provider_requests": 0,
+                    "production_modified": False,
+                }}), flush=True)
+            else:
+                try:
+                    from market_only_a0_private_capture import capture_using_existing_shadow_store
+                    market_a0_status = capture_using_existing_shadow_store(
+                        shadow_store, predictions, matches,
+                        observed_at=datetime.now(timezone.utc),
+                        model_sha256=sha256(
+                            (model_dir / "model.joblib").read_bytes()
+                        ).hexdigest(),
+                    )
+                    print(json.dumps({"market_a0_private_shadow": market_a0_status},
+                                     ensure_ascii=False), flush=True)
+                except Exception as exc:
+                    # Research loss must not abort a valid production prediction
+                    # refresh; it is NOT a success and needs an independent replay.
+                    print(json.dumps({"warning": "market_a0_private_shadow_unavailable",
+                                      "error_type": type(exc).__name__,
+                                      "detail": str(exc)[:240],
+                                      "production_modified": False,
+                                      "incremental_provider_requests": 0},
+                                     ensure_ascii=False), flush=True)
+
         # Doubles selection is performed only after both trusted H2H providers
         # have had the chance to price an otherwise eligible fixture.
         doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
