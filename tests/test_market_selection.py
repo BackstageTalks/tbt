@@ -401,7 +401,7 @@ def test_ranked_top_uses_only_real_pre_start_prices_without_cap():
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
-    assert rule['probability_tiers'] == [.60]
+    assert rule['probability_tiers'] == [.65]
     assert rule['min_odds'] == 1.50
     assert rule['daily_preferred_count'] == 3
 
@@ -427,7 +427,7 @@ def test_value_audit_reports_filter_bottlenecks_without_changing_selection():
     assert audit['missing_real_match_winner_quote'] == 1
     assert audit['qualified'] == 1
     assert audit['thresholds'] == {
-        'min_probability': .65,
+        'min_probability': .60,
         'min_data_depth': .50,
         'min_surface_matches_each': 3,
         'min_odds': 1.80,
@@ -500,7 +500,7 @@ def test_all_four_quality_qualified_selections_are_ordered_in_top():
             row("d75", .75, 1.60, 3.00, depth=1.0)]
     result = select_market_sections(rows, top_limit=None)
     assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78','d75']
-    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .60
+    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .65
 
 
 def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
