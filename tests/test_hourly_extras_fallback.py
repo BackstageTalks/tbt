@@ -200,3 +200,63 @@ def test_paid_zero_gain_fallback_rejects_inadequate_plateau_evidence(change):
                     reason="cross_tour_paid_zero_cdb_yield_plateau")
     data[0]["statistics_availability_circuit"]["trigger"].update(change)
     assert select(data, max_calls=1000)["allowed"] is False
+
+
+def exhausted_stats(*, candidates=17, paid=None):
+    paid = candidates if paid is None else paid
+    data = verified(paid=paid, gained=0)
+    data[0]["statistics_availability_circuit"] = {"tripped": False}
+    data[0]["statistics_candidate_rows"] = candidates
+    data[0]["statistics_adaptive_priority"] = {
+        "candidate_rows": candidates, "selected_rows": candidates,
+        "remaining_rows": 0,
+    }
+    data[0]["statistics_unavailable_reasons"] = {
+        "empty_whole_match_statistics": candidates,
+    }
+    return data
+
+
+def test_exhausted_verified_unavailable_queue_reuses_only_remaining_allowance():
+    outcome = select(exhausted_stats(), max_calls=5000)
+    assert outcome["allowed"] is True
+    assert outcome["reason"] == "verified_statistics_queue_exhausted_unavailable"
+    assert outcome["max_requests"] == 4983
+    assert outcome["statistics_paid_requests"] == 17
+
+
+def test_no_eligible_statistics_can_continue_with_verified_empty_queue():
+    outcome = select(exhausted_stats(candidates=0, paid=0))
+    assert outcome["status"] == "ELIGIBLE"
+    assert outcome["reason"] == "verified_statistics_queue_empty"
+    assert outcome["max_requests"] == 4515
+
+
+@pytest.mark.parametrize("change", [
+    lambda d: d[0]["statistics_adaptive_priority"].update(selected_rows=16),
+    lambda d: d[0]["statistics_adaptive_priority"].update(remaining_rows=1),
+    lambda d: d[0]["statistics_unavailable_reasons"].update(
+        empty_whole_match_statistics=16),
+    lambda d: d[0].update(statistics_candidate_rows=18),
+    lambda d: d[0]["statistics_adaptive_priority"].pop("remaining_rows"),
+    lambda d: d[1].update(status="UNVERIFIED"),
+    lambda d: d[2].update(run_id="other"),
+])
+def test_exhausted_queue_fallback_fails_closed_on_mismatch(change):
+    data = exhausted_stats()
+    change(data)
+    assert select(data)["allowed"] is False
+
+
+def test_queue_exhaustion_requires_paid_empty_responses_not_just_zero_gain():
+    data = exhausted_stats(candidates=17, paid=7)
+    assert select(data)["allowed"] is False
+    data = exhausted_stats(candidates=7, paid=7)
+    assert select(data)["allowed"] is False
+
+
+def test_exhausted_queue_never_spends_exceeded_allowance():
+    outcome = select(exhausted_stats(candidates=17, paid=5000),
+                     max_calls=5000)
+    assert outcome["max_requests"] == 0
+    assert outcome["reason"] == "original_run_allowance_exhausted"
