@@ -70,6 +70,8 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
             or not 0 <= paid <= original_limit or paid != verified_paid
             or persisted < 0 or persisted != verified_persisted):
         return skip("inconsistent_verified_metrics")
+    if paid == original_limit:
+        return skip("original_run_allowance_exhausted")
     # An exhausted, independently verified statistics queue is also a valid
     # reason to use the *remaining* allowance for provider-native extras.
     # Without this route, tiny hourly queues (or entirely cooled-down queues)
