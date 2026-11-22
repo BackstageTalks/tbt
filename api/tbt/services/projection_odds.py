@@ -213,8 +213,8 @@ def aces_cushion_rule_enabled() -> bool:
 
 
 def choose_cushion_ace_line(mean: float, options: list[dict[str, Any]]) -> tuple[str, dict[str, Any], float] | None:
-    """Pick OVER (line <= projection-1.5) or UNDER (ace_under_eligible) from real
-    offers; among qualifying offers take the highest price >= 1.50."""
+    """Symmetric 1.5-ace cushion: OVER if line <= projection-1.5, UNDER if
+    line >= projection+1.5; among qualifying real offers the highest price >= 1.50."""
     best = None
     for option in options:
         line = float(option["line"])
@@ -224,7 +224,7 @@ def choose_cushion_ace_line(mean: float, options: list[dict[str, Any]]) -> tuple
                 continue
             if side == "over" and mean - line < ACES_OVER_CUSHION - 1e-9:
                 continue
-            if side == "under" and not ace_under_eligible(mean, line):
+            if side == "under" and line - mean < ACES_OVER_CUSHION - 1e-9:
                 continue
             if best is None or odds > best[2]:
                 best = (side, option, float(odds))

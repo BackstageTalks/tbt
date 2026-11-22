@@ -150,3 +150,11 @@ def test_cushion_rule_off_keeps_ev_logic(monkeypatch):
                             "choiceGroup": "3.5", "decimalOdds": 1.7}]}
     card, ok, _ = _attach_ace(_card(5.2), payload, "2026-11-01T11:00:00+00:00", 2)
     assert not ok
+
+
+def test_cushion_rule_under_symmetric_1_5(monkeypatch):
+    monkeypatch.setenv("TBT_ACES_CUSHION_RULE", "true")
+    card, ok, _ = _pick(10.4, [(11.5, 1.9, 1.9)])
+    assert not ok
+    card, ok, _ = _pick(10.4, [(12.5, 1.6, 2.2)])
+    assert ok and card["ou_side"] == "under" and card["market_line"] == 12.5
