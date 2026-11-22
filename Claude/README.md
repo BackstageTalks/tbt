@@ -3,9 +3,13 @@
 Jeden súbor, jeden riadok = jedna zmena. Stav: PR = otvorený draft, MAIN = zlúčené, TODO = nezačaté.
 Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (GitHub → Settings → Variables → Actions).
 
+## Záväzné vylúčenie z rozsahu (22.11.2026)
+Majiteľ výslovne zamietol všetky tri požiadavky na zmenu KPI: (1) filtrovať ROI/yield len na skutočné bookmaker kurzy a vylúčiť `local_ace_result_odds` / `price_status=projection_only`, (2) premenovať stĺpec `KURZ` na `orient. kurz`, (3) nahradiť obdobie `auto` pevnými 30 dňami. **Všetky tri sú OUT OF SCOPE; ponechať súčasné správanie a zobrazenie bez zásahu.** Žiadny súvisiaci frontend, API ani metrikový kód neupravovať.
+
 ## Zmeny
 | Dátum | Stav | Čo | Prečo | Prepínač |
 |---|---|---|---|---|
+| 2026-11-22 | SCOPE (owner) | KPI: žiadna zmena ROI/yieldu, `KURZ` ani `auto` obdobia | Výslovná výnimka zo zadania, zachovať doterajší stav | – |
 | 2026-11-22 | PR #1766 | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
 | 2026-11-22 | PR #1766 | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
