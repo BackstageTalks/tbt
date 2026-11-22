@@ -6,6 +6,11 @@ Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (Gi
 ## Zmeny
 | Dátum | Stav | Čo | Prečo | Prepínač |
 |---|---|---|---|---|
+| 2026-11-22 | PREPARED (Draft PR; CI pending) | `model_training.github()`: pri GET a dočasnom GitHub HTTP 429/5xx alebo timeout max 3 pokusy (1 s, 2 s backoff); POST nikdy nereplayovať | Príčina z behu 44930482812: `TimeoutError` pri GitHub GET; nejasné POST dispatch nesmie byť opakované | – |
+| 2026-11-22 | DIAGNOSED | PropLine evening 44954471519: súkromný archív uložený a čítaný späť, ale Drive upload zlyhal `HTTP 404` | Zlyhanie nie je report assert; opraviť iba po kontrole cieľového Drive endpointu/kontraktu | – |
+| 2026-11-22 | DIAGNOSED | Match status 44927684951: API `503 match_status_provider_unavailable` (`due=9`, `checked=1`), workflow failed | Nie je to dôkaz zlyhania gapfill dispatch; pri retry rešpektovať idempotenciu a zdieľanú kvótu | – |
+| 2026-11-22 | DIAGNOSED | Telegram/web parity 45038757356: na dňoch 16.–20.11. `site_missing_exact_archive_result` / chýbajúce presné kontrakty | Skutočné dátové rozdiely; nie iba zastaraný `assert req`, neoslabovať bez read-back | – |
+| 2026-11-22 | DIAGNOSED | Šesť `cdb-drive-inbox.yml` behov 44823715525–44824445941 má `failure` s 0 jobmi, všetky pri push eventoch | Najprv overiť validitu definície workflowu; neoznačovať ako 6 zlyhaných CDB importov | – |
 | 2026-11-22 | PR #1766 | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
 | 2026-11-22 | PR #1766 | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
