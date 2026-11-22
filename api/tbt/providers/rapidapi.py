@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -1394,6 +1395,16 @@ class RapidTennisClient:
                     )
                     continue
 
+                if not historical and category_id in {self.CATEGORY_ITF_MEN, self.CATEGORY_ITF_WOMEN}:
+                    # Preserve the verified native ITF grade on the winner card.
+                    # The general tournament rank may only say "ITF". Historical
+                    # normalization and all canonical CDB writes are unchanged.
+                    grade = re.search(
+                        r"(?<![a-z0-9])([mw])[\s_-]?(\d{2,3})(?![a-z0-9])",
+                        self._event_text(raw), re.I,
+                    )
+                    if grade is not None:
+                        match.tournament_level = f"ITF {grade.group(1).upper()}{grade.group(2)}"
                 matches.append(match)
 
         return _merge_matches(matches)
