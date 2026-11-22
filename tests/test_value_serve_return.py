@@ -13,7 +13,13 @@ def test_off_by_default(monkeypatch):
 
 def test_on_keeps_only_better_serve_return_side(monkeypatch):
     monkeypatch.setenv(ms.ENV_VALUE_SERVE_RETURN, "true")
-    assert ms.value_serve_return_ok(_card(0.03, "1"))
-    assert not ms.value_serve_return_ok(_card(0.03, "2"))
-    assert ms.value_serve_return_ok(_card(-0.02, "2"))
+    assert ms.value_serve_return_ok(_card(0.07, "1"))
+    assert not ms.value_serve_return_ok(_card(0.07, "2"))
+    assert ms.value_serve_return_ok(_card(-0.08, "2"))
     assert not ms.value_serve_return_ok(_card(None, "1"))
+
+
+def test_small_edge_is_rejected(monkeypatch):
+    monkeypatch.setenv(ms.ENV_VALUE_SERVE_RETURN, "true")
+    monkeypatch.delenv("TBT_VALUE_SERVE_RETURN_MIN", raising=False)
+    assert not ms.value_serve_return_ok(_card(0.03, "1"))
