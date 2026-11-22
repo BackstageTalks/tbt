@@ -152,6 +152,9 @@ jobs:
       # Passive research piggybacks only on an already-authorized paid refresh.
       # Never dispatch another provider job just to score the frozen 7.2.1 model.
       BLINQ_FROZEN_721_SHADOW_ENABLED: ${{ ((github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')) || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'refresh' || inputs.mode == 'current-refresh'))) && 'true' || 'false' }}
+      # Owner-approved PropLine N+ Aces pilot: only the existing authorized
+      # morning refresh, no new provider queries, scheduler, feed or CDB writer.
+      BLINQ_PROPLINE_ACES_SHADOW_ENABLED: ${{ vars.BLINQ_PROPLINE_ACES_SHADOW_DISABLED != 'true' && github.event_name == 'workflow_dispatch' && inputs.morning_refresh == true && (inputs.mode == 'refresh' || inputs.mode == 'current-refresh') && 'true' || 'false' }}
       # A0 is OFF by default. A separate explicit owner-approved repository variable
       # BLINQ_MARKET_A0_OWNER_APPROVED=true is required before guarded refreshes.
       # Do NOT activate merely by merging this research branch.

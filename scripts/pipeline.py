@@ -1380,6 +1380,7 @@ def main():
     odds_report = None
     ace_picks = []
     ace_report = None
+    propline_aces_shadow_result = {"status": "NOT_ENABLED"}
     ace_winner_picks = []
     ace_winner_report = None
     sg_picks = []
@@ -1974,6 +1975,41 @@ def main():
                     "source_status": "unavailable:" + type(exc).__name__,
                     "matched_aces": 0,
                 }
+        # Owner-approved research only. Model probability/EV is attached to
+        # archived N+ bookmaker quotes in the EXISTING private shadow release;
+        # production ESÁ/O-U selector, published feed and KPI never see it.
+        if (args.morning_refresh and os.getenv(
+                "BLINQ_PROPLINE_ACES_SHADOW_ENABLED", "").strip().lower() == "true"):
+            if shadow_store is None:
+                propline_aces_shadow_result = {
+                    "status": "BLOCKED_EXISTING_SHADOW_STORE_UNAVAILABLE",
+                    "incremental_provider_requests": 0,
+                }
+            else:
+                try:
+                    from propline_aces_shadow import capture_in_existing_store
+                    observed_at = datetime.now(timezone.utc)
+                    day = observed_at.astimezone(PROPLINE_TZ).date().isoformat()
+                    observed_report, archive_status = load_propline_evening_report(
+                        betting_day=day, now=observed_at)
+                    propline_aces_shadow_result = capture_in_existing_store(
+                        shadow_store, matches, predictions, observed_report,
+                        observed_at=observed_at,
+                        model_sha256=sha256(
+                            (model_dir / "model.joblib").read_bytes()).hexdigest(),
+                    )
+                    propline_aces_shadow_result["archive_status"] = archive_status
+                except Exception as exc:
+                    # Failure of a research artifact cannot trigger more API
+                    # calls or invalidate the already prepared official offer.
+                    propline_aces_shadow_result = {
+                        "status": "BLOCKED_" + type(exc).__name__,
+                        "reason": str(exc)[:240],
+                        "incremental_provider_requests": 0,
+                        "official_results_modified": False,
+                    }
+            print(json.dumps({"propline_aces_shadow": propline_aces_shadow_result},
+                             ensure_ascii=False), flush=True)
         # Market-first publication is strict: an unmatched card remains an
         # internal model diagnostic, never a bookmaker-looking bet.
         if projection_odds_cap:
@@ -2155,6 +2191,7 @@ def main():
             ),
         },
         "ace_projection": ace_report or {},
+        "propline_aces_shadow": propline_aces_shadow_result,
         "ace_df_settlement_statistics": ace_df_settlement_stats_report or {},
         "sg": len(feed.get("sg_picks", [])),
         "sg_projection": sg_report or {},
