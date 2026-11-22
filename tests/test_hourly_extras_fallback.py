@@ -286,3 +286,11 @@ def test_small_queue_fails_closed_without_complete_matching_evidence(change):
     result = select(data, max_calls=5000)
     assert result["allowed"] is False
     assert result["max_requests"] == 0
+
+
+@pytest.mark.parametrize("paid", [6, 7])
+def test_fully_exhausted_small_queue_counts_verified_retry_attempts(paid):
+    result = select(exhausted_stats(candidates=5, paid=paid), max_calls=5000)
+    assert result["allowed"] is True
+    assert result["statistics_paid_requests"] == paid
+    assert result["max_requests"] == 5000 - paid
