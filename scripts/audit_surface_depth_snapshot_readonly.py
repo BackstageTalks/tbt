@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import gzip
 import json
 from pathlib import Path
@@ -197,7 +197,7 @@ def compute(archive: Path, day: str):
         "depth_fail_bins":dict(depth_fail_bins),
         "depth_bins_all_priced":dict(depth_hist),
         "competitions_with_surface_or_depth_fails":{k:dict(v) for k,v in sorted(competition.items())},
-        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced), "affected_examples":examples,
+        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "affected_examples":examples,
         "limitations":"Non-exclusive failures; source snapshot may have different day filters or evaluation time than audit logs. Scenario is pre-exclusivity, not public issuance. Model public probabilities and odds are held fixed; no new API calls, no outcomes, no backdating.",
         "provider_requests":0, "production_writes":0,
     }
@@ -262,7 +262,19 @@ def _spread(row):
     return abs(a-b)/((a+b)/2)
 
 
-def scenario_analysis(priced):
+def prestart_at_snapshot(row, observed_at):
+    start=stamp(row.get("scheduled_at"))
+    creation=stamp(row.get("created_at"))
+    betting=row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    quote=stamp(betting.get("captured_at"))
+    observed=stamp(observed_at)
+    return bool(start and creation and quote and observed
+                and start-observed >= timedelta(minutes=15)
+                and creation <= observed and quote <= observed
+                and creation < start and quote < start)
+
+
+def scenario_analysis(priced, observed_at):
     safe = [r for r in priced if _row_core_safe(r)]
     report = {}
     for name, top_prob, top_odds, top_surface, top_depth, value_spread in POLICY_VARIANTS:
@@ -289,12 +301,20 @@ def scenario_analysis(priced):
         tops = sorted(tops, key=lambda x: number(x.get("blinq_probability")) or 0, reverse=True)
         values = sorted(values, key=lambda x: number(x.get("blinq_probability")) or 0, reverse=True)
         actual_top=tops[:5]
+        issueable_top=[x for x in tops if prestart_at_snapshot(x, observed_at)][:5]
+        issueable_values=[x for x in values if prestart_at_snapshot(x, observed_at)]
         report[name]={
             "top_candidates_before_5_cap":len(tops),
             "top_after_5_cap":len(actual_top),
             "value_candidates":len(values),
             "total_top_value":len(actual_top)+len(values),
             "at_least_five":len(actual_top)+len(values)>=5,
+            "prestart_15m_top":len(issueable_top),
+            "prestart_15m_value":len(issueable_values),
+            "prestart_15m_total":len(issueable_top)+len(issueable_values),
+            "prestart_15m_at_least_5":len(issueable_top)+len(issueable_values)>=5,
+            "prestart_15m_top_ids":[_candidate_id(x) for x in issueable_top],
+            "prestart_15m_value_ids":[_candidate_id(x) for x in issueable_values],
             "acca_candidate_count":len(acca),
             "top_event_ids":[_candidate_id(x) for x in actual_top],
             "value_event_ids":[_candidate_id(x) for x in values],
