@@ -1,1 +1,14 @@
-[refresh-now] [current-refresh] 2026-11-15 post-PR-1625 on or after commit 724c5cc6cae2ce7e7953876473e9146f64e17152. Recompute live public-day BlinQ offer using the corrected Bratislava 06:00 local day scope BEFORE TOP/PRIME/VALUE ranking and category caps. Prior 43707764131 yielded five raw TOP but independent production readback 43710860949 showed only one current-day visible TOP, because four were dated outside the public day. Retain exact verified current profile rank supplementation, ATP/WTA TOP1000 eligibility and all proven quality, model, prices and source provenance. Never fabricate picks or bookmaker prices, change champion 7.2.1, overwrite CDB history, alter UI/tiers, settled results or immutable issued daily receipts. Respect active writer run 43711670597, shared global lock and CAS, RapidAPI shared 14500 ceiling / 500 reserve / 6 per second and other consumers. Allow the existing serial production pipeline to wait on locks. No model training/promotion or telegram dispatch. Measure day-scoped selection candidate counts and final independently verified Azure serving-readback raw_counts and visible_counts (particularly TOP), ensure API/PropLine fallback respects quota and detect any remaining shortfall explicitly.
+[refresh-now] [current-refresh] 2026-11-22 OWNER-APPROVED extended Match Winner TOP/Value slate.
+After verified #1753 plus future-only historical safety #1755, execute one normal controlled
+current-refresh using provider-native match discovery: ATP/WTA 250+ plus ATP
+Challenger 50/75/100/125/175, WTA 125, Billie Jean King Cup and Davis Cup
+SINGLES. Respect 06:00 Europe/Bratislava betting-day boundaries, immutable
+issued snapshots and source/identity/prematch quote/evidence gates; append only
+new qualified, provably prestart TOP/Value, never fabricate prices or picks.
+Do not retrain/promote the serving champion, change ACCA/ESÁ/doubles, modify
+canonical CDB or retroactively regrade Results. Keep shared global writer lock,
+CAS, provider quota and reserve (14,500 global ceiling, 500 reserve, 6/s)
+including other consumers and retries. Fail closed if budget or lock unsafe.
+Record discovery counts by competition, model candidates, odds with provenance,
+TOP/Value rejection reasons, eligible/published counts and independent Azure
+feed and private receipt readback. No unapproved new cron or recurring job.
