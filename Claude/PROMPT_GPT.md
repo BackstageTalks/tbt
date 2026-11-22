@@ -1,5 +1,7 @@
 # Prompt pre GPT/Codex – BlinQ (stav 22.11.2026)
 
+> **Novšie záväzné rozhodnutie majiteľa (22.11.2026):** celý podbod 5 týkajúci sa ROI/yieldu, premenovania `KURZ` a pevného 30-dňového KPI obdobia je ZRUŠENÝ; zachovať pôvodný stav. Oprava horizontálneho mobilného posunu zostáva v rozsahu. Nižší pôvodný text je historický, nie pokyn na realizáciu týchto troch zmien.
+
 Pracuj v BackstageTalks/tbt podľa AGENTS.md. Nič nezapínaj v produkcii bez môjho OK. Každý krok: test, PR, stav podľa AGENTS.md (PREPARED/VERIFIED…).
 
 ## 1. Zlúčenie PR #1766 (Claude) – PRVÉ
