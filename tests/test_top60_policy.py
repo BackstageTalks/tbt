@@ -20,7 +20,7 @@ def test_top60_survives_member_filter_and_does_not_force_three():
 
 def test_top60_global_sports_order_cap_and_odds_independence():
     rows = [row(str(i), p, 1.6, 2.6, depth=1)
-            for i, p in enumerate((.61, .62, .63, .64, .64))]
+            for i, p in enumerate((.66, .67, .68, .69, .69))]
     rows[3]['competition'] = 'Challenger'
     out = select_market_sections(rows)
     assert [r['event_id'] for r in out['top_daily_picks']] == ['4', '2', '1', '0', '3']
@@ -35,10 +35,10 @@ def test_top_five_ranks_main_tours_before_challenger_and_excludes_itf():
     rows = [
         verified_w35("itf", .99),
         pick("challenger", .94, "Challenger"),
-        pick("wta", .60, "WTA"),
-        pick("atp", .61, "ATP"),
-        pick("extra", .62, "ATP"),
-        pick("last", .63, "Challenger"),
+        pick("wta", .65, "WTA"),
+        pick("atp", .66, "ATP"),
+        pick("extra", .67, "ATP"),
+        pick("last", .68, "Challenger"),
     ]
     before = deepcopy(rows)
     out = select_market_sections(rows)
