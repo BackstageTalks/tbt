@@ -9,6 +9,7 @@
 ## Denník nasadení a návrat
 | Dátum | PR / commit | Čo | Návrat |
 |---|---|---|---|
+| 2026-11-23 | (PR ops-fixes) | training worker: GET na GitHub 3 pokusy pri timeoute, POST (spustenie) nikdy neopakuje | revert PR |
 | 2026-11-23 | (tento PR) | Value: prah podanie+príjem ≥ 0,06 (`TBT_VALUE_SERVE_RETURN_MIN`) | vrátiť PR alebo zmazať `TBT_VALUE_SERVE_RETURN_OWNER_APPROVED` |
 | 2026-11-23 | #1766 → `c4ed468` | opravy + prepínače (všetky OFF) | `git revert -m 1 c4ed468` alebo zrušiť príslušnú `_OWNER_APPROVED` premennú |
 
@@ -92,3 +93,8 @@ Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne 
 - TOP: ísť S trhom (poradie podľa kurzu, nikdy proti trhu). Strop ≈ 59–64 %. Ranné kurzy 6:00 stačia (presnosť 67,1 % vs. záverečné 67,3 %).
 - Value: ísť PROTI trhu len so signálom podanie+príjem ≥ 6 p.b. (CDB 1 877 vyrovnaných zápasov: 56,5 % pri n=356, zisková hranica pri 1,90 je 52,6 %).
 - Esá: vlastná projekcia proti hraniciam kancelárií, rezerva 1,5 esa (simulácia 78,7 %).
+
+## Otvorené nálezy (23.11. v noci)
+- Telegram vs web parity: 6 zo 7 dní 1–2 predikcie odoslané na Telegram nie sú vo výsledkoch webu (`event_absent`, match_winner aj aces). Dátový nesúlad, treba preskúmať.
+- Prop-Line archív do Google Drive: HTTP 404 → chýba prístup service accountu k Drive priečinku (nastavenie Drive, nie kód). Súkromná kópia v tbt-data funguje.
+- match-status 503: zámerné zlyhanie pri chybe poskytovateľa (ponechané).

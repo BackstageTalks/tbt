@@ -103,3 +103,29 @@ def test_skipped_push_runs_do_not_move_training_queue_base():
 
     result = mt.inspect(read)
     assert result["base"] == "20" and result["can_start"] is True
+
+
+def test_github_get_retries_timeout_but_post_never(monkeypatch):
+    import io
+    from tbt.services import model_training as mt
+    monkeypatch.setenv("BLINQ_TRAINING_GITHUB_TOKEN", "x")
+    monkeypatch.setenv("BLINQ_TRAINING_DISPATCH_TOKEN", "x")
+    calls = []
+
+    class Resp(io.BytesIO):
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake(req, timeout):
+        calls.append(req.get_method())
+        if len(calls) < 3:
+            raise TimeoutError("timed out")
+        return Resp(b'{"ok": 1}')
+
+    monkeypatch.setattr(mt, "urlopen", fake)
+    assert mt.github("a/b") == {"ok": 1} and calls == ["GET"] * 3
+    calls.clear()
+    import pytest
+    with pytest.raises(mt.TrainingUnavailable):
+        mt.github("a/b", payload={"x": 1})
+    assert calls == ["POST"]

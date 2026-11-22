@@ -32,10 +32,23 @@ def github(path, payload=None, missing_ok=False):
                   headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                            "Content-Type": "application/json", "User-Agent": "BlinQ-Model-Lab"},
                   method="POST" if payload is not None else "GET")
+    # Read-only GETs retry transient network timeouts; POST (dispatch) never
+    # retries so a slow response can never cause a duplicate training run.
+    attempts = 1 if payload is not None else 3
+    for attempt in range(attempts):
+        try:
+            with urlopen(req, timeout=15 if attempt == 0 else 30) as response:
+                raw = response.read()
+                return json.loads(raw) if raw else {}
+        except (URLError, TimeoutError, ValueError) as exc:
+            if isinstance(exc, (HTTPError, ValueError)) or attempt == attempts - 1:
+                return _github_error(exc, missing_ok)
+    return {}
+
+
+def _github_error(exc, missing_ok):
     try:
-        with urlopen(req, timeout=15) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else {}
+        raise exc
     except HTTPError as exc:
         if exc.code == 404 and missing_ok:
             return None
