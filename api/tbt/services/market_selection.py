@@ -1194,8 +1194,17 @@ def select_market_sections(
             market_conflict_missing_rank_quarantined += 1
             continue
 
+        from .top_policy import competition_group
+        competition_text = f"{card.get('competition') or ''} {card.get('tournament') or ''}"
+        is_itf_candidate = bool(re.search(
+            r"\b(?:itf|futures?)\b|(?<![a-z0-9])[mw][\s_-]?\d{2,3}(?![a-z0-9])",
+            competition_text, re.I,
+        ))
+        # A raw ITF label alone must not unlock VALUE: require the same
+        # verified M15+/W15+ classification as TOP.
         if (
-            odds > max(VALUE_MIN_ODDS, float(value_min_odds))
+            (not is_itf_candidate or competition_group(card) == "ITF")
+            and odds > max(VALUE_MIN_ODDS, float(value_min_odds))
             and _passes_candidate_gate(
                 card, min_probability=value_floor,
                 min_data_depth=value_min_data_depth,
