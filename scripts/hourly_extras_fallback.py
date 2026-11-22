@@ -94,7 +94,7 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
         empty_count = unavailable.get("empty_whole_match_statistics", 0)
         no_candidates = (queue_size == 0 and paid == 0
                          and type(empty_count) is int and empty_count == 0)
-        all_unavailable = (queue_size >= 1 and paid == queue_size
+        all_unavailable = (queue_size >= 1 and paid >= queue_size
                            and type(empty_count) is int
                            and empty_count == queue_size)
         if no_candidates or all_unavailable:
