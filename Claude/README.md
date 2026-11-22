@@ -50,10 +50,15 @@ Vrátenie: zrušiť príslušnú `_OWNER_APPROVED` premennú.
 | Esá | top 3–5 podľa istoty | 83–84 % (39 dní) | už teraz nad 75 % |
 | TOP (kurz ≥ 1,50) | top 5 podľa trhu | ≈ 57–59 % | 75 % pri tejto cene nie je možné (strop trhu) |
 | Value (kurz ≥ 1,70) | – | ≈ 50–55 % | 75 % pri tejto cene nie je možné |
-Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Pre 06:00 treba externý spúšťač posunúť na ≈ 04:55.
+Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne uvoľňuje až po 06:01 (stávkový deň od 06:00) a Telegram ide o 06:20; posun spúšťača by čas zverejnenia nezmenil.
 
 ## Esá – zdroj hraníc (zistené 22.11.)
 - Viac es (kto dá viac es): žiadna kancelária v dátach to neponúka → ostáva modelový tip bez kurzu.
 - Esá O/U: reálna hranica z Prop-Line (PrizePicks, Underdog = DFS, nie klasická stávková kancelária) len 20 z 39 dní, ≈ 4,7 tipu/deň.
 - Prop-Line closeout 18.–19.11.: player_aces takmer chýba (7 a 0 záznamov) → pokrytie, nie logika, je hlavný limit.
 - Ďalší krok: overiť, či RapidAPI tennisapi1 vracia player aces O/U pre ATP/WTA 250+ (dnes primárny zdroj, Prop-Line fallback).
+
+## Zosúladenie s GPT exportom (22.11., main bd3b450)
+- TOP: min p 0,60, data_depth 0,30, max 5, minimum 3 je cieľ, nie záruka → `TBT_TOP_MIN_PICKS` to rieši.
+- Esá: GPT pilot Prop-Line N+ (shadow od 23.11.) je oddelený; `TBT_ACES_REAL_LINE_STRICT` sa ho nedotýka.
+- Večerný Prop-Line zber 23:00 je hlavný zdroj reálnych hraníc es; pokrytie overiť v `tbt-data/research/propline-evening-odds/`.
