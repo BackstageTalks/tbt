@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 import math
 import re
 from typing import Any
@@ -265,8 +267,128 @@ def _attach_sg(card: dict[str, Any], payload: Any, captured_at: str, provider_id
     })
     return out, True, "priced"
 
+
+def _line_first_calibration() -> dict[str, Any] | None:
+    """Fail closed without independently reviewed ATP+WTA holdout evidence.
+
+    A future validation PR must add this artifact after a chronological
+    pre-match backtest, with 5-pp reliability bins and fitted isotonic points.
+    Merely setting owner variables is NEVER sufficient for publication.
+    """
+    path = Path(__file__).with_name("ace_line_ou_calibration.json")
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+        if doc.get("schema") != 1 or doc.get("verified") is not True:
+            return None
+        for tour in ("ATP", "WTA"):
+            part = doc["tours"][tour]
+            if (int(part["holdout_n"]) < 150
+                or int(part["qualified_n"]) < 150
+                or not 0.75 <= float(part["qualified_hit_rate"]) <= 1.0
+                or not 0 <= float(part["brier"]) <= 1
+                or not 0 <= float(part["log_loss"]) < 10
+                or not isinstance(part["reliability_5pp"], list)
+                or len(part["reliability_5pp"]) < 10):
+                return None
+            points = part["isotonic_points"]
+            if not isinstance(points, list) or not points:
+                return None
+            previous_x, previous_y = -1.0, -1.0
+            for pt in points:
+                x, y = float(pt["max_raw"]), float(pt["calibrated"])
+                if not (0 <= x <= 1 and 0 <= y <= 1
+                        and x > previous_x and y >= previous_y):
+                    return None
+                previous_x, previous_y = x, y
+            if previous_x < 0.99:
+                return None
+        return doc
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
+        return None
+
+
+def line_first_calibration_ready() -> bool:
+    return _line_first_calibration() is not None
+
+
+def _line_first_calibrated_probability(raw: float, points: list[dict[str, Any]]) -> float:
+    for pt in points:
+        if raw <= float(pt["max_raw"]):
+            return float(pt["calibrated"])
+    return float(points[-1]["calibrated"])
+
+
+def _attach_ace_line_first(
+    card: dict[str, Any], payload: Any, captured_at: str, provider_id: int,
+) -> tuple[dict[str, Any], bool, str]:
+    """Evaluate both players, every offered two-sided line and both O/U sides."""
+    out = deepcopy(card)
+    calibration = _line_first_calibration()
+    tour_text = str(out.get("tour") or out.get("circuit") or "").strip().upper()
+    tour = next((t for t in ("ATP", "WTA") if tour_text.startswith(t)), None)
+    if calibration is None or tour is None:
+        return out, False, "line_first_holdout_unverified"
+
+    options_seen: set[float] = set()
+    offers: list[tuple[float, float, float, str, dict[str, Any], dict[str, Any]]] = []
+    for player in out.get("line_first_players") or []:
+        if not isinstance(player, dict) or not player.get("name"):
+            continue
+        mean = _number(player.get("projection"))
+        if mean is None or mean < 0:
+            continue
+        for option in extract_player_total_ou(
+            payload, "aces", str(player["name"]), player_slot=int(player["slot"])
+        ):
+            line = float(option["line"])
+            options_seen.add(line)
+            p_over = _player_ou_probability(mean, "aces", line)
+            for direction, raw_prob in (("over", p_over), ("under", 1.0 - p_over)):
+                odds = _number(option.get(direction))
+                if odds is None or odds <= 1 or odds == 2.0:
+                    # Existing unverified 2.00 legacy quotes are not real prices.
+                    continue
+                probability = _line_first_calibrated_probability(
+                    raw_prob, calibration["tours"][tour]["isotonic_points"])
+                ev = probability * odds - 1
+                if probability >= 0.60 and ev >= 0:
+                    offers.append((ev, probability, odds, direction, player, option))
+    if options_seen:
+        out["real_ou_lines_seen"] = sorted(options_seen)
+        out["real_ou_market_rejected"] = True
+    if not offers:
+        return out, False, "line_first_no_qualified_real_market"
+
+    ev, p, odds, direction, player, option = max(offers, key=lambda x: (x[0], x[1]))
+    line = float(option["line"])
+    name = str(player["name"])
+    out.update({
+        "selection": f"{name} {direction.title()} {line:.1f} Aces",
+        "pick": f"{name} {direction.title()} {line:.1f} Aces",
+        "selection_id": str(player["id"]),
+        "market_type": "Player Aces Over/Under",
+        "projection_subject": name,
+        "projection_label": "Hráč · Esá O/U",
+        "projection": round(float(player["projection"]), 2),
+        "price_contract": "player_total_ou",
+        "ou_side": direction, "market_line": line,
+        "model_probability": round(p, 4),
+        "expected_value": round(ev, 4),
+        "odds": round(odds, 3), "price_status": "priced_projection",
+        "provider_id": int(provider_id), "captured_at": captured_at,
+        "odds_market_name": option["market_name"],
+        "odds_contract_version": ACE_DF_REAL_ODDS_CONTRACT,
+        "line_first_calibration_tour": tour,
+        "real_ou_market_rejected": False,
+    })
+    out.pop("line_first_players", None)
+    return out, True, "priced_line_first_player_aces"
+
+
 def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_id: int) -> tuple[dict[str, Any], bool, str]:
     out = deepcopy(card)
+    if out.get("selection_tier") == "line_first":
+        return _attach_ace_line_first(out, payload, captured_at, provider_id)
     metric = str(out.get("market") or "").strip().lower()
     p1, p2 = _card_players(out)
     name1, name2 = str(p1.get("name") or ""), str(p2.get("name") or "")
@@ -524,6 +646,56 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
                     reasons[metric][reason] = reasons[metric].get(reason, 0) + 1
                 continue
             alternate = (alternate_market_payloads or {}).get(event_id, {}).get(metric)
+
+            if kind == "ace" and row.get("selection_tier") == "line_first":
+                # Evaluate ALL bookmaker payloads. RapidAPI remains first when
+                # it has an eligible exact quote; otherwise compare every
+                # PropLine book by EV then probability, not arrival order.
+                book_entries = []
+                if payload is not None:
+                    book_entries.append(("rapidapi", None, payload, provider_id, captured_at))
+                if alternate and str(alternate.get("source") or "").lower() == "propline":
+                    books = [alternate] + [
+                        b for b in alternate.get("other_books") or [] if isinstance(b, dict)
+                    ]
+                    for book in books:
+                        book_entries.append((
+                            "propline", book, book.get("payload"),
+                            int(book.get("provider_id") or 2),
+                            str(book.get("captured_at") or captured_at),
+                        ))
+                successful = []
+                observed_lines = set()
+                for source, book, data, pid, observed_at in book_entries:
+                    if data is None:
+                        continue
+                    result, accepted, why = _attach_ace(row, data, observed_at, pid)
+                    observed_lines.update(result.get("real_ou_lines_seen") or [])
+                    if accepted:
+                        successful.append((source, book, result, why))
+                if successful:
+                    primary_winners = [x for x in successful if x[0] == "rapidapi"]
+                    source, book, updated, reason = max(
+                        primary_winners or successful,
+                        key=lambda x: (
+                            float(x[2].get("expected_value") or 0.0),
+                            float(x[2].get("model_probability") or 0.0),
+                        ),
+                    )
+                    updated["odds_source"] = source
+                    if source == "propline" and book:
+                        updated["odds_bookmaker"] = book.get("bookmaker")
+                        updated["odds_provider_event_id"] = book.get("provider_event_id")
+                    priced[metric] += 1
+                    attached_by_provider[source] += 1
+                else:
+                    updated, reason = deepcopy(row), "line_first_no_qualified_offer"
+                    if observed_lines:
+                        updated["real_ou_market_rejected"] = True
+                        updated["real_ou_lines_seen"] = sorted(observed_lines)
+                ace[index] = updated
+                reasons[metric][reason] = reasons[metric].get(reason, 0) + 1
+                continue
 
             # Primary provider is authoritative when it exposes an exact
             # contract. PropLine is a true fallback, never an override.
