@@ -197,10 +197,116 @@ def compute(archive: Path, day: str):
         "depth_fail_bins":dict(depth_fail_bins),
         "depth_bins_all_priced":dict(depth_hist),
         "competitions_with_surface_or_depth_fails":{k:dict(v) for k,v in sorted(competition.items())},
-        "scenario_gate_pass":sensitivity, "affected_examples":examples,
+        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced), "affected_examples":examples,
         "limitations":"Non-exclusive failures; source snapshot may have different day filters or evaluation time than audit logs. Scenario is pre-exclusivity, not public issuance. Model public probabilities and odds are held fixed; no new API calls, no outcomes, no backdating.",
         "provider_requests":0, "production_writes":0,
     }
+
+
+
+# Diagnostic-only recomputation. These scenarios are NOT a production eligibility
+# engine. All non-tunable original rejections are retained (identity, timing,
+# market integrity, model provenance). Frozen probabilities and odds never change.
+TUNABLE_TOP_REASONS = {
+    "probability_below_fixed_floor", "missing_or_low_odds",
+    "insufficient_surface_history", "insufficient_data_depth", "assigned_to_value",
+}
+POLICY_VARIANTS = [
+    ("baseline", .65, 1.50, 5, .50, .15),
+    ("surface_3", .65, 1.50, 3, .50, .15),
+    ("depth_30", .65, 1.50, 5, .30, .15),
+    ("top_prob_62", .62, 1.50, 5, .50, .15),
+    ("top_prob_60", .60, 1.50, 5, .50, .15),
+    ("top_surface3_prob62", .62, 1.50, 3, .50, .15),
+    ("top_surface3_depth30_prob62", .62, 1.50, 3, .30, .15),
+    ("value_spread_25", .65, 1.50, 5, .50, .25),
+    ("value_spread_35", .65, 1.50, 5, .50, .35),
+    ("value_spread_50", .65, 1.50, 5, .50, .50),
+    ("top62_value_spread35", .62, 1.50, 5, .50, .35),
+    ("top60_value_spread50", .60, 1.50, 5, .50, .50),
+    ("top_surface3_prob62_value35", .62, 1.50, 3, .50, .35),
+    ("top_odds_140_overlaps_acca", .65, 1.40, 5, .50, .15),
+    ("top_odds_130_overlaps_acca", .65, 1.30, 5, .50, .15),
+    ("top_odds_120_overlaps_acca", .65, 1.20, 5, .50, .15),
+    ("top_odds_130_surface3", .65, 1.30, 3, .50, .15),
+    ("top_odds_130_surface3_prob62", .62, 1.30, 3, .50, .15),
+]
+
+
+def _row_core_safe(row):
+    reasons = set(row.get("top_rejection_reasons") or [])
+    return not (reasons - TUNABLE_TOP_REASONS)
+
+
+def _candidate_id(row):
+    return str(row.get("event_id") or "")
+
+
+def _price(row):
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    return number(betting.get("odds"))
+
+
+def _surface_min(row):
+    samples = row.get("samples") if isinstance(row.get("samples"), dict) else {}
+    values = [number(samples.get("player1_surface_matches")),
+              number(samples.get("player2_surface_matches"))]
+    return min(values) if all(v is not None for v in values) else None
+
+
+def _spread(row):
+    market = row.get("two_way_market") if isinstance(row.get("two_way_market"), dict) else {}
+    a, b = number(market.get("player1_odds")), number(market.get("player2_odds"))
+    if not a or not b or a <= 1.0 or b <= 1.0:
+        return None
+    return abs(a-b)/((a+b)/2)
+
+
+def scenario_analysis(priced):
+    safe = [r for r in priced if _row_core_safe(r)]
+    report = {}
+    for name, top_prob, top_odds, top_surface, top_depth, value_spread in POLICY_VARIANTS:
+        values, tops, acca = [], [], []
+        for row in safe:
+            p = number(row.get("blinq_probability"))
+            o = _price(row)
+            surface = _surface_min(row)
+            depth = number(row.get("data_depth"))
+            if None in (p,o,surface,depth):
+                continue
+            value = (p >= .60 and o > 1.80 and depth >= .50
+                     and surface >= 3 and _spread(row) is not None
+                     and _spread(row) <= value_spread + 1e-12)
+            if value:
+                values.append(row)
+                continue
+            if (p >= top_prob and o >= top_odds and depth >= top_depth
+                    and surface >= top_surface):
+                tops.append(row)
+            elif p >= .65 and o < 1.50 and depth >= .50 and surface >= 5:
+                acca.append(row)
+        # TOP has five cards maximum, Value has no configured cardinality cap.
+        tops = sorted(tops, key=lambda x: number(x.get("blinq_probability")) or 0, reverse=True)
+        values = sorted(values, key=lambda x: number(x.get("blinq_probability")) or 0, reverse=True)
+        actual_top=tops[:5]
+        report[name]={
+            "top_candidates_before_5_cap":len(tops),
+            "top_after_5_cap":len(actual_top),
+            "value_candidates":len(values),
+            "total_top_value":len(actual_top)+len(values),
+            "at_least_five":len(actual_top)+len(values)>=5,
+            "acca_candidate_count":len(acca),
+            "top_event_ids":[_candidate_id(x) for x in actual_top],
+            "value_event_ids":[_candidate_id(x) for x in values],
+            "odds_bucket_overlap_with_acca":top_odds<1.50,
+            "low_surface_unknown_admitted":any(str(r.get("surface"))=="unknown" for r in actual_top+values),
+        }
+    base=set(report["baseline"]["top_event_ids"]+report["baseline"]["value_event_ids"])
+    for item in report.values():
+        now=set(item["top_event_ids"]+item["value_event_ids"])
+        item["unique_new_vs_baseline"]=len(now-base)
+    return {"safeguarded_priced_rows":len(safe), "variants":report,
+            "limits":"One same-day frozen snapshot, no repricing and no model rerun. Non-tunable rejection reasons preserved; ACCA and TOP odds overlap noted, not deployed. Counts are rough upper bounds prior to canonical publication/issuance validation."}
 
 
 def main():
