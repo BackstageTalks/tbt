@@ -39,8 +39,11 @@ jobs:
       WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
       GH_TOKEN: ${{ github.token }}
       CDB_READ_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
-      DRY_RUN: ${{ (github.event_name == 'push' && !contains(github.event.head_commit.message, '[api-autofill-tick]')) || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+      # One dated owner-authorized 5k closeout uses the existing ledger, writer wait,
+      # provider cap and UTC cutoff. Every other smoke push remains dry-run.
+      DRY_RUN: ${{ (github.event_name == 'push' && !contains(github.event.head_commit.message, '[api-autofill-tick]') && !contains(github.event.head_commit.message, '[api-autofill-full-20261122]')) || (github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
       TICK_500_SMOKE: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[api-autofill-tick]') && 'true' || 'false' }}
+      ONEOFF_5000: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[api-autofill-full-20261122]') && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Verify budget, reserve hourly capacity, and dispatch governed pipeline
@@ -68,6 +71,24 @@ jobs:
           ZONE = ZoneInfo("Europe/Bratislava")
           now = datetime.now(timezone.utc)
           local = now.astimezone(ZONE)
+          oneoff_5000 = os.getenv("ONEOFF_5000") == "true"
+          oneoff_cutoff = datetime(2026, 11, 22, 17, 7, tzinfo=timezone.utc)
+          if oneoff_5000:
+              with open(".github/hourly-api-gapfill-smoke.json", encoding="utf-8") as fp:
+                  request = json.load(fp)
+              if not (
+                  isinstance(request, dict)
+                  and request.get("schema") == 1
+                  and request.get("kind") == "operator-approved-pre-reset-hourly-full-20261122"
+                  and request.get("local_day") == "2026-11-22"
+                  and request.get("max_requests") == 5000
+                  and request.get("stop_at_utc") == "2026-11-22T17:07:00Z"
+                  and request.get("owner_approved") is True
+              ):
+                  raise SystemExit("One-off 5000 request payload not explicitly authorized; no dispatch")
+              if now.date().isoformat() != "2026-11-22" or now >= oneoff_cutoff - timedelta(minutes=15):
+                  print("One-off 5000 pre-reset start window expired; no dispatch")
+                  sys.exit(0)
 
           # Fixed UTC provider reset survives DST. Source budget is checked
           # independently after this scheduling preflight.
@@ -280,6 +301,15 @@ jobs:
               if proposed < 1:
                   print("No quota allowance remains after writer wait; no dispatch.")
                   sys.exit(0)
+
+          # The one-off operator request must never roll into the next
+          # provider day if the global writer lock was held until reset.
+          if oneoff_5000 and (
+              now.date().isoformat() != "2026-11-22"
+              or now >= oneoff_cutoff - timedelta(minutes=15)
+          ):
+              print("One-off 5000 start window expired after canonical writer wait; no dispatch")
+              sys.exit(0)
 
           # hourly_autofill enables a missing-field queue in data.yml:
           # canonical event identity, retry cooldown, recent-year priority,

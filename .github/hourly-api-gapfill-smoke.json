@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "kind": "dry-run",
-  "source": "operator-approved-recodex-supplemental-data-qa",
-  "requested_at_utc": "2026-11-03T21:37:00Z",
-  "scope": "read-only shared RapidAPI quota and CDB writer preflight after PR 1345",
-  "safe_mode": true,
-  "pr": 1345,
-  "merged_commit": "bc3f90d36acc5ed07150565630ba0df61477f192",
-  "purpose": "Verify current provider budget and existing global CDB writer state before bounded 30-call provider-5/post-match research smoke; no billable requests or CDB changes."
+  "kind": "operator-approved-pre-reset-hourly-full-20261122",
+  "local_day": "2026-11-22",
+  "max_requests": 5000,
+  "stop_at_utc": "2026-11-22T17:07:00Z",
+  "owner_approved": true,
+  "mode": "existing hourly statistics then verified same-writer extras fallback",
+  "source": "owner request 2026-11-22: accelerate current 28pct usage under 5000 requests",
+  "purpose": "Provider native NULL-only ATP/WTA 2016-2026 ingestion; only actual eligible gaps; retries within 5000; shared CAS 14500, provider reserve 500, 6/s, global CDB writer lock and independent SHA/value read-back. This exact one-off push may dispatch before 17:07 UTC only. No model change, no TOP/ACCA issuance, no override of current canonical writer."
 }
