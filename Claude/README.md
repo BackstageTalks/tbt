@@ -6,6 +6,9 @@ Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (Gi
 ## Zmeny
 | Dátum | Stav | Čo | Prečo | Prepínač |
 |---|---|---|---|---|
+| 2026-11-22 | PREPARED (samostatná vetva; testy v CI čakajú) | Line-first ESÁ: `select_ace_picks` vytvorí player-neutral kandidátov pre oboch hráčov bez gap filtra, až po zistení reálnych O/U; `enrich_projection_odds` hodnotí všetky O/U strany a kancelárie (max EV, potom p, RapidAPI primárne) | Max. 1 vybraný reálny kontrakt na zápas; modelová hranica pri line-first sa nevymýšľa | `TBT_ACES_LINE_FIRST` + `TBT_ACES_LINE_FIRST_OWNER_APPROVED` (OFF) |
+| 2026-11-22 | PREPARED / HOLDOUT BLOCKED | Ochrana kalibrácie `ace_line_ou_calibration.json`: bez nezávislého ATP aj WTA chronologického testu (každý aspoň 150 kvalifikovaných kontraktov, úspešnosť ≥75 %, Brier/log loss, krivka 5 p.b. a izotonické body) sa line-first ani pri zapnutých premenných neaktivuje | Nesmie sa publikovať EV z neoverenej `_player_ou_probability` | fail closed |
+| 2026-11-22 | SCOPE (owner) | KPI, ROI/yield, stĺpec `KURZ`, obdobie `auto` a lokálny kurzový fallback nemeniť; `TBT_ACES_REAL_LINE_STRICT` nezapínať | Najnovšie schválené rozhodnutie | – |
 | 2026-11-22 | PR #1766 | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
 | 2026-11-22 | PR #1766 | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
