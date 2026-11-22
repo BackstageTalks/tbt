@@ -47,11 +47,17 @@ def competition_group(row):
     # junior/exhibition is not an ATP Challenger singles match.
     if any(word in combined for word in ("doubles", "wheelchair", "junior", "exhibition")):
         return "other"
-    if "itf" in combined or "futures" in combined:
-        return "ITF"
     if "utr" in combined:
         return "UTR"
     tour = str(row.get("tour") or "").strip().upper()
+    grades = re.findall(r"(?<![a-z0-9])([mw])[\s_-]?(\d{2,3})(?![a-z0-9])", combined)
+    if "itf" in combined or "futures" in combined or grades:
+        gender = {"ATP": "m", "WTA": "w"}.get(tour)
+        if gender and grades and all(
+            marker == gender and int(amount) >= 15 for marker, amount in grades
+        ):
+            return "ITF"
+        return "unknown"
     if ("billie jean king cup" in combined or "fed cup" in combined) and tour == "WTA":
         return "BJK Cup"
     if "davis cup" in combined and tour == "ATP":
@@ -129,18 +135,9 @@ def rejection_reasons(card, *, min_probability=.65, min_depth=.50, min_surface=5
 
     reasons = []
     group = competition_group(card)
-    # ITF of every grade is held out of NEW TOP picks, independent of probability.
-    # Previously issued snapshots and VALUE/PRIME selection are unaffected.
-    if group not in {"ATP", "WTA", "Challenger", "WTA 125", "BJK Cup", "Davis Cup"}:
+    # ITF M15+/W15+ uses the same standard probability/data/odds gates.
+    if group not in {"ATP", "WTA", "Challenger", "WTA 125", "BJK Cup", "Davis Cup", "ITF"}:
         reasons.append("competition_not_approved")
-    # Temporary TOP-only hold pending independently graded M15/M25 calibration.
-    # This changes neither issued selections nor VALUE/PRIME or model probabilities.
-    if is_itf_m15_m25(card):
-        reasons.append("itf_m15_m25_top_hold_pending_calibration")
-    if group == "ITF" and not qualified_itf_w35plus_evidence(card):
-        reasons.append("itf_top_requires_verified_w35plus")
-    if unverified_top_market_outsider(card):
-        reasons.append("top_unverified_market_outsider_conflict")
     if card.get("prediction_family") == "doubles":
         reasons.append("not_singles")
     bet = card.get("betting") if isinstance(card.get("betting"), dict) else {}
@@ -166,8 +163,6 @@ def rejection_reasons(card, *, min_probability=.65, min_depth=.50, min_surface=5
     # handled separately. Count-depth does NOT establish calibrated reliability.
     if public is None or public < max(MIN_PROBABILITY, min_probability):
         reasons.append("probability_below_fixed_floor")
-    if group == "ITF" and public is not None and public <= .65:
-        reasons.append("itf_probability_not_above_65")
     if depth is None or not min_depth <= depth <= 1:
         reasons.append("insufficient_data_depth")
     quality = card.get("quality") if isinstance(card.get("quality"), dict) else {}
@@ -177,8 +172,6 @@ def rejection_reasons(card, *, min_probability=.65, min_depth=.50, min_surface=5
         reasons.append("insufficient_surface_history")
     if odds is None or odds < max(MIN_ODDS, min_odds):
         reasons.append("missing_or_low_odds")
-    if group == "ITF" and odds is not None and odds > ITF_MAX_ODDS + 1e-12:
-        reasons.append("itf_odds_above_1_70")
     start, created, captured = (timestamp(card.get("scheduled_at")),
                                 timestamp(card.get("created_at")), timestamp(bet.get("captured_at")))
     if not start or not created or created >= start or not str(card.get("model_version") or "").strip():
