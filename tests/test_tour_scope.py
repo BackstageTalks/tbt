@@ -93,8 +93,8 @@ def test_native_main_category_event_below_tier_is_blocked_even_if_id_is_valid():
     ("atp", None, "Billie Jean King Cup", False),
     ("wta", None, "Davis Cup", False),
     ("atp", 72, "ITF Challenger 100", False),
-    ("atp", 785, "ITF Men", False),
-    ("wta", 213, "ITF Women", False),
+    ("atp", 785, "ITF Men", True),
+    ("wta", 213, "ITF Women", True),
     ("atp", 72, "Challenger Juniors", False),
     ("atp", None, "UTR", False),
     ("atp", None, "Unknown tournament", False),
@@ -120,7 +120,7 @@ def test_extended_discovery_visits_approved_categories_without_lower_doubles():
     day = date(2026, 11, 22)
     client.matches_for_day("atp", day, historical=False)
     client.matches_for_day("wta", day, historical=False)
-    assert called == [72, 82001, 871, 82002]
+    assert called == [72, 82001, 785, 871, 82002, 213]
     called.clear()
     client.doubles_for_day(day, historical=False)
     assert called == []
@@ -160,3 +160,26 @@ def test_historical_scope_does_not_expand_into_challenger_wta125_or_cups():
     client.matches_for_day("atp", day, historical=False)
     client.matches_for_day("wta", day, historical=False)
     assert visited == [72, 82001, 3, 871, 82002, 6]
+
+
+@pytest.mark.parametrize(("tour", "category", "label", "event", "ok"), [
+    ("atp", 785, "ITF Men", "ITF M15 Monastir", True),
+    ("atp", 785, "ITF Men", "ITF M25", True),
+    ("atp", 785, "ITF Men", "ITF M50", True),
+    ("wta", 213, "ITF Women", "ITF W15 Antalya", True),
+    ("wta", 213, "ITF Women", "ITF W35", True),
+    ("wta", 213, "ITF Women", "ITF W100", True),
+    ("atp", 785, "ITF Men", "ITF M10", False),
+    ("wta", 213, "ITF Women", "ITF W10", False),
+    ("atp", 785, "ITF Men", "ITF W15", False),
+    ("wta", 213, "ITF Women", "ITF M15", False),
+    ("atp", 213, "ITF Women", "ITF W15", False),
+    ("wta", 785, "ITF Men", "ITF M15", False),
+    ("atp", 785, "ITF Men", "ITF M15 Juniors", False),
+    ("wta", 213, "ITF Women", "ITF W15 Doubles", False),
+    ("atp", 785, "ITF Men", "Generic ITF", False),
+])
+def test_itf_requires_native_category_and_explicit_eligible_event_grade(tour, category, label, event, ok):
+    from tbt.tour_scope import is_match_winner_offer_scope
+    assert is_match_winner_offer_scope(tour, category_id=category, labels=(label, event), event_level=True) is ok
+    assert not is_250_plus(tour, category_id=category, labels=(label, event))
