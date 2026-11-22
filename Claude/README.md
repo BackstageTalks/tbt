@@ -6,6 +6,7 @@ Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (Gi
 ## Zmeny
 | Dátum | Stav | Čo | Prečo | Prepínač |
 |---|---|---|---|---|
+| 2026-11-22 | PREPARED (Draft PR; CI pending) | 7 prioritných workflowov: `actions/checkout` v5 a `actions/setup-python` v6 (tam, kde sa používa), pinned SHA podľa oficiálnych refs (`fbc6f3992d24...`, `ece7cb06caef...`) | Odstránenie Node20 deprecation v týchto workflowoch; ostatné workflowy ešte nie sú auditované | – |
 | 2026-11-22 | PR #1766 | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
 | 2026-11-22 | PR #1766 | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
