@@ -84,6 +84,9 @@ def compute(archive: Path, day: str):
     raw_reasons = Counter()
     depth_hist, surf_hist, overlap = Counter(), Counter(), Counter()
     competition, examples = defaultdict(Counter), []
+    surface_fail_surface_labels = Counter()
+    quality_cofailures = Counter()
+    depth_fail_bins = Counter()
     for row in priced:
         rs, a, b, depth = classify(row)
         raw_reasons.update(rs)
@@ -129,6 +132,21 @@ def compute(archive: Path, day: str):
         else:
             overlap["neither"] += 1
         if surface_fail or depth_fail:
+            if surface_fail:
+                surface_fail_surface_labels[str(row.get("surface") or "missing").lower()] += 1
+            if depth_fail:
+                binname = ("unknown" if depth is None else
+                           "<20%" if depth < .20 else
+                           "20-29%" if depth < .30 else
+                           "30-39%" if depth < .40 else
+                           "40-49%" if depth < .50 else "50%+")
+                depth_fail_bins[binname] += 1
+            if rs - QUALITY:
+                quality_cofailures["also_other_blockers"] += 1
+                for extra in rs - QUALITY:
+                    quality_cofailures["also_"+extra] += 1
+            else:
+                quality_cofailures["only_surface_depth_blockers"] += 1
             category = str(row.get("competition") or row.get("tournament_level") or row.get("tour") or "unknown")
             competition[category]["affected"] += 1
             if surface_fail:
@@ -174,6 +192,9 @@ def compute(archive: Path, day: str):
         "day_priced":len(priced), "source_rejection_counts":dict(raw_reasons),
         "quality_overlap":dict(overlap),
         "surface_min_count_bins_all_priced":dict(surf_hist),
+        "surface_fail_surface_labels":dict(surface_fail_surface_labels),
+        "quality_failure_cofactors":dict(quality_cofailures),
+        "depth_fail_bins":dict(depth_fail_bins),
         "depth_bins_all_priced":dict(depth_hist),
         "competitions_with_surface_or_depth_fails":{k:dict(v) for k,v in sorted(competition.items())},
         "scenario_gate_pass":sensitivity, "affected_examples":examples,
