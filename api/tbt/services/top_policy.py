@@ -53,8 +53,10 @@ def competition_group(row):
     grades = re.findall(r"(?<![a-z0-9])([mw])[\s_-]?(\d{2,3})(?![a-z0-9])", combined)
     if "itf" in combined or "futures" in combined or grades:
         gender = {"ATP": "m", "WTA": "w"}.get(tour)
+        allowed = {"m": {15, 25}, "w": {15, 25, 35, 40, 50, 60, 75, 80, 100}}
         if gender and grades and all(
-            marker == gender and int(amount) >= 15 for marker, amount in grades
+            marker == gender and int(amount) in allowed[gender]
+            for marker, amount in grades
         ):
             return "ITF"
         return "unknown"
