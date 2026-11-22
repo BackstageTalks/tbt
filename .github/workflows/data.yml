@@ -170,6 +170,7 @@ jobs:
       # Owner-gated daily TOP minimum (3-10). Reaches it only together with TBT_TOP_EMERGENCY_FILL.
       TBT_GAMES_SUSPENDED: ${{ vars.TBT_GAMES_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_GAMES_SUSPENDED == 'true' && 'true' || 'false' }}
       TBT_SETS_SUSPENDED: ${{ vars.TBT_SETS_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_SETS_SUSPENDED == 'true' && 'true' || 'false' }}
+      TBT_ACES_MIN_GAP: ${{ vars.TBT_ACES_MIN_GAP_OWNER_APPROVED == 'true' && vars.TBT_ACES_MIN_GAP || '' }}
       TBT_TOP_MIN_PICKS: ${{ vars.TBT_TOP_MIN_PICKS_OWNER_APPROVED == 'true' && vars.TBT_TOP_MIN_PICKS || '' }}
       TBT_TOP_REQUIRE_MARKET_SIDE: ${{ vars.TBT_TOP_REQUIRE_MARKET_SIDE_OWNER_APPROVED == 'true' && (vars.TBT_TOP_REQUIRE_MARKET_SIDE == 'true' || vars.TBT_TOP_REQUIRE_MARKET_SIDE == '1') && 'true' || 'false' }}
       # Explicit owner instruction 2026-11-21: run research-only candidate
@@ -1047,17 +1048,21 @@ jobs:
             --minimum-days 3 \
             --out .cache/tbt/model-readiness/readiness.json
           path="audit/model-promotion-readiness-latest.json"
-          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
           encoded="$(base64 -w0 .cache/tbt/model-readiness/readiness.json)"
-          if [[ -n "$existing_sha" ]]; then
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-              -f message="Update BlinQ model promotion readiness" \
-              -f content="$encoded" -f sha="$existing_sha" >/dev/null
-          else
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-              -f message="Update BlinQ model promotion readiness" \
-              -f content="$encoded" >/dev/null
-          fi
+          # Concurrent tbt-data writers can move the ref (HTTP 409). Re-read the
+          # blob SHA and retry a bounded number of times instead of failing the run.
+          for attempt in 1 2 3 4 5; do
+            existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            args=(-f message="Update BlinQ model promotion readiness" -f content="$encoded")
+            [[ -n "$existing_sha" ]] && args+=(-f sha="$existing_sha")
+            if gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" "${args[@]}" >/dev/null; then
+              break
+            fi
+            if [[ "$attempt" == 5 ]]; then
+              echo "::error::Readiness upload failed after 5 attempts"; exit 1
+            fi
+            sleep $((attempt * 7))
+          done
 
       # The six-hour monitor can finish before the morning refresh publishes
       # current completed matches. Publish the SAME newly audited, SHA-pinned

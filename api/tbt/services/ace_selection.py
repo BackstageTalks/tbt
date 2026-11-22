@@ -11,6 +11,7 @@ from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
 import math
+import os
 from typing import Any
 
 from .feed import ace_eligibility_reason, main_tour_aces
@@ -691,6 +692,26 @@ def _adaptive_confidence_select(
             break
     return selected,applied,counts
 
+ENV_ACES_MIN_GAP = "TBT_ACES_MIN_GAP"
+ACES_MIN_GAP_RANGE = (0.85, 3.0)
+
+
+def aces_preferred_gap(env: dict[str, str] | None = None) -> float | None:
+    """Owner-gated Most Aces gap preference (default OFF -> None).
+
+    Own results 2026-11-09..11-20 (n=360): gap >= 1.3 -> 85.5 % vs 80.6 % all
+    (+5.2 pp, day-bootstrap CI +1.5..+9.3). Cards below the gap are never
+    dropped, only ranked after the preferred ones, so the feed is never empty.
+    """
+    raw = str((os.environ if env is None else env).get(ENV_ACES_MIN_GAP, "")).strip()
+    try:
+        value = float(raw)
+    except ValueError:
+        return None
+    lo, hi = ACES_MIN_GAP_RANGE
+    return value if lo <= value <= hi else None
+
+
 def select_ace_picks(
     history,
     predictions: list[dict[str, Any]],
@@ -758,9 +779,12 @@ def select_ace_picks(
             if card is not None:
                 by_market[market].append(card)
 
+    preferred_gap = aces_preferred_gap()
     for market in by_market:
         by_market[market].sort(
             key=lambda row: (
+                market == "aces" and preferred_gap is not None
+                and float(row.get("projection_gap") or 0.0) >= preferred_gap,
                 float(row.get("projection_score") or 0.0),
                 float(row.get("projection_confidence") or 0.0),
                 float(row.get("projection_gap") or 0.0),
@@ -818,6 +842,7 @@ def select_ace_picks(
         "uncertainty_model": "future_count_predictive_variance",
         "empirical_calibration": calibration,
         "fill_policy": "independent_market_fill_evidence_adjusted_hard_floor_0.60",
+        "aces_preferred_gap": preferred_gap,
     }
 
 

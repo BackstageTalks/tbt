@@ -11,6 +11,8 @@ Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (Gi
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
 | 2026-11-22 | PR #1766 | Testy workflowov zosúladené s `oneoff_global_limit` | testy zaostali za workflowom | – |
 | 2026-11-22 | PR #1766 | TOP minimum picks + emergency fill z mäkkých pravidiel | systém nesmie mlčať; tvrdé pravidlá (kurz ≥ 1,50, identita, predštart, súťaže) sa nemenia | `TBT_TOP_MIN_PICKS` + `_OWNER_APPROVED`, `TBT_TOP_EMERGENCY_FILL` + `_OWNER_APPROVED` |
+| 2026-11-22 | PR #1766 | Viac es: tipy s gapom ≥ prah idú prednostne, ostatné len doplnia (nikdy prázdne) | vlastné výsledky 9.–20.11. (n=360): gap ≥ 1,3 → 85,5 % vs 80,6 % (+5,2 pp, CI +1,5..+9,3); top 3/deň podľa gapu 94,4 %, top 5/deň 91,7 % (12 dní) | `TBT_ACES_MIN_GAP` (napr. 1.3) + `_OWNER_APPROVED` |
+| 2026-11-22 | PR #1766 | data.yml: zápis readiness do tbt-data s 5 opakovaniami pri 409 | ranný beh 20.11. skončil `failure` kvôli súbehu zápisov (tipy sa publikovali) | – |
 | 2026-11-22 | PR #1766 | Pauza Setov (manuálna) | 62,7 %, pokles 66 → 59 % | `TBT_SETS_SUSPENDED` + `_OWNER_APPROVED` |
 | 2026-11-22 | PR #1766 | Pauza Gamov | 47,9 %, ROI −12,1 %, projekcia o 2,3 gamu nad realitou | `TBT_GAMES_SUSPENDED` + `_OWNER_APPROVED` |
 
@@ -39,3 +41,12 @@ Vrátenie: zrušiť príslušnú `_OWNER_APPROVED` premennú.
 
 ## Ako spustiť testy
 `PYTHONPATH=api:scripts python -m pytest tests -q` (potrebné: pyarrow, zstd). Stav 22.11.: 5 674 prešlo.
+
+## Cieľ 3–5 tipov / kategória, 75 %+ (overené 22.11.)
+| Kategória | 3–5/deň | Úspešnosť | Stav |
+|---|---|---|---|
+| Viac es | top 3–5 podľa gapu | 92–94 % (12 dní, n=36–60) | dosiahnuteľné, `TBT_ACES_MIN_GAP` |
+| Esá | top 3–5 podľa istoty | 83–84 % (39 dní) | už teraz nad 75 % |
+| TOP (kurz ≥ 1,50) | top 5 podľa trhu | ≈ 57–59 % | 75 % pri tejto cene nie je možné (strop trhu) |
+| Value (kurz ≥ 1,70) | – | ≈ 50–55 % | 75 % pri tejto cene nie je možné |
+Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Pre 06:00 treba externý spúšťač posunúť na ≈ 04:55.
