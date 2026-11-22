@@ -34,3 +34,12 @@ No forced picks, no fabricated prices, and no probability recalibration.
 Do not claim newly issued picks, API gain, model performance, or CDB mutation
 from code-only tests. Restore previous scope via reverting this isolated PR if
 new provider categories introduce degraded identity, wrong market or quota strain.
+
+## ITF M15+/W15+ seasonal extension (owner request 2026-11-22)
+- Allow source-native ITF Men (785) and ITF Women (213) **prospective singles** discovery.
+- At the event gate require explicit, gender-consistent M15+ / W15+ grade; unknown, under-15, junior, doubles, UTR and contradictory grade labels fail closed.
+- Preserve the exact verified grade on the normalized prospective Match Winner fixture so the TOP selector can classify it, even when the provider's general tournament rank says only ITF.
+- ITF is third priority **after** existing ATP/WTA main tour and Challenger/WTA125/team cups, with standard TOP probability, data-depth, surface and real pre-start odds checks. VALUE uses its existing standard gates and exclusive priority. No forced picks, special ITF odds ceiling, dedicated ITF probability floor, or changes to ACCA.
+- Keep historical Tennis API data downloads, CDB gapfills, doubles, ESÁ/Viac Es, champion, API budget, provider safety and already issued receipts unchanged.
+- Current main at preparation time had TOP >=65%, depth >=50%; separate owner-gated draft PR #1760 proposes TOP >=60%, depth >=30%. Do not conflate these changes.
+- State: PREPARED in separate branch; require exact-HEAD CI, reviewer check of native provider payloads, graded-funnel evidence and real next-day receipt/read-back before declaring production verification.
