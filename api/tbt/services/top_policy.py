@@ -56,10 +56,13 @@ def competition_group(row):
         return "BJK Cup"
     if "davis cup" in combined and tour == "ATP":
         return "Davis Cup"
-    if re.search(r"wta\s*125", combined) or ("challenger" in combined and
-            ("wta" in combined or str(row.get("tour") or "").strip().upper() == "WTA")):
-        return "WTA 125"
+    # A generic WTA Challenger or an ATP fixture mislabelled WTA cannot
+    # prove the specific WTA 125 grade. Fail closed on ambiguous tier identity.
+    if re.search(r"wta[\s_-]*125", combined):
+        return "WTA 125" if tour == "WTA" else "unknown"
     if "challenger" in combined:
+        if tour != "ATP" or "wta" in combined:
+            return "unknown"
         return "Challenger"
     if level in {"atp", "atp 250", "atp 500", "atp 1000", "masters 1000", "atp finals"}:
         return "ATP" if str(row.get("tour") or "").upper() == "ATP" else "unknown"
