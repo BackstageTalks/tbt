@@ -1345,7 +1345,8 @@ class RapidTennisClient:
                     continue
                 # Re-check the event grade; provider categories can be broad.
                 if not eligible(tour, category_id=category_id,
-                                labels=(category_name, self._event_text(raw))):
+                                labels=(category_name, self._event_text(raw)),
+                                **({"event_level": True} if not historical else {})):
                     continue
 
                 event = self._annotate_event(
