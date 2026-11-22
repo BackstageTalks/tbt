@@ -252,7 +252,9 @@ def test_queue_exhaustion_requires_paid_empty_responses_not_just_zero_gain():
     data = exhausted_stats(candidates=17, paid=7)
     assert select(data)["allowed"] is False
     data = exhausted_stats(candidates=7, paid=7)
-    assert select(data)["allowed"] is False
+    result = select(data)
+    assert result["allowed"] is True
+    assert result["max_requests"] == 4515 - 7
 
 
 def test_exhausted_queue_never_spends_exceeded_allowance():
@@ -260,3 +262,35 @@ def test_exhausted_queue_never_spends_exceeded_allowance():
                      max_calls=5000)
     assert outcome["max_requests"] == 0
     assert outcome["reason"] == "original_run_allowance_exhausted"
+
+
+@pytest.mark.parametrize("count", [1, 2, 5, 7])
+def test_small_fully_exhausted_verified_queue_reuses_remaining_budget(count):
+    result = select(exhausted_stats(candidates=count, paid=count), max_calls=5000)
+    assert result["allowed"] is True
+    assert result["reason"] == "verified_statistics_queue_exhausted_unavailable"
+    assert result["statistics_paid_requests"] == count
+    assert result["max_requests"] == 5000 - count
+
+
+@pytest.mark.parametrize("change", [
+    lambda d: d[0]["statistics_adaptive_priority"].update(remaining_rows=1),
+    lambda d: d[0]["statistics_unavailable_reasons"].update(empty_whole_match_statistics=4),
+    lambda d: d[0].update(requests_including_retries=4),
+    lambda d: d[2].update(requests_including_retries=6),
+    lambda d: d[1].update(status="UNVERIFIED"),
+])
+def test_small_queue_fails_closed_without_complete_matching_evidence(change):
+    data = exhausted_stats(candidates=5, paid=5)
+    change(data)
+    result = select(data, max_calls=5000)
+    assert result["allowed"] is False
+    assert result["max_requests"] == 0
+
+
+@pytest.mark.parametrize("paid", [6, 7])
+def test_fully_exhausted_small_queue_counts_verified_retry_attempts(paid):
+    result = select(exhausted_stats(candidates=5, paid=paid), max_calls=5000)
+    assert result["allowed"] is True
+    assert result["statistics_paid_requests"] == paid
+    assert result["max_requests"] == 5000 - paid
