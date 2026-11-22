@@ -183,3 +183,21 @@ def test_itf_requires_native_category_and_explicit_eligible_event_grade(tour, ca
     from tbt.tour_scope import is_match_winner_offer_scope
     assert is_match_winner_offer_scope(tour, category_id=category, labels=(label, event), event_level=True) is ok
     assert not is_250_plus(tour, category_id=category, labels=(label, event))
+
+
+def test_itf_prospective_grade_survives_provider_normalization():
+    client = object.__new__(RapidTennisClient)
+    client.calendar_categories = lambda day: [{"id": 785, "name": "ITF Men"}]
+    raw = {
+        "id": 998877, "name": "M15 Monastir Singles",
+        "homeTeam": {"id": 1001, "name": "Alpha"},
+        "awayTeam": {"id": 1002, "name": "Beta"},
+        "startTimestamp": 1795358400,
+        "tournament": {"id": 11, "name": "Monastir", "rank": {"name": "M15"}},
+    }
+    client.category_events = lambda category, day: [raw]
+    matches = client.matches_for_day("atp", date(2026, 11, 22), historical=False)
+    assert len(matches) == 1
+    assert matches[0].tournament_level == "ITF M15"
+    assert matches[0].provider_payload["_tbt_source_category_id"] == 785
+    assert client.doubles_for_day(date(2026, 11, 22), historical=False) == []
