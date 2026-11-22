@@ -3332,7 +3332,7 @@
         ?lcopy('Your included pick is temporarily unavailable in the current offer.','Tvoj zahrnutý tip momentálne nie je dostupný v aktuálnej ponuke.','Tvůj zahrnutý tip momentálně není dostupný v aktuální nabídce.')
         :zeroUnlocked
           ?lcopy('No predictions are unlocked for your level in this category.','Pre tvoj level nie sú v tejto kategórii odomknuté predikcie.','Pro tvůj level nejsou v této kategorii odemčené predikce.')
-          :lcopy('No predictions are available in this category yet.','V tejto kategórii zatiaľ nie sú dostupné predikcie.','V této kategorii zatím nejsou dostupné predikce.');
+          :lcopy('No open predictions in this category right now. New picks are published daily around 06:20.','V tejto kategórii teraz nie sú otvorené predikcie. Nové tipy zverejňujeme denne okolo 06:20.','V této kategorii teď nejsou otevřené predikce. Nové tipy zveřejňujeme denně kolem 06:20.');
     }
     const first=rows[0]||sourceRows[0];const raw=first?.scheduled_at||first?.date||first?.start_time||first?.start_at||'';const d=raw?new Date(raw):new Date();const dateText=Number.isNaN(d.getTime())?lcopy('Today','Dnes','Dnes'):new Intl.DateTimeFormat(locale==='en'?'en-GB':locale==='cz'?'cs-CZ':'sk-SK',{weekday:'short',day:'numeric',month:'numeric'}).format(d);
     if($('dailyHubMetaDate'))$('dailyHubMetaDate').textContent=dateText;if($('dailyHubToolbarDate'))$('dailyHubToolbarDate').textContent=dateText;
