@@ -53,7 +53,8 @@ from propline_evening_quotes import (
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import (
     enrich_projection_odds, prefetch_projection_market_board,
-    extract_match_total_odds,
+    extract_match_total_odds, extract_player_total_ou,
+    line_first_calibration_ready,
 )
 from tbt.services.indicative_odds import annotate_feed_indicative_odds
 from tbt.services.propline_live import (
@@ -1956,6 +1957,73 @@ def main():
             ),
         )
         projection_odds_report["discovery"] = projection_discovery_report
+
+        # Fail closed on BOTH owner variables AND audited per-tour holdout data.
+        # A merge cannot activate line-first; an environment toggle alone
+        # cannot promote an uncalibrated probability estimator.
+        line_first_requested = (
+            os.getenv("TBT_ACES_LINE_FIRST", "").strip().lower() == "true"
+            and os.getenv("TBT_ACES_LINE_FIRST_OWNER_APPROVED", "").strip().lower() == "true"
+        )
+        line_first_active = line_first_requested and line_first_calibration_ready()
+        projection_odds_report["line_first"] = {
+            "requested": line_first_requested,
+            "calibration_verified": line_first_calibration_ready(),
+            "active": line_first_active, "matched_events": 0,
+            "candidate_events": 0,
+        }
+        if line_first_active:
+            line_first_event_ids = set()
+            # Only events with an EXACT, complete, named player_aces O/U
+            # bookmaker market qualify; never infer offered lines.
+            for pred in ace_predictions:
+                event_id = str(pred.get("event_id") or "")
+                if not event_id:
+                    continue
+                p1 = pred.get("player1") or {}
+                p2 = pred.get("player2") or {}
+                sources = []
+                primary = projection_market_cache.get(event_id)
+                if primary is not None:
+                    sources.append(primary)
+                alt = (prop_market_payloads.get(event_id) or {}).get("aces")
+                if alt:
+                    sources.extend(
+                        b.get("payload") for b in [alt] + list(alt.get("other_books") or [])
+                        if isinstance(b, dict)
+                    )
+                if any(
+                    data is not None and (
+                        extract_player_total_ou(
+                            data, "aces", str(p1.get("name") or ""), player_slot=1
+                        ) or extract_player_total_ou(
+                            data, "aces", str(p2.get("name") or ""), player_slot=2
+                        )
+                    )
+                    for data in sources
+                ):
+                    line_first_event_ids.add(event_id)
+            line_first_candidates, lf_report = select_ace_picks(
+                matches, ace_predictions, now=selection_now,
+                per_market_limit=max(1, len(line_first_event_ids)),
+                total_limit=max(1, len(line_first_event_ids)),
+                target_count=max(1, len(line_first_event_ids)),
+                line_first_event_ids=line_first_event_ids,
+            )
+            replacement_ids = {
+                str(r.get("event_id") or "") for r in line_first_candidates
+            }
+            ace_picks = [
+                r for r in ace_picks
+                if not (r.get("market") == "aces"
+                        and str(r.get("event_id") or "") in replacement_ids)
+            ] + line_first_candidates
+            projection_odds_report["line_first"].update({
+                "matched_events": len(line_first_event_ids),
+                "candidate_events": len(replacement_ids),
+                "selection": lf_report,
+            })
+
         if (projection_odds_cap or prop_market_payloads) and (ace_picks or sg_picks):
             ace_picks, sg_picks, attachment_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks,
@@ -2078,6 +2146,12 @@ def main():
                     or row.get("price_contract") == "player_total_ou"
                 ):
                     selected_aces.append(row)
+                elif row.get("selection_tier") == "line_first":
+                    # Exact bookmaker line was observed: do not make up a
+                    # replacement if none passed the calibrated p/EV gate.
+                    # The old local fallback remains unchanged for every
+                    # non-line-first event.
+                    continue
                 elif (os.getenv("TBT_ACES_REAL_LINE_STRICT", "").strip().lower() == "true"
                       and row.get("real_ou_market_rejected")):
                     # A real bookmaker line existed and did not qualify:
