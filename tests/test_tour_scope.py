@@ -65,7 +65,9 @@ def test_daily_provider_does_not_pay_to_open_lower_categories():
     day = date(2026, 11, 21)
     client.matches_for_day("atp", day, historical=True)
     client.matches_for_day("wta", day, historical=True)
-    assert called == [3, -100, 6, -100]
+    # Winner discovery now opens approved Challenger/WTA125; native CDB
+    # statistics and doubles scope remains 250+.
+    assert called == [72, 3, -100, 871, 6, -100]
     called.clear()
     client.doubles_for_day(day, historical=True)
     assert called == [3, 6, -100]
