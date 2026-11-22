@@ -1,9 +1,10 @@
 name: BlinQ read-only selector reliability replay
 on:
   push:
-    branches: [analysis/selection-reliability-replay-20261103, main, feat/top-quality-ranking-morning-20261108]
+    branches: [analysis/selection-reliability-replay-20261103, main, feat/top-quality-ranking-morning-20261108, analysis/surface-depth-rejections-20261122]
     paths:
       - scripts/replay_selection_reliability.py
+      - scripts/audit_surface_depth_snapshot_readonly.py
       - scripts/replay_top_ranked_morning.py
       - api/tbt/services/market_selection.py
       - tests/test_selection_reliability_replay.py
@@ -22,6 +23,7 @@ concurrency:
 
 jobs:
   replay:
+    if: github.ref_name != 'analysis/surface-depth-rejections-20261122'
     runs-on: ubuntu-latest
     timeout-minutes: 35
     env:
@@ -139,3 +141,38 @@ jobs:
             .cache/tbt/selection-replay/ranked-top-morning-report.json
           if-no-files-found: warn
           retention-days: 14
+
+  one_off_surface_depth_diagnostic:
+    # Temporary branch-only research. No schedule, provider API, public release,
+    # model promotion, CDB writer or publication is executed by this job.
+    if: github.ref_name == 'analysis/surface-depth-rejections-20261122'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - name: Checkout exact analysis branch
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Read current private candidate archive only
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          mkdir -p .cache/tbt/surface-depth
+          gh release download tbt-predictions-v1 \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'selection_candidates_2026-11.json.gz' \
+            --dir .cache/tbt/surface-depth
+          python scripts/audit_surface_depth_snapshot_readonly.py \
+            --archive .cache/tbt/surface-depth/selection_candidates_2026-11.json.gz \
+            --day 2026-11-22
