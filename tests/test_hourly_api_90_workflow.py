@@ -37,8 +37,8 @@ def test_hourly_writer_and_dual_quota_guards():
     assert 'group: tbt-hourly-api-gapfill-orchestrator' in HOURLY
     assert 'if active:' in HOURLY
     assert 'check_writers()' in HOURLY
-    assert 'min(5000, limit-spent, remaining, history_remaining)' in HOURLY
-    assert 'min(5000, limit-spent, 14500-spent, remaining, history_remaining)' in HOURLY
+    assert 'min(5000, limit-spent, oneoff_global_limit-spent, remaining, history_remaining)' in HOURLY
+    assert 'min(5000, limit-spent, oneoff_global_limit-spent, remaining, history_remaining)' in HOURLY
     assert '(( 10#$MAX_REQUESTS <= 5000 ))' in DATA
     assert 'Hourly autofill cap is 5000' in DATA
     assert 'group: tbt-crossrepo-writer-${{ github.run_id }}' in DATA

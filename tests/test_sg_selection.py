@@ -172,3 +172,23 @@ def test_sets_and_games_fill_independently_when_target_is_one():
     assert {card["market"] for card in cards} == {"sets", "games"}
     assert report["target_count_per_market"] == 1
     assert set(report["adaptive_confidence_floor"]) == {"sets", "games"}
+
+
+def test_games_suspension_is_owner_gated_and_off_by_default(monkeypatch):
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    rows = []
+    for i in range(12):
+        when = now - timedelta(days=20 + i * 8)
+        rows.append(historical(f"a{i}", when, "A", f"X{i}", 3, 31))
+        rows.append(historical(f"b{i}", when, "B", f"Y{i}", 3, 30))
+    for i in range(60):
+        when = now - timedelta(days=30 + i * 3)
+        rows.append(historical(f"base{i}", when, f"C{i}", f"D{i}", 2, 20))
+    pred = [prediction(now + timedelta(hours=5))]
+    monkeypatch.delenv("TBT_GAMES_SUSPENDED", raising=False)
+    cards, _ = select_sg_picks(rows, pred, now=now)
+    assert {c["market"] for c in cards} == {"sets", "games"}
+    monkeypatch.setenv("TBT_GAMES_SUSPENDED", "true")
+    cards, report = select_sg_picks(rows, pred, now=now)
+    assert {c["market"] for c in cards} == {"sets"}
+    assert report["games_suspended"] is True

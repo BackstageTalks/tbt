@@ -167,6 +167,9 @@ jobs:
       TBT_TOP_EMERGENCY_FILL: ${{ vars.TBT_TOP_EMERGENCY_FILL_OWNER_APPROVED == 'true' && vars.TBT_TOP_EMERGENCY_FILL == 'true' && 'true' || 'false' }}
       # Separate owner approval; a market disagreement may LOWER TOP coverage.
       # A merge never enables this non-silence-affecting product rule.
+      # Owner-gated daily TOP minimum (3-10). Reaches it only together with TBT_TOP_EMERGENCY_FILL.
+      TBT_GAMES_SUSPENDED: ${{ vars.TBT_GAMES_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_GAMES_SUSPENDED == 'true' && 'true' || 'false' }}
+      TBT_TOP_MIN_PICKS: ${{ vars.TBT_TOP_MIN_PICKS_OWNER_APPROVED == 'true' && vars.TBT_TOP_MIN_PICKS || '' }}
       TBT_TOP_REQUIRE_MARKET_SIDE: ${{ vars.TBT_TOP_REQUIRE_MARKET_SIDE_OWNER_APPROVED == 'true' && (vars.TBT_TOP_REQUIRE_MARKET_SIDE == 'true' || vars.TBT_TOP_REQUIRE_MARKET_SIDE == '1') && 'true' || 'false' }}
       # Explicit owner instruction 2026-11-21: run research-only candidate
       # comparisons on already-authorized refreshes. No provider job is added.

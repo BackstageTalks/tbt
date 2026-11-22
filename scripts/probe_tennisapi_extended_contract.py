@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from tbt.errors import ProviderError
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.tennisapi_extra import point_by_point_inventory
 from tbt.providers.tennisapi_bulk import normalize_daily_bulk_odds
