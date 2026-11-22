@@ -41,8 +41,8 @@ def test_verified_itf_is_still_excluded_even_with_high_probability():
     assert out["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
-@pytest.mark.parametrize("p",[.55,.59,.5999])
-def test_no_target_filling_below_60(p):
+@pytest.mark.parametrize("p",[.55,.60,.6499])
+def test_no_target_filling_below_65(p):
     out=select_market_sections([pick("low",p)])
     assert not ids(out)
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==3
@@ -232,7 +232,7 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     result = select_market_sections(rows)
     assert ids(result) == ["atp70", "wta68", "atp65", "challenger"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60"
+        "sports_0.65", "sports_0.65", "sports_0.65", "sports_0.65"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
@@ -246,13 +246,13 @@ def test_60_floor_allows_challenger_but_never_w35_or_weak_matches():
     result = select_market_sections([atp, challenger, w35, rejected])
     assert ids(result) == ["atp", "challenger"]
     assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
-        "sports_0.60", "sports_0.60"
+        "sports_0.65", "sports_0.65"
     ]
     snap = build_selection_candidate_snapshot(
         [atp, challenger, w35, rejected],
         generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
-    assert snap["selection_policy"] == "sports_tiered_top5_60_v24"
+    assert snap["selection_policy"] == "sports_tiered_top5_65_v25"
     assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
 
 
