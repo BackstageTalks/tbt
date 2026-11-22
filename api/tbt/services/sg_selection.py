@@ -281,6 +281,18 @@ def games_suspended(env: dict[str, str] | None = None) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+ENV_SETS_SUSPENDED = "TBT_SETS_SUSPENDED"
+
+
+def sets_suspended(env: dict[str, str] | None = None) -> bool:
+    """Owner-gated pause of the Total Sets market (default OFF).
+
+    Own results 2026-10-08..11-20: 62.7 %, falling 66.0 % -> 59.3 % between halves.
+    """
+    raw = (os.environ if env is None else env).get(ENV_SETS_SUSPENDED, "")
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _games_card(
     row: dict[str, Any],
     p1: dict[str, Any],
@@ -512,6 +524,8 @@ def select_sg_picks(
 
     if games_suspended():
         by_market["games"] = []
+    if sets_suspended():
+        by_market["sets"] = []
 
     for market in by_market:
         by_market[market].sort(
@@ -578,6 +592,7 @@ def select_sg_picks(
         "target_count": int(target_count),
         "target_count_per_market": per_market_target,
         "games_suspended": games_suspended(),
+        "sets_suspended": sets_suspended(),
         "candidate_cards": {market: len(by_market[market]) for market in ("sets", "games")},
         "adaptive_confidence_floor": applied_floors,
         "adaptive_tier_counts": tier_counts_by_market,

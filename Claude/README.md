@@ -11,6 +11,7 @@ Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (Gi
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
 | 2026-11-22 | PR #1766 | Testy workflowov zosúladené s `oneoff_global_limit` | testy zaostali za workflowom | – |
 | 2026-11-22 | PR #1766 | TOP minimum picks + emergency fill z mäkkých pravidiel | systém nesmie mlčať; tvrdé pravidlá (kurz ≥ 1,50, identita, predštart, súťaže) sa nemenia | `TBT_TOP_MIN_PICKS` + `_OWNER_APPROVED`, `TBT_TOP_EMERGENCY_FILL` + `_OWNER_APPROVED` |
+| 2026-11-22 | PR #1766 | Pauza Setov (manuálna) | 62,7 %, pokles 66 → 59 % | `TBT_SETS_SUSPENDED` + `_OWNER_APPROVED` |
 | 2026-11-22 | PR #1766 | Pauza Gamov | 47,9 %, ROI −12,1 %, projekcia o 2,3 gamu nad realitou | `TBT_GAMES_SUSPENDED` + `_OWNER_APPROVED` |
 
 ## Odporúčané zapnutie (po zlúčení)
@@ -25,7 +26,7 @@ Vrátenie: zrušiť príslušnú `_OWNER_APPROVED` premennú.
 - TOP/Value 70 %+ pri kurze ≥ 1,50 nie je dosiahnuteľné výberom: strop je ≈ 59 % (TOP) a ≈ 52–55 % (Value).
 
 ## TODO (nezačaté, každé za prepínačom)
-- Sety: automatická pauza pod ~60 % (sledovať, klesá 66 → 59 %).
+- Sety: manuálny vypínač hotový; automatická pauza podľa priebežnej úspešnosti zatiaľ nie (selektor nemá prístup k výsledkom).
 - Štvorhra: zbierať do ~150 tipov, potom vyhodnotiť.
 - Viac es / Esá: nemeniť. Segmenty (antuka 86 %, 1. kolo 32 = 84,6 %) zatiaľ len pozorovanie, nie návrh.
 - Zber všetkých zápasov (`BLINQ_MARKET_A0_OWNER_APPROVED`) + export CDB na test signálu nad trhom (kritérium: log loss lepší o ≥ 0,005, CI < 0, ≥ 5 000 testovacích zápasov, ATP a WTA zvlášť).

@@ -192,3 +192,21 @@ def test_games_suspension_is_owner_gated_and_off_by_default(monkeypatch):
     cards, report = select_sg_picks(rows, pred, now=now)
     assert {c["market"] for c in cards} == {"sets"}
     assert report["games_suspended"] is True
+
+
+def test_sets_suspension_is_owner_gated(monkeypatch):
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    rows = []
+    for i in range(12):
+        when = now - timedelta(days=20 + i * 8)
+        rows.append(historical(f"a{i}", when, "A", f"X{i}", 3, 31))
+        rows.append(historical(f"b{i}", when, "B", f"Y{i}", 3, 30))
+    for i in range(60):
+        when = now - timedelta(days=30 + i * 3)
+        rows.append(historical(f"base{i}", when, f"C{i}", f"D{i}", 2, 20))
+    pred = [prediction(now + timedelta(hours=5))]
+    monkeypatch.delenv("TBT_GAMES_SUSPENDED", raising=False)
+    monkeypatch.setenv("TBT_SETS_SUSPENDED", "true")
+    cards, report = select_sg_picks(rows, pred, now=now)
+    assert {c["market"] for c in cards} == {"games"}
+    assert report["sets_suspended"] is True
