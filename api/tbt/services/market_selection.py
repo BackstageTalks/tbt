@@ -1041,7 +1041,12 @@ def value_serve_return_ok(card: dict[str, Any]) -> bool:
     if str(os.environ.get(ENV_VALUE_SERVE_RETURN, "")).strip().lower() not in {"1", "true", "yes", "on"}:
         return True
     edge = _number(card.get("serve_return_edge"))
-    if edge is None or edge == 0:
+    try:
+        minimum = float(os.environ.get("TBT_VALUE_SERVE_RETURN_MIN", "0.06"))
+    except ValueError:
+        minimum = 0.06
+    # CDB 2016-2026, balanced 1.70-2.20: |edge| >= 0.06 -> 56.5 % (n=356).
+    if edge is None or edge == 0 or abs(edge) < max(0.0, minimum):
         return False
     p1 = card.get("player1") if isinstance(card.get("player1"), dict) else {}
     winner = str(card.get("winner_id") or "")

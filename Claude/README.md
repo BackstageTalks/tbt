@@ -9,6 +9,7 @@
 ## Denník nasadení a návrat
 | Dátum | PR / commit | Čo | Návrat |
 |---|---|---|---|
+| 2026-11-23 | (tento PR) | Value: prah podanie+príjem ≥ 0,06 (`TBT_VALUE_SERVE_RETURN_MIN`) | vrátiť PR alebo zmazať `TBT_VALUE_SERVE_RETURN_OWNER_APPROVED` |
 | 2026-11-23 | #1766 → `c4ed468` | opravy + prepínače (všetky OFF) | `git revert -m 1 c4ed468` alebo zrušiť príslušnú `_OWNER_APPROVED` premennú |
 
 Jeden súbor, jeden riadok = jedna zmena. Stav: PR = otvorený draft, MAIN = zlúčené, TODO = nezačaté.
@@ -86,3 +87,8 @@ Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne 
 - Rozhodnutie majiteľa 22.11.: lokálny kurzový fallback, KPI (ROI/yield/auto) a stĺpec KURZ sa nemenia. `TBT_ACES_REAL_LINE_STRICT` ostáva vypnutý.
 - Esá – pravidlo rezervy majiteľa (`TBT_ACES_CUSHION_RULE` + `_OWNER_APPROVED`, default OFF): z reálnych hraníc (aj jednostranných „N+“) Over len ak projekcia − hranica ≥ 1,5; Under len ak hranica − projekcia ≥ 1,5 (symetricky, rozhodnutie majiteľa 22.11.); z vyhovujúcich najvyšší kurz ≥ 1,50. Smer vyberá podľa ponuky. Platí pre hráča vybraného modelom (Viac es); oboch hráčov rieši line-first (GPT prompt).
 - Value – podanie+príjem (`TBT_VALUE_SERVE_RETURN` + `_OWNER_APPROVED`, default OFF): zverejní len Value, kde vybraný hráč má lepší súčet kvality podania a príjmu (povrch, inak celkovo). Neoverené na histórii; majiteľ chce test v praxi. Engine pridáva `serve_return_edge` ku každej predikcii.
+
+## Stratégia výberu (dohodnuté 23.11.)
+- TOP: ísť S trhom (poradie podľa kurzu, nikdy proti trhu). Strop ≈ 59–64 %. Ranné kurzy 6:00 stačia (presnosť 67,1 % vs. záverečné 67,3 %).
+- Value: ísť PROTI trhu len so signálom podanie+príjem ≥ 6 p.b. (CDB 1 877 vyrovnaných zápasov: 56,5 % pri n=356, zisková hranica pri 1,90 je 52,6 %).
+- Esá: vlastná projekcia proti hraniciam kancelárií, rezerva 1,5 esa (simulácia 78,7 %).
