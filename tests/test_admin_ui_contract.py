@@ -192,8 +192,8 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["limit"] == 5
     assert rules["top_daily"]["presentation_preview_limit"] == 10
     assert rules["top_daily"]["target_count"] == 3
-    assert rules["top_daily"]["confidence_tiers"] == [.60]
-    assert rules["top_daily"]["min_probability"] == 0.60
+    assert rules["top_daily"]["confidence_tiers"] == [.65]
+    assert rules["top_daily"]["min_probability"] == 0.65
     assert rules["top_daily"]["min_odds"] == 1.50
     assert rules["top_daily"]["max_odds"] is None
     assert rules["top_daily"]["min_edge"] is None
@@ -201,7 +201,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["edge_ev_role"] == "diagnostic_only"
     assert rules["top_daily"]["objective"] == "competition_tier_then_probability_desc"
     assert rules["value"]["selection_mode"] == "probability_plus_close_odds"
-    assert rules["value"]["min_probability"] == 0.65
+    assert rules["value"]["min_probability"] == 0.60
     assert rules["value"]["min_data_depth"] == 0.50
     assert rules["value"]["min_surface_matches"] == 3
     assert rules["value"]["min_odds"] == 1.80
