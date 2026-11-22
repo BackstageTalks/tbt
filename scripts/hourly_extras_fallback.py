@@ -70,6 +70,42 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
             or not 0 <= paid <= original_limit or paid != verified_paid
             or persisted < 0 or persisted != verified_persisted):
         return skip("inconsistent_verified_metrics")
+    # An exhausted, independently verified statistics queue is also a valid
+    # reason to use the *remaining* allowance for provider-native extras.
+    # Without this route, tiny hourly queues (or entirely cooled-down queues)
+    # leave thousands of governed requests idle even when extras have backlog.
+    # Do not infer exhaustion from a missing report or from a partial scan.
+    queue_size = download.get("statistics_candidate_rows")
+    adaptive = download.get("statistics_adaptive_priority")
+    unavailable = download.get("statistics_unavailable_reasons")
+    if (type(queue_size) is int and isinstance(adaptive, dict)
+            and isinstance(unavailable, dict)
+            and all(type(adaptive.get(key)) is int for key in
+                    ("candidate_rows", "selected_rows", "remaining_rows"))
+            and adaptive["candidate_rows"] == queue_size
+            and adaptive["selected_rows"] == queue_size
+            and adaptive["remaining_rows"] == 0
+            and persisted == 0):
+        empty_count = unavailable.get("empty_whole_match_statistics", 0)
+        no_candidates = (queue_size == 0 and paid == 0
+                         and type(empty_count) is int and empty_count == 0)
+        all_unavailable = (queue_size >= 8 and paid >= queue_size
+                           and type(empty_count) is int
+                           and empty_count == queue_size)
+        if no_candidates or all_unavailable:
+            remaining = original_limit - paid
+            if remaining < 1:
+                return skip("original_run_allowance_exhausted")
+            return {
+                **result, "status": "ELIGIBLE",
+                "reason": ("verified_statistics_queue_empty" if no_candidates
+                           else "verified_statistics_queue_exhausted_unavailable"),
+                "allowed": True, "max_requests": remaining,
+                "statistics_paid_requests": paid,
+                "cutoff_utc": cutoff.isoformat(),
+                "evidence": "same_run_remote_CDB_readback_and_exhausted_statistics_queue",
+            }
+
     circuit = download.get("statistics_availability_circuit")
     if not isinstance(circuit, dict) or circuit.get("tripped") is not True:
         return skip("statistics_route_not_stopped_by_availability_circuit")
