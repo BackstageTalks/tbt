@@ -1025,7 +1025,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     selected = []
     seen = set()
     tier = {"ATP": 0, "WTA": 0, "Challenger": 1, "WTA 125": 1,
-            "BJK Cup": 1, "Davis Cup": 1}
+            "BJK Cup": 1, "Davis Cup": 1, "ITF": 2}
     ranked = sorted(core, key=lambda card: (
         tier.get(competition_group(card), 99),
         -float(rank_value(card)),
@@ -1344,7 +1344,7 @@ def select_market_sections(
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
                 "top_probability_tiers": [TOP_MIN_PROBABILITY],
-                "top_competition_order": ["ATP/WTA 250+", "Challenger 50+", "WTA 125", "BJK/Davis Cup singles"],
+                "top_competition_order": ["ATP/WTA 250+", "Challenger 50+", "WTA 125", "BJK/Davis Cup singles", "ITF M15+/W15+"],
                 "secondary_competition_probability_floor": TOP_MIN_PROBABILITY,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
@@ -1380,6 +1380,7 @@ def select_market_sections(
                 "competition_tiers": [
                     {"group": "ATP/WTA", "thresholds": [TOP_MIN_PROBABILITY]},
                     {"group": "Challenger/WTA125/BJK/Davis", "thresholds": [TOP_MIN_PROBABILITY]},
+                    {"group": "ITF M15+/W15+", "thresholds": [TOP_MIN_PROBABILITY]},
                 ],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": top_limit is None,
