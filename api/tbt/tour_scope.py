@@ -80,13 +80,15 @@ _UNSAFE_WINNER_LEVEL = re.compile(
 )
 _CHALLENGER_LABEL = re.compile(r"\bchallengers?\b", re.I)
 _WTA125_LABEL = re.compile(r"\bwta[\s_-]*125\b", re.I)
+_ITF_GRADE = re.compile(r"(?<![a-z0-9])([mw])[\s_-]?(\d{2,3})(?![a-z0-9])", re.I)
+_UNSAFE_ITF_LEVEL = re.compile(r"\b(?:utr|juniors?|wheelchair|exhibitions?|doubles?|mixed|boys?|girls?|next[\s_-]*gen|u1[2468])\b", re.I)
 
 
-def is_match_winner_offer_scope(tour: str, *, category_id=None, labels=()) -> bool:
-    """Allow ATP/WTA 250+, ATP Challenger 50+, WTA 125 and team-cup singles.
+def is_match_winner_offer_scope(tour: str, *, category_id=None, labels=(), event_level=False) -> bool:
+    """Include verified ITF M15+/W15+ singles with existing winner competitions.
 
-    Unknown grades do not bypass native category/tour identity. Davis Cup and
-    Billie Jean King Cup are accepted by explicit names, not generic teams.
+    Native ITF category IDs open discovery only. Individual events require
+    explicit grade evidence, while historical/ACES scope remains 250+.
     """
     if is_250_plus(tour, category_id=category_id, labels=labels):
         return True
@@ -98,6 +100,19 @@ def is_match_winner_offer_scope(tour: str, *, category_id=None, labels=()) -> bo
     except (TypeError, ValueError):
         category = None
     label = " ".join(str(item or "") for item in labels).casefold()
+    if category in {213, 785}:
+        if (tour, category) not in {("atp", 785), ("wta", 213)}:
+            return False
+        if _UNSAFE_ITF_LEVEL.search(label):
+            return False
+        if not event_level:
+            return True  # Category discovery only; the event gets a strict gate.
+        gender = "m" if tour == "atp" else "w"
+        grades = _ITF_GRADE.findall(label)
+        return bool(grades) and all(
+            marker.casefold() == gender and int(amount) >= 15
+            for marker, amount in grades
+        )
     if _UNSAFE_WINNER_LEVEL.search(label):
         return False
     if tour == "atp" and category in (None, 3, 72) and _CHALLENGER_LABEL.search(label):
