@@ -1,20 +1,18 @@
 {
   "schema": 1,
-  "kind": "operator-approved-20261114-wta2021-verified-yield-300-expansion",
-  "mode": "statistics",
+  "kind": "operator-approved-postmatch-provider-extras-1000-test",
+  "mode": "extras",
   "source": "tennisapi1",
   "promote": false,
-  "purpose": "User-authorized <=300-call extension after independent run 43581904980 verified 100 paid calls, 1310 actual WTA 2021 CDB NULL-only values and 47 full serve-return rows. Same exact provider-native 2021 WTA only, no model changes; shared 14500 CAS, 500 reserve, 6/s, CDB global writer/backup/rollback, cooldown, no overwrites, independent exact SHA/value readback.",
-  "start": "2021-01-01",
-  "end": "2021-12-31",
-  "max_requests": 300,
-  "targeted_statistics": true,
-  "target_tour": "wta",
+  "start": "2016-01-01",
+  "end": "2026-11-21",
+  "max_requests": 1000,
+  "targeted_statistics": false,
   "high_yield_statistics": false,
   "break_points_focus": false,
   "cdb_writes_allowed": true,
   "model_changes": false,
   "pre_reset_provider_header_override": false,
-  "status": "OPERATOR_APPROVED_VERIFIED_HIGH_YIELD_EXTENSION",
-  "diagnostic_attempt": 2
+  "status": "OPERATOR_APPROVED_20261122_API_QUOTA_RECOVERY",
+  "purpose": "Owner-approved safe use of unused RapidAPI quota on 22 Nov 2026 before 17:09 UTC reset. Existing provider-native extras (post-match markers), max 1000 calls incl retries, global shared CAS <=14500, provider reserve 500, <=6 requests/sec, single CDB writer, exact identity/NULL-only, independent remote CDB read-back. No model/ACCA/TOP publication changes. Reuse proven good 2026->2025 extras queue; do not spend on empty statistics."
 }
