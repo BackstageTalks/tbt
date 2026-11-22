@@ -197,7 +197,7 @@ def compute(archive: Path, day: str):
         "depth_fail_bins":dict(depth_fail_bins),
         "depth_bins_all_priced":dict(depth_hist),
         "competitions_with_surface_or_depth_fails":{k:dict(v) for k,v in sorted(competition.items())},
-        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "ev_price_comparison":ev_policy_analysis(priced,snap["generated_at"]), "historical_capacity":historical_capacity_check(archive,day), "affected_examples":examples,
+        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "ev_price_comparison":ev_policy_analysis(priced,snap["generated_at"]), "historical_capacity":historical_capacity_check(archive,day), "historical_top_supply":historical_top_supply(archive,day), "affected_examples":examples,
         "limitations":"Non-exclusive failures; source snapshot may have different day filters or evaluation time than audit logs. Scenario is pre-exclusivity, not public issuance. Model public probabilities and odds are held fixed; no new API calls, no outcomes, no backdating.",
         "provider_requests":0, "production_writes":0,
     }
@@ -425,6 +425,87 @@ def historical_capacity_check(archive: Path, last_day: str, window_days: int = 7
                         "observations":observations})
     return {"days_in_archive":len(grouped),"days_reported":summary,
             "caution":"Different historical discovery scopes, model versions, publication windows and opportunity sizes: not a controlled forecast or profitability test."}
+
+
+
+def historical_top_supply(archive: Path, last_day: str, window_days: int = 14):
+    """Read-only last-14-day TOP-only baseline vs strict owner emergency supply.
+
+    Uses only historically frozen candidate metadata from native daily release.
+    Exact future policy/issuer semantics may vary, so do not call it issued TOP.
+    """
+    with gzip.open(archive,"rt",encoding="utf-8") as f:
+        env=json.load(f)
+    byday=defaultdict(list)
+    for snap in env.get("snapshots",[]):
+        moment=stamp(snap.get("generated_at")) if isinstance(snap,dict) else None
+        if not moment or not isinstance(snap.get("rows"),list):
+            continue
+        local=moment.astimezone(LOCAL)
+        day=local.date().isoformat()
+        if local.hour>=6 and day<=last_day:
+            byday[day].append(snap)
+    days=sorted(byday)[-window_days:]
+    results=[]
+    for day in days:
+        anchor=min(byday[day],key=lambda x:stamp(x["generated_at"]))
+        standard=[]
+        supplemental=[]
+        priced_today=0
+        candidate_failures=Counter()
+        for row in anchor["rows"]:
+            if not isinstance(row,dict) or row.get("priced") is not True or not is_today(row,day):
+                continue
+            priced_today+=1
+            reasons=set(row.get("top_rejection_reasons") or [])
+            # Value already owns the contract; never republish under TOP.
+            if row.get("selected_section")=="value" or "assigned_to_value" in reasons:
+                candidate_failures["value_claimed"]+=1
+                continue
+            # No other hard rejection may be overridden or ignored.
+            if reasons-{"probability_below_fixed_floor","insufficient_surface_history"}:
+                candidate_failures["hard_rejection"]+=1
+                continue
+            if not prestart_at_snapshot(row,anchor["generated_at"]):
+                candidate_failures["not_live_prematch"]+=1
+                continue
+            p,o,d,s=(number(row.get("blinq_probability")),_price(row),
+                     number(row.get("data_depth")),_surface_min(row))
+            if None in (p,o,d,s) or o<1.50 or d<.50:
+                candidate_failures["hard_price_or_depth"]+=1
+                continue
+            market=row.get("two_way_market") if isinstance(row.get("two_way_market"),dict) else {}
+            betting=row.get("betting") if isinstance(row.get("betting"),dict) else {}
+            fair=number(betting.get("fair_implied_probability"))
+            if fair is not None and not 0<fair<1:
+                fair=None
+            # Market favorite is a separate strict check for emergency only.
+            if p>=.65 and s>=5 and not reasons:
+                standard.append(row)
+            elif (reasons and reasons.issubset({"probability_below_fixed_floor","insufficient_surface_history"})
+                  and s>=3 and ((fair is not None and fair>=.5 and p>=.5)
+                  or (fair is None and p>=.55))):
+                supplemental.append(row)
+        standard.sort(key=lambda x:(number(x.get("blinq_probability")) or 0,str(x.get("event_id"))),reverse=True)
+        supplemental.sort(key=lambda x:(number(x.get("blinq_probability")) or 0,str(x.get("event_id"))),reverse=True)
+        standard_ids=[_candidate_id(x) for x in standard[:5]]
+        after=standard_ids[:]
+        after.extend(_candidate_id(x) for x in supplemental if _candidate_id(x) not in set(after))
+        after=after[:5]
+        results.append({"day":day,"generated_at":anchor["generated_at"],"priced_today":priced_today,
+                        "normal_top":len(standard_ids),
+                        "supply_top":len(after),
+                        "added":len(after)-len(standard_ids),
+                        "normal_below_5":len(standard_ids)<5,
+                        "supply_below_5":len(after)<5,
+                        "candidate_failures":dict(candidate_failures)})
+    return {"requested_days":window_days,"observed_days":len(results),
+            "days_below_5_normal":sum(x["normal_below_5"] for x in results),
+            "days_below_5_owner_supply":sum(x["supply_below_5"] for x in results),
+            "normal_top_total":sum(x["normal_top"] for x in results),
+            "supply_top_total":sum(x["supply_top"] for x in results),
+            "days":results,
+            "warning":"Descriptive, single earliest >=06:00 snapshot/day, different historical policy scopes, pricing windows and model versions; source rejection codes and past Value assignment may differ from prospective live policy. Does not prove approval, issuance, accuracy or five quality picks every day."}
 
 
 def main():
