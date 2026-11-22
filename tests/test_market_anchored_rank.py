@@ -31,7 +31,7 @@ def _clean_env(monkeypatch):
 
 def _slate():
     return [row('a', .70, 1.60, 2.40),
-            row('b', .66, 1.52, 2.60),
+            row('b', .66, 1.52, 2.60, depth=1.0),
             row('c', .58, 1.70, 2.20)]
 
 
@@ -117,7 +117,7 @@ def test_emergency_fill_requires_flag_and_market_agreement(monkeypatch):
     res = select_market_sections(copy.deepcopy(choices), top_limit=3)
     assert _ids(res)[0] == "a" and len(_ids(res)) == 3
     tiers = {c["event_id"]: c["selection_tier"] for c in res["top_daily_picks"]}
-    assert tiers["a"] == "sports_0.60"
+    assert tiers["a"] == "sports_0.65"
     assert tiers["c"] == "emergency_fill" and tiers["d"] == "emergency_fill"
 
 
