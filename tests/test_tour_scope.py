@@ -165,7 +165,8 @@ def test_historical_scope_does_not_expand_into_challenger_wta125_or_cups():
 @pytest.mark.parametrize(("tour", "category", "label", "event", "ok"), [
     ("atp", 785, "ITF Men", "ITF M15 Monastir", True),
     ("atp", 785, "ITF Men", "ITF M25", True),
-    ("atp", 785, "ITF Men", "ITF M50", True),
+    ("atp", 785, "ITF Men", "ITF M50", False),
+    ("atp", 785, "ITF Men", "ITF M150", False),
     ("wta", 213, "ITF Women", "ITF W15 Antalya", True),
     ("wta", 213, "ITF Women", "ITF W35", True),
     ("wta", 213, "ITF Women", "ITF W100", True),
