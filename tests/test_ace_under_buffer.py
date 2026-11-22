@@ -116,3 +116,9 @@ def test_rejected_real_line_is_flagged_for_strict_mode():
 def test_no_real_market_is_not_flagged():
     card, ok, _ = _pick(2.1, [])
     assert not ok and "real_ou_market_rejected" not in card
+
+
+def test_dfs_books_rank_after_sportsbooks():
+    from tbt.services.projection_odds import _is_dfs_book
+    assert _is_dfs_book("PrizePicks") and _is_dfs_book("Underdog Fantasy")
+    assert not _is_dfs_book("DraftKings") and not _is_dfs_book("bet365")

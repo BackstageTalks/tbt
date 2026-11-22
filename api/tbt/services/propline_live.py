@@ -439,6 +439,16 @@ def discover_propline_fallback(
                     report["bookmakers_with_target_market"] += 1
                 for metric, normalized in parsed.items():
                     if metric in fetched.get(rapid_id, {}):
+                        # Keep every additional bookmaker for player props so a
+                        # player missing at the first book can still be priced.
+                        if metric in ("aces", "double_faults"):
+                            fetched[rapid_id][metric].setdefault("other_books", []).append({
+                                "payload": normalized, "provider_id": 2,
+                                "source": "propline", "bookmaker": str(book.get("title") or
+                                    book.get("key") or book.get("name") or "")[:90],
+                                "provider_event_id": prop_id,
+                                "captured_at": datetime.now(timezone.utc).isoformat(),
+                            })
                         continue
                     fetched.setdefault(rapid_id, {})[metric] = {
                         "payload": normalized, "provider_id": 2,

@@ -453,6 +453,14 @@ def prefetch_projection_market_board(
     }
 
 
+_DFS_BOOKS = ("prizepicks", "underdog", "sleeper", "betr", "dabble")
+
+
+def _is_dfs_book(name: Any) -> bool:
+    text = str(name or "").lower().replace(" ", "")
+    return any(tag in text for tag in _DFS_BOOKS)
+
+
 def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1, prefetched_payloads: dict[str, Any] | None = None, alternate_market_payloads: dict[str, dict[str, dict]] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Attach exact provider prices to already-selected projection cards.
 
@@ -527,14 +535,22 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
 
             used_alternate = False
             if not ok and alternate and str(alternate.get("source") or "propline").lower() == "propline":
-                alt_payload = alternate.get("payload")
-                alt_provider = int(alternate.get("provider_id") or 2)
-                alt_captured = str(alternate.get("captured_at") or captured_at)
-                alt_updated, alt_ok, alt_reason = (
-                    _attach_ace(row, alt_payload, alt_captured, alt_provider)
-                    if kind == "ace" else
-                    _attach_sg(row, alt_payload, alt_captured, alt_provider)
-                )
+                books = [alternate] + [b for b in (alternate.get("other_books") or []) if isinstance(b, dict)]
+                if kind == "ace":
+                    # Real sportsbooks before DFS pick'em boards.
+                    books.sort(key=lambda b: _is_dfs_book(b.get("bookmaker")))
+                for book in (books if kind == "ace" else books[:1]):
+                    alt_payload = book.get("payload")
+                    alt_provider = int(book.get("provider_id") or 2)
+                    alt_captured = str(book.get("captured_at") or captured_at)
+                    alt_updated, alt_ok, alt_reason = (
+                        _attach_ace(row, alt_payload, alt_captured, alt_provider)
+                        if kind == "ace" else
+                        _attach_sg(row, alt_payload, alt_captured, alt_provider)
+                    )
+                    if alt_ok:
+                        alternate = book
+                        break
                 if alt_ok:
                     updated, ok, reason = alt_updated, True, alt_reason
                     used_alternate = True
