@@ -713,12 +713,13 @@ def test_expanded_tour_categories_generate_top_value_but_not_acca():
     rows.append(main_short)
     from copy import deepcopy
     original = deepcopy(rows)
-    out = select_market_sections(rows)
-    assert [r["event_id"] for r in out["top_daily_picks"]] == [
-        "atp-main", "ch50", "ch175", "w125", "bjk"
-    ] or [r["event_id"] for r in out["top_daily_picks"]] == [
-        "atp-main", "ch50", "ch175", "w125", "davis"
-    ]
+    out = select_market_sections(rows, top_limit=None)
+    assert {r["event_id"] for r in out["top_daily_picks"]} == {
+        "atp-main", "ch50", "ch175", "w125", "bjk", "davis"
+    }
+    published = select_market_sections(rows)
+    assert len(published["top_daily_picks"]) == 5
+    assert published["top_daily_picks"][0]["event_id"] == "atp-main"
     assert {r["event_id"] for r in out["value_picks"]} == {"value-challenger", "value-bjk"}
     assert {r["event_id"] for r in out["prime_picks"]} == {"main-short"}
     assert rows == original
