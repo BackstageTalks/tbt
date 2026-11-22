@@ -661,6 +661,43 @@ def _card(
 
 
 
+
+def _line_first_candidate(
+    row: dict[str, Any], p1_projection: dict[str, Any],
+    p2_projection: dict[str, Any],
+) -> dict[str, Any]:
+    """Odds-led, player-neutral Aces candidate; never a publishable bet alone.
+
+    The exact player and offered O/U contract are chosen later, after bookmaker
+    discovery. No gap/Most Aces winner is assumed at this stage.
+    """
+    out = deepcopy(row)
+    for key in ("betting", "match_winner_market", "market_publication_candidates"):
+        out.pop(key, None)
+    p1 = row.get("player1") or {}
+    p2 = row.get("player2") or {}
+    depth_n = min(int(p1_projection["samples"]), int(p2_projection["samples"]))
+    out.update({
+        "market": "aces", "market_type": "Player Aces Over/Under",
+        "projection_kind": "player_aces", "selection_tier": "line_first",
+        "selection": "", "pick": "", "selection_id": "",
+        "price_status": "projection_only", "odds": None,
+        "probability": None, "expected_value": None,
+        "line_first_players": [
+            {"slot": 1, "id": str(p1.get("id") or ""),
+             "name": str(p1.get("name") or ""),
+             "projection": float(p1_projection["estimate"])},
+            {"slot": 2, "id": str(p2.get("id") or ""),
+             "name": str(p2.get("name") or ""),
+             "projection": float(p2_projection["estimate"])},
+        ],
+        "data_depth": round(min(1.0, depth_n / 20.0), 4),
+        "projection_model": "ace-count-projection-v4",
+        "projection_source": "historical_event_statistics",
+    })
+    return out
+
+
 def _adaptive_confidence_select(
     cards: list[dict[str, Any]],
     *,
@@ -722,6 +759,7 @@ def select_ace_picks(
     target_count: int = 10,
     available_markets_by_event: dict[str, set[str]] | None = None,
     allow_local_aces_fallback: bool = False,
+    line_first_event_ids: set[str] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Keep odds-first selection; optionally allow model-qualified local Aces."""
     if now.tzinfo is None:
@@ -731,7 +769,8 @@ def select_ace_picks(
     # Match Winner policy: no same-UTC-day post-match statistics are consumed.
     cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
     histories, baselines, stat_matches = _history_index(history, cutoff)
-    calibration = build_ace_market_calibration(history, cutoff)
+    calibration = ({} if line_first_event_ids is not None
+                   else build_ace_market_calibration(history, cutoff))
 
     by_market: dict[str, list[dict[str, Any]]] = {"aces": [], "double_faults": []}
     eligible_matches = 0
@@ -748,6 +787,9 @@ def select_ace_picks(
         p1_id, p2_id = str(p1.get("id") or ""), str(p2.get("id") or "")
         if not p1_id or not p2_id:
             continue
+        if (line_first_event_ids is not None and
+                str(row.get("event_id") or "") not in line_first_event_ids):
+            continue
         eligible_matches += 1
         ace_gate_reason = ace_eligibility_reason(row)
         ace_gate_counts[ace_gate_reason] += 1
@@ -759,6 +801,8 @@ def select_ace_picks(
             best_of = None
 
         for market in ("aces", "double_faults"):
+            if line_first_event_ids is not None and market != "aces":
+                continue
             if market == "aces" and ace_gate_reason != "eligible":
                 continue
             if (available_markets_by_event is not None
@@ -775,9 +819,25 @@ def select_ace_picks(
             )
             if p1_projection is None or p2_projection is None:
                 continue
-            card = _card(row, market, p1_projection, p2_projection, calibration=calibration)
-            if card is not None:
-                by_market[market].append(card)
+            if line_first_event_ids is not None:
+                # Preserve both player count projections even for a tiny gap.
+                # Only real, two-sided player_aces quotes can make this a pick.
+                by_market[market].append(_line_first_candidate(
+                    row, p1_projection, p2_projection))
+            else:
+                card = _card(row, market, p1_projection, p2_projection, calibration=calibration)
+                if card is not None:
+                    by_market[market].append(card)
+
+    if line_first_event_ids is not None:
+        return by_market['aces'], {
+            'schema': 1, 'selection_policy': 'line_first_unpriced_candidates',
+            'requested_events': len(line_first_event_ids),
+            'eligible_upcoming_matches': eligible_matches,
+            'candidate_cards': len(by_market['aces']),
+            'aces_gate_counts': ace_gate_counts,
+            'odds_backed': False, 'projection_only': True,
+        }
 
     preferred_gap = aces_preferred_gap()
     for market in by_market:
