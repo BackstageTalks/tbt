@@ -41,10 +41,10 @@ MATCH_WINNER_MARKET_NAMES = {
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
 # The active champion/model features and probability shrink are unchanged.
-# Lower only the historical-count eligibility floor to 0.50 for ACCA, TOP,
-# VALUE and pre-price winner-odds discovery. Surface/price/identity guards stay.
-# TOP remains ATP/WTA main-tour 250+; lower grades and old issued records stay
-# untouched. The ACCA public name uses legacy prime keys in JSON and Python.
+# ACCA and VALUE retain their 0.50 historical-depth floors. TOP alone uses
+# 0.30 with a separate approved-competition TOP quote-discovery lane.
+# Surface/price/identity guards and historical issued records stay unchanged.
+# The ACCA public name uses legacy prime keys in JSON and Python.
 #
 # VALUE has assignment priority because close-odds candidates are scarce.
 # TOP receives remaining >=1.50 selections; ACCA is the short-price (<1.50)
@@ -55,7 +55,7 @@ PUBLICATION_MIN_PROBABILITY = 0.60
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
 TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # ACCA (legacy internal key: prime): decimal odds below 1.50 (no lower bound).
@@ -81,7 +81,7 @@ TOP_FALLBACK_PROBABILITIES = ()
 TOP_MIN_PROBABILITY = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
 TOP_TARGET_COUNT = 3
 TOP_MIN_COUNT = 3
-TOP_MIN_DATA_DEPTH = 0.50
+TOP_MIN_DATA_DEPTH = 0.30
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
 TOP_FALLBACK_MIN_ODDS = 1.50
@@ -762,12 +762,25 @@ def enrich_current_betting_day_odds(
         if scheduled <= now:
             started_predictions_skipped += 1
             continue
-        if not _passes_candidate_gate(
+        # Retain the old VALUE/ACCA pre-price gate; admit shallower rows only
+        # through the approved singles TOP lane (not generic ITF/UTR).
+        from .top_policy import competition_group
+        standard_candidate = _passes_candidate_gate(
             row,
             min_probability=candidate_min_probability,
             min_data_depth=candidate_min_data_depth,
             min_surface_matches=candidate_min_surface_matches,
-        ):
+        )
+        top_candidate = (
+            competition_group(row) in {"ATP", "WTA", "Challenger", "WTA 125", "BJK Cup", "Davis Cup"}
+            and _passes_candidate_gate(
+                row,
+                min_probability=max(TOP_MIN_PROBABILITY, candidate_min_probability),
+                min_data_depth=TOP_MIN_DATA_DEPTH,
+                min_surface_matches=TOP_MIN_SURFACE_MATCHES,
+            )
+        )
+        if not (standard_candidate or top_candidate):
             continue
         candidates.append(row)
     # Spend scarce odds calls on the strongest/data-richest predictions first.
@@ -799,6 +812,12 @@ def enrich_current_betting_day_odds(
             "min_probability": float(candidate_min_probability),
             "min_data_depth": float(candidate_min_data_depth),
             "min_surface_matches_each": int(candidate_min_surface_matches),
+            "top_only_lane": {
+                "min_probability": max(TOP_MIN_PROBABILITY, float(candidate_min_probability)),
+                "min_data_depth": TOP_MIN_DATA_DEPTH,
+                "min_surface_matches_each": TOP_MIN_SURFACE_MATCHES,
+                "approved_competitions_only": True,
+            },
         },
     }
     for row in candidates:
@@ -1041,7 +1060,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
         if not event or event in seen or (target is not None and len(selected) >= target):
             continue
         item = deepcopy(card)
-        item["selection_tier"] = "sports_0.65"
+        item["selection_tier"] = "sports_0.60"
         selected.append(item)
         seen.add(event)
     return selected, 0, {
@@ -1299,7 +1318,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "sports_tiered_top5_65_v25",
+            "selection_policy": "sports_tiered_top5_60_v26",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1404,7 +1423,7 @@ def select_market_sections(
                 "limit": top_limit,
                 "sort": "competition_tier_then_probability_desc_then_event_id",
                 "ranked_full_slate": True,
-                "policy": "sports_tiered_top5_65_v25",
+                "policy": "sports_tiered_top5_60_v26",
                 "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,

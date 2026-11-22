@@ -981,8 +981,8 @@
       ],
       "requires_odds": true,
       "objective": "competition_tier_then_probability_desc",
-      "min_probability": 0.65,
-      "min_data_depth": 0.5,
+      "min_probability": 0.6,
+      "min_data_depth": 0.3,
       "min_surface_matches": 5,
       "min_odds": 1.5,
       "max_odds": null,
@@ -994,16 +994,16 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "Target three, publish at most five verified TOP picks at 65% or above. ATP/WTA 250+ preferred, then ATP Challenger 50+, WTA 125, BJK Cup and Davis Cup singles. No forced fill; ITF, UTR, juniors and exhibitions excluded.",
+      "cascade": "Target three, publish at most five verified TOP picks at 60% or above. ATP/WTA 250+ preferred, then ATP Challenger 50+, WTA 125, BJK Cup and Davis Cup singles. No forced fill; ITF, UTR, juniors and exhibitions excluded.",
       "confidence_tiers": [
-        0.65
+        0.6
       ],
       "minimum_dashboard_count": 3,
-      "fallback_min_probability": 0.65,
+      "fallback_min_probability": 0.6,
       "fallback_only_if_core_count_below": null,
       "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [],
-      "backup_min_data_depth": 0.5,
+      "backup_min_data_depth": 0.3,
       "backup_min_surface_matches": 5,
       "competition_priority": [
         [
@@ -1018,7 +1018,7 @@
         ]
       ],
       "quality_fallback": false,
-      "policy": "sports_tiered_top5_65_v25",
+      "policy": "sports_tiered_top5_60_v26",
       "excluded_competitions": [
         "ITF",
         "UTR",
