@@ -4679,7 +4679,7 @@
       '</tbody></table></div></section>';
     const focused='<section class="monthly-table-card monthly-focused-card"><div class="monthly-card-heading">'+
       '<h3>Denný report · '+escapeHtml(active.label)+'</h3></div>'+
-      '<div class="monthly-table-scroll"><table class="monthly-grid-table monthly-focused-table">'+
+      '<div class="monthly-table-scroll" role="region" aria-label="Denný report – posúvateľná tabuľka" tabindex="0"><table class="monthly-grid-table monthly-focused-table">'+
       '<thead><tr><th>Deň</th><th>WIN / LOSS / VOID</th><th>Profit</th><th>Spolu</th></tr></thead>'+
       '<tbody>'+(days?focusedRows:'<tr><td colspan="4" class="monthly-chart-empty">Zvolené obdobie nie je platné.</td></tr>')+
       '</tbody></table></div></section>';
