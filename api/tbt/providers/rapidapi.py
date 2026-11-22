@@ -1325,8 +1325,11 @@ class RapidTennisClient:
 
             if category_tour is not None and category_tour != tour:
                 continue
-            # Match Winner expansion only. Other products retain 250+ gates.
-            if not is_match_winner_offer_scope(tour, category_id=category_id, labels=(category_name,)):
+            # Only the prospective Match Winner slate can use extended tiers.
+            # Historical downloads and CDB import retain the established 250+
+            # scope and must not pay for newly excluded historical categories.
+            eligible = (is_250_plus if historical else is_match_winner_offer_scope)
+            if not eligible(tour, category_id=category_id, labels=(category_name,)):
                 continue
 
             for raw in self.category_events(category_id, day):
@@ -1341,8 +1344,8 @@ class RapidTennisClient:
                 if event_tour != tour:
                     continue
                 # Re-check the event grade; provider categories can be broad.
-                if not is_match_winner_offer_scope(tour, category_id=category_id,
-                                                   labels=(category_name, self._event_text(raw))):
+                if not eligible(tour, category_id=category_id,
+                                labels=(category_name, self._event_text(raw))):
                     continue
 
                 event = self._annotate_event(

@@ -65,9 +65,8 @@ def test_daily_provider_does_not_pay_to_open_lower_categories():
     day = date(2026, 11, 21)
     client.matches_for_day("atp", day, historical=True)
     client.matches_for_day("wta", day, historical=True)
-    # Winner discovery now opens approved Challenger/WTA125; native CDB
-    # statistics and doubles scope remains 250+.
-    assert called == [72, 3, -100, 871, 6, -100]
+    # Native historical calendar and CDB ingest remain 250+ only.
+    assert called == [3, -100, 6, -100]
     called.clear()
     client.doubles_for_day(day, historical=True)
     assert called == [3, 6, -100]
@@ -138,3 +137,26 @@ def test_cup_event_tour_requires_explicit_competition_and_singles():
         "name": "Billie Jean King Cup Doubles",
         "homeTeam": {"id": 1}, "awayTeam": {"id": 2},
     }) is False
+
+
+def test_historical_scope_does_not_expand_into_challenger_wta125_or_cups():
+    client = object.__new__(RapidTennisClient)
+    visited = []
+    categories = [
+        {"id": 72, "name": "ATP Challenger"},
+        {"id": 871, "name": "WTA 125"},
+        {"id": 82001, "name": "Davis Cup World Group"},
+        {"id": 82002, "name": "Billie Jean King Cup World Group"},
+        {"id": 3, "name": "ATP"},
+        {"id": 6, "name": "WTA"},
+    ]
+    client.calendar_categories = lambda day: categories
+    client.category_events = lambda category, day: visited.append(category) or []
+    day = date(2026, 11, 22)
+    client.matches_for_day("atp", day, historical=True)
+    client.matches_for_day("wta", day, historical=True)
+    assert visited == [3, 6]
+    visited.clear()
+    client.matches_for_day("atp", day, historical=False)
+    client.matches_for_day("wta", day, historical=False)
+    assert visited == [72, 82001, 3, 871, 82002, 6]
