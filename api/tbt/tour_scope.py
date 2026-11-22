@@ -69,3 +69,45 @@ def match_is_250_plus(match) -> bool:
         raw.get("tournamentLevel"), raw.get("rankName"),
     )
     return is_250_plus(match.tour, category_id=source_id, labels=labels)
+
+
+# Match Winner discovery is deliberately broader than the paid historical
+# statistics/ACES scope above. Do not reuse this predicate in CDB gapfills,
+# doubles, ESÁ or Viac Es. All newly included fixtures still need valid
+# individual identities, pre-start winner odds and standard quality gates.
+_UNSAFE_WINNER_LEVEL = re.compile(
+    r"\b(?:itf|futures?|utr|juniors?|wheelchair|exhibitions?|next[\s_-]*gen)\b", re.I
+)
+_CHALLENGER_LABEL = re.compile(r"\bchallengers?\b", re.I)
+_WTA125_LABEL = re.compile(r"\bwta[\s_-]*125\b", re.I)
+
+
+def is_match_winner_offer_scope(tour: str, *, category_id=None, labels=()) -> bool:
+    """Allow ATP/WTA 250+, ATP Challenger 50+, WTA 125 and team-cup singles.
+
+    Unknown grades do not bypass native category/tour identity. Davis Cup and
+    Billie Jean King Cup are accepted by explicit names, not generic teams.
+    """
+    if is_250_plus(tour, category_id=category_id, labels=labels):
+        return True
+    tour = str(tour or "").strip().casefold()
+    if tour not in _MAIN_CATEGORY:
+        return False
+    try:
+        category = int(category_id) if category_id not in (None, "") else None
+    except (TypeError, ValueError):
+        category = None
+    label = " ".join(str(item or "") for item in labels).casefold()
+    if _UNSAFE_WINNER_LEVEL.search(label):
+        return False
+    if tour == "atp" and category in (None, 3, 72) and _CHALLENGER_LABEL.search(label):
+        return True
+    if tour == "wta" and category in (None, 6, 871) and _WTA125_LABEL.search(label):
+        return True
+    if category in {72, 871, 213, 785}:
+        return False
+    if tour == "atp" and "davis cup" in label:
+        return True
+    if tour == "wta" and ("billie jean king cup" in label or "fed cup" in label):
+        return True
+    return False
