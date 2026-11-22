@@ -71,3 +71,5 @@ Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne 
 - Tréning z Adminu: Azure tokeny NEpotrebuje (požiadavka → Azure Table → `admin-training-worker.yml` na GitHube, beží každých ~15 min, OK). Oprava v PR #1766: push-triggered „skipped“ behy tréningového workflowu posúvali `base` fronty, takže uložená požiadavka sa stratila. Teraz sa ignorujú.
 - Prop-Line: predtým sa pre esá/dvojchyby uložila len PRVÁ kancelária; ostatné sa zahodili. Teraz sa uchovajú všetky (`other_books`) a model skúša hranice postupne, klasické kancelárie pred DFS (PrizePicks, Underdog). Bez prepínača – len pridáva reálne hranice, nič nové nevymýšľa.
 - Blokér nasadenia: CI na main padal na 3 zastaraných testoch → web sa nenasadzoval (watchdog, issue #1765). PR #1766 to opravuje.
+
+- Rozhodnutie majiteľa 22.11.: lokálny kurzový fallback, KPI (ROI/yield/auto) a stĺpec KURZ sa nemenia. `TBT_ACES_REAL_LINE_STRICT` ostáva vypnutý.
