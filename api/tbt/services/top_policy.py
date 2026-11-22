@@ -51,10 +51,18 @@ def competition_group(row):
         return "ITF"
     if "utr" in combined:
         return "UTR"
-    if re.search(r"wta\s*125", combined) or ("challenger" in combined and
-            ("wta" in combined or str(row.get("tour") or "").strip().upper() == "WTA")):
-        return "WTA 125"
+    tour = str(row.get("tour") or "").strip().upper()
+    if ("billie jean king cup" in combined or "fed cup" in combined) and tour == "WTA":
+        return "BJK Cup"
+    if "davis cup" in combined and tour == "ATP":
+        return "Davis Cup"
+    # A generic WTA Challenger or an ATP fixture mislabelled WTA cannot
+    # prove the specific WTA 125 grade. Fail closed on ambiguous tier identity.
+    if re.search(r"wta[\s_-]*125", combined):
+        return "WTA 125" if tour == "WTA" else "unknown"
     if "challenger" in combined:
+        if tour != "ATP" or "wta" in combined:
+            return "unknown"
         return "Challenger"
     if level in {"atp", "atp 250", "atp 500", "atp 1000", "masters 1000", "atp finals"}:
         return "ATP" if str(row.get("tour") or "").upper() == "ATP" else "unknown"
@@ -123,7 +131,7 @@ def rejection_reasons(card, *, min_probability=.60, min_depth=.50, min_surface=5
     group = competition_group(card)
     # ITF of every grade is held out of NEW TOP picks, independent of probability.
     # Previously issued snapshots and VALUE/PRIME selection are unaffected.
-    if group not in {"ATP", "WTA"}:
+    if group not in {"ATP", "WTA", "Challenger", "WTA 125", "BJK Cup", "Davis Cup"}:
         reasons.append("competition_not_approved")
     # Temporary TOP-only hold pending independently graded M15/M25 calibration.
     # This changes neither issued selections nor VALUE/PRIME or model probabilities.

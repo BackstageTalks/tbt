@@ -16,7 +16,7 @@ from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
 from .score import parse_event_score
 from ..schemas import MatchRecord
-from ..tour_scope import is_250_plus
+from ..tour_scope import is_250_plus, is_match_winner_offer_scope
 from ..match_format import exact_best_of_from_score_stats, explicit_best_of_from_event, infer_best_of
 from ..utils import (
     deterministic_id,
@@ -1030,6 +1030,11 @@ class RapidTennisClient:
         category: dict[str, Any],
     ) -> str | None:
         category_id = cls._category_id(category)
+        name = " ".join(str(first_present(category, key) or "") for key in ("name", "slug", "title")).casefold()
+        if "billie jean king cup" in name or "fed cup" in name:
+            return "wta"
+        if "davis cup" in name:
+            return "atp"
 
         if category_id in cls._ATP_CATEGORY_IDS:
             return "atp"
@@ -1095,6 +1100,11 @@ class RapidTennisClient:
         source_category_id: int | None,
         source_category_name: str = "",
     ) -> str | None:
+        cup_text = cls._event_text(raw) + " " + str(source_category_name or "").casefold()
+        if "billie jean king cup" in cup_text or "fed cup" in cup_text:
+            return "wta"
+        if "davis cup" in cup_text:
+            return "atp"
         if source_category_id in cls._ATP_CATEGORY_IDS:
             return "atp"
         if source_category_id in cls._WTA_CATEGORY_IDS:
@@ -1315,8 +1325,8 @@ class RapidTennisClient:
 
             if category_tour is not None and category_tour != tour:
                 continue
-            # Exclude lower tiers *before* paying for category/date events.
-            if not is_250_plus(tour, category_id=category_id, labels=(category_name,)):
+            # Match Winner expansion only. Other products retain 250+ gates.
+            if not is_match_winner_offer_scope(tour, category_id=category_id, labels=(category_name,)):
                 continue
 
             for raw in self.category_events(category_id, day):
@@ -1330,10 +1340,9 @@ class RapidTennisClient:
                 )
                 if event_tour != tour:
                     continue
-                # Native category can be overly broad; fail closed on an explicit
-                # WTA 125 / Challenger / ITF event label even within ATP/WTA.
-                if not is_250_plus(tour, category_id=category_id,
-                                   labels=(category_name, self._event_text(raw))):
+                # Re-check the event grade; provider categories can be broad.
+                if not is_match_winner_offer_scope(tour, category_id=category_id,
+                                                   labels=(category_name, self._event_text(raw))):
                     continue
 
                 event = self._annotate_event(

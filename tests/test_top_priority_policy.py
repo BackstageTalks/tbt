@@ -27,12 +27,12 @@ def verified_w35(event, p=.75, *, odds=1.60, other=2.60):
     return card
 
 
-def test_main_tours_exclude_challenger_and_itf_even_below_target():
+def test_main_tours_rank_before_challenger_and_still_exclude_itf():
     rows=[pick("itf",.93,"ITF Men"),pick("wta",.70,"WTA"),
           pick("atp",.75),pick("challenger",.85,"Challenger")]
     out=select_market_sections(rows)
-    assert ids(out)==["atp","wta"]
-    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==1
+    assert ids(out)==["atp","wta","challenger"]
+    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==0
 
 
 def test_verified_itf_is_still_excluded_even_with_high_probability():
@@ -95,12 +95,12 @@ def test_probability_wins_over_market_consensus_within_same_group():
     assert ids(select_market_sections(rows)) == ["higher", "middle", "lower"]
 
 
-def test_main_excludes_challenger_w35_and_wta125():
+def test_main_prioritizes_wta125_challenger_and_excludes_w35():
     rows = [verified_w35("itf", .95), pick("secondary-low", .71, "Challenger"),
             pick("secondary-high", .88, "WTA 125"), pick("main", .70)]
     result = select_market_sections(rows)
-    assert ids(result) == ["main"]
-    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 3
+    assert ids(result) == ["main", "secondary-high", "secondary-low"]
+    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
 @pytest.mark.parametrize("tournament", [
@@ -230,23 +230,23 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     ]
     before = deepcopy(rows)
     result = select_market_sections(rows)
-    assert ids(result) == ["atp70", "wta68", "atp65"]
+    assert ids(result) == ["atp70", "wta68", "atp65", "challenger"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "sports_0.60", "sports_0.60", "sports_0.60"
+        "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
 
 
-def test_65_floor_never_reintroduces_challenger_or_w35():
+def test_60_floor_allows_challenger_but_never_w35_or_weak_matches():
     atp = pick("atp", .65, "ATP")
     challenger = pick("challenger", .66, "Challenger")
     w35 = verified_w35("w35", .655)
     rejected = pick("under-floor", .599, "Challenger")
     result = select_market_sections([atp, challenger, w35, rejected])
-    assert ids(result) == ["atp"]
+    assert ids(result) == ["atp", "challenger"]
     assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
-        "sports_0.60"
+        "sports_0.60", "sports_0.60"
     ]
     snap = build_selection_candidate_snapshot(
         [atp, challenger, w35, rejected],
@@ -293,14 +293,14 @@ def test_old_itf_safeguards_survive_new_tier_order():
     assert result["market_selection"]["top_rejection_counts"]["top_unverified_market_outsider_conflict"] == 1
 
 
-def test_nonapproved_wta125_wta_challenger_and_utr_do_not_fill_top():
+def test_verified_wta125_enters_top_but_generic_wta_challenger_and_utr_fail():
     wta125 = pick("wta125", .99, "WTA 125")
     wta_challenger = pick("wta_challenger", .98, "WTA Challenger")
     utr = pick("utr", .98, "UTR")
     result = select_market_sections([wta125, wta_challenger, utr])
-    assert ids(result) == []
-    assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
-    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 3
+    assert ids(result) == ["wta125"]
+    assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
+    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 2
 
 
 
@@ -330,12 +330,12 @@ def test_itf_top_excluded_regardless_of_probability(p, eligible):
         assert output["market_selection"]["top_rejection_counts"]["itf_probability_not_above_65"] == 1
 
 
-def test_main_atp_does_not_inherit_itf_cap_and_challenger_is_excluded():
+def test_main_atp_and_challenger_do_not_inherit_itf_price_cap():
     main = pick("atp65", .65, "ATP", odds=1.70, other=2.60)
     challenger = pick("ch65", .65, "Challenger", odds=1.75, other=2.60)
     output = select_market_sections([main, challenger])
-    assert ids(output) == ["atp65"]
-    assert output["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
+    assert ids(output) == ["atp65", "ch65"]
+    assert output["market_selection"]["selection_counts"]["top_daily_shortfall"] == 1
 
 
 def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
@@ -344,7 +344,7 @@ def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
     over = verified_w35("over", .95, odds=1.7001)
     qualifying = verified_w35("qualifying", .651, odds=1.70)
     output = select_market_sections([over, qualifying, main, challenger])
-    assert ids(output) == ["atp65"]
+    assert ids(output) == ["atp65", "ch65"]
     assert output["market_selection"]["top_rejection_counts"]["itf_odds_above_1_70"] == 1
 
 
@@ -359,8 +359,8 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
 
 @pytest.mark.parametrize("tour,competition,tournament,expected", [
     ("ATP", "ATP Challenger", "Regular", "Challenger"),
-    ("WTA", "Challenger", "Generic", "WTA 125"),
-    ("ATP", "WTA Challenger", "Mislabelled", "WTA 125"),
+    ("WTA", "Challenger", "Generic", "unknown"),
+    ("ATP", "WTA Challenger", "Mislabelled", "unknown"),
     ("WTA", "WTA 125", "Open", "WTA 125"),
     ("ATP", "ATP Challenger", "Junior Challenger", "other"),
     ("ATP", "ATP Challenger", "Doubles Challenger", "other"),
@@ -374,5 +374,5 @@ def test_top_competition_classifier_fails_closed_for_unapproved_formats(tour, co
     card = pick("tier-check", .99, competition)
     card.update(tour=tour, tournament=tournament)
     assert competition_group(card) == expected
-    if expected in {"ITF", "UTR", "WTA 125", "other"}:
+    if expected in {"ITF", "UTR", "other", "unknown"}:
         assert "competition_not_approved" in rejection_reasons(card)
