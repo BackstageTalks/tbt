@@ -197,7 +197,7 @@ def compute(archive: Path, day: str):
         "depth_fail_bins":dict(depth_fail_bins),
         "depth_bins_all_priced":dict(depth_hist),
         "competitions_with_surface_or_depth_fails":{k:dict(v) for k,v in sorted(competition.items())},
-        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "affected_examples":examples,
+        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "ev_price_comparison":ev_policy_analysis(priced,snap["generated_at"]), "affected_examples":examples,
         "limitations":"Non-exclusive failures; source snapshot may have different day filters or evaluation time than audit logs. Scenario is pre-exclusivity, not public issuance. Model public probabilities and odds are held fixed; no new API calls, no outcomes, no backdating.",
         "provider_requests":0, "production_writes":0,
     }
@@ -327,6 +327,62 @@ def scenario_analysis(priced, observed_at):
         item["unique_new_vs_baseline"]=len(now-base)
     return {"safeguarded_priced_rows":len(safe), "variants":report,
             "limits":"One same-day frozen snapshot, no repricing and no model rerun. Non-tunable rejection reasons preserved; ACCA and TOP odds overlap noted, not deployed. Counts are rough upper bounds prior to canonical publication/issuance validation."}
+
+
+
+def ev_policy_analysis(priced, observed_at):
+    """Research alternative Value definition; preserve 65% TOP and all evidence.
+
+    Positive model EV is NOT proven profitability or calibrated reliability.
+    The selected price is a genuine frozen quote; this never requests or
+    synthesizes another market or a different probability.
+    """
+    safe=[r for r in priced if _row_core_safe(r) and prestart_at_snapshot(r,observed_at)]
+    variants = [
+        ("value_ev_0_odds180", 1.80, .00, None),
+        ("value_ev_3_odds180", 1.80, .03, None),
+        ("value_ev_5_odds180", 1.80, .05, None),
+        ("value_ev_10_odds180", 1.80, .10, None),
+        ("value_ev_5_odds180_max_gap20pp", 1.80, .05, .20),
+        ("value_ev_5_odds180_max_gap15pp", 1.80, .05, .15),
+        ("value_ev_5_odds150", 1.50, .05, None),
+        ("value_ev_10_odds150", 1.50, .10, None),
+        ("value_ev_5_odds150_max_gap20pp", 1.50, .05, .20),
+        ("value_ev_10_odds150_max_gap20pp", 1.50, .10, .20),
+    ]
+    out={}
+    for name,min_odds,ev_min,market_gap_max in variants:
+        values,top=[],[]
+        for row in safe:
+            p,o,depth,surf=(number(row.get("blinq_probability")),_price(row),
+                            number(row.get("data_depth")),_surface_min(row))
+            if None in (p,o,depth,surf):
+                continue
+            tw=row.get("two_way_market") if isinstance(row.get("two_way_market"),dict) else {}
+            a,b=number(tw.get("player1_odds")),number(tw.get("player2_odds"))
+            if a is None or b is None or min(a,b)<=1:
+                continue
+            player1=row.get("player1") if isinstance(row.get("player1"),dict) else {}
+            chosen_side=0 if str(row.get("winner_id") or "")==str(player1.get("id") or "") else 1
+            selected_two_way=[a,b][chosen_side]
+            if abs(selected_two_way-o)>0.05:
+                continue
+            fair=(1.0/selected_two_way)/(1/a+1/b)
+            if (p>=.60 and o>min_odds and depth>=.50 and surf>=3
+                and p*o-1>=ev_min
+                and (market_gap_max is None or abs(p-fair)<=market_gap_max)):
+                values.append(row)
+            elif p>=.65 and o>=1.50 and depth>=.50 and surf>=5:
+                top.append(row)
+        top.sort(key=lambda r:number(r.get("blinq_probability")) or 0,reverse=True)
+        out[name]={"top":len(top[:5]),"value":len(values),
+                   "total":len(top[:5])+len(values),
+                   "reach_five":len(top[:5])+len(values)>=5,
+                   "value_event_ids":[_candidate_id(r) for r in values],
+                   "top_event_ids":[_candidate_id(r) for r in top[:5]]}
+    return {"variants":out,"counts_only":True,
+            "model_ev_not_calibrated":"No financial returns or profit validation. These are hypothetical, not deployable Value picks.",
+            "provider_requests":0,"production_writes":0}
 
 
 def main():
