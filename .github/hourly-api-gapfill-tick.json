@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "local_day": "2026-11-13",
-  "local_hour": 22,
-  "requested_utc": "2026-11-13T21:46:11Z",
+  "local_day": "2026-11-22",
+  "local_hour": 15,
+  "requested_utc": "2026-11-22T14:27:26Z",
   "source": "operator-approved-500-statistics-smoke",
-  "max_requests": 300,
-  "purpose": "User-approved single guarded <=300 RapidAPI-request statistics yield comparison after PR #1597. Fresh shared Azure CAS budget, provider-header reserve, 6/s, 17:09 UTC reset, global CDB lock, native importer and independent exact-value/SHA256 CDB read-back remain mandatory. No automatic model promotion."
+  "max_requests": 500,
+  "purpose": "Operator-approved one-off <=500 shared-budget API gapfill verification after PR #1758. This tick uses current hour mode selection (extras when staged as extras). Preserve CAS 14500 ceiling, 500 reserve, 6/s, global CDB writer lock, native NULL-only importer, UTC 17:07 cutoff and independent CDB read-back. Do not modify champion or production predictions."
 }
