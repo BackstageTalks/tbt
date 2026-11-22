@@ -907,6 +907,9 @@ def _daily_rows(payload: dict) -> list[dict]:
         # Preserve the selector's competition/tier order. Old publications and
         # settled results are not mutated by this active-board filter.
         return out
+    if rule.get("policy") == "sports_tiered_top5_60_v26":
+        # Forward-only 60% TOP rule. Old v25 publications retain 65%.
+        return [row for row in out if _row_probability(row) + 1e-12 >= .60][:5]
     if rule.get("policy") == "sports_tiered_top5_65_v25":
         # The serving/member view must preserve the selector's ranked TOP
         # competition order and the owner's new >=65% floor. A legacy

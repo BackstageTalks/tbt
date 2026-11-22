@@ -6,8 +6,8 @@ from tbt.services.entitlements import _daily_rows
 
 
 def test_top60_survives_member_filter_and_does_not_force_three():
-    rows = [row('boundary', .65, 1.5, 2.6, depth=1),
-            row('below', .6499, 1.6, 2.6, depth=1),
+    rows = [row('boundary', .60, 1.5, 2.6, depth=1),
+            row('below', .5999, 1.6, 2.6, depth=1),
             row('shrunken', .62, 1.6, 2.6, depth=.8),
             row('short', .64, 1.49, 2.6, depth=1)]
     before = deepcopy(rows)

@@ -192,8 +192,11 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["top_daily"]["limit"] == 5
     assert rules["top_daily"]["presentation_preview_limit"] == 10
     assert rules["top_daily"]["target_count"] == 3
-    assert rules["top_daily"]["confidence_tiers"] == [.65]
-    assert rules["top_daily"]["min_probability"] == 0.65
+    assert rules["top_daily"]["confidence_tiers"] == [.60]
+    assert rules["top_daily"]["min_probability"] == 0.60
+    assert rules["top_daily"]["min_data_depth"] == 0.30
+    assert rules["top_daily"]["min_surface_matches"] == 5
+    assert rules["top_daily"]["policy"] == "sports_tiered_top5_60_v26"
     assert rules["top_daily"]["min_odds"] == 1.50
     assert rules["top_daily"]["max_odds"] is None
     assert rules["top_daily"]["min_edge"] is None
