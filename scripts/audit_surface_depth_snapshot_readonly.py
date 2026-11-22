@@ -197,7 +197,7 @@ def compute(archive: Path, day: str):
         "depth_fail_bins":dict(depth_fail_bins),
         "depth_bins_all_priced":dict(depth_hist),
         "competitions_with_surface_or_depth_fails":{k:dict(v) for k,v in sorted(competition.items())},
-        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "ev_price_comparison":ev_policy_analysis(priced,snap["generated_at"]), "affected_examples":examples,
+        "scenario_gate_pass":sensitivity, "candidate_policy_scenarios":scenario_analysis(priced,snap["generated_at"]), "ev_price_comparison":ev_policy_analysis(priced,snap["generated_at"]), "historical_capacity":historical_capacity_check(archive,day), "affected_examples":examples,
         "limitations":"Non-exclusive failures; source snapshot may have different day filters or evaluation time than audit logs. Scenario is pre-exclusivity, not public issuance. Model public probabilities and odds are held fixed; no new API calls, no outcomes, no backdating.",
         "provider_requests":0, "production_writes":0,
     }
@@ -383,6 +383,48 @@ def ev_policy_analysis(priced, observed_at):
     return {"variants":out,"counts_only":True,
             "model_ev_not_calibrated":"No financial returns or profit validation. These are hypothetical, not deployable Value picks.",
             "provider_requests":0,"production_writes":0}
+
+
+
+def historical_capacity_check(archive: Path, last_day: str, window_days: int = 7):
+    """Earliest 06:00+ snapshot/day; small descriptive sample only.
+
+    This cannot validate a 5/day guarantee or profitability: previous dates
+    can have different competition/price discovery and champion policies.
+    """
+    with gzip.open(archive, "rt", encoding="utf-8") as f:
+        env=json.load(f)
+    grouped=defaultdict(list)
+    for snap in env.get("snapshots",[]):
+        if not isinstance(snap,dict):
+            continue
+        when=stamp(snap.get("generated_at"))
+        if when is None:
+            continue
+        local=when.astimezone(LOCAL)
+        day=local.date().isoformat()
+        if local.hour>=6 and day<=last_day and isinstance(snap.get("rows"),list):
+            grouped[day].append(snap)
+    selected=sorted(grouped)[-window_days:]
+    summary=[]
+    for day in selected:
+        snaps=sorted(grouped[day],key=lambda x:stamp(x["generated_at"]))
+        first,last=snaps[0],snaps[-1]
+        observations=[]
+        for label,snap in [("first_after_06",first),("last_of_day",last)]:
+            priced=[x for x in snap["rows"] if isinstance(x,dict)
+                    and x.get("priced") is True and is_today(x,day)]
+            v=scenario_analysis(priced,snap["generated_at"])["variants"]
+            keep=("baseline","top_prob_62","top_prob_60","value_spread_25","top62_value_spread35")
+            observations.append({
+                "anchor":label,"generated_at":snap["generated_at"],
+                "same_day_priced":len(priced),
+                "counts":{name:v[name]["prestart_15m_total"] for name in keep},
+            })
+        summary.append({"day":day,"snapshot_count":len(snaps),
+                        "observations":observations})
+    return {"days_in_archive":len(grouped),"days_reported":summary,
+            "caution":"Different historical discovery scopes, model versions, publication windows and opportunity sizes: not a controlled forecast or profitability test."}
 
 
 def main():
