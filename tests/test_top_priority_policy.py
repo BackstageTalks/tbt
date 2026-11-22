@@ -41,8 +41,8 @@ def test_verified_itf_is_still_excluded_even_with_high_probability():
     assert out["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
-@pytest.mark.parametrize("p",[.55,.60,.6499])
-def test_no_target_filling_below_65(p):
+@pytest.mark.parametrize("p",[.55,.58,.5999])
+def test_no_target_filling_below_60(p):
     out=select_market_sections([pick("low",p)])
     assert not ids(out)
     assert out["market_selection"]["selection_counts"]["top_daily_shortfall"]==3
@@ -67,7 +67,7 @@ def test_quote_time_and_evidence_do_not_relax_for_target():
     cases=[]
     card=pick("time");card["betting"].pop("captured_at");cases.append(card)
     card=pick("surface");card["quality"]["player1"]["surface_matches"]=3;cases.append(card)
-    card=pick("depth",.95);card["data_depth"]=.49;cases.append(card)
+    card=pick("depth",.95);card["data_depth"]=.29;cases.append(card)
     assert not ids(select_market_sections(cases))
 
 
@@ -232,7 +232,7 @@ def test_atp_wta_65_floor_fills_all_three_slots_before_itf():
     result = select_market_sections(rows)
     assert ids(result) == ["atp70", "wta68", "atp65", "challenger"]
     assert [c["selection_tier"] for c in result["top_daily_picks"]] == [
-        "sports_0.65", "sports_0.65", "sports_0.65", "sports_0.65"
+        "sports_0.60", "sports_0.60", "sports_0.60", "sports_0.60"
     ]
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 0
     assert rows == before
@@ -246,13 +246,13 @@ def test_60_floor_allows_challenger_but_never_w35_or_weak_matches():
     result = select_market_sections([atp, challenger, w35, rejected])
     assert ids(result) == ["atp", "challenger"]
     assert [row["selection_tier"] for row in result["top_daily_picks"]] == [
-        "sports_0.65", "sports_0.65"
+        "sports_0.60", "sports_0.60"
     ]
     snap = build_selection_candidate_snapshot(
         [atp, challenger, w35, rejected],
         generated_at=datetime(2026, 11, 11, 7, tzinfo=timezone.utc)
     )
-    assert snap["selection_policy"] == "sports_tiered_top5_65_v25"
+    assert snap["selection_policy"] == "sports_tiered_top5_60_v26"
     assert "probability_below_fixed_floor" in snap["rows"][3]["top_rejection_reasons"]
 
 
@@ -352,7 +352,7 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
     assert verify() == {
-        "status": "PASS", "policy": "sports_tiered_top5_65_v25",
+        "status": "PASS", "policy": "sports_tiered_top5_60_v26",
         "provider_requests": 0,
     }
 
