@@ -766,7 +766,12 @@ def test_verified_itf_m15_w15_plus_uses_standard_top_value_rules():
     m25_value.update(tour="ATP", competition="ITF M25", tournament="ITF M25")
     invalid = row("itf-unknown", .90, 1.60, 2.60, depth=1)
     invalid.update(tour="ATP", competition="ITF", tournament="ITF without grade")
-    result = select_market_sections([main, m15, w15, m25_value, invalid])
+    low_grade_value = row("w10-value", .72, 1.90, 2.00, depth=1)
+    low_grade_value.update(tour="WTA", competition="ITF W10", tournament="ITF W10")
+    unknown_grade_value = row("unknown-grade-value", .72, 1.90, 2.00, depth=1)
+    unknown_grade_value.update(tour="WTA", competition="ITF", tournament="ITF generic")
+    result = select_market_sections([main, m15, w15, m25_value, invalid,
+                                     low_grade_value, unknown_grade_value])
     assert [x["event_id"] for x in result["top_daily_picks"]] == ["main", "m15", "w15"]
     assert [x["event_id"] for x in result["value_picks"]] == ["m25-value"]
     assert "itf-unknown" not in {x["event_id"] for x in result["top_daily_picks"]}
