@@ -6,7 +6,7 @@
 
 Owner referenced an attachment named `top5_supply_fallback.patch`, but it was not present among conversation attachments, persistent file library, local working data, or the current main repo on 2026-11-22. The only available current conversation files were two unrelated JPEGs. **No `git apply --check`, `git apply`, or patch rebase can truthfully be reported until the original patch is supplied.** Do not reconstruct a replacement patch silently. Pin the patch SHA-256 and apply against the then-current `main` with `git apply --check` and `git apply` before review; rebase the supplied patch rather than replacing it.
 
-Baseline main pinned at `7e8c753b847d8b6bda0bf1e7de96fd3e2680db76`.
+Baseline main pinned at `78f3b974fb4706cade764328933732aa3af30516` (documentation-only draft rebased onto current main; code unchanged).
 
 ## Main state verified in source
 
