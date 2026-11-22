@@ -994,7 +994,7 @@
       "edge_ev_role": "diagnostic_only",
       "target_count": 3,
       "presentation_preview_limit": 10,
-      "cascade": "Target three, publish at most five quality-approved TOP picks at 60% or above. ATP 250+ / WTA 250+ only. Challenger, WTA 125, ITF, UTR, juniors and exhibitions excluded. No forced fill.",
+      "cascade": "Target three, publish at most five verified TOP picks at 60% or above. ATP/WTA 250+ preferred, then ATP Challenger 50+, WTA 125, BJK Cup and Davis Cup singles. No forced fill; ITF, UTR, juniors and exhibitions excluded.",
       "confidence_tiers": [
         0.6
       ],
@@ -1009,14 +1009,18 @@
         [
           "ATP",
           "WTA"
+        ],
+        [
+          "Challenger",
+          "WTA 125",
+          "BJK Cup",
+          "Davis Cup"
         ]
       ],
       "quality_fallback": false,
       "policy": "sports_tiered_top5_60_v24",
       "excluded_competitions": [
-        "Challenger",
         "ITF",
-        "WTA 125",
         "UTR",
         "other",
         "unknown"
