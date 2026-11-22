@@ -16,5 +16,7 @@
   "paid_api_calls_allowed": false,
   "morning_refresh": false,
   "pre_reset_provider_header_override": false,
-  "purpose": "Owner approved forward-only TOP threshold deployment. Reuse existing data.yml deploy-current, no TennisAPI/PropLine calls or model promotion, preserve immutable morning issuance freeze. Production verification must confirm Azure frontend/backend SHA and authenticated feed snapshot before claiming picks visible."
+  "purpose": "Owner approved forward-only TOP threshold deployment. Reuse existing data.yml deploy-current, no TennisAPI/PropLine calls or model promotion, preserve immutable morning issuance freeze. Production verification must confirm Azure frontend/backend SHA and authenticated feed snapshot before claiming picks visible.",
+  "trigger_correction": "retry_after_preflight_run_45040311002_which_skipped_deploy_due_to_missing_deploy-current_marker",
+  "dispatch_attempt": 2
 }
