@@ -1,21 +1,32 @@
 # Claude – poznámky k úpravám BlinQ
 
+## Pravidlá spolupráce (dohodnuté 23.11.2026)
+- Claude zlučuje PR do main len po „OK“ majiteľa v chate a po zelenom CI.
+- Pred zlúčením: zhrnutie zmeny, riziká (najprv), spôsob návratu.
+- Prepínače (Variables) zapína majiteľ, vždy po jednom.
+- UI, zobrazenie kurzov, KPI a lokálny kurzový fallback sa nemenia bez výslovného súhlasu.
+
+## Denník nasadení a návrat
+| Dátum | PR / commit | Čo | Návrat |
+|---|---|---|---|
+| 2026-11-23 | #1766 → `c4ed468` | opravy + prepínače (všetky OFF) | `git revert -m 1 c4ed468` alebo zrušiť príslušnú `_OWNER_APPROVED` premennú |
+
 Jeden súbor, jeden riadok = jedna zmena. Stav: PR = otvorený draft, MAIN = zlúčené, TODO = nezačaté.
 Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (GitHub → Settings → Variables → Actions).
 
 ## Zmeny
 | Dátum | Stav | Čo | Prečo | Prepínač |
 |---|---|---|---|---|
-| 2026-11-22 | PR #1766 | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
-| 2026-11-22 | PR #1766 | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
-| 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
-| 2026-11-22 | PR #1766 | Testy workflowov zosúladené s `oneoff_global_limit` | testy zaostali za workflowom | – |
-| 2026-11-22 | PR #1766 | TOP minimum picks + emergency fill z mäkkých pravidiel | systém nesmie mlčať; tvrdé pravidlá (kurz ≥ 1,50, identita, predštart, súťaže) sa nemenia | `TBT_TOP_MIN_PICKS` + `_OWNER_APPROVED`, `TBT_TOP_EMERGENCY_FILL` + `_OWNER_APPROVED` |
-| 2026-11-22 | PR #1766 | Viac es: tipy s gapom ≥ prah idú prednostne, ostatné len doplnia (nikdy prázdne) | vlastné výsledky 9.–20.11. (n=360): gap ≥ 1,3 → 85,5 % vs 80,6 % (+5,2 pp, CI +1,5..+9,3); top 3/deň podľa gapu 94,4 %, top 5/deň 91,7 % (12 dní) | `TBT_ACES_MIN_GAP` (napr. 1.3) + `_OWNER_APPROVED` |
-| 2026-11-22 | PR #1766 | Esá O/U: ak Prop-Line/RapidAPI ponúka reálnu hranicu, ktorá nevyhovie (p < 0,60 alebo EV < 0), tip sa NEnahradí ľahšou modelovou hranicou | vlastné výsledky: 124 z 218 tipov Esá malo modelovú hranicu (≈ projekcia − 1,5), reálna hranica len 103 (PrizePicks 87, Underdog 6); úspešnosť rovnaká (81,5 % vs 81,6 %), takže reálne hranice nestoja úspešnosť | `TBT_ACES_REAL_LINE_STRICT` + `_OWNER_APPROVED` |
-| 2026-11-22 | PR #1766 | data.yml: zápis readiness do tbt-data s 5 opakovaniami pri 409 | ranný beh 20.11. skončil `failure` kvôli súbehu zápisov (tipy sa publikovali) | – |
-| 2026-11-22 | PR #1766 | Pauza Setov (manuálna) | 62,7 %, pokles 66 → 59 % | `TBT_SETS_SUSPENDED` + `_OWNER_APPROVED` |
-| 2026-11-22 | PR #1766 | Pauza Gamov | 47,9 %, ROI −12,1 %, projekcia o 2,3 gamu nad realitou | `TBT_GAMES_SUSPENDED` + `_OWNER_APPROVED` |
+| 2026-11-22 | MAIN (#1766) | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
+| 2026-11-22 | MAIN (#1766) | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
+| 2026-11-22 | MAIN (#1766) | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
+| 2026-11-22 | MAIN (#1766) | Testy workflowov zosúladené s `oneoff_global_limit` | testy zaostali za workflowom | – |
+| 2026-11-22 | MAIN (#1766) | TOP minimum picks + emergency fill z mäkkých pravidiel | systém nesmie mlčať; tvrdé pravidlá (kurz ≥ 1,50, identita, predštart, súťaže) sa nemenia | `TBT_TOP_MIN_PICKS` + `_OWNER_APPROVED`, `TBT_TOP_EMERGENCY_FILL` + `_OWNER_APPROVED` |
+| 2026-11-22 | MAIN (#1766) | Viac es: tipy s gapom ≥ prah idú prednostne, ostatné len doplnia (nikdy prázdne) | vlastné výsledky 9.–20.11. (n=360): gap ≥ 1,3 → 85,5 % vs 80,6 % (+5,2 pp, CI +1,5..+9,3); top 3/deň podľa gapu 94,4 %, top 5/deň 91,7 % (12 dní) | `TBT_ACES_MIN_GAP` (napr. 1.3) + `_OWNER_APPROVED` |
+| 2026-11-22 | MAIN (#1766) | Esá O/U: ak Prop-Line/RapidAPI ponúka reálnu hranicu, ktorá nevyhovie (p < 0,60 alebo EV < 0), tip sa NEnahradí ľahšou modelovou hranicou | vlastné výsledky: 124 z 218 tipov Esá malo modelovú hranicu (≈ projekcia − 1,5), reálna hranica len 103 (PrizePicks 87, Underdog 6); úspešnosť rovnaká (81,5 % vs 81,6 %), takže reálne hranice nestoja úspešnosť | `TBT_ACES_REAL_LINE_STRICT` + `_OWNER_APPROVED` |
+| 2026-11-22 | MAIN (#1766) | data.yml: zápis readiness do tbt-data s 5 opakovaniami pri 409 | ranný beh 20.11. skončil `failure` kvôli súbehu zápisov (tipy sa publikovali) | – |
+| 2026-11-22 | MAIN (#1766) | Pauza Setov (manuálna) | 62,7 %, pokles 66 → 59 % | `TBT_SETS_SUSPENDED` + `_OWNER_APPROVED` |
+| 2026-11-22 | MAIN (#1766) | Pauza Gamov | 47,9 %, ROI −12,1 %, projekcia o 2,3 gamu nad realitou | `TBT_GAMES_SUSPENDED` + `_OWNER_APPROVED` |
 
 ## Odporúčané zapnutie (po zlúčení)
 1. `TBT_MARKET_ANCHORED_OWNER_APPROVED=true`, `TBT_RANK_SOURCE=market_anchored` (poradie TOP podľa trhu: replay 49,6 → 57,4 %).
