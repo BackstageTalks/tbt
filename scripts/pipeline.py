@@ -2078,6 +2078,11 @@ def main():
                     or row.get("price_contract") == "player_total_ou"
                 ):
                     selected_aces.append(row)
+                elif (os.getenv("TBT_ACES_REAL_LINE_STRICT", "").strip().lower() == "true"
+                      and row.get("real_ou_market_rejected")):
+                    # A real bookmaker line existed and did not qualify:
+                    # never replace it with an easier model-made line.
+                    continue
                 elif eligible_local_ace_projection(row):
                     local = local_player_aces_ou(row)
                     if local is not None:

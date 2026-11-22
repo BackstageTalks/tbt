@@ -7,6 +7,8 @@ fabricated here.
 """
 from __future__ import annotations
 
+import os
+
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import math
@@ -22,8 +24,8 @@ from .price_integrity import (
 )
 from .market_anchored_rank import (
     EMERGENCY_TIER, MODE_MARKET, TOP_REJECT_REASON,
-    annotate_rank_probability, emergency_fill, rank_mode, rank_value,
-    top_market_side_violation,
+    annotate_rank_probability, emergency_fill, emergency_pool_member,
+    rank_mode, rank_value, top_market_side_violation, top_min_picks,
 )
 
 
@@ -659,8 +661,6 @@ def _confidence(row: dict[str, Any]) -> float:
     if explicit is not None and 0.5 <= explicit < 1.0:
         return explicit
     return _blinq_probability(row)
-    probabilities = [value for value in probabilities if value is not None]
-    return max(probabilities) if probabilities else 0.0
 
 
 def attach_match_winner_market(
@@ -1032,6 +1032,23 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
             _selection_identity(card))
 
 
+ENV_VALUE_SERVE_RETURN = "TBT_VALUE_SERVE_RETURN"
+
+
+def value_serve_return_ok(card: dict[str, Any]) -> bool:
+    """Owner-gated VALUE filter (default OFF): publish only the side with the
+    better pre-match serve+return quality. Missing stats never pass when ON."""
+    if str(os.environ.get(ENV_VALUE_SERVE_RETURN, "")).strip().lower() not in {"1", "true", "yes", "on"}:
+        return True
+    edge = _number(card.get("serve_return_edge"))
+    if edge is None or edge == 0:
+        return False
+    p1 = card.get("player1") if isinstance(card.get("player1"), dict) else {}
+    winner = str(card.get("winner_id") or "")
+    picks_p1 = winner and winner == str(p1.get("id") or "")
+    return (edge > 0) == bool(picks_p1)
+
+
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int | None = None,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
@@ -1192,6 +1209,8 @@ def select_market_sections(
     top_fallback: list[dict[str, Any]] = []
     top_rejection_counts: dict[str, int] = {}
     top_emergency_pool: list[dict[str, Any]] = []
+    # Daily TOP minimum: champion 3, or owner-approved TBT_TOP_MIN_PICKS (3-10).
+    _top_min = top_min_picks(TOP_MIN_COUNT)
 
     extreme_inversion_quarantined = 0
     market_conflict_missing_rank_quarantined = 0
@@ -1221,6 +1240,7 @@ def select_market_sections(
                 min_surface_matches=value_min_surface_matches,
             )
             and _is_close_odds_value(card)
+            and value_serve_return_ok(card)
         ):
             value_qualified.append(card)
 
@@ -1253,7 +1273,7 @@ def select_market_sections(
             tagged = deepcopy(card)
             tagged["selection_tier"] = "ranked_core"
             top_core.append(tagged)
-        elif set(reasons) == {"probability_below_fixed_floor"}:
+        elif emergency_pool_member(card, reasons):
             # Rejected ONLY by model floor; never include unless separate
             # emergency-fill owner flag is explicitly enabled.
             top_emergency_pool.append(deepcopy(card))
@@ -1275,12 +1295,12 @@ def select_market_sections(
         prime_core, prime_fallback, minimum_count=PRIME_MIN_COUNT, rank_key=rank
     )
     top_qualified, top_fallback_added, top_fallback_applied = _rank_full_slate_top(
-        top_core, top_fallback, target=top_limit, minimum=TOP_MIN_COUNT,
+        top_core, top_fallback, target=top_limit, minimum=_top_min,
     )
     top_qualified = emergency_fill(
         top_qualified,
         [card for card in top_emergency_pool if _selection_identity(card) not in value_ids],
-        minimum=TOP_MIN_COUNT, identity=_selection_identity, rank_key=rank,
+        minimum=_top_min, identity=_selection_identity, rank_key=rank,
     )
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
@@ -1334,14 +1354,14 @@ def select_market_sections(
                 "prime": len(prime), "top_daily": len(top), "value": len(value),
                 "duplicates_removed": sum(duplicate_removed.values()),
                 "limited_out": sum(limited_out.values()),
-                "daily_minimum_target": TOP_MIN_COUNT,
-                "daily_preferred_target": TOP_MIN_COUNT,
+                "daily_minimum_target": _top_min,
+                "daily_preferred_target": _top_min,
                 "all_qualifying_above_active_tier": top_limit is None,
                 "active_top_probability_floor": top_fallback_applied["min_probability"],
-                "top_daily_shortfall": max(0, TOP_MIN_COUNT-len(top)),
+                "top_daily_shortfall": max(0, _top_min-len(top)),
                 "minimum_shortfall": {
                     "prime": max(0, PRIME_MIN_COUNT-len(prime)),
-                    "top_daily": max(0, TOP_MIN_COUNT-len(top)),
+                    "top_daily": max(0, _top_min-len(top)),
                     "value": max(0, VALUE_MIN_COUNT-len(value)),
                 },
             },
@@ -1368,7 +1388,7 @@ def select_market_sections(
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
-                "fallback_only_if_section_below": TOP_MIN_COUNT,
+                "fallback_only_if_section_below": _top_min,
                 "probability_basis": "blinq_probability=data_depth_shrunk_calibrated_model_probability",
                 "edge_filter": False,
             },
@@ -1400,7 +1420,7 @@ def select_market_sections(
                     {"group": "ATP/WTA", "thresholds": [TOP_MIN_PROBABILITY]},
                     {"group": "Challenger/WTA125/BJK/Davis", "thresholds": [TOP_MIN_PROBABILITY]},
                 ],
-                "daily_minimum_target": TOP_MIN_COUNT,
+                "daily_minimum_target": _top_min,
                 "all_qualifying_above_active_tier": top_limit is None,
                 "no_forced_fill": True,
                 "observed_pick_count": len(top),

@@ -45,7 +45,10 @@ def github(path, payload=None, missing_ok=False):
 
 
 def inspect(read=github):
-    runs = read(f"{APP}/actions/workflows/{WORKFLOW}/runs?per_page=10")["workflow_runs"]
+    runs = read(f"{APP}/actions/workflows/{WORKFLOW}/runs?per_page=30")["workflow_runs"]
+    # Push-triggered no-op runs (conclusion "skipped") must not move the queue
+    # base; otherwise a stored Admin request is orphaned by any unrelated push.
+    runs = [r for r in runs if r.get("conclusion") != "skipped"][:10]
     latest = runs[0] if runs else None
     busy = False
     for status in ("queued", "in_progress", "waiting", "pending", "requested"):

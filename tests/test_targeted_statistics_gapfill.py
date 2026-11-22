@@ -686,7 +686,7 @@ def test_hourly_live_verified_wta_2021_eligible_in_full_2016_2026_window(match_f
     assert '"start": "2016-01-01"' in workflow
     assert '"start": "2022-01-01"' not in workflow
     assert '"max_requests": str(proposed)' in workflow
-    assert 'min(5000, limit-spent, remaining, history_remaining)' in workflow
+    assert 'min(5000, limit-spent, oneoff_global_limit-spent, remaining, history_remaining)' in workflow
 
 def test_hourly_prefers_recent_verified_paid_yield_over_stale_cohort_prior(
     match_factory,

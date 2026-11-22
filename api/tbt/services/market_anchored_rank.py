@@ -23,6 +23,11 @@ MODE_MARKET = "market_anchored"
 ENV_RANK = "TBT_RANK_SOURCE"
 ENV_FILL = "TBT_TOP_EMERGENCY_FILL"
 ENV_TOP_SIDE = "TBT_TOP_REQUIRE_MARKET_SIDE"
+ENV_TOP_MIN_PICKS = "TBT_TOP_MIN_PICKS"
+# Supply fallback (owner-gated): only these SOFT rejections may be topped up.
+EMERGENCY_SOFT_REASONS = frozenset({"probability_below_fixed_floor", "insufficient_surface_history"})
+EMERGENCY_MIN_SURFACE_MATCHES = 3
+TOP_MIN_PICKS_RANGE = (3, 10)
 TOP_REJECT_REASON = "market_favours_opponent"
 EMERGENCY_MIN_FAIR = 0.50
 EMERGENCY_MIN_MODEL_NO_FAIR = 0.55
@@ -70,6 +75,33 @@ def rank_mode(env: dict[str, str] | None = None) -> str:
 def emergency_fill_enabled(env: dict[str, str] | None = None) -> bool:
     raw = (os.environ if env is None else env).get(ENV_FILL, "")
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def top_min_picks(default: int, env: dict[str, str] | None = None) -> int:
+    """Daily TOP minimum from TBT_TOP_MIN_PICKS in [3, 10]; else the champion default."""
+    raw = str((os.environ if env is None else env).get(ENV_TOP_MIN_PICKS, "")).strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return int(default)
+    lo, hi = TOP_MIN_PICKS_RANGE
+    return value if lo <= value <= hi else int(default)
+
+
+def emergency_pool_member(card: dict[str, Any], reasons: Iterable[str]) -> bool:
+    """True when a card failed ONLY soft gates (model floor, thin surface history >= 3)."""
+    reasons = set(reasons)
+    if not reasons or not reasons <= EMERGENCY_SOFT_REASONS:
+        return False
+    if "insufficient_surface_history" in reasons:
+        quality = card.get("quality") if isinstance(card.get("quality"), dict) else {}
+        counts = []
+        for side in ("player1", "player2"):
+            block = quality.get(side) if isinstance(quality.get(side), dict) else {}
+            counts.append(_num(block.get("surface_matches")))
+        if any(n is None or n < EMERGENCY_MIN_SURFACE_MATCHES for n in counts):
+            return False
+    return True
 
 
 def calibrated_market(fair: float) -> float:

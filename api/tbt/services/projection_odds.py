@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 import math
+import os
 import re
 from typing import Any
 
@@ -149,7 +150,8 @@ def extract_player_superiority_odds(payload: Any, metric: str, player1: str, pla
 
 
 
-def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, player_slot: int | None = None) -> list[dict[str, Any]]:
+def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, player_slot: int | None = None,
+                            allow_one_sided: bool = False) -> list[dict[str, Any]]:
     """Extract two-sided individual player Aces / Double Faults O/U markets.
 
     Only the named player's complete markets count. A match-total or Most Aces
@@ -195,7 +197,38 @@ def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, play
             "player_name": player_name,
         })
         item.setdefault(side, float(price))
+    if allow_one_sided:
+        return [item for item in candidates.values() if "over" in item or "under" in item]
     return [item for item in candidates.values() if "over" in item and "under" in item]
+
+
+ENV_ACES_CUSHION_RULE = "TBT_ACES_CUSHION_RULE"
+ACES_OVER_CUSHION = 1.5
+ACES_MIN_ODDS = 1.50
+
+
+def aces_cushion_rule_enabled() -> bool:
+    """Owner-gated BlinQ rule: real line with >= 1.5 ace cushion, side by offer."""
+    return str(os.environ.get(ENV_ACES_CUSHION_RULE, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def choose_cushion_ace_line(mean: float, options: list[dict[str, Any]]) -> tuple[str, dict[str, Any], float] | None:
+    """Symmetric 1.5-ace cushion: OVER if line <= projection-1.5, UNDER if
+    line >= projection+1.5; among qualifying real offers the highest price >= 1.50."""
+    best = None
+    for option in options:
+        line = float(option["line"])
+        for side in ("over", "under"):
+            odds = _number(option.get(side))
+            if odds is None or odds < ACES_MIN_ODDS or odds == 2.0:
+                continue
+            if side == "over" and mean - line < ACES_OVER_CUSHION - 1e-9:
+                continue
+            if side == "under" and line - mean < ACES_OVER_CUSHION - 1e-9:
+                continue
+            if best is None or odds > best[2]:
+                best = (side, option, float(odds))
+    return best
 
 
 def _player_ou_probability(mean: float, metric: str, line: float) -> float:
@@ -305,6 +338,32 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     mean = _number(out.get("projection"))
     if mean is None or mean < 0:
         return out, False, "missing_player_count_projection"
+    if metric == "aces" and aces_cushion_rule_enabled():
+        one_sided = extract_player_total_ou(payload, metric, selected_name,
+                                            player_slot=slot, allow_one_sided=True)
+        picked = choose_cushion_ace_line(mean, one_sided)
+        if picked is None:
+            if one_sided:
+                out["real_ou_market_rejected"] = True
+                out["real_ou_lines_seen"] = sorted({float(o["line"]) for o in one_sided})
+            return out, False, "cushion_rule_no_qualifying_line" if one_sided else "no_exact_player_total_ou_market"
+        direction, choice, odds = picked
+        line = float(choice["line"])
+        out.update({
+            "selection": f"{selected_name} {direction.title()} {line:.1f} Aces",
+            "pick": f"{selected_name} {direction.title()} {line:.1f} Aces",
+            "market_type": "Player Aces Over/Under",
+            "projection_label": "Hráč · Aces O/U",
+            "price_contract": "player_total_ou", "ou_side": direction, "market_line": line,
+            "ace_cushion": round(abs(mean - line), 2), "selection_rule": "blinq_cushion_v1",
+            "model_probability": round(_player_ou_probability(mean, metric, line) if direction == "over"
+                                       else 1 - _player_ou_probability(mean, metric, line), 4),
+            "odds": round(odds, 3), "price_status": "priced_projection",
+            "provider_id": int(provider_id), "captured_at": captured_at,
+            "odds_market_name": choice["market_name"],
+        })
+        out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
+        return out, True, "priced_player_total_ou_cushion"
     priced = []
     under_rejected_by_buffer = False
     for option in options:
@@ -323,6 +382,11 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
             if probability >= 0.60 and ev >= 0:
                 priced.append((ev, probability, odds, direction, option))
     if not priced:
+        if options:
+            # A real bookmaker O/U line existed for this player but did not
+            # qualify. Downstream may refuse to replace it with a model line.
+            out["real_ou_market_rejected"] = True
+            out["real_ou_lines_seen"] = sorted({float(o["line"]) for o in options})
         reason = ("no_exact_player_total_ou_market" if not options
                   else "ace_under_buffer_not_qualified" if metric == "aces" and under_rejected_by_buffer
                   else "player_total_ou_not_qualified")
@@ -448,6 +512,14 @@ def prefetch_projection_market_board(
     }
 
 
+_DFS_BOOKS = ("prizepicks", "underdog", "sleeper", "betr", "dabble")
+
+
+def _is_dfs_book(name: Any) -> bool:
+    text = str(name or "").lower().replace(" ", "")
+    return any(tag in text for tag in _DFS_BOOKS)
+
+
 def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1, prefetched_payloads: dict[str, Any] | None = None, alternate_market_payloads: dict[str, dict[str, dict]] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Attach exact provider prices to already-selected projection cards.
 
@@ -522,19 +594,32 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
 
             used_alternate = False
             if not ok and alternate and str(alternate.get("source") or "propline").lower() == "propline":
-                alt_payload = alternate.get("payload")
-                alt_provider = int(alternate.get("provider_id") or 2)
-                alt_captured = str(alternate.get("captured_at") or captured_at)
-                alt_updated, alt_ok, alt_reason = (
-                    _attach_ace(row, alt_payload, alt_captured, alt_provider)
-                    if kind == "ace" else
-                    _attach_sg(row, alt_payload, alt_captured, alt_provider)
-                )
+                books = [alternate] + [b for b in (alternate.get("other_books") or []) if isinstance(b, dict)]
+                if kind == "ace":
+                    # Real sportsbooks before DFS pick'em boards.
+                    books.sort(key=lambda b: _is_dfs_book(b.get("bookmaker")))
+                for book in (books if kind == "ace" else books[:1]):
+                    alt_payload = book.get("payload")
+                    alt_provider = int(book.get("provider_id") or 2)
+                    alt_captured = str(book.get("captured_at") or captured_at)
+                    alt_updated, alt_ok, alt_reason = (
+                        _attach_ace(row, alt_payload, alt_captured, alt_provider)
+                        if kind == "ace" else
+                        _attach_sg(row, alt_payload, alt_captured, alt_provider)
+                    )
+                    if alt_ok:
+                        alternate = book
+                        break
                 if alt_ok:
                     updated, ok, reason = alt_updated, True, alt_reason
                     used_alternate = True
                 else:
                     reason = f"{reason};fallback:{alt_reason}"
+                    if alt_updated.get("real_ou_market_rejected"):
+                        updated["real_ou_market_rejected"] = True
+                        updated["real_ou_lines_seen"] = sorted(set(
+                            (updated.get("real_ou_lines_seen") or [])
+                            + (alt_updated.get("real_ou_lines_seen") or [])))
 
             if ok:
                 updated["odds_source"] = (str(alternate.get("source") or "propline") if used_alternate else "rapidapi")

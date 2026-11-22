@@ -105,3 +105,56 @@ def test_double_faults_under_is_not_subject_to_ace_buffer():
     card, ok, _ = _pick(2.1, [(2.5, 2.5, 1.1)], "double_faults")
     assert ok and card["ou_side"] == "under"
     assert card["market_line"] == 2.5
+
+
+def test_rejected_real_line_is_flagged_for_strict_mode():
+    card, ok, _ = _pick(2.1, [(2.5, 1.8, 1.1)])
+    assert not ok and card["real_ou_market_rejected"] is True
+    assert card["real_ou_lines_seen"] == [2.5]
+
+
+def test_no_real_market_is_not_flagged():
+    card, ok, _ = _pick(2.1, [])
+    assert not ok and "real_ou_market_rejected" not in card
+
+
+def test_dfs_books_rank_after_sportsbooks():
+    from tbt.services.projection_odds import _is_dfs_book
+    assert _is_dfs_book("PrizePicks") and _is_dfs_book("Underdog Fantasy")
+    assert not _is_dfs_book("DraftKings") and not _is_dfs_book("bet365")
+
+
+def test_cushion_rule_over_and_under_from_offer(monkeypatch):
+    from tbt.services import projection_odds as po
+    monkeypatch.setenv("TBT_ACES_CUSHION_RULE", "true")
+    # projection 5.0: Over 3.5 qualifies (cushion 1.5), Over 4.5 does not
+    card, ok, reason = _pick(5.0, [(3.5, 2.6, 1.55), (4.5, 2.0, 1.9)])
+    assert ok and card["ou_side"] == "over" and card["market_line"] == 3.5
+    assert card["selection_rule"] == "blinq_cushion_v1"
+    # projection 10.4: Under 17.5 qualifies (big cushion)
+    card, ok, _ = _pick(10.4, [(17.5, 1.6, 2.2)])
+    assert ok and card["ou_side"] == "under" and card["market_line"] == 17.5
+
+
+def test_cushion_rule_accepts_one_sided_over(monkeypatch):
+    monkeypatch.setenv("TBT_ACES_CUSHION_RULE", "true")
+    payload = {"markets": [{"marketName": "Player A Total Aces", "choiceName": "Over",
+                            "choiceGroup": "3.5", "decimalOdds": 1.7}]}
+    card, ok, _ = _attach_ace(_card(5.2), payload, "2026-11-01T11:00:00+00:00", 2)
+    assert ok and card["ou_side"] == "over" and card["market_line"] == 3.5
+
+
+def test_cushion_rule_off_keeps_ev_logic(monkeypatch):
+    monkeypatch.delenv("TBT_ACES_CUSHION_RULE", raising=False)
+    payload = {"markets": [{"marketName": "Player A Total Aces", "choiceName": "Over",
+                            "choiceGroup": "3.5", "decimalOdds": 1.7}]}
+    card, ok, _ = _attach_ace(_card(5.2), payload, "2026-11-01T11:00:00+00:00", 2)
+    assert not ok
+
+
+def test_cushion_rule_under_symmetric_1_5(monkeypatch):
+    monkeypatch.setenv("TBT_ACES_CUSHION_RULE", "true")
+    card, ok, _ = _pick(10.4, [(11.5, 1.9, 1.9)])
+    assert not ok
+    card, ok, _ = _pick(10.4, [(12.5, 1.6, 2.2)])
+    assert ok and card["ou_side"] == "under" and card["market_line"] == 12.5

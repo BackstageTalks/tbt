@@ -20,7 +20,7 @@ from typing import Any
 
 from tbt.services.market_selection import extract_match_winner_odds
 from tbt.services.projection_odds import (
-    extract_match_total_odds, extract_player_total_ou,
+    aces_cushion_rule_enabled, extract_match_total_odds, extract_player_total_ou,
 )
 
 BASE = "https://api.prop-line.com/v1"
@@ -334,8 +334,9 @@ def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]
             group.setdefault(direction, {"choiceName": direction.title(),
                                          "line": line, "decimalOdds": price,
                                          "playerName": player})
+        one_sided_ok = metric == "aces" and aces_cushion_rule_enabled()
         for (player, line), sides in groups.items():
-            if set(sides) != {"over", "under"}:
+            if set(sides) != {"over", "under"} and not (one_sided_ok and sides):
                 continue
             market_name = (
                 f"{player} {'Aces' if metric == 'aces' else 'Double Faults'} Total"
@@ -350,8 +351,10 @@ def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]
         elif metric in ("games", "sets") and not extract_match_total_odds(payload, metric):
             result.pop(metric)
         elif metric in ("aces", "double_faults") and not (
-            extract_player_total_ou(payload, metric, p1, player_slot=1)
-            or extract_player_total_ou(payload, metric, p2, player_slot=2)
+            extract_player_total_ou(payload, metric, p1, player_slot=1,
+                                    allow_one_sided=(metric == "aces" and aces_cushion_rule_enabled()))
+            or extract_player_total_ou(payload, metric, p2, player_slot=2,
+                                       allow_one_sided=(metric == "aces" and aces_cushion_rule_enabled()))
         ):
             result.pop(metric)
     return result
@@ -439,6 +442,16 @@ def discover_propline_fallback(
                     report["bookmakers_with_target_market"] += 1
                 for metric, normalized in parsed.items():
                     if metric in fetched.get(rapid_id, {}):
+                        # Keep every additional bookmaker for player props so a
+                        # player missing at the first book can still be priced.
+                        if metric in ("aces", "double_faults"):
+                            fetched[rapid_id][metric].setdefault("other_books", []).append({
+                                "payload": normalized, "provider_id": 2,
+                                "source": "propline", "bookmaker": str(book.get("title") or
+                                    book.get("key") or book.get("name") or "")[:90],
+                                "provider_event_id": prop_id,
+                                "captured_at": datetime.now(timezone.utc).isoformat(),
+                            })
                         continue
                     fetched.setdefault(rapid_id, {})[metric] = {
                         "payload": normalized, "provider_id": 2,

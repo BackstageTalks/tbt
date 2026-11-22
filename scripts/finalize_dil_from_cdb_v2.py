@@ -270,10 +270,10 @@ def reconcile(dil,cdb,dest,expected_cdb_sha256,release_manifest_sha256,quick_che
         try:src.backup(out, pages=4096)
         finally:out.close()
     finally:src.close();source.close()
-    db=sqlite3.connect(str(dest))
+    db=sqlite3.connect(pathlib.Path(dest).resolve().as_uri(),uri=True)
     try:
         db.execute('PRAGMA foreign_keys=ON')
-        db.execute('ATTACH DATABASE ? AS current_cdb',(f'file:{cdb}?mode=ro',))
+        db.execute('ATTACH DATABASE ? AS current_cdb',(pathlib.Path(cdb).resolve().as_uri()+'?mode=ro',))
         bootstrap(db)
         db.commit()
         db.execute('BEGIN IMMEDIATE')
