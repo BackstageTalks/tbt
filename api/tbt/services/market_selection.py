@@ -1016,7 +1016,7 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int | None = None,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Rank eligible ATP/WTA main tour only; never force fill.
+    """Rank approved Match Winner categories with main tours first; never force fill.
 
     Identity, competition and quote guards run before this stage.
     Odds and outcomes never contribute to ranking.
@@ -1024,7 +1024,8 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     from .top_policy import competition_group
     selected = []
     seen = set()
-    tier = {"ATP": 0, "WTA": 0}
+    tier = {"ATP": 0, "WTA": 0, "Challenger": 1, "WTA 125": 1,
+            "BJK Cup": 1, "Davis Cup": 1}
     ranked = sorted(core, key=lambda card: (
         tier.get(competition_group(card), 99),
         -float(rank_value(card)),
@@ -1032,7 +1033,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     for card in ranked:
         event = str(card.get("event_id") or "")
         group = competition_group(card)
-        if group not in {"ATP", "WTA"}:
+        if group not in tier:
             continue
         probability = _number(card.get("probability")) or 0
         if probability < TOP_MIN_PROBABILITY:
@@ -1338,7 +1339,7 @@ def select_market_sections(
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
                 "top_probability_tiers": [TOP_MIN_PROBABILITY],
-                "top_competition_order": ["ATP/WTA 250+"],
+                "top_competition_order": ["ATP/WTA 250+", "Challenger 50+", "WTA 125", "BJK/Davis Cup singles"],
                 "secondary_competition_probability_floor": TOP_MIN_PROBABILITY,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
@@ -1373,6 +1374,7 @@ def select_market_sections(
                 "probability_tiers": [TOP_MIN_PROBABILITY],
                 "competition_tiers": [
                     {"group": "ATP/WTA", "thresholds": [TOP_MIN_PROBABILITY]},
+                    {"group": "Challenger/WTA125/BJK/Davis", "thresholds": [TOP_MIN_PROBABILITY]},
                 ],
                 "daily_minimum_target": TOP_MIN_COUNT,
                 "all_qualifying_above_active_tier": top_limit is None,
@@ -1391,14 +1393,14 @@ def select_market_sections(
                 "core_min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
                 "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
                 "min_odds": TOP_FALLBACK_MIN_ODDS,
-                "excluded_competitions": ["Challenger", "ITF", "WTA 125", "UTR", "other", "unknown"],
+                "excluded_competitions": ["ITF", "UTR", "other", "unknown"],
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
                 "sort": "competition_tier_then_probability_desc_then_event_id",
                 "ranked_full_slate": True,
                 "policy": "sports_tiered_top5_60_v24",
-                "competition_priority": [["ATP", "WTA"]],
+                "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
                 "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,
