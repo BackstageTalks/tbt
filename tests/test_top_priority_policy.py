@@ -352,7 +352,7 @@ def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
     # This same fail-closed script runs before the paid morning data refresh.
     from verify_top_morning_policy import verify
     assert verify() == {
-        "status": "PASS", "policy": "sports_tiered_top5_60_v24",
+        "status": "PASS", "policy": "sports_tiered_top5_65_v25",
         "provider_requests": 0,
     }
 
