@@ -51,11 +51,11 @@ MATCH_WINNER_MARKET_NAMES = {
 # branch.
 SECTION_PRIORITY = ("value", "top_daily", "prime")
 
-PUBLICATION_MIN_PROBABILITY = 0.65
+PUBLICATION_MIN_PROBABILITY = 0.60
 
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_TIERS = ()
 
 # ACCA (legacy internal key: prime): decimal odds below 1.50 (no lower bound).
@@ -1041,7 +1041,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
         if not event or event in seen or (target is not None and len(selected) >= target):
             continue
         item = deepcopy(card)
-        item["selection_tier"] = "sports_0.60"
+        item["selection_tier"] = "sports_0.65"
         selected.append(item)
         seen.add(event)
     return selected, 0, {
@@ -1299,7 +1299,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 16,
-            "selection_policy": "sports_tiered_top5_60_v24",
+            "selection_policy": "sports_tiered_top5_65_v25",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "extreme_price_inversion_quarantined": extreme_inversion_quarantined,
@@ -1404,7 +1404,7 @@ def select_market_sections(
                 "limit": top_limit,
                 "sort": "competition_tier_then_probability_desc_then_event_id",
                 "ranked_full_slate": True,
-                "policy": "sports_tiered_top5_60_v24",
+                "policy": "sports_tiered_top5_65_v25",
                 "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
