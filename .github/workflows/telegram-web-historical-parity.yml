@@ -26,10 +26,10 @@ jobs:
       BLINQ_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
       BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (tag resolved 2026-11-22)
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6 (tag resolved 2026-11-22)
         with:
           python-version: '3.11'
       - name: Enforce approved read-only scope and local 08:00 schedule
@@ -60,7 +60,7 @@ jobs:
           PY
       - name: Checkout immutable private Telegram issue/result receipt ledger
         if: steps.scope.outputs.enabled == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5 (tag resolved 2026-11-22)
         with:
           repository: BackstageTalks/tbt-data
           ref: telegram-bot-state
