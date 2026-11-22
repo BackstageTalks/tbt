@@ -323,6 +323,11 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
             if probability >= 0.60 and ev >= 0:
                 priced.append((ev, probability, odds, direction, option))
     if not priced:
+        if options:
+            # A real bookmaker O/U line existed for this player but did not
+            # qualify. Downstream may refuse to replace it with a model line.
+            out["real_ou_market_rejected"] = True
+            out["real_ou_lines_seen"] = sorted({float(o["line"]) for o in options})
         reason = ("no_exact_player_total_ou_market" if not options
                   else "ace_under_buffer_not_qualified" if metric == "aces" and under_rejected_by_buffer
                   else "player_total_ou_not_qualified")
@@ -535,6 +540,11 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
                     used_alternate = True
                 else:
                     reason = f"{reason};fallback:{alt_reason}"
+                    if alt_updated.get("real_ou_market_rejected"):
+                        updated["real_ou_market_rejected"] = True
+                        updated["real_ou_lines_seen"] = sorted(set(
+                            (updated.get("real_ou_lines_seen") or [])
+                            + (alt_updated.get("real_ou_lines_seen") or [])))
 
             if ok:
                 updated["odds_source"] = (str(alternate.get("source") or "propline") if used_alternate else "rapidapi")

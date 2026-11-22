@@ -105,3 +105,14 @@ def test_double_faults_under_is_not_subject_to_ace_buffer():
     card, ok, _ = _pick(2.1, [(2.5, 2.5, 1.1)], "double_faults")
     assert ok and card["ou_side"] == "under"
     assert card["market_line"] == 2.5
+
+
+def test_rejected_real_line_is_flagged_for_strict_mode():
+    card, ok, _ = _pick(2.1, [(2.5, 1.8, 1.1)])
+    assert not ok and card["real_ou_market_rejected"] is True
+    assert card["real_ou_lines_seen"] == [2.5]
+
+
+def test_no_real_market_is_not_flagged():
+    card, ok, _ = _pick(2.1, [])
+    assert not ok and "real_ou_market_rejected" not in card
