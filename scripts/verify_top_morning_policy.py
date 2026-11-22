@@ -12,7 +12,7 @@ def verify():
     from tbt.services.top_policy import rejection_reasons
     rule = select_market_sections([])["market_selection"]["top_daily_rule"]
     ui = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]["top_daily"]
-    assert rule["policy"] == ui["policy"] == "sports_tiered_top5_60_v24"
+    assert rule["policy"] == ui["policy"] == "sports_tiered_top5_65_v25"
     assert rule["limit"] == ui["limit"] == 5
     config = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))["market_rules"]
     empty = select_market_sections([])["market_selection"]
@@ -23,8 +23,9 @@ def verify():
     assert config["prime"]["label"] == "ACCA"
     assert inspect.signature(enrich_current_betting_day_odds).parameters[
         "candidate_min_data_depth"].default == 0.50
-    assert rule["core_min_probability"] == ui["min_probability"] == .60
-    assert rule["probability_tiers"] == ui["confidence_tiers"] == [.60]
+    assert rule["core_min_probability"] == ui["min_probability"] == .65
+    assert rule["probability_tiers"] == ui["confidence_tiers"] == [.65]
+    assert empty["value_rule"]["min_probability"] == config["value"]["min_probability"] == .60
     assert rule["daily_minimum_target"] == ui["target_count"] == 3
     assert rule["min_odds"] == ui["min_odds"] == 1.50 and ui["max_odds"] is None
     assert ui["competition_priority"] == rule["competition_priority"] == [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]]
@@ -38,12 +39,12 @@ def verify():
             card("main-70", "WTA", .79), card("excluded", "WTA 125", .99)]
     selected, _, details = _rank_full_slate_top(pool, [])
     assert [c["event_id"] for c in selected] == ["main-70", "main-68", "main-65", "excluded", "secondary"]
-    assert all(c["selection_tier"] == "sports_0.60" for c in selected[:3])
+    assert all(c["selection_tier"] == "sports_0.65" for c in selected[:3])
     assert details["shortfall"] == 0
     selected, _, details = _rank_full_slate_top([pool[0], pool[1], pool[4]], [])
     assert [c["event_id"] for c in selected] == ["main-70", "secondary"]
     assert details["shortfall"] == 1
-    selected, _, details = _rank_full_slate_top([card("none", "ATP", .59)], [])
+    selected, _, details = _rank_full_slate_top([card("none", "ATP", .649)], [])
     assert selected == [] and details["shortfall"] == 3
 
     male = card("itf-m", "ITF Men", .98)
