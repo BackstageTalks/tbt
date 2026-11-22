@@ -72,6 +72,7 @@ jobs:
           now = datetime.now(timezone.utc)
           local = now.astimezone(ZONE)
           oneoff_5000 = os.getenv("ONEOFF_5000") == "true"
+          oneoff_global_limit = 13500 if oneoff_5000 else 14500
           oneoff_cutoff = datetime(2026, 11, 22, 17, 7, tzinfo=timezone.utc)
           if oneoff_5000:
               with open(".github/hourly-api-gapfill-smoke.json", encoding="utf-8") as fp:
@@ -82,6 +83,7 @@ jobs:
                   and request.get("kind") == "operator-approved-pre-reset-hourly-full-20261122"
                   and request.get("local_day") == "2026-11-22"
                   and request.get("max_requests") == 5000
+                  and request.get("target_global_spent") == 13500
                   and request.get("stop_at_utc") == "2026-11-22T17:07:00Z"
                   and request.get("owner_approved") is True
               ):
@@ -211,7 +213,7 @@ jobs:
           # Other hourly ticks retain high-yield whole-match/per-set statistics.
           # Never run extras in final closeout/reset.
           extras_slot = stage_hour in (14, 16) and not final_topup and not new_day_start
-          proposed = min(5000, limit-spent, 14500-spent, remaining, history_remaining)
+          proposed = min(5000, limit-spent, oneoff_global_limit-spent, remaining, history_remaining)
           if tick_cap is not None:
               proposed = min(proposed, tick_cap)
           if extras_slot:
@@ -291,7 +293,7 @@ jobs:
               else:
                   limit = 3000 if new_day_start else (14500 if final_topup else caps[stage_hour])
               extras_slot = stage_hour in (14, 16) and not final_topup and not new_day_start
-              proposed = min(5000, limit-spent, remaining, history_remaining)
+              proposed = min(5000, limit-spent, oneoff_global_limit-spent, remaining, history_remaining)
               if tick_cap is not None:
                   proposed = min(proposed, tick_cap)
               if extras_slot:
