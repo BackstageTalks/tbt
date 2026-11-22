@@ -76,7 +76,7 @@ def test_candidate_snapshot_keeps_selected_and_unselected_without_post_match_fie
     }
     rows = {item['event_id']: item for item in snap['rows']}
     assert rows['selected-top']['selected_section'] == 'top_daily'
-    assert rows['selected-top']['selection_tier'] == 'sports_0.65'
+    assert rows['selected-top']['selection_tier'] == 'sports_0.60'
     assert rows['unpriced']['priced'] is False
     assert rows['unpriced']['selected_section'] is None
     serialized = str(snap).lower()
@@ -161,7 +161,7 @@ def test_retired_top200_cannot_claim_ranked_picks_from_active_sections():
     assert [item['event_id'] for item in sections['value_picks']] == ['ranked-value']
     assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-top']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'sports_tiered_top5_65_v25'
+    assert meta['selection_policy'] == 'sports_tiered_top5_60_v26'
     assert meta['exclusive_assignment']['priority'] == ['value', 'top_daily', 'prime']
     assert 'top200_rule' not in meta
 
@@ -188,26 +188,26 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'sports_tiered_top5_65_v25'
+    assert meta['selection_policy'] == 'sports_tiered_top5_60_v26'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
 
 
 
-def test_top65_value60_floors_apply_when_overrides_try_to_lower_them():
+def test_top60_value60_floors_apply_when_overrides_try_to_lower_them():
     rows = [
-        row('p649-prime', .649, 1.40, 3.10, depth=1.0),
-        row('p649-top', .649, 1.70, 2.20, depth=1.0),
+        row('p599-prime', .599, 1.40, 3.10, depth=1.0),
+        row('p599-top', .599, 1.70, 2.20, depth=1.0),
         row('v599', .599, 1.90, 2.00, depth=1.0),
         row('v600', .60, 1.90, 2.00, depth=1.0),
         row('v650', .65, 1.90, 2.00, depth=1.0),
-        row('p650', .65, 1.60, 2.30, depth=1.0),
+        row('p600', .60, 1.60, 2.30, depth=1.0),
     ]
     sections = select_market_sections(rows, prime_min_probability=.50,
                                      top_min_probability=.50, value_min_probability=.50)
     assert [x['event_id'] for x in sections['value_picks']] == ['v650', 'v600']
-    assert {x['event_id'] for x in sections['top_daily_picks']} == {'p650'}
+    assert {x['event_id'] for x in sections['top_daily_picks']} == {'p600'}
     assert sections['prime_picks'] == []
     assert sections['market_selection']['selection_counts']['top_daily_shortfall'] == 2
     assert all(x['odds'] >= 1.50 for x in sections['top_daily_picks'])
@@ -219,7 +219,7 @@ def test_champion_depth_050_accepts_acca_top_and_value_with_surface_and_price_ga
     acca = row('acca-050', .90, 1.30, 3.20, depth=.50, surface1=5, surface2=5)
     top = row('top-050', .90, 1.60, 2.60, depth=.50, surface1=5, surface2=5)
     value = row('value-050', .90, 1.90, 1.95, depth=.50, surface1=5, surface2=5)
-    too_shallow = row('top-049', .90, 1.60, 2.60, depth=.49, surface1=5, surface2=5)
+    too_shallow = row('top-029', .90, 1.60, 2.60, depth=.29, surface1=5, surface2=5)
     no_surface = row('top-no-surface', .90, 1.60, 2.60, depth=.50, surface1=4, surface2=5)
     low_odds = row('low-odds', .90, 1.49, 2.60, depth=.50, surface1=5, surface2=5)
     before = [acca, top, value, too_shallow, no_surface, low_odds]
@@ -233,23 +233,29 @@ def test_champion_depth_050_accepts_acca_top_and_value_with_surface_and_price_ga
     assert result['market_selection']['top_rejection_counts']['insufficient_surface_history'] >= 1
     assert before == original
     assert result['market_selection']['prime_rule']['min_data_depth'] == .50
-    assert result['market_selection']['top_daily_rule']['min_data_depth'] == .50
+    assert result['market_selection']['top_daily_rule']['min_data_depth'] == .30
     assert result['market_selection']['value_rule']['min_data_depth'] == .50
 
 
-def test_depth_050_is_also_considered_before_any_paid_winner_odds_requests():
+def test_top_depth_030_reaches_quote_requests_without_relaxing_value_or_acca():
     provider = _OddsProvider()
-    rows = [row('quote-050', .90, 1.60, 2.60, depth=.50, surface1=5, surface2=5),
-            row('quote-049', .90, 1.60, 2.60, depth=.49, surface1=5, surface2=5)]
+    rows = [
+        row('quote-050', .90, 1.60, 2.60, depth=.50, surface1=5, surface2=5),
+        row('quote-049', .90, 1.60, 2.60, depth=.49, surface1=5, surface2=5),
+        row('quote-030', .90, 1.60, 2.60, depth=.30, surface1=5, surface2=5),
+        row('quote-029', .90, 1.60, 2.60, depth=.29, surface1=5, surface2=5),
+    ]
     for item in rows:
         item.pop('betting', None)
         item.pop('match_winner_market', None)
     _, report = enrich_current_betting_day_odds(
         provider, rows, now=datetime(2026, 9, 7, 8, tzinfo=timezone.utc))
-    assert provider.called == [('quote-050', 1)]
+    assert provider.called == [('quote-050', 1), ('quote-049', 1), ('quote-030', 1)]
     assert report['candidate_gate']['min_data_depth'] == .50
-    assert report['provider_call_attempts'] == 1
+    assert report['candidate_gate']['top_only_lane']['min_data_depth'] == .30
+    assert report['provider_call_attempts'] == 3
     assert report['candidate_gate']['min_surface_matches_each'] == 3
+
 
 def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
     shallow = row('shallow90', .90, 1.90, 2.00, depth=.30, surface1=20, surface2=20)
@@ -369,11 +375,11 @@ def test_odds_errors_are_classified_without_publishing_exception_body():
     assert 'private response' not in str(report)
 
 
-def test_morning_odds_discovery_prices_top65_value60_candidates_with_existing_budget():
+def test_morning_odds_discovery_prices_top60_depth30_candidates_with_existing_budget():
     provider = _OddsProvider()
     rows = [
         row('eligible', .70, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
-        row('top60', .63, 1.60, 2.20, depth=.80, surface1=5, surface2=5),  # adjusted BlinQ p=.604
+        row('top60', .63, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
         row('weak', .59, 1.60, 2.20, depth=1.0, surface1=20, surface2=20),
         row('shallow', .80, 1.60, 2.20, depth=.49, surface1=20, surface2=20),
         row('surface', .80, 1.60, 2.20, depth=1.0, surface1=2, surface2=20),
@@ -382,14 +388,16 @@ def test_morning_odds_discovery_prices_top65_value60_candidates_with_existing_bu
         item.pop('betting', None); item.pop('match_winner_market', None)
     enriched, report = enrich_current_betting_day_odds(
         provider, rows, now=datetime(2026,9,7,8,0,tzinfo=timezone.utc))
-    assert provider.called == [('eligible', 1), ('top60', 1)]
+    assert provider.called == [('eligible', 1), ('shallow', 1), ('top60', 1)]
     assert report['candidate_gate']['min_probability'] == .60
     assert report['candidate_gate']['min_data_depth'] == .50
+    assert report['candidate_gate']['top_only_lane']['min_data_depth'] == .30
     assert report['candidate_gate']['min_surface_matches_each'] == 3
-    assert report['odds_available'] == 2
+    assert report['odds_available'] == 3
     assert all(next(x for x in enriched if x['event_id'] == k).get('betting')
-               for k in ('eligible',))
+               for k in ('eligible', 'shallow', 'top60'))
     assert not next(x for x in enriched if x['event_id'] == 'weak').get('betting')
+
 
 def test_ranked_top_uses_only_real_pre_start_prices_without_cap():
     rows = [row(f'core{i}', .80-i*.02, 1.60, 2.60, depth=1.0) for i in range(7)]
@@ -401,7 +409,7 @@ def test_ranked_top_uses_only_real_pre_start_prices_without_cap():
     assert [x['event_id'] for x in sections['prime_picks']] == ['too-short']
     rule = sections['market_selection']['top_daily_rule']
     assert rule['ranked_full_slate'] is True
-    assert rule['probability_tiers'] == [.65]
+    assert rule['probability_tiers'] == [.60]
     assert rule['min_odds'] == 1.50
     assert rule['daily_preferred_count'] == 3
 
@@ -500,7 +508,7 @@ def test_all_four_quality_qualified_selections_are_ordered_in_top():
             row("d75", .75, 1.60, 3.00, depth=1.0)]
     result = select_market_sections(rows, top_limit=None)
     assert [x['event_id'] for x in result['top_daily_picks']] == ['a80','c78','b78','d75']
-    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .65
+    assert result['market_selection']['selection_counts']['active_top_probability_floor'] == .60
 
 
 def test_top_uses_quality_ranking_not_old_80_78_75_70_cascade():
@@ -522,7 +530,7 @@ def test_top_never_bypasses_150_price_and_safe_evidence_backup():
             row("backup75", .77, 1.60, 3.00, depth=.75, surface1=3, surface2=3),
             row("backup77", .76, 1.60, 3.00, depth=.78, surface1=4, surface2=4),
             row("short", .85, 1.49, 3.00, depth=1.0),
-            row("shallow", .90, 1.60, 3.00, depth=.49),
+            row("shallow", .90, 1.60, 3.00, depth=.29),
             row("no-surface", .90, 1.60, 3.00, depth=1.0, surface1=2)]
     result = select_market_sections(rows)
     assert {x['event_id'] for x in result['top_daily_picks']} == {
@@ -737,20 +745,20 @@ def test_extended_cup_and_challenger_classification_is_fail_closed():
     assert competition_group({"tour": "ATP", "tournament": "ITF M15 Challenger"}) == "ITF"
 
 
-def test_explicit_top65_and_value60_boundaries_without_forced_fill():
+def test_explicit_top60_and_value60_boundaries_without_forced_fill():
     from copy import deepcopy
     cards = [
-        row("top-under-65", .6499, 1.60, 2.60, depth=1.0),
-        row("top-at-65", .65, 1.60, 2.60, depth=1.0),
+        row("top-under-60", .5999, 1.60, 2.60, depth=1.0),
+        row("top-at-60", .60, 1.60, 2.60, depth=1.0),
         row("value-under-60", .5999, 1.90, 2.00, depth=1.0),
         row("value-at-60", .60, 1.90, 2.00, depth=1.0),
         row("value-above-60", .6499, 1.90, 2.00, depth=1.0),
     ]
     before = deepcopy(cards)
     result = select_market_sections(cards, top_min_probability=.50, value_min_probability=.50)
-    assert [x["event_id"] for x in result["top_daily_picks"]] == ["top-at-65"]
+    assert [x["event_id"] for x in result["top_daily_picks"]] == ["top-at-60"]
     assert {x["event_id"] for x in result["value_picks"]} == {"value-at-60", "value-above-60"}
     assert result["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
-    assert result["market_selection"]["top_daily_rule"]["core_min_probability"] == .65
+    assert result["market_selection"]["top_daily_rule"]["core_min_probability"] == .60
     assert result["market_selection"]["value_rule"]["min_probability"] == .60
     assert cards == before
