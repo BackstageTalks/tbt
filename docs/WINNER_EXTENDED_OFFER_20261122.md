@@ -5,9 +5,9 @@ The owner explicitly requested immediate Match Winner processing for ATP Challen
 50/75/100/125/175, WTA 125 and Davis Cup/Billie Jean King Cup **singles**,
 in addition to existing ATP/WTA 250+, without a shadow-only delay.
 
-TOP: model p >= 0.60, real before-start winner odds >= 1.50, depth >= 0.50,
+TOP: model p >= 0.65, real before-start winner odds >= 1.50, depth >= 0.50,
 >= 5 surface matches per player, max 5/day and priority ATP/WTA 250+ before
-new categories. Value: model p >= 0.65, odds > 1.80, 15% symmetric two-way
+new categories. Value: model p >= 0.60, odds > 1.80, 15% symmetric two-way
 price difference, depth >= 0.50, >= 3 surface matches/player.
 No forced picks, no fabricated prices, and no probability recalibration.
 

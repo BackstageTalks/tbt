@@ -33,7 +33,7 @@ def test_rebuild_keeps_v65_dashboard_contract_and_complete_assets():
 
 def test_rebuild_keeps_unchanged_value_prime_and_ranked_top_market_contract():
     source = (ROOT / "api" / "tbt" / "services" / "market_selection.py").read_text(encoding="utf-8")
-    assert "PUBLICATION_MIN_PROBABILITY = 0.65" in source
+    assert "PUBLICATION_MIN_PROBABILITY = 0.60" in source
     assert "PRIME_TOP_CORE_PROBABILITY = 0.68" in source
     assert "PRIME_TOP_FALLBACK_PROBABILITY = 0.65" in source
     assert "PRIME_MAX_ODDS_EXCLUSIVE = 1.50" in source
@@ -42,7 +42,7 @@ def test_rebuild_keeps_unchanged_value_prime_and_ranked_top_market_contract():
     assert "TOP_MIN_COUNT = 3" in source
     assert "VALUE_MIN_ODDS = 1.80" in source
     assert "VALUE_MAX_ODDS_DIFFERENCE = 0.15" in source
-    assert "sports_tiered_top5_60_v24" in source
+    assert "sports_tiered_top5_65_v25" in source
     assert 'SECTION_PRIORITY = ("value", "top_daily", "prime")' in source
     assert '"top200_picks": []' in source
 

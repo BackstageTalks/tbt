@@ -907,9 +907,13 @@ def _daily_rows(payload: dict) -> list[dict]:
         # Preserve the selector's competition/tier order. Old publications and
         # settled results are not mutated by this active-board filter.
         return out
+    if rule.get("policy") == "sports_tiered_top5_65_v25":
+        # The serving/member view must preserve the selector's ranked TOP
+        # competition order and the owner's new >=65% floor. A legacy
+        # three-core fallback would silently hide legitimate TOP picks.
+        return [row for row in out if _row_probability(row) + 1e-12 >= .65][:5]
     if rule.get("policy") in {"sports_tiered_top5_60_v23", "sports_tiered_top5_60_v24"}:
-        # Preserve the exact published competition-tier order for both legacy
-        # v23 (including its historical ITF) and new v24 (ATP/WTA, Challenger).
+        # Historical immutable v23/v24 publications retain the original floor.
         return [row for row in out if _row_probability(row) >= .60][:5]
     if rule.get("policy") == "sports_top3_60_v22":
         return sorted((row for row in out if _row_probability(row) >= .60),

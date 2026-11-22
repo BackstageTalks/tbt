@@ -627,6 +627,22 @@ def _publish_predictions(
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         public_offer_day=public_offer_day,
     )
+    # Audit only aggregate publication gates: real-provider prices may exist
+    # without enough model confidence, history, or a valid close-odds VALUE
+    # quote. Never expose names, full provider payloads or private evidence.
+    _selection_audit = feed.get("market_selection") or {}
+    print(json.dumps({"match_winner_selection_audit": {
+        "betting_day": public_offer_day,
+        "prediction_rows": len(predictions),
+        "priced_rows": (_selection_audit.get("selection_counts") or {}).get("priced_match_winner_rows"),
+        "top_qualified": len(feed.get("top_daily_picks") or []),
+        "value_qualified": len(feed.get("value_picks") or []),
+        "top_rejection_counts": _selection_audit.get("top_rejection_counts") or {},
+        "value_qualification": _selection_audit.get("value_audit") or {},
+        "top_floor": (_selection_audit.get("top_daily_rule") or {}).get("core_min_probability"),
+        "value_floor": (_selection_audit.get("value_rule") or {}).get("min_probability"),
+        "provider_requests_added": 0,
+    }}, default=str), flush=True)
     # PRIME remains internal, but its rows carry a separately trained-on-history
     # conditional projection used only after the favourite loses set 1 LIVE.
     feed, comeback_report = annotate_live_second_set_projections(feed, matches, now=now)
