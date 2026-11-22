@@ -1205,11 +1205,16 @@ def select_market_sections(
         ):
             value_qualified.append(card)
 
-        if odds < PRIME_MAX_ODDS_EXCLUSIVE and _passes_candidate_gate(
+        # The scope expansion is TOP/VALUE-only; ACCA keeps the original
+        # ATP/WTA main-tour universe and unchanged short-price policy.
+        from .top_policy import competition_group
+        if (competition_group(card) in {"ATP", "WTA"}
+                and odds < PRIME_MAX_ODDS_EXCLUSIVE
+                and _passes_candidate_gate(
             card, min_probability=fallback_floor,
             min_data_depth=prime_min_data_depth,
             min_surface_matches=prime_min_surface_matches,
-        ):
+        )):
             (prime_core if probability >= prime_core_floor else prime_fallback).append(card)
 
         from .top_policy import rejection_reasons
