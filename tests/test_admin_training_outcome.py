@@ -84,3 +84,22 @@ def test_worker_subscribes_to_preflight_completion_and_syncs_after_error():
     text = Path(".github/workflows/admin-training-worker.yml").read_text(encoding="utf-8")
     assert "BlinQ Model Factory source preflight" in text
     assert "if: ${{ !cancelled() }}" in text
+
+
+def test_skipped_push_runs_do_not_move_training_queue_base():
+    from tbt.services import model_training as mt
+
+    def read(path, missing_ok=False):
+        if "status=" in path:
+            return {"workflow_runs": []}
+        if "/runs?" in path:
+            return {"workflow_runs": [
+                {"id": 30, "status": "completed", "conclusion": "skipped"},
+                {"id": 20, "status": "completed", "conclusion": "success"},
+            ]}
+        if path.endswith("blinq-cdb-global-writer"):
+            return None
+        return {}
+
+    result = mt.inspect(read)
+    assert result["base"] == "20" and result["can_start"] is True
