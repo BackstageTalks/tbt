@@ -683,3 +683,54 @@ def test_public_offer_day_matches_bratislava_six_am_boundary_and_fails_closed():
     assert _belongs_to_public_offer_day(
         fixture('2026-10-25T05:00:00Z'), '2026-10-25'
     )
+
+
+def test_expanded_tour_categories_generate_top_value_but_not_acca():
+    # Same proven pre-match prices and evidence rules; lower divisions are
+    # eligible for TOP/Value only. No synthetic prices or forced minimum.
+    rows = []
+    for key, competition, tour, tournament in [
+        ("atp-main", "ATP", "ATP", "ATP 500"),
+        ("ch50", "Challenger", "ATP", "ATP Challenger 50"),
+        ("ch175", "Challenger", "ATP", "ATP Challenger 175"),
+        ("w125", "WTA 125", "WTA", "WTA 125"),
+        ("bjk", "BJK Cup", "WTA", "Billie Jean King Cup"),
+        ("davis", "Davis Cup", "ATP", "Davis Cup"),
+    ]:
+        card = row(key, .75, 1.60, 2.50, depth=1.0, surface1=5, surface2=5)
+        card.update(competition=competition, tour=tour, tournament=tournament)
+        rows.append(card)
+    value = row("value-challenger", .70, 1.90, 2.00, depth=1.0, surface1=3, surface2=3)
+    value.update(competition="Challenger", tour="ATP", tournament="ATP Challenger 100")
+    rows.append(value)
+    value_cup = row("value-bjk", .72, 1.92, 2.00, depth=1.0, surface1=3, surface2=3)
+    value_cup.update(competition="BJK Cup", tour="WTA", tournament="Billie Jean King Cup")
+    rows.append(value_cup)
+    cup_short = row("cup-short", .90, 1.30, 3.50, depth=1.0)
+    cup_short.update(competition="Davis Cup", tour="ATP", tournament="Davis Cup")
+    rows.append(cup_short)
+    main_short = row("main-short", .90, 1.30, 3.50, depth=1.0)
+    rows.append(main_short)
+    from copy import deepcopy
+    original = deepcopy(rows)
+    out = select_market_sections(rows)
+    assert [r["event_id"] for r in out["top_daily_picks"]] == [
+        "atp-main", "ch50", "ch175", "w125", "bjk"
+    ] or [r["event_id"] for r in out["top_daily_picks"]] == [
+        "atp-main", "ch50", "ch175", "w125", "davis"
+    ]
+    assert {r["event_id"] for r in out["value_picks"]} == {"value-challenger", "value-bjk"}
+    assert {r["event_id"] for r in out["prime_picks"]} == {"main-short"}
+    assert rows == original
+
+
+def test_extended_cup_and_challenger_classification_is_fail_closed():
+    from tbt.services.top_policy import competition_group
+    assert competition_group({"competition": "Challenger", "tour": "ATP",
+                              "tournament": "ATP Challenger 75"}) == "Challenger"
+    assert competition_group({"competition": "WTA 125", "tour": "WTA"}) == "WTA 125"
+    assert competition_group({"tour": "WTA", "tournament": "Billie Jean King Cup"}) == "BJK Cup"
+    assert competition_group({"tour": "ATP", "tournament": "Davis Cup"}) == "Davis Cup"
+    assert competition_group({"tour": "ATP", "tournament": "Billie Jean King Cup"}) == "unknown"
+    assert competition_group({"tour": "WTA", "tournament": "Davis Cup"}) == "unknown"
+    assert competition_group({"tour": "ATP", "tournament": "ITF M15 Challenger"}) == "ITF"
