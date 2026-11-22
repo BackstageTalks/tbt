@@ -172,6 +172,7 @@ jobs:
       TBT_SETS_SUSPENDED: ${{ vars.TBT_SETS_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_SETS_SUSPENDED == 'true' && 'true' || 'false' }}
       TBT_ACES_MIN_GAP: ${{ vars.TBT_ACES_MIN_GAP_OWNER_APPROVED == 'true' && vars.TBT_ACES_MIN_GAP || '' }}
       TBT_ACES_REAL_LINE_STRICT: ${{ vars.TBT_ACES_REAL_LINE_STRICT_OWNER_APPROVED == 'true' && vars.TBT_ACES_REAL_LINE_STRICT == 'true' && 'true' || 'false' }}
+      TBT_ACES_CUSHION_RULE: ${{ vars.TBT_ACES_CUSHION_RULE_OWNER_APPROVED == 'true' && vars.TBT_ACES_CUSHION_RULE == 'true' && 'true' || 'false' }}
       TBT_TOP_MIN_PICKS: ${{ vars.TBT_TOP_MIN_PICKS_OWNER_APPROVED == 'true' && vars.TBT_TOP_MIN_PICKS || '' }}
       TBT_TOP_REQUIRE_MARKET_SIDE: ${{ vars.TBT_TOP_REQUIRE_MARKET_SIDE_OWNER_APPROVED == 'true' && (vars.TBT_TOP_REQUIRE_MARKET_SIDE == 'true' || vars.TBT_TOP_REQUIRE_MARKET_SIDE == '1') && 'true' || 'false' }}
       # Explicit owner instruction 2026-11-21: run research-only candidate
