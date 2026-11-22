@@ -109,8 +109,11 @@ def is_match_winner_offer_scope(tour: str, *, category_id=None, labels=(), event
             return True  # Category discovery only; the event gets a strict gate.
         gender = "m" if tour == "atp" else "w"
         grades = _ITF_GRADE.findall(label)
+        # ITF Men has M15/M25; women's circuit has modern and legacy
+        # W15+ point tiers. Unknown numbers such as M150 are not ITF grades.
+        allowed = {"m": {15, 25}, "w": {15, 25, 35, 40, 50, 60, 75, 80, 100}}
         return bool(grades) and all(
-            marker.casefold() == gender and int(amount) >= 15
+            marker.casefold() == gender and int(amount) in allowed[gender]
             for marker, amount in grades
         )
     if _UNSAFE_WINNER_LEVEL.search(label):
