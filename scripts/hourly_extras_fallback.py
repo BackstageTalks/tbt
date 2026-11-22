@@ -75,6 +75,9 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
     # Without this route, tiny hourly queues (or entirely cooled-down queues)
     # leave thousands of governed requests idle even when extras have backlog.
     # Do not infer exhaustion from a missing report or from a partial scan.
+    # A small (1..7) fully scanned queue with exact paid all-empty responses
+    # and same-run independent CDB read-back is just as exhausted as >=8.
+    # Avoid a statistical threshold here: full exhaustion is hard evidence.
     queue_size = download.get("statistics_candidate_rows")
     adaptive = download.get("statistics_adaptive_priority")
     unavailable = download.get("statistics_unavailable_reasons")
@@ -89,7 +92,7 @@ def plan(download, readback, evidence, *, original_limit: int, run_id: str,
         empty_count = unavailable.get("empty_whole_match_statistics", 0)
         no_candidates = (queue_size == 0 and paid == 0
                          and type(empty_count) is int and empty_count == 0)
-        all_unavailable = (queue_size >= 8 and paid >= queue_size
+        all_unavailable = (queue_size >= 1 and paid == queue_size
                            and type(empty_count) is int
                            and empty_count == queue_size)
         if no_candidates or all_unavailable:
