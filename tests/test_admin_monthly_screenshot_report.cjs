@@ -50,6 +50,12 @@ rendered=t.renderMonthlyPerformance();
 for(const token of ['is-report-mode','monthly-focused-table','Kumulatívny profit · ELITE','monthly-profit-area','1. – 7. deň','Režim screenshotu','+0,70 u','-0,30 u','BlinQ · ADMIN / ANALYTIKA']) assert.ok(rendered.includes(token),token);
 assert.ok(!rendered.includes('monthly-tables-pair'));
 assert.ok(rendered.includes('role="region" aria-label="Denný report – posúvateľná tabuľka" tabindex="0"'), 'daily report keyboard access');
+// The table shows newest first while "Spolu" remains a chronological running total.
+const focusedBody=rendered.split('monthly-grid-table monthly-focused-table')[1]?.split('<tbody>')[1]?.split('</tbody>')[0]||'';
+const displayedDays=[...focusedBody.matchAll(/<th scope="row">([^<]+)<\/th>/g)].map(match=>match[1]);
+assert.deepEqual(displayedDays,['7.','6.','5.','4.','3.','2.','1.'], 'focused daily report must show latest betting day first, including days without settlements');
+const newestRow=focusedBody.match(/<tr><th scope="row">7\.<\/th>[\s\S]*?<\/tr>/)?.[0]||'';
+assert.ok(newestRow.includes('-0,30 u'), 'newest row must retain its chronological cumulative total');
 assert.match(css, /\.monthly-focused-card \.monthly-table-scroll\{\s*max-height:min\(62dvh,560px\);\s*overflow-y:auto;overflow-x:auto;/, 'daily report vertical scrollbar and bound');
 assert.ok(css.includes('scrollbar-gutter:stable;scrollbar-width:thin;'), 'stable scrollbar track');
 assert.ok(css.includes('.monthly-focused-card .monthly-focused-table thead th{\n  position:sticky;top:0;z-index:2'), 'headers sticky while scrolling');

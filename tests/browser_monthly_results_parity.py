@@ -159,13 +159,15 @@ def main():
                   }]};
               });
               const dom=new DOMParser().parseFromString(t.renderMonthlyPerformance(),'text/html');
-              const lines=[...dom.querySelectorAll('.monthly-focused-table tbody tr')].slice(0,3);
+              const lines=[...dom.querySelectorAll('.monthly-focused-table tbody tr')].slice(-3);
               const toNumber=text=>Number(text.replace('u','').replace('+','').trim().replace(',','.'));
               const displayed=lines.map(tr=>toNumber(tr.querySelectorAll('td')[1].textContent));
-              const last=toNumber(lines[2].querySelectorAll('td')[2].textContent);
+              const last=toNumber(lines[0].querySelectorAll('td')[2].textContent);
+              const order=lines.map(tr=>tr.querySelector('th')?.textContent.trim());
               const exact=t.monthlyMetricSummary(t.monthlyMetricRows('elite'),'elite','top_daily').profit;
-              return {displayed,last,exact};
+              return {displayed,last,exact,order};
             }""")
+            assert rounding["order"] == ["3.", "2.", "1."], rounding
             assert len(rounding["displayed"]) == 3, rounding
             assert abs(sum(rounding["displayed"]) - rounding["last"]) < 1e-9, rounding
             assert abs(rounding["last"] - 1.01) < 1e-9, rounding
