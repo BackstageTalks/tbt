@@ -13,7 +13,9 @@ from _bootstrap import ROOT  # noqa: F401
 from import_offline_linked_serve_return import ALLOWED
 from recover_cdb_opponent_service_rates import _sha, _storage, verify_readback
 from tbt.data.history_snapshot import load_manifest, load_partitions
-from offline_exact_cdb_write import write_exact_stats_partition
+from offline_exact_cdb_write import SCORE_FIELDS, write_exact_stats_partition
+import os
+_EXTRA = SCORE_FIELDS if os.environ.get("TBT_STAGED_ALLOW_SCORE") == "1" else frozenset()
 
 POLICY = "staged_stats_null_only_v1"
 
@@ -51,9 +53,9 @@ def stage(directory, rows):
             continue
         old = dict(m.stats or {})
         raw = r.get("stats") or {}
-        new = {k: v for k, v in raw.items() if k in ALLOWED}
+        new = {k: v for k, v in raw.items() if k in ALLOWED or k in _EXTRA}
         c["dropped_unapproved_fields"] = c.get("dropped_unapproved_fields", 0) + len(raw) - len(new)
-        if any(k not in ALLOWED or not isinstance(v, (int, float)) or isinstance(v, bool)
+        if any((k not in ALLOWED and k not in _EXTRA) or not isinstance(v, (int, float)) or isinstance(v, bool)
                or not math.isfinite(v) or v < 0 for k, v in new.items()):
             c["invalid"] += 1
             continue
@@ -100,7 +102,8 @@ def main():
                 if _sha(_storage(m)) != r["prewrite_hash"] or _sha(dict(m.stats or {})) != r["source_stats_hash"]:
                     raise SystemExit("Canonical row changed since stage: " + r["match_id"])
                 m.stats = {**(m.stats or {}), **r["additions"]}
-            write_exact_stats_partition(a.history_dir, y, matches, {r["match_id"] for r in batch})
+            write_exact_stats_partition(a.history_dir, y, matches, {r["match_id"] for r in batch},
+                                        approved_score_fields=_EXTRA)
             del matches, by_id
         res = {"schema": 1, "mode": "write", "updated": len(rows), "changed_years": years,
                "new_stat_values": sum(len(r["additions"]) for r in rows),
