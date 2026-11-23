@@ -102,3 +102,19 @@ Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne 
 ## Výsledky 23.11.
 - Denné kurzy RapidAPI: 1 000 dní (27.2.2024–22.11.2026), 527 184 zápasov, 1 000 volaní (artefakt behu 45135311353, 90 dní).
 - ITF test: RapidAPI pozná ~95 % hist-js ITF zápasov, štatistiky 20/20 (104 volaní). Pred veľkým zberom overiť podanie/príjem na prvých 200.
+
+## 2026-11-23 – CDB importy bez API (zdroj → zápasy) a rollback
+Všetko NULL-only (okrem opravy orientácie), guarded workflow: lock, prewrite backup release, CAS, full readback, 2. beh = 0.
+Rollback: obnov partície z releasu `blinq-cdb-*-prewrite-<run_id>-1` v tbt-data (history-YYYY.parquet + manifesty).
+| PR | Čo | Zápasy | Write run |
+|---|---|---|---|
+| #1787/#1788 | Sackmann/TML štatistiky Challenger/ATP | 11 240 | 45198536085 |
+| #1789 | ITF ženy štatistiky 2025-26 | 17 513 | 45208319247 |
+| #1790 | oprava prehodených p1/p2 štatistík (Sackmann-potvrdené) | 5 688 | 45211682760 |
+| #1791 | ITF muži + WTA štatistiky | 6 412 | 45220670690 |
+| #1795 | bulk kurzy bet365 → `_tbt_market_history` | 133 888 | 45241241201 |
+| #1796 | rebríčky ATP/WTA (Sackmann weekly) | 150 653 | 45243990048 |
+| #1797 | gemy/sety zo skóre (parser `parse_event_score`) | 346 361 | 45246930046 |
+| #1801 | konsenzus kurzov HF minmaxxxer → `_tbt_market_consensus` | 9 643 | 45253782831 |
+ITF zber: #1783 (budget fix), #1784 (CDB-ready staging), #1786 (skip duplicít), #1792 (večerný owner cap).
+Zistenie: ledger vs provider rozdiel ~1 000/deň; ochrana = provider reserve 500 v klientovi.
