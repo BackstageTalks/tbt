@@ -159,7 +159,7 @@ def main():
                   }]};
               });
               const dom=new DOMParser().parseFromString(t.renderMonthlyPerformance(),'text/html');
-              const lines=[...dom.querySelectorAll('.monthly-focused-table tbody tr')].slice(0,3);
+              const lines=[...dom.querySelectorAll('.monthly-focused-table tbody tr')].slice(-3);
               const toNumber=text=>Number(text.replace('u','').replace('+','').trim().replace(',','.'));
               const displayed=lines.map(tr=>toNumber(tr.querySelectorAll('td')[1].textContent));
               const last=toNumber(lines[0].querySelectorAll('td')[2].textContent);
