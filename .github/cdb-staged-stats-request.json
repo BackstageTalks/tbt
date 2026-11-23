@@ -1,8 +1,24 @@
 {
   "workflow": "cdb-staged-stats-import.yml",
-  "mode": "dry-run",
-  "approved_by_operator": false,
+  "mode": "write",
+  "approved_by_operator": true,
   "allow_score_fields": true,
   "input": "data/staging/sackmann_scores_2016_2026.jsonl.gz",
-  "source_attribution": "Jeff Sackmann match scores (CC BY-NC) parsed with tbt.providers.score.parse_event_score; 98.45 % exact vs existing API score stats"
+  "source_attribution": "Jeff Sackmann match scores (CC BY-NC) parsed with tbt.providers.score.parse_event_score; 98.45 % exact vs existing API score stats",
+  "approved_in_chat": "2026-11-23 19:27 owner: super, ak sa daju zadarmo, tak ich pls dopln, idealne presne ako z api",
+  "expected_staged_matches": 346361,
+  "expected_new_stat_values": 5888137,
+  "expected_changed_years": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ]
 }
