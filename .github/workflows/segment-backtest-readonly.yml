@@ -1,0 +1,40 @@
+name: BlinQ segment backtest (read-only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-segment-backtest
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
+      BLINQ_RAPIDAPI_MAX_RPS: '3'
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: python -m pip install -r api/requirements-train.txt
+      - name: Download canonical CDB (read-only)
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          mkdir -p .cache/h
+          for y in 2022 2023 2024 2025 2026; do gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p "history-$y.parquet" -D .cache/h; done
+      - run: python scripts/backtest_segments_readonly.py .cache/h
