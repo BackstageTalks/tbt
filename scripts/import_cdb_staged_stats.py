@@ -11,7 +11,8 @@ import argparse, gzip, json, math
 from pathlib import Path
 from _bootstrap import ROOT  # noqa: F401
 from import_offline_linked_serve_return import ALLOWED
-from recover_cdb_opponent_service_rates import _load, _sha, _storage, verify_readback
+from recover_cdb_opponent_service_rates import _sha, _storage, verify_readback
+from tbt.data.history_snapshot import load_manifest, load_partitions
 from offline_exact_cdb_write import write_exact_stats_partition
 
 POLICY = "staged_stats_null_only_v1"
@@ -23,13 +24,28 @@ def _read(path: Path):
         return [json.loads(x) for x in fp if x.strip()]
 
 
-def stage(matches, rows):
-    by_id = {str(m.match_id): m for m in matches}
-    out, c = [], {"input": len(rows), "missing_match": 0, "nothing_new": 0, "invalid": 0}
+def _years(directory):
+    return sorted(int(y) for y in load_manifest(directory)["years"])
+
+
+def _year(directory, y):
+    # One partition at a time: whole-CDB loads exhaust the runner memory.
+    return load_partitions(directory, years=[y])
+
+
+def stage(directory, rows):
+    wanted = {str(r.get("match_id") or ""): r for r in rows}
+    out, c = [], {"input": len(rows), "missing_match": 0, "nothing_new": 0, "invalid": 0,
+                  "duplicate_input": len(rows) - len(wanted)}
+    found = {}
+    for y in _years(directory):
+        for m in _year(directory, y):
+            if str(m.match_id) in wanted:
+                found[str(m.match_id)] = m
     seen = set()
     for r in rows:
         mid = str(r.get("match_id") or "")
-        m = by_id.get(mid)
+        m = found.get(mid)
         if m is None or mid in seen:
             c["missing_match"] += 1
             continue
@@ -65,7 +81,7 @@ def main():
     a = p.parse_args()
     a.out_dir.mkdir(parents=True, exist_ok=True)
     if a.mode == "stage":
-        rows, counts = stage(_load(a.history_dir), _read(a.input))
+        rows, counts = stage(a.history_dir, _read(a.input))
         with (a.out_dir / "stage.jsonl").open("w") as fp:
             for r in rows:
                 fp.write(json.dumps(r, sort_keys=True, allow_nan=False) + "\n")
@@ -74,22 +90,32 @@ def main():
                "production_mutated": False, "provider_requests": 0}
     elif a.mode == "write":
         rows = _read(a.stage_file)
-        matches = _load(a.history_dir)
-        by_id = {str(m.match_id): m for m in matches}
-        for r in rows:
-            m = by_id[r["match_id"]]
-            if _sha(_storage(m)) != r["prewrite_hash"] or _sha(dict(m.stats or {})) != r["source_stats_hash"]:
-                raise SystemExit("Canonical row changed since stage: " + r["match_id"])
-            m.stats = {**(m.stats or {}), **r["additions"]}
         years = sorted({int(r["utc_year"]) for r in rows})
         for y in years:
-            ids = {r["match_id"] for r in rows if int(r["utc_year"]) == y}
-            write_exact_stats_partition(a.history_dir, y, matches, ids)
+            batch = [r for r in rows if int(r["utc_year"]) == y]
+            matches = _year(a.history_dir, y)
+            by_id = {str(m.match_id): m for m in matches}
+            for r in batch:
+                m = by_id[r["match_id"]]
+                if _sha(_storage(m)) != r["prewrite_hash"] or _sha(dict(m.stats or {})) != r["source_stats_hash"]:
+                    raise SystemExit("Canonical row changed since stage: " + r["match_id"])
+                m.stats = {**(m.stats or {}), **r["additions"]}
+            write_exact_stats_partition(a.history_dir, y, matches, {r["match_id"] for r in batch})
+            del matches, by_id
         res = {"schema": 1, "mode": "write", "updated": len(rows), "changed_years": years,
                "new_stat_values": sum(len(r["additions"]) for r in rows),
                "production_mutated": False, "provider_requests": 0}
     else:
-        res = verify_readback(_load(a.before_dir), _load(a.history_dir), _read(a.stage_file))
+        rows = _read(a.stage_file)
+        res = {"status": "verified", "canonical_matches": 0, "enriched_matches": 0,
+               "new_stat_values": 0, "existing_values_overwritten": 0, "unverified_identities": 0}
+        for y in _years(a.before_dir):
+            batch = [r for r in rows if int(r["utc_year"]) == y]
+            part = verify_readback(_year(a.before_dir, y), _year(a.history_dir, y), batch)
+            for k in ("canonical_matches", "enriched_matches", "new_stat_values"):
+                res[k] += part[k]
+        if res["enriched_matches"] != len(rows):
+            raise SystemExit("Readback did not cover every staged row")
     (a.out_dir / "report.json").write_text(json.dumps(res, sort_keys=True, indent=2) + "\n")
     print(json.dumps(res, sort_keys=True))
 
