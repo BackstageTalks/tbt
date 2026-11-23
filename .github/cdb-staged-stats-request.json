@@ -2,18 +2,13 @@
   "workflow": "cdb-staged-stats-import.yml",
   "mode": "write",
   "approved_by_operator": true,
-  "approved_in_chat": "2026-11-23 14:31 owner: kludne spusti zapis do CDB",
-  "input": "data/staging/sackmann_all_2016_2026.jsonl.gz",
-  "expected_staged_matches": 11240,
-  "expected_new_stat_values": 177752,
+  "input": "data/staging/sackmann_itfw_2025_2026.jsonl.gz",
+  "source_attribution": "Jeff Sackmann / Tennis Abstract (CC BY-NC, non-commercial BlinQ); validated 99.2% SPW / 99.7% aces vs API on ITF Women overlap",
+  "approved_in_chat": "2026-11-23 14:31 + 16:14 owner: zapis do CDB / pokracuj v importoch",
+  "expected_staged_matches": 17513,
+  "expected_new_stat_values": 226152,
   "expected_changed_years": [
-    2016,
-    2017,
-    2020,
-    2021,
-    2022,
-    2023
-  ],
-  "source_attribution": "Jeff Sackmann / Tennis Abstract; TennisMyLife (CC BY-NC, non-commercial BlinQ)",
-  "retry": 2
+    2025,
+    2026
+  ]
 }
