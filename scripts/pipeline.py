@@ -1956,6 +1956,25 @@ def main():
             ),
         )
         projection_odds_report["discovery"] = projection_discovery_report
+        # Isolated candidate: reuse already captured offers and RapidAPI cache.
+        # Never feed these rows to the champion issuer or change TOP/Value.
+        if os.getenv("TBT_ACES_LINE_FIRST_CANDIDATE", "").lower() == "true":
+            try:
+                from aces_line_first import project_candidates, select_candidate
+                candidate_now = datetime.now(timezone.utc)
+                candidate_day = selection_now.astimezone(PROPLINE_TZ).date().isoformat()
+                candidate_archive, candidate_source = load_propline_evening_report(
+                    betting_day=candidate_day, now=candidate_now)
+                projection_odds_report["line_first_candidate"] = select_candidate(
+                    project_candidates(matches, predictions, now=candidate_now),
+                    candidate_archive, now=candidate_now,
+                    betting_day=candidate_day, rapid_payloads=projection_market_cache)
+                projection_odds_report["line_first_candidate"]["source_status"] = candidate_source
+            except Exception as exc:
+                projection_odds_report["line_first_candidate"] = {
+                    "status": "blocked", "error_type": type(exc).__name__,
+                    "incremental_provider_requests": 0,
+                }
         if (projection_odds_cap or prop_market_payloads) and (ace_picks or sg_picks):
             ace_picks, sg_picks, attachment_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks,
