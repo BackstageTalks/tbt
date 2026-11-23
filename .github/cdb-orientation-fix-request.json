@@ -1,0 +1,7 @@
+{
+  "workflow": "cdb-stats-orientation-fix.yml",
+  "mode": "dry-run",
+  "approved_by_operator": false,
+  "input": "data/staging/swap_confirmed_2021_2026.jsonl.gz",
+  "source_attribution": "Swap confirmed by Jeff Sackmann winner/loser stats (CC BY-NC, non-commercial)"
+}
