@@ -1,0 +1,12 @@
+{
+  "workflow": "cdb-staged-stats-import.yml",
+  "mode": "write",
+  "approved_by_operator": true,
+  "approved_in_chat": "2026-11-23 14:31 owner: kludne spusti zapis do CDB",
+  "input": "data/staging/sackmann_all_2016_2026.jsonl.gz",
+  "expected_cdb_bundle_sha256": "f1c75ace1e09d0520173063b13e50df3afe4787a62b58461cf8fa759780a8ce4",
+  "expected_staged_matches": 11240,
+  "expected_new_stat_values": 177752,
+  "expected_changed_years": [2016, 2017, 2020, 2021, 2022, 2023],
+  "source_attribution": "Jeff Sackmann / Tennis Abstract; TennisMyLife (CC BY-NC, non-commercial BlinQ)"
+}

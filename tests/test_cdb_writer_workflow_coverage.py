@@ -7,6 +7,7 @@ WRITERS = (
     "alimoh89-preparation.yml",
     "cdb-identity-reconcile.yml",
     "cdb-service-complement-write.yml",
+    "cdb-staged-stats-import.yml",
     "data.yml",
     "drive-pbpx-canonical-enrichment.yml",
     "kaggle-hwaitt-history-enrichment.yml",
