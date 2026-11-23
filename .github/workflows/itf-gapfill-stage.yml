@@ -55,8 +55,10 @@ jobs:
           from datetime import datetime
           from zoneinfo import ZoneInfo
           req = urllib.request.Request(os.environ["BUDGET_URL"], headers={"X-Blinq-Worker-Token": os.environ["WORKER_TOKEN"]})
-          budget = json.load(urllib.request.urlopen(req, timeout=15))
-          spent = int(budget["global_spent"])
+          resp = json.load(urllib.request.urlopen(req, timeout=15))
+          if resp.get("ok") is not True or not isinstance(resp.get("budget"), dict):
+              raise SystemExit("Shared budget did not confirm status; no run")
+          spent = int(resp["budget"]["global_spent"])
           h = datetime.now(ZoneInfo("Europe/Bratislava")).hour
           # Daytime only (owner can watch it). Cumulative global ceiling by
           # Bratislava hour; provider day resets at 18:09 Bratislava.
