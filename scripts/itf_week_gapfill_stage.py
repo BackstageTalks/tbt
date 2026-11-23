@@ -60,6 +60,7 @@ def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
                 break
             rep["weeks"] += 1
             rep["targets"] += len(targets)
+            week_started = start
             index: dict[frozenset, list] = defaultdict(list)
             for k in range(7):
                 day = start + timedelta(days=k)
@@ -93,6 +94,10 @@ def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
                 rep["stats_with_serve_return"] += int("p1_service_points_won" in stats)
                 fp.write(json.dumps({"match_id": t["match_id"], "provider_event_id": eid,
                                      "week": start.isoformat(), "stats": stats}) + "\n")
+            else:
+                rep["last_complete_week"] = start.isoformat()
+                continue
+            break
     finally:
         fp.close()
     rep["requests"] = client.request_count

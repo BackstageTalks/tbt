@@ -1,18 +1,20 @@
-name: BlinQ ITF gap-fill staging (night, no CDB writes)
+name: BlinQ ITF gap-fill staging (daytime, no CDB writes)
 
 on:
   workflow_dispatch:
     inputs:
       start:
-        description: First tournament week YYYY-MM-DD
-        required: true
+        description: First tournament week YYYY-MM-DD (empty = continue automatically)
+        required: false
+        default: ''
       end:
-        description: Last tournament week YYYY-MM-DD
-        required: true
+        description: Last tournament week YYYY-MM-DD (empty = automatic)
+        required: false
+        default: ''
       max_requests:
-        description: Max paid requests (<= 6000)
+        description: Max paid requests (<= 5000)
         required: true
-        default: '3000'
+        default: '5000'
 
 permissions:
   contents: read
@@ -42,6 +44,29 @@ jobs:
           if (( 10#$now >= 400 && 10#$now < 730 )); then
             echo "::error::Morning prediction window: gap-fill refused"; exit 1
           fi
+      - name: Hourly global quota schedule (cap this run so the night never drains the day)
+        id: quota
+        env:
+          BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+          WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: python
+        run: |
+          import json, os, urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          req = urllib.request.Request(os.environ["BUDGET_URL"], headers={"X-Blinq-Worker-Token": os.environ["WORKER_TOKEN"]})
+          budget = json.load(urllib.request.urlopen(req, timeout=15))
+          spent = int(budget["global_spent"])
+          h = datetime.now(ZoneInfo("Europe/Bratislava")).hour
+          # Daytime only (owner can watch it). Cumulative global ceiling by
+          # Bratislava hour; provider day resets at 18:09 Bratislava.
+          ceiling = {11: 5000, 12: 6600, 13: 8200, 14: 9800, 15: 11400, 16: 13050, 17: 14500}.get(h, 0)  # 90 % by 16h, top-up at 17:30, reset 18:09
+          allowed = max(0, min(5000, ceiling - spent))
+          print(f"global_spent={spent} hour={h} ceiling={ceiling} allowed_this_run={allowed}")
+          with open(os.environ["GITHUB_ENV"], "a") as fp:
+              fp.write(f"QUOTA_ALLOWED={allowed}\n")
+              if allowed < 100:
+                  fp.write("DONE=1\n")
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -51,19 +76,30 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements-train.txt
       - run: python -m pip install -r api/requirements-train.txt
-      - name: Validate inputs
+      - name: Resolve range (continue after last completed week)
         env:
-          START: ${{ inputs.start }}
-          END: ${{ inputs.end }}
-          MAX: ${{ inputs.max_requests }}
+          IN_START: ${{ inputs.start }}
+          IN_END: ${{ inputs.end }}
+          MAX: ${{ inputs.max_requests || '5000' }}
         run: |
           set -euo pipefail
+          [[ "$MAX" =~ ^[0-9]+$ ]] && (( 10#$MAX >= 1 && 10#$MAX <= 5000 ))
+          (( 10#$MAX <= 10#${QUOTA_ALLOWED:-0} )) || MAX="${QUOTA_ALLOWED:-0}"
+          START="$IN_START"; END="$IN_END"; PREFIX=itf
+          [[ -n "$START" ]] || PREFIX=itf-auto
+          if [[ -z "$START" ]]; then
+            last=$(gh release view itf-gapfill-staging-v1 -R BackstageTalks/tbt-data --json assets --jq '.assets[].name' 2>/dev/null \
+              | grep -oE '^itf-auto-[0-9-]{10}-[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl\.gz$' | sed -E 's/^itf-auto-[0-9-]{10}-([0-9-]{10})\.jsonl\.gz$/\1/' | sort | tail -1 || true)
+            if [[ -n "$last" ]]; then START=$(date -u -d "$last + 1 day" +%F); else START=2016-01-01; fi
+          fi
+          [[ -n "$END" ]] || END=$(date -u -d "$START + 365 days" +%F)
+          [[ "$END" < "2025-01-01" ]] || END=2024-12-31
           [[ "$START" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}$ && "$END" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]]
-          [[ "$MAX" =~ ^[0-9]+$ ]] && (( 10#$MAX >= 1 && 10#$MAX <= 6000 ))
+          if [[ "$START" > "$END" ]]; then echo "ITF 2016-2024 backlog complete"; echo "DONE=1" >> "$GITHUB_ENV"; fi
+          echo "START=$START" >> "$GITHUB_ENV"; echo "END=$END" >> "$GITHUB_ENV"; echo "MAX=$MAX" >> "$GITHUB_ENV"; echo "PREFIX=$PREFIX" >> "$GITHUB_ENV"
+          echo "Range $START..$END max $MAX"
       - name: Download canonical CDB years (read-only)
-        env:
-          START: ${{ inputs.start }}
-          END: ${{ inputs.end }}
+        if: env.DONE != '1'
         run: |
           set -euo pipefail
           mkdir -p .cache/cdb
@@ -71,22 +107,19 @@ jobs:
             gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p "history-$y.parquet" -D .cache/cdb --clobber
           done
       - name: Link + fetch statistics into staging
-        env:
-          START: ${{ inputs.start }}
-          END: ${{ inputs.end }}
-          MAX: ${{ inputs.max_requests }}
+        if: env.DONE != '1'
         run: python scripts/itf_week_gapfill_stage.py --history-dir .cache/cdb --start "$START" --end "$END" --max-requests "$MAX" --out .cache/itf-gapfill
       - name: Upload staging to tbt-data research release (not CDB)
-        if: always()
-        env:
-          START: ${{ inputs.start }}
-          END: ${{ inputs.end }}
+        if: always() && env.DONE != '1'
         run: |
           set -euo pipefail
           test -s .cache/itf-gapfill/report.json || exit 0
+          LAST=$(python3 -c "import json;print(json.load(open('.cache/itf-gapfill/report.json')).get('last_complete_week',''))")
+          [[ -n "$LAST" ]] || { echo "No complete week staged"; exit 0; }
+          END="$LAST"
           tag=itf-gapfill-staging-v1
           gh release view "$tag" -R BackstageTalks/tbt-data >/dev/null 2>&1 || \
             gh release create "$tag" -R BackstageTalks/tbt-data --title "ITF gap-fill staging (not CDB)" --notes "Research staging; import only via guarded writer after review." --prerelease
-          cp .cache/itf-gapfill/staging.jsonl.gz "itf-$START-$END.jsonl.gz"
-          cp .cache/itf-gapfill/report.json "itf-$START-$END.report.json"
-          gh release upload "$tag" "itf-$START-$END.jsonl.gz" "itf-$START-$END.report.json" -R BackstageTalks/tbt-data --clobber
+          cp .cache/itf-gapfill/staging.jsonl.gz "$PREFIX-$START-$END.jsonl.gz"
+          cp .cache/itf-gapfill/report.json "$PREFIX-$START-$END.report.json"
+          gh release upload "$tag" "$PREFIX-$START-$END.jsonl.gz" "$PREFIX-$START-$END.report.json" -R BackstageTalks/tbt-data --clobber
