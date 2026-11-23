@@ -1177,7 +1177,16 @@ def reconcile_ledger(ledger, predictions, history, now=None):
             }
         existing = stored[row["event_id"]]
         if {existing["player1"]["id"], existing["player2"]["id"]} != {row["player1"]["id"], row["player2"]["id"]}:
-            raise ValueError("Prediction identity mismatch")
+            # A provider may re-use an event ID after a lineup change (lucky
+            # loser / replacement). One event must never block the whole day:
+            # an unissued, unsettled commitment is replaced by the new pair;
+            # an issued or settled one stays frozen and the new row is skipped.
+            if existing.get("issued_at") is None and existing.get("result") is None:
+                stored[row["event_id"]] = {**row, "issued_at": None, "publication_status": "pending",
+                                           "identity_replaced": True}
+            else:
+                existing["identity_conflict_skipped"] = True
+            continue
         _merge_market_publication_candidates(existing, row)
         if existing.get("result") is None:
             # Safe fixture metadata may be filled after the original probability
