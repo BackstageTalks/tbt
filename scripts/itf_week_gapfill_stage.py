@@ -36,11 +36,19 @@ def load_targets(history_dir: str, start: date, end: date) -> dict[date, list[di
         for f in glob.glob(f"{history_dir}/history-{year}.parquet"):
             d = pd.read_parquet(f, columns=["match_id", "scheduled_at", "player1_name",
                                             "player2_name", "tournament_level", "stats_json"])
+            # Never pay for a match the CDB already holds under a native
+            # provider row (2022+ hist-js ITF is ~95 % duplicated there).
+            iso = lambda t: date.fromisoformat(str(t)[:10]).isocalendar()[:2]
+            native = d[~d.match_id.astype(str).str.startswith("hist-js")]
+            native_keys = {(iso(t), tuple(sorted((norm_last(a), norm_last(b)))))
+                           for t, a, b in zip(native.scheduled_at, native.player1_name, native.player2_name)}
             d = d[d.match_id.astype(str).str.startswith("hist-js")
                   & d.tournament_level.astype(str).str.lower().str.contains("itf")
                   & ~d.stats_json.fillna("").str.contains("p1_service_points_won")]
             for mid, t, a, b in zip(d.match_id, d.scheduled_at, d.player1_name, d.player2_name):
                 day = date.fromisoformat(str(t)[:10])
+                if (iso(t), tuple(sorted((norm_last(a), norm_last(b))))) in native_keys:
+                    continue
                 if start <= day <= end:
                     weeks[day].append({"match_id": mid, "p1": a, "p2": b})
     return dict(sorted(weeks.items()))
