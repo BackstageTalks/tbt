@@ -34,7 +34,9 @@ def stage(matches, rows):
             c["missing_match"] += 1
             continue
         old = dict(m.stats or {})
-        new = r.get("stats") or {}
+        raw = r.get("stats") or {}
+        new = {k: v for k, v in raw.items() if k in ALLOWED}
+        c["dropped_unapproved_fields"] = c.get("dropped_unapproved_fields", 0) + len(raw) - len(new)
         if any(k not in ALLOWED or not isinstance(v, (int, float)) or isinstance(v, bool)
                or not math.isfinite(v) or v < 0 for k, v in new.items()):
             c["invalid"] += 1
