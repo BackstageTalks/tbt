@@ -12,9 +12,9 @@ on:
         required: false
         default: ''
       max_requests:
-        description: Max paid requests (<= 6000)
+        description: Max paid requests (<= 5000)
         required: true
-        default: '3000'
+        default: '5000'
 
 permissions:
   contents: read
@@ -44,6 +44,31 @@ jobs:
           if (( 10#$now >= 400 && 10#$now < 730 )); then
             echo "::error::Morning prediction window: gap-fill refused"; exit 1
           fi
+      - name: Hourly global quota schedule (cap this run so the night never drains the day)
+        id: quota
+        env:
+          BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+          WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: python
+        run: |
+          import json, os, urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          req = urllib.request.Request(os.environ["BUDGET_URL"], headers={"X-Blinq-Worker-Token": os.environ["WORKER_TOKEN"]})
+          budget = json.load(urllib.request.urlopen(req, timeout=15))
+          spent = int(budget["global_spent"])
+          h = datetime.now(ZoneInfo("Europe/Bratislava")).hour
+          # Cumulative global ceiling by local hour since the 18:09 reset.
+          if 18 <= h < 21:   ceiling = 3600
+          elif h >= 21 or h < 1: ceiling = 7250
+          elif h < 4:        ceiling = 8700
+          else:              ceiling = 0     # 04:00-18:00: day belongs to predictions/hourly jobs
+          allowed = max(0, min(5000, ceiling - spent))
+          print(f"global_spent={spent} hour={h} ceiling={ceiling} allowed_this_run={allowed}")
+          with open(os.environ["GITHUB_ENV"], "a") as fp:
+              fp.write(f"QUOTA_ALLOWED={allowed}\n")
+              if allowed < 100:
+                  fp.write("DONE=1\n")
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -57,10 +82,11 @@ jobs:
         env:
           IN_START: ${{ inputs.start }}
           IN_END: ${{ inputs.end }}
-          MAX: ${{ inputs.max_requests || '3000' }}
+          MAX: ${{ inputs.max_requests || '5000' }}
         run: |
           set -euo pipefail
-          [[ "$MAX" =~ ^[0-9]+$ ]] && (( 10#$MAX >= 1 && 10#$MAX <= 6000 ))
+          [[ "$MAX" =~ ^[0-9]+$ ]] && (( 10#$MAX >= 1 && 10#$MAX <= 5000 ))
+          (( 10#$MAX <= 10#${QUOTA_ALLOWED:-0} )) || MAX="${QUOTA_ALLOWED:-0}"
           START="$IN_START"; END="$IN_END"; PREFIX=itf
           [[ -n "$START" ]] || PREFIX=itf-auto
           if [[ -z "$START" ]]; then
