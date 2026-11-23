@@ -1,7 +1,15 @@
 {
   "workflow": "cdb-context-key-import.yml",
-  "mode": "dry-run",
-  "approved_by_operator": false,
+  "mode": "write",
+  "approved_by_operator": true,
   "input": "data/staging/mm_consensus_atp_wta_2025_2026.jsonl.gz",
-  "source_attribution": "HF minmaxxxer/atp-wta-matches-with-odds (CC BY 4.0); consensus of ~18 bookmakers; vs bet365 close: 1.2 pp mean diff, same favourite 98.7 %"
+  "source_attribution": "HF minmaxxxer/atp-wta-matches-with-odds (CC BY 4.0); consensus of ~18 bookmakers; vs bet365 close: 1.2 pp mean diff, same favourite 98.7 %",
+  "approved_in_chat": "2026-11-23 20:38 owner: ok (consensus odds import)",
+  "expected_staged_matches": 9643,
+  "expected_new_stat_values": 0,
+  "expected_changed_years": [
+    2024,
+    2025,
+    2026
+  ]
 }
