@@ -1,0 +1,92 @@
+name: BlinQ ITF gap-fill staging (night, no CDB writes)
+
+on:
+  workflow_dispatch:
+    inputs:
+      start:
+        description: First tournament week YYYY-MM-DD
+        required: true
+      end:
+        description: Last tournament week YYYY-MM-DD
+        required: true
+      max_requests:
+        description: Max paid requests (<= 6000)
+        required: true
+        default: '3000'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-itf-gapfill-stage
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    env:
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+      BLINQ_PROVIDER_REQUEST_RESERVE: '500'
+      BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
+      BLINQ_RAPIDAPI_MAX_RPS: '3'
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - name: Protect the morning prediction window (04:00-07:30 Bratislava)
+        run: |
+          now=$(TZ=Europe/Bratislava date +%H%M)
+          if (( 10#$now >= 400 && 10#$now < 730 )); then
+            echo "::error::Morning prediction window: gap-fill refused"; exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: python -m pip install -r api/requirements-train.txt
+      - name: Validate inputs
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+          MAX: ${{ inputs.max_requests }}
+        run: |
+          set -euo pipefail
+          [[ "$START" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}$ && "$END" =~ ^20[0-9]{2}-[0-9]{2}-[0-9]{2}$ ]]
+          [[ "$MAX" =~ ^[0-9]+$ ]] && (( 10#$MAX >= 1 && 10#$MAX <= 6000 ))
+      - name: Download canonical CDB years (read-only)
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/cdb
+          for y in $(seq "${START:0:4}" "${END:0:4}"); do
+            gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p "history-$y.parquet" -D .cache/cdb --clobber
+          done
+      - name: Link + fetch statistics into staging
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+          MAX: ${{ inputs.max_requests }}
+        run: python scripts/itf_week_gapfill_stage.py --history-dir .cache/cdb --start "$START" --end "$END" --max-requests "$MAX" --out .cache/itf-gapfill
+      - name: Upload staging to tbt-data research release (not CDB)
+        if: always()
+        env:
+          START: ${{ inputs.start }}
+          END: ${{ inputs.end }}
+        run: |
+          set -euo pipefail
+          test -s .cache/itf-gapfill/report.json || exit 0
+          tag=itf-gapfill-staging-v1
+          gh release view "$tag" -R BackstageTalks/tbt-data >/dev/null 2>&1 || \
+            gh release create "$tag" -R BackstageTalks/tbt-data --title "ITF gap-fill staging (not CDB)" --notes "Research staging; import only via guarded writer after review." --prerelease
+          cp .cache/itf-gapfill/staging.jsonl.gz "itf-$START-$END.jsonl.gz"
+          cp .cache/itf-gapfill/report.json "itf-$START-$END.report.json"
+          gh release upload "$tag" "itf-$START-$END.jsonl.gz" "itf-$START-$END.report.json" -R BackstageTalks/tbt-data --clobber
