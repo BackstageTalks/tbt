@@ -38,7 +38,16 @@ def _same_except_stats(left, right):
     return before == after
 
 
-def _additions(original, changed, *, approved_count_fields=frozenset()):
+SCORE_FIELDS = frozenset((
+    "p1_sets_won", "p2_sets_won", "p1_games_won", "p2_games_won",
+    "p1_first_set_won", "p2_first_set_won", "total_sets", "total_games",
+    "tiebreak_sets", "straight_sets", "deciding_set",
+    "p1_set1_games", "p2_set1_games", "p1_set2_games", "p2_set2_games",
+    "p1_second_set_won", "p2_second_set_won",
+))
+
+
+def _additions(original, changed, *, approved_count_fields=frozenset(), approved_score_fields=frozenset()):
     if not _same_except_stats(original, changed):
         raise ValueError("Staged write attempted canonical identity or context change")
     old = dict(original.stats or {})
@@ -56,7 +65,10 @@ def _additions(original, changed, *, approved_count_fields=frozenset()):
     if any(not isinstance(v,(int,float)) or isinstance(v,bool)
            or not math.isfinite(v) or v < 0 or int(v) != v for k,v in added.items() if k in approved):
         raise ValueError("Invalid source count value")
-    if not added or not set(added).issubset(ALLOWED | approved):
+    score_ok = frozenset(approved_score_fields)
+    if score_ok - SCORE_FIELDS:
+        raise ValueError("Unapproved CDB score field")
+    if not added or not set(added).issubset(ALLOWED | approved | score_ok):
         raise ValueError("Missing or invalid additive source statistics")
     return added
 
@@ -77,7 +89,7 @@ def _verify_entire_partition(before, persisted, expected_additions):
     return len(before_by)
 
 
-def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids, *, approved_count_fields=frozenset()):
+def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids, *, approved_count_fields=frozenset(), approved_score_fields=frozenset()):
     """Patch exact stats_json rows for proven additions; fail before local replace."""
     directory = Path(history_dir)
     year = int(year)
@@ -106,7 +118,8 @@ def write_exact_stats_partition(history_dir, year, changed_matches, changed_ids,
             if old.to_storage_dict() != updated.to_storage_dict():
                 raise ValueError(f"Unstaged match mutated in memory: {mid}")
             continue
-        additions = _additions(old, updated, approved_count_fields=approved_count_fields)
+        additions = _additions(old, updated, approved_count_fields=approved_count_fields,
+                               approved_score_fields=approved_score_fields)
         raw = frame.at[by_index[mid], "stats_json"]
         if not isinstance(raw, str):
             raise ValueError("Missing original stats_json")
