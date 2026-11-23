@@ -4648,6 +4648,7 @@
       if(Object.prototype.hasOwnProperty.call(counts,item.outcome))counts[item.outcome]++;
     });
     let dailyRunning=0;
+    // Accumulate chronologically, then show the most recent day first.
     const focusedRows=daysWithResults.map((date,index)=>{
       const settled=dailyOutcomes.get(date)||{win:0,loss:0,void:0};
       const dayProfit=m?.daily.get(date);
@@ -4658,7 +4659,7 @@
         '<td class="monthly-unit'+(dayDisplay==null?' monthly-cell-empty':moneyClass(dayDisplay))+'">'+
         (dayDisplay==null?'·':escapeHtml(signed(dayDisplay))+' u')+'</td>'+
         '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(roundUnits(dailyRunning)))+' u</td></tr>';
-    }).join('');
+    }).reverse().join('');
     const periodText=singleDay?(Number(from.slice(-2))+'. deň · 06:00–06:00'):
       days?(from.slice(8)==='01'&&!spansMonths?'1. – '+Number(to.slice(-2))+'. deň · 06:00–06:00':
         rangeLabel+' · 06:00–06:00'):'bez dát';
