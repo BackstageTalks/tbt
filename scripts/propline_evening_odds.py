@@ -422,10 +422,13 @@ def main():
     p.add_argument("--max-events", type=int, default=0,
                    help="0 = all events returned in one API response")
     p.add_argument("--allow-same-day", action="store_true")
+    p.add_argument("--bulk-only", action="store_true",
+                   help="One board request, no per-match requests (reuse paid event observations)")
     p.add_argument("--out", default="reports/propline-evening/odds.json")
     args = p.parse_args()
     report = collect(args.target_day, max_events=args.max_events,
-                     allow_same_day=args.allow_same_day, get_event=fetch_event)
+                     allow_same_day=args.allow_same_day,
+                     get_event=None if args.bulk_only else fetch_event)
     destination = Path(args.out)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(

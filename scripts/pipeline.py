@@ -1961,10 +1961,13 @@ def main():
         if os.getenv("TBT_ACES_LINE_FIRST_CANDIDATE", "").lower() == "true":
             try:
                 from aces_line_first import project_candidates, select_candidate
+                from stage_aces_offer_cdb import load_cdb_report
                 candidate_now = datetime.now(timezone.utc)
                 candidate_day = selection_now.astimezone(PROPLINE_TZ).date().isoformat()
-                candidate_archive, candidate_source = load_propline_evening_report(
-                    betting_day=candidate_day, now=candidate_now)
+                candidate_archive, candidate_source = load_cdb_report(day=candidate_day, now=candidate_now)
+                if candidate_archive is None:
+                    candidate_archive, candidate_source = load_propline_evening_report(
+                        betting_day=candidate_day, now=candidate_now)
                 projection_odds_report["line_first_candidate"] = select_candidate(
                     project_candidates(matches, predictions, now=candidate_now),
                     candidate_archive, now=candidate_now,

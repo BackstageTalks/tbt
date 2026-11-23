@@ -182,3 +182,30 @@ def test_cdb_writer_idempotency_and_readback(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="refusing overwrite"):
         persist(path, work=tmp_path)
     assert actions[-1] == "unlock"
+
+
+def test_cdb_reader_checks_manifest_and_reuses_native_report():
+    import json
+    from pathlib import Path
+    from hashlib import sha256
+    from stage_aces_offer_cdb import load_cdb_report
+    archive = report()
+    data = json.dumps(stage(archive, day=DAY, now=MORNING)).encode()
+    corrupt = False
+    def runner(args):
+        folder = Path(args[-1])
+        name = f"aces-offers-{DAY}.json"
+        (folder / name).write_bytes(data)
+        (folder / "_tbt_bundle_manifest.json").write_text(json.dumps({"files": {
+            name: {"sha256": "bad" if corrupt else sha256(data).hexdigest(), "bytes": len(data)}}}))
+    loaded, status = load_cdb_report(day=DAY, now=MORNING, runner=runner)
+    assert status == "cdb_verified"
+    assert loaded["events_in_target_window"] == archive["events_in_target_window"]
+    corrupt = True
+    assert load_cdb_report(day=DAY, now=MORNING, runner=runner) == (None, "cdb_checksum_mismatch")
+
+
+def test_staging_preserves_observed_events_after_start():
+    from datetime import timedelta
+    archive = report()
+    assert stage(archive, day=DAY, now=MORNING) == stage(archive, day=DAY, now=MORNING + timedelta(hours=8))
