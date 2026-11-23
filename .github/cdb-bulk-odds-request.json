@@ -1,0 +1,6 @@
+{
+  "workflow": "cdb-bulk-odds-import.yml",
+  "mode": "dry-run",
+  "approved_by_operator": false,
+  "source": "tennisapi1 daily bulk odds artifact run 45135311353 (already paid, 1000 days)"
+}
