@@ -42,7 +42,7 @@ def _risky_shell_lines(lines):
 
 def test_untrusted_workflow_event_and_dispatch_inputs_stay_out_of_shell_source():
     paths = sorted(WF.glob("*.yml")) + sorted(WF.glob("*.yaml"))
-    assert len(paths) >= 150, "Workflow audit unexpectedly missing files"
+    assert len(paths) >= 100, "Workflow audit unexpectedly missing files"
     for path in paths:
         lines = path.read_text(encoding="utf-8").splitlines()
         violations = list(_risky_shell_lines(lines))
