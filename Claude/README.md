@@ -9,6 +9,7 @@
 ## Denník nasadení a návrat
 | Dátum | PR / commit | Čo | Návrat |
 |---|---|---|---|
+| 2026-11-23 | #1778 | zmazaný DIL kód (skripty, testy, workflowy, docs); DIL DB na Drive maže majiteľ | `git revert` PR |
 | 2026-11-23 | (PR cleanup) | zmazaných 66 nepoužívaných workflowov (zoznam v UPRATANIE.md) | `git revert` PR obnoví všetky |
 | 2026-11-23 | (PR identity) | HOTFIX: zmena hráča v zápase (lucky loser) už nezastaví celé ranné zverejnenie; nezverejnená predikcia sa nahradí, zverejnená ostane | revert PR |
 | 2026-11-23 | (PR bulk odds) | read-only workflow: denné kurzy RapidAPI do artefaktu, 1 volanie/deň, bez zápisu do CDB | zmazať workflow; nič iné sa nemení |
