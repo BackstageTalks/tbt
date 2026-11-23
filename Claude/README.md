@@ -9,6 +9,7 @@
 ## Denník nasadení a návrat
 | Dátum | PR / commit | Čo | Návrat |
 |---|---|---|---|
+| 2026-11-23 | (PR itf-gapfill) | ITF gap-fill staging: párovanie hist-js ITF zápasov na RapidAPI (týždenný kalendár, oba priezviská, jednoznačne) + štatistiky do release `itf-gapfill-staging-v1` v tbt-data; CDB bez zmeny; ranné okno 04:00–07:30 chránené | zmazať workflow a release |
 | 2026-11-23 | #1778 | zmazaný DIL kód (skripty, testy, workflowy, docs); DIL DB na Drive maže majiteľ | `git revert` PR |
 | 2026-11-23 | (PR cleanup) | zmazaných 66 nepoužívaných workflowov (zoznam v UPRATANIE.md) | `git revert` PR obnoví všetky |
 | 2026-11-23 | (PR identity) | HOTFIX: zmena hráča v zápase (lucky loser) už nezastaví celé ranné zverejnenie; nezverejnená predikcia sa nahradí, zverejnená ostane | revert PR |
@@ -96,3 +97,7 @@ Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne 
 - TOP: ísť S trhom (poradie podľa kurzu, nikdy proti trhu). Strop ≈ 59–64 %. Ranné kurzy 6:00 stačia (presnosť 67,1 % vs. záverečné 67,3 %).
 - Value: ísť PROTI trhu len so signálom podanie+príjem ≥ 6 p.b. (CDB 1 877 vyrovnaných zápasov: 56,5 % pri n=356, zisková hranica pri 1,90 je 52,6 %).
 - Esá: vlastná projekcia proti hraniciam kancelárií, rezerva 1,5 esa (simulácia 78,7 %).
+
+## Výsledky 23.11.
+- Denné kurzy RapidAPI: 1 000 dní (27.2.2024–22.11.2026), 527 184 zápasov, 1 000 volaní (artefakt behu 45135311353, 90 dní).
+- ITF test: RapidAPI pozná ~95 % hist-js ITF zápasov, štatistiky 20/20 (104 volaní). Pred veľkým zberom overiť podanie/príjem na prvých 200.
