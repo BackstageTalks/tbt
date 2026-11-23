@@ -1,7 +1,22 @@
 {
   "workflow": "cdb-rank-import.yml",
-  "mode": "dry-run",
-  "approved_by_operator": false,
+  "mode": "write",
+  "approved_by_operator": true,
   "input": "data/staging/sackmann_ranks_2016_2026.jsonl.gz",
-  "source_attribution": "Jeff Sackmann weekly ATP/WTA rankings (CC BY-NC); validated vs existing CDB ranks: median rel. error 0, p90 0.9 %"
+  "source_attribution": "Jeff Sackmann weekly ATP/WTA rankings (CC BY-NC); validated vs existing CDB ranks: median rel. error 0, p90 0.9 %",
+  "approved_in_chat": "2026-11-23 19:27 owner: ok, kurzy, potom rebricky ATP/WTA, potom sety a gemy",
+  "expected_staged_matches": 150653,
+  "expected_new_stat_values": 186844,
+  "expected_changed_years": [
+    2016,
+    2017,
+    2018,
+    2019,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ]
 }
