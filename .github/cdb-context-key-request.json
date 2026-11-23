@@ -1,0 +1,7 @@
+{
+  "workflow": "cdb-context-key-import.yml",
+  "mode": "dry-run",
+  "approved_by_operator": false,
+  "input": "data/staging/mm_consensus_atp_wta_2025_2026.jsonl.gz",
+  "source_attribution": "HF minmaxxxer/atp-wta-matches-with-odds (CC BY 4.0); consensus of ~18 bookmakers; vs bet365 close: 1.2 pp mean diff, same favourite 98.7 %"
+}
