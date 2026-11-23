@@ -1,7 +1,16 @@
 {
   "workflow": "cdb-stats-orientation-fix.yml",
-  "mode": "dry-run",
-  "approved_by_operator": false,
+  "mode": "write",
+  "approved_by_operator": true,
   "input": "data/staging/swap_confirmed_2021_2026.jsonl.gz",
-  "source_attribution": "Swap confirmed by Jeff Sackmann winner/loser stats (CC BY-NC, non-commercial)"
+  "source_attribution": "Swap confirmed by Jeff Sackmann winner/loser stats (CC BY-NC, non-commercial)",
+  "approved_in_chat": "2026-11-23 16:15 owner: oprav to pls",
+  "expected_staged_matches": 5688,
+  "expected_new_stat_values": 0,
+  "expected_changed_years": [
+    2021,
+    2024,
+    2025,
+    2026
+  ]
 }
