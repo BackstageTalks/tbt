@@ -46,25 +46,36 @@ def main():
         sk = [i for i, n in prov.items() if any(k in str(n).lower() for k in ("fortuna", "tipsport", "nike", "doxx"))]
         print("SK_BOOKS", sk)
         d = date.today() - timedelta(days=1)
-        st, ev = get(c, f"/api/tennis/events/{d.day}/{d.month}/{d.year}")
-        events = (ev or {}).get("events", []) if isinstance(ev, dict) else []
-        itf = next((e for e in events if "itf" in json.dumps(e.get("tournament", {})).lower()), None)
-        chall = next((e for e in events if "challenger" in json.dumps(e.get("tournament", {})).lower()), None)
-        for label, e in (("ITF", itf), ("CHALLENGER", chall)):
-            if not e:
-                print("no", label, "event"); continue
+        tok = f"{d.day}/{d.month}/{d.year}"
+        st, cats = get(c, f"/api/tennis/calendar/{tok}/categories")
+        rows = (cats or {}).get("categories", []) if isinstance(cats, dict) else []
+        picks = {}
+        for row in rows:
+            cat = row.get("category", row)
+            name = json.dumps(cat).lower()
+            for label in ("itf", "challenger"):
+                if label in name and label not in picks:
+                    picks[label] = cat.get("id")
+        print("CATEGORIES", picks)
+        for label, cid in picks.items():
+            st, ev = get(c, f"/api/tennis/category/{cid}/events/{tok}")
+            events = [e for e in ((ev or {}).get("events", []) if isinstance(ev, dict) else [])
+                      if (e.get("status") or {}).get("type") == "finished"]
+            if not events:
+                print("no finished", label); continue
+            e = events[0]
             eid = e["id"]; season = (e.get("season") or {}).get("id")
             home = (e.get("homeTeam") or {}).get("id")
-            print(f"\n=== {label} event {eid} season {season} home {home} {e.get('tournament',{}).get('name')}")
-            for pid in (sk[:2] or ["1"]):
-                st, b = get(c, f"/api/tennis/event/{eid}/odds/{pid}/all"); show(b, 500)
-            st, b = get(c, f"/api/odds/season/{season}/provider/{sk[0] if sk else 1}/all"); show(b, 600)
+            print(f"\n=== {label} event {eid} season {season} home {home} {e.get('tournament',{}).get('name')} events_in_cat={len(events)}")
+            st, b = get(c, f"/api/tennis/event/{eid}/odds/1/all"); show(b, 500)
+            st, b = get(c, f"/api/odds/season/{season}/provider/1/all"); show(b, 500)
             if isinstance(b, dict):
-                print("SEASON_ODDS_EVENTS", len(json.dumps(b)), "bytes")
-            st, b = get(c, f"/api/tennis/team/{home}/rankings"); show(b, 600)
-            st, b = get(c, f"/api/tennis/team/{home}/year-statistics/{d.year}"); show(b, 700)
-        if sk:
-            st, b = get(c, f"/api/tennis/events/odds/{d.day}/{d.month}/{d.year}/{sk[0]}"); show(b, 400)
+                print("SEASON_ODDS_KEYS", list(b)[:10], "bytes", len(json.dumps(b)))
+                for k, v in b.items():
+                    if isinstance(v, (list, dict)):
+                        print("SEASON_ODDS_COUNT", k, len(v))
+            st, b = get(c, f"/api/tennis/player/{home}/rankings"); show(b, 500)
+            st, b = get(c, f"/api/tennis/team/{home}/year-statistics/{d.year}"); show(b, 500)
     print(f"\nPROBE_DONE calls={calls}")
 
 
