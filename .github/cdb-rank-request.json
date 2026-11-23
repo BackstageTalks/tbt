@@ -1,0 +1,7 @@
+{
+  "workflow": "cdb-rank-import.yml",
+  "mode": "dry-run",
+  "approved_by_operator": false,
+  "input": "data/staging/sackmann_ranks_2016_2026.jsonl.gz",
+  "source_attribution": "Jeff Sackmann weekly ATP/WTA rankings (CC BY-NC); validated vs existing CDB ranks: median rel. error 0, p90 0.9 %"
+}

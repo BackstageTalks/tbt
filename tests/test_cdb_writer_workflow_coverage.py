@@ -8,6 +8,7 @@ WRITERS = (
     "cdb-identity-reconcile.yml",
     "cdb-service-complement-write.yml",
     "cdb-staged-stats-import.yml",
+    "cdb-rank-import.yml",
     "cdb-stats-orientation-fix.yml",
     "data.yml",
     "drive-pbpx-canonical-enrichment.yml",
