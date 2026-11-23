@@ -34,3 +34,13 @@ No forced picks, no fabricated prices, and no probability recalibration.
 Do not claim newly issued picks, API gain, model performance, or CDB mutation
 from code-only tests. Restore previous scope via reverting this isolated PR if
 new provider categories introduce degraded identity, wrong market or quota strain.
+
+## ITF M15+/W15+ seasonal extension (owner request 2026-11-22)
+- Allow source-native ITF Men (785) and ITF Women (213) **prospective singles** discovery.
+- At the event gate require explicit, gender-consistent M15+ / W15+ grade; unknown, under-15, junior, doubles, UTR and contradictory grade labels fail closed.
+- Preserve the exact verified grade on the normalized prospective Match Winner fixture so the TOP selector can classify it, even when the provider's general tournament rank says only ITF.
+- ITF is third priority **after** existing ATP/WTA main tour and Challenger/WTA125/team cups, with standard TOP probability, data-depth, surface and real pre-start odds checks. VALUE uses its existing standard gates and exclusive priority. No forced picks, special ITF odds ceiling, dedicated ITF probability floor, or changes to ACCA.
+- Keep historical Tennis API data downloads, CDB gapfills, doubles, ESÁ/Viac Es, champion, API budget, provider safety and already issued receipts unchanged.
+- Current baseline is 60% public probability and 30% minimum data depth. The opt-in candidate TBT_ITF_TOP_DEPTH_MODE=sqrt_v1 changes only the graded ITF TOP depth adjustment. It retains sqrt(depth) of the raw advantage over 0.5. At depth 0.30 the raw requirement for 0.60 becomes 68.26%. Candidate scoring is experimental pending independent chronological evaluation. Unset the variable to restore linear scoring. No model promotion.
+- Read-only PR replay uses the first archived snapshot after 06:00 Bratislava for each day, independently timed quotes and exact player/event joins. Report sample size and unresolved outcomes before interpreting hit rate.
+- An interrupted admission to the Admin training or Lab queue leaves its durable admission row for inspection. Recover only after verifying the owning request has ended and reconciling its durable queue row. Routine completion releases it.

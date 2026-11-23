@@ -1,4 +1,5 @@
 """Admin-only bridge to the existing protected training workflow."""
+from contextlib import contextmanager
 import json
 import os
 import subprocess
@@ -173,6 +174,21 @@ def status():
     return result
 
 
+@contextmanager
+def admission(table, actor):
+    """Serialize only queue admission. Workers retain their durable one-shot claims."""
+    partition, key = "model-queue-admission", "active"
+    try:
+        table.create_entity({"PartitionKey": partition, "RowKey": key, "actor": str(actor),
+                             "created_at": datetime.now(timezone.utc).isoformat()})
+    except Exception as exc:
+        raise TrainingBlocked("Registrácia operácie je obsadená alebo nedostupná.") from exc
+    try:
+        yield
+    finally:
+        table.delete_entity(partition_key=partition, row_key=key)
+
+
 def start(payload, actor):
     if not isinstance(payload, dict) or set(payload) - {"profile", "auto_shadow"}:
         raise ValueError("Neplatná požiadavka na tréning.")
@@ -222,13 +238,20 @@ def start(payload, actor):
     current = status()
     if not current["can_start"]:
         raise TrainingBlocked(current["reason"])
-    try:
-        _table(UI_TABLE).create_entity({"PartitionKey": PARTITION,
-            "RowKey": "request-" + current["base"], "actor": str(actor),
-            "profile": profile, "auto_shadow": auto_shadow, "base": current["base"],
-            "created_at": datetime.now(timezone.utc).isoformat()})
-    except Exception as exc:
-        raise TrainingBlocked("Požiadavka už existuje alebo úložisko nie je dostupné. Obnov stav.") from exc
+    table = _table(UI_TABLE)
+    with admission(table, actor):
+        if lab_row("active") is not None:
+            raise TrainingBlocked("Model Factory má rozpracovanú operáciu.")
+        fresh = status()
+        if not fresh["can_start"] or fresh["base"] != current["base"]:
+            raise TrainingBlocked("Stav tréningu sa zmenil. Obnov stav.")
+        try:
+            table.create_entity({"PartitionKey": PARTITION,
+                "RowKey": "request-" + current["base"], "actor": str(actor),
+                "profile": profile, "auto_shadow": auto_shadow, "base": current["base"],
+                "created_at": datetime.now(timezone.utc).isoformat()})
+        except Exception as exc:
+            raise TrainingBlocked("Požiadavka už existuje alebo úložisko nie je dostupné. Obnov stav.") from exc
     return {"state": "QUEUED", "message": "Požiadavka uložená. Worker ju prevezme pri najbližšej kontrole (bežne do 30 minút). Obnov stav pre potvrdenie behu."}
 
 

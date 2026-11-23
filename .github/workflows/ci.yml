@@ -225,6 +225,17 @@ jobs:
           gh release download tbt-predictions-v1 --repo BackstageTalks/tbt-data --pattern ledger.json --dir "$RUNNER_TEMP/ace-under-audit" --clobber
           PYTHONPATH=api:scripts python scripts/audit_ace_under_buffer.py "$RUNNER_TEMP/ace-under-audit/ledger.json"
 
+      - name: Replay winter TOP and inspect existing ITF staging
+        if: ${{ github.event_name == 'pull_request' && github.head_ref == 'fix/winter-top-and-audit-20261123' }}
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/ace-under-audit"
+          gh release download tbt-predictions-v1 -R BackstageTalks/tbt-data -p 'selection_candidates_*.json.gz' -D "$out"
+          gh release download itf-gapfill-staging-v1 -R BackstageTalks/tbt-data -p '*.jsonl.gz' -D "$out"
+          env -u GH_TOKEN PYTHONPATH=api:scripts python scripts/audit_winter_top.py "$out" | tee -a "$GITHUB_STEP_SUMMARY"
+
       # Scoped read-only verification of the real 2 Nov Farjat issuance.
       # PR-only: ensure the *private* release and SENT Telegram receipt
       # actually link before touching production.

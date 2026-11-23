@@ -762,3 +762,25 @@ def test_explicit_top60_and_value60_boundaries_without_forced_fill():
     assert result["market_selection"]["top_daily_rule"]["core_min_probability"] == .60
     assert result["market_selection"]["value_rule"]["min_probability"] == .60
     assert cards == before
+
+
+def test_verified_itf_m15_w15_plus_uses_standard_top_value_rules():
+    main = row("main", .68, 1.60, 2.45, depth=1)
+    m15 = row("m15", .75, 1.55, 2.50, depth=1)
+    m15.update(tour="ATP", competition="ITF M15", tournament="ITF M15")
+    w15 = row("w15", .71, 1.65, 2.40, depth=1)
+    w15.update(tour="WTA", competition="ITF W15", tournament="ITF W15")
+    m25_value = row("m25-value", .72, 1.90, 2.00, depth=1)
+    m25_value.update(tour="ATP", competition="ITF M25", tournament="ITF M25")
+    invalid = row("itf-unknown", .90, 1.60, 2.60, depth=1)
+    invalid.update(tour="ATP", competition="ITF", tournament="ITF without grade")
+    low_grade_value = row("w10-value", .72, 1.90, 2.00, depth=1)
+    low_grade_value.update(tour="WTA", competition="ITF W10", tournament="ITF W10")
+    unknown_grade_value = row("unknown-grade-value", .72, 1.90, 2.00, depth=1)
+    unknown_grade_value.update(tour="WTA", competition="ITF", tournament="ITF generic")
+    result = select_market_sections([main, m15, w15, m25_value, invalid,
+                                     low_grade_value, unknown_grade_value])
+    assert [x["event_id"] for x in result["top_daily_picks"]] == ["main", "m15", "w15"]
+    assert [x["event_id"] for x in result["value_picks"]] == ["m25-value"]
+    assert "itf-unknown" not in {x["event_id"] for x in result["top_daily_picks"]}
+    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] >= 1

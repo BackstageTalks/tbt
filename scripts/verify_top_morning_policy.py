@@ -29,8 +29,10 @@ def verify():
     assert empty["value_rule"]["min_probability"] == config["value"]["min_probability"] == .60
     assert rule["daily_minimum_target"] == ui["target_count"] == 3
     assert rule["min_odds"] == ui["min_odds"] == 1.50 and ui["max_odds"] is None
-    assert ui["competition_priority"] == rule["competition_priority"] == [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]]
-    assert "ITF" in rule["excluded_competitions"] == ui["excluded_competitions"]
+    assert ui["competition_priority"] == rule["competition_priority"] == [
+        ["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"], ["ITF"]
+    ]
+    assert rule["excluded_competitions"] == ui["excluded_competitions"] == ["UTR", "other", "unknown"]
     def card(event, competition, probability):
         return dict(event_id=event, competition=competition,
                     tour="WTA" if competition.startswith("WTA") else "ATP",
@@ -49,26 +51,27 @@ def verify():
     assert selected == [] and details["shortfall"] == 3
 
     male = card("itf-m", "ITF Men", .98)
-    male["tournament"] = "M25 Challenger"
-    assert "itf_top_requires_verified_w35plus" in rejection_reasons(male)
+    male["tournament"] = "ITF M25"
+    assert "competition_not_approved" not in rejection_reasons(male)
     unknown = card("unknown-itf", "ITF Women", .97)
-    assert "itf_top_requires_verified_w35plus" in rejection_reasons(unknown)
-    verified = card("verified", "ITF Women", .65)
+    assert "competition_not_approved" in rejection_reasons(unknown)
+    invalid_grade = card("invalid-grade", "ITF Men", .98)
+    invalid_grade["tournament"] = "ITF M150"
+    assert "competition_not_approved" in rejection_reasons(invalid_grade)
+    verified = card("verified", "ITF W35", .65)
+    verified["tour"] = "WTA"
     verified["tournament"] = "ITF W35 Heraklion"
     verified["quality"] = {"feature_evidence": {
         "serve_return_known_both": True,
         "surface_serve_return_known_both": True,
     }}
-    assert "itf_top_requires_verified_w35plus" not in rejection_reasons(verified)
-    assert "competition_not_approved" in rejection_reasons(verified)
-    verified["odds"] = 1.70
-    assert "itf_odds_above_1_70" not in rejection_reasons(verified)
+    assert "competition_not_approved" not in rejection_reasons(verified)
     verified["odds"] = 1.700001
-    assert "itf_odds_above_1_70" in rejection_reasons(verified)
+    assert "itf_odds_above_1_70" not in rejection_reasons(verified)
     verified["odds"] = 1.60
-    assert "itf_probability_not_above_65" in rejection_reasons(verified)
-    verified["probability"] = .650001
     assert "itf_probability_not_above_65" not in rejection_reasons(verified)
+    selected_itf, _, _ = _rank_full_slate_top([verified], [])
+    assert [c["event_id"] for c in selected_itf] == ["verified"]
     return {"status": "PASS", "policy": rule["policy"], "provider_requests": 0}
 
 

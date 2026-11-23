@@ -771,10 +771,14 @@ def enrich_current_betting_day_odds(
             min_data_depth=candidate_min_data_depth,
             min_surface_matches=candidate_min_surface_matches,
         )
+        top_row = row
+        if os.getenv("TBT_ITF_TOP_DEPTH_MODE") == "sqrt_v1" and competition_group(row) == "ITF":
+            from .top_policy import winter_top_probability
+            top_row = dict(row, blinq_probability=winter_top_probability(_raw_confidence(row), _depth(row)))
         top_candidate = (
-            competition_group(row) in {"ATP", "WTA", "Challenger", "WTA 125", "BJK Cup", "Davis Cup"}
+            competition_group(row) in {"ATP", "WTA", "Challenger", "WTA 125", "BJK Cup", "Davis Cup", "ITF"}
             and _passes_candidate_gate(
-                row,
+                top_row,
                 min_probability=max(TOP_MIN_PROBABILITY, candidate_min_probability),
                 min_data_depth=TOP_MIN_DATA_DEPTH,
                 min_surface_matches=TOP_MIN_SURFACE_MATCHES,
@@ -879,6 +883,25 @@ def enrich_current_betting_day_odds(
         if report["odds_requested"] else 0.0
     )
     return enriched, report
+
+
+def _winter_top_card(card):
+    from .top_policy import competition_group, winter_top_probability
+    if os.getenv("TBT_ITF_TOP_DEPTH_MODE") != "sqrt_v1" or competition_group(card) != "ITF":
+        return card
+    betting = card["betting"]
+    adjusted = winter_top_probability(betting.get("model_probability"), card.get("data_depth"))
+    baseline = _number(card.get("probability"))
+    if (adjusted is None or baseline is None
+            or abs(baseline - (.5 + (float(betting["model_probability"]) - .5) * float(card["data_depth"]))) > .005):
+        return card
+    out = deepcopy(card)
+    out["top_probability_basis"] = "winter_sqrt_depth_v1"
+    out["baseline_blinq_probability"] = card["probability"]
+    out["probability"] = out["blinq_probability"] = out["betting"]["blinq_probability"] = adjusted
+    if rank_mode() == MODE_MARKET:
+        annotate_rank_probability(out)
+    return out
 
 
 def _market_card(row: dict[str, Any]) -> dict[str, Any] | None:
@@ -1066,7 +1089,7 @@ def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]
     selected = []
     seen = set()
     tier = {"ATP": 0, "WTA": 0, "Challenger": 1, "WTA 125": 1,
-            "BJK Cup": 1, "Davis Cup": 1}
+            "BJK Cup": 1, "Davis Cup": 1, "ITF": 2}
     ranked = sorted(core, key=lambda card: (
         tier.get(competition_group(card), 99),
         -float(rank_value(card)),
@@ -1185,13 +1208,13 @@ def select_market_sections(
     TOP ranks the entire safe priced Match Winner slate, aiming for three
     quality-qualified picks. VALUE remains higher priority; ACES is untouched.
     """
-    cards = [
-        card for row in predictions
+    eligible_rows = [
+        row for row in predictions
         if isinstance(row, dict)
         and row.get("prediction_family") != "doubles"
         and (public_offer_day is None or _belongs_to_public_offer_day(row, public_offer_day))
-        and (card := _market_card(row)) is not None
     ]
+    cards = [card for row in eligible_rows if (card := _market_card(row)) is not None]
 
     prime_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(prime_min_probability))
     top_core_floor = max(TOP_MIN_PROBABILITY, float(top_min_probability))
@@ -1199,7 +1222,7 @@ def select_market_sections(
     top_fallback_floor = max(TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY, float(top_min_probability))
     value_floor = max(PUBLICATION_MIN_PROBABILITY, float(value_min_probability))
     value_audit = _value_qualification_audit(
-        predictions,
+        eligible_rows,
         min_probability=value_floor,
         min_data_depth=value_min_data_depth,
         min_surface_matches=value_min_surface_matches,
@@ -1230,15 +1253,32 @@ def select_market_sections(
         if extreme_winner_price_inversion(probability, odds):
             extreme_inversion_quarantined += 1
             continue
-        if post_start_winner_quote(card):
+        players = [str(card[side].get("id") or "").strip() if isinstance(card.get(side), dict) else ""
+                   for side in ("player1", "player2")]
+        selection = str(card["betting"].get("selection_id") or "").strip()
+        if (not str(card.get("event_id") or "").strip() or not all(players)
+                or players[0] == players[1] or selection not in players
+                or selection != str(card.get("winner_id") or "").strip()):
+            top_rejection_counts["invalid_selection_identity"] = top_rejection_counts.get("invalid_selection_identity", 0) + 1
+            continue
+        if not card["betting"].get("captured_at") or post_start_winner_quote(card):
             post_start_quote_quarantined += 1
             continue
         if unsubstantiated_high_confidence_winner(card):
             market_conflict_missing_rank_quarantined += 1
             continue
 
+        from .top_policy import competition_group
+        competition_text = f"{card.get('competition') or ''} {card.get('tournament') or ''}"
+        is_itf_candidate = bool(re.search(
+            r"\b(?:itf|futures?)\b|(?<![a-z0-9])[mw][\s_-]?\d{2,3}(?![a-z0-9])",
+            competition_text, re.I,
+        ))
+        # A raw ITF label alone must not unlock VALUE: require the same
+        # verified M15+/W15+ classification as TOP.
         if (
-            odds > max(VALUE_MIN_ODDS, float(value_min_odds))
+            (not is_itf_candidate or competition_group(card) == "ITF")
+            and odds > max(VALUE_MIN_ODDS, float(value_min_odds))
             and _passes_candidate_gate(
                 card, min_probability=value_floor,
                 min_data_depth=value_min_data_depth,
@@ -1262,6 +1302,7 @@ def select_market_sections(
             (prime_core if probability >= prime_core_floor else prime_fallback).append(card)
 
         from .top_policy import rejection_reasons
+        card = _winter_top_card(card)
         reasons = rejection_reasons(
             card, min_probability=top_core_floor,
             min_depth=max(TOP_MIN_DATA_DEPTH, float(top_min_data_depth)),
@@ -1292,7 +1333,11 @@ def select_market_sections(
     value_qualified.sort(key=rank, reverse=True)
 
     # VALUE retains exclusive priority. TOP ranks the remaining full priced slate.
-    value_ids = {_selection_identity(card) for card in value_qualified}
+    # Reserve only identities VALUE can actually publish before TOP.
+    order = list(dict.fromkeys((*section_priority, "value", "prime", "top_daily")))
+    value_first = order.index("value") < order.index("top_daily")
+    allocated, _, _ = _exclusive_section_assignment({"value": value_qualified}, limits={"value": value_limit})
+    value_ids = {_selection_identity(card) for card in allocated["value"]} if value_first else set()
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
 
@@ -1332,6 +1377,9 @@ def select_market_sections(
     if any((_number(card.get("odds")) or 0.0) < TOP_FALLBACK_MIN_ODDS for card in top):
         raise ValueError("Top odds floor invariant failed")
 
+    value_audit["qualified_before_integrity"] = value_audit["qualified"]
+    value_audit["qualified"] = len(value_qualified)
+    value_audit["published"] = len(value)
     value_diffs = [_market_odds_difference(card) for card in value]
     return {
         "top200_picks": [],  # Retired product: empty compatibility field; never issue new picks.
@@ -1388,7 +1436,7 @@ def select_market_sections(
                 "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
                 "top_fallback_probability_floor": TOP_MIN_PROBABILITY,
                 "top_probability_tiers": [TOP_MIN_PROBABILITY],
-                "top_competition_order": ["ATP/WTA 250+", "Challenger 50+", "WTA 125", "BJK/Davis Cup singles"],
+                "top_competition_order": ["ATP/WTA 250+", "Challenger 50+", "WTA 125", "BJK/Davis Cup singles", "ITF M15+/W15+"],
                 "secondary_competition_probability_floor": TOP_MIN_PROBABILITY,
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
@@ -1424,6 +1472,7 @@ def select_market_sections(
                 "competition_tiers": [
                     {"group": "ATP/WTA", "thresholds": [TOP_MIN_PROBABILITY]},
                     {"group": "Challenger/WTA125/BJK/Davis", "thresholds": [TOP_MIN_PROBABILITY]},
+                    {"group": "ITF M15+/W15+", "thresholds": [TOP_MIN_PROBABILITY]},
                 ],
                 "daily_minimum_target": _top_min,
                 "all_qualifying_above_active_tier": top_limit is None,
@@ -1442,14 +1491,14 @@ def select_market_sections(
                 "core_min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
                 "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
                 "min_odds": TOP_FALLBACK_MIN_ODDS,
-                "excluded_competitions": ["ITF", "UTR", "other", "unknown"],
+                "excluded_competitions": ["UTR", "other", "unknown"],
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
                 "sort": "competition_tier_then_probability_desc_then_event_id",
                 "ranked_full_slate": True,
                 "policy": "sports_tiered_top5_60_v26",
-                "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]],
+                "competition_priority": [["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"], ["ITF"]],
                 "quality_fallback": False,
                 "daily_preferred_count": TOP_TARGET_COUNT,
                 "backup_min_data_depth": TOP_BACKUP_MIN_DATA_DEPTH,
@@ -1523,7 +1572,7 @@ def build_selection_candidate_snapshot(
         q2 = quality.get("player2") if isinstance(quality.get("player2"), dict) else {}
         identity = _selection_identity(card or source) if (card is not None or betting) else ""
         from .top_policy import rejection_reasons
-        reasons = rejection_reasons(card) if card else ["missing_match_winner_quote"]
+        reasons = rejection_reasons(_winter_top_card(card)) if card else ["missing_match_winner_quote"]
         if assigned.get(identity) == "value":
             reasons.append("assigned_to_value")
         rows.append({

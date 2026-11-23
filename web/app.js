@@ -3836,8 +3836,9 @@
       ||row?.betting?.betting_day
       ||''
     ).trim();
-    if(/^\d{4}-\d{2}-\d{2}$/.test(explicit))return explicit;
-    return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
+    if(explicit&&dateOnlyAddDays(explicit,0)===explicit)return explicit;
+    const start=row?.scheduled_at||row?.date||row?.start_time||row?.start_at;
+    return start?bratislavaBettingDayKey(start,6):'';
   }
   function resultBetIdentity(row,publication,defaultMarket='match_winner'){
     const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};

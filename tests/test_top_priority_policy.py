@@ -111,17 +111,14 @@ def test_m15_m25_top_hold_pending_calibration(tournament):
     card["tournament"] = tournament
     before = deepcopy(card)
     selected = select_market_sections([card])
-    assert ids(selected) == []
-    assert selected["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
-    assert selected["market_selection"]["top_rejection_counts"][
-        "itf_m15_m25_top_hold_pending_calibration"
-    ] == 1
-    assert card == before  # preserve source and existing issued records
+    assert ids(selected) == ["itf-risk"]
+    assert selected["market_selection"]["selection_counts"]["top_daily_shortfall"] == 2
+    assert "itf_m15_m25_top_hold_pending_calibration" not in selected["market_selection"]["top_rejection_counts"]
+    assert card == before
     snap = build_selection_candidate_snapshot(
         [card], generated_at=datetime(2026, 11, 11, 6, tzinfo=timezone.utc)
     )
-    assert "itf_m15_m25_top_hold_pending_calibration" in snap["rows"][0]["top_rejection_reasons"]
-    assert snap["rows"][0]["selected_section"] is None
+    assert snap["rows"][0]["selected_section"] == "top_daily"
 
 
 def test_m15_m25_hold_does_not_change_value_or_generic_itf_top():
@@ -139,7 +136,7 @@ def test_m15_m25_hold_does_not_false_match_m150_or_main_tours():
     atp = pick("atp", .72, "ATP")
     out = select_market_sections([m150, atp])
     assert ids(out) == ["atp"]
-    assert out["market_selection"]["top_rejection_counts"]["itf_top_requires_verified_w35plus"] == 1
+    assert out["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
 def test_feature_availability_snapshot_is_not_a_calibration_claim():
@@ -160,22 +157,19 @@ def test_feature_availability_snapshot_is_not_a_calibration_claim():
 
 
 @pytest.mark.parametrize("competition,tournament,odds,other", [
-    ("ITF Men", "ITF M50 Test", 2.50, 1.50),
-    ("ITF Women", "ITF W35 Heraklion", 2.70, 1.52),
+    ("ITF Men", "ITF M25 Test", 3.80, 1.50),
+    ("ITF Women", "ITF W35 Heraklion", 3.80, 1.50),
 ])
 def test_severe_market_outsider_conflict_held_from_new_top(competition, tournament, odds, other):
-    card = pick("model-market-reversal", .718, competition, odds=odds, other=other)
+    card = pick("model-market-reversal", .95, competition, odds=odds, other=other)
     card["tournament"] = tournament
+    if competition == "ITF Women":
+        card["tour"] = "WTA"
     before = deepcopy(card)
     output = select_market_sections([card])
     assert ids(output) == []
-    assert output["market_selection"]["top_rejection_counts"]["top_unverified_market_outsider_conflict"] == 1
-    assert output["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
-    audit = build_selection_candidate_snapshot(
-        [card], generated_at=datetime(2026, 11, 11, 8, tzinfo=timezone.utc)
-    )
-    assert "top_unverified_market_outsider_conflict" in audit["rows"][0]["top_rejection_reasons"]
-    assert audit["rows"][0]["selected_section"] is None
+    # The GLOBAL price-integrity guard survives; there is no ITF-only veto.
+    assert output["market_selection"]["selection_counts"]["extreme_price_inversion_quarantined"] == 1
     assert card == before
 
 
@@ -257,15 +251,17 @@ def test_60_floor_allows_challenger_but_never_w35_or_weak_matches():
 
 
 def test_men_itf_all_levels_and_unverified_women_fail_closed():
-    men = [pick(f"men{n}", .99, "ITF Men") for n in (15,25,50,100)]
-    for n,card in zip((15,25,50,100),men):
+    men = [pick(f"men{n}", .99, "ITF Men") for n in (15, 25, 50, 100)]
+    for n, card in zip((15, 25, 50, 100), men):
         card["tournament"] = f"ITF M{n} Futures"
     unknown = pick("unknown", .99, "ITF Women")
     false_evidence = verified_w35("false", .99)
     false_evidence["quality"]["feature_evidence"]["surface_serve_return_known_both"] = False
-    out = select_market_sections(men + [unknown,false_evidence])
-    assert ids(out) == []
-    assert out["market_selection"]["top_rejection_counts"]["itf_top_requires_verified_w35plus"] == 6
+    out = select_market_sections(men + [unknown, false_evidence])
+    # Only actual ITF men's M15/M25 native point tiers qualify; unverified
+    # and gender-conflicting candidates remain excluded.
+    assert ids(out) == ["men15", "men25"]
+    assert out["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 4
 
 
 def test_w35_quality_gate_is_not_waived_for_3_tip_target():
@@ -285,12 +281,10 @@ def test_old_itf_safeguards_survive_new_tier_order():
     m15["tournament"] = "ITF M15 Futures"
     m25 = pick("m25", .99, "ITF Men", odds=1.60)
     m25["tournament"] = "ITF M25 Futures"
-    risky_itf = verified_w35("risky", .75, odds=2.50, other=1.50)
-    safe_itf = verified_w35("safe", .73, odds=1.60)
-    result = select_market_sections([m15, m25, risky_itf, safe_itf])
-    assert ids(result) == []
-    assert result["market_selection"]["top_rejection_counts"]["itf_m15_m25_top_hold_pending_calibration"] == 2
-    assert result["market_selection"]["top_rejection_counts"]["top_unverified_market_outsider_conflict"] == 1
+    wrong_gender = verified_w35("wrong-gender", .75, odds=2.50, other=1.50)
+    result = select_market_sections([m15, m25, wrong_gender])
+    assert ids(result) == ["m25", "m15"]
+    assert result["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
 
 
 def test_verified_wta125_enters_top_but_generic_wta_challenger_and_utr_fail():
@@ -309,25 +303,28 @@ def test_verified_wta125_enters_top_but_generic_wta_challenger_and_utr_fail():
     (1.71, False), (1.80, False), (2.20, False),
 ])
 def test_itf_top_excluded_regardless_of_price(odds, eligible):
+    # This legacy fixture deliberately has ITF WOMEN with ATP tour,
+    # so mismatched gender cannot enter TOP at any price.
     w35 = verified_w35("w35-price", .75, odds=odds, other=2.50)
     original = deepcopy(w35)
     output = select_market_sections([w35])
     assert ids(output) == []
     assert output["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
-    assert ("itf_odds_above_1_70" in output["market_selection"]["top_rejection_counts"]) is (not eligible)
+    assert "itf_odds_above_1_70" not in output["market_selection"]["top_rejection_counts"]
     assert w35 == original
 
 
 @pytest.mark.parametrize("p,eligible", [
-    (.649, False), (.65, False), (.650001, True), (.651, True),
+    (.599, False), (.60, True), (.649, True), (.651, True),
 ])
 def test_itf_top_excluded_regardless_of_probability(p, eligible):
     w35 = verified_w35("w35-probability", p, odds=1.60, other=2.60)
     output = select_market_sections([w35])
     assert ids(output) == []
     assert output["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 1
-    if p == .65:
-        assert output["market_selection"]["top_rejection_counts"]["itf_probability_not_above_65"] == 1
+    if p < .60:
+        assert output["market_selection"]["top_rejection_counts"]["probability_below_fixed_floor"] == 1
+    assert "itf_probability_not_above_65" not in output["market_selection"]["top_rejection_counts"]
 
 
 def test_main_atp_and_challenger_do_not_inherit_itf_price_cap():
@@ -341,11 +338,12 @@ def test_main_atp_and_challenger_do_not_inherit_itf_price_cap():
 def test_itf_price_cap_applies_after_higher_priority_and_no_forced_fill():
     main = pick("atp65", .65, "ATP")
     challenger = pick("ch65", .65, "Challenger")
-    over = verified_w35("over", .95, odds=1.7001)
-    qualifying = verified_w35("qualifying", .651, odds=1.70)
-    output = select_market_sections([over, qualifying, main, challenger])
+    wrong_tour1 = verified_w35("over", .95, odds=1.7001)
+    wrong_tour2 = verified_w35("qualifying", .651, odds=1.70)
+    output = select_market_sections([wrong_tour1, wrong_tour2, main, challenger])
     assert ids(output) == ["atp65", "ch65"]
-    assert output["market_selection"]["top_rejection_counts"]["itf_odds_above_1_70"] == 1
+    assert output["market_selection"]["top_rejection_counts"]["competition_not_approved"] == 2
+    assert "itf_odds_above_1_70" not in output["market_selection"]["top_rejection_counts"]
 
 
 def test_current_morning_policy_preflight_matches_v20_ui_and_selector():
@@ -374,5 +372,7 @@ def test_top_competition_classifier_fails_closed_for_unapproved_formats(tour, co
     card = pick("tier-check", .99, competition)
     card.update(tour=tour, tournament=tournament)
     assert competition_group(card) == expected
-    if expected in {"ITF", "UTR", "other", "unknown"}:
+    if expected in {"UTR", "other", "unknown"}:
         assert "competition_not_approved" in rejection_reasons(card)
+    if expected == "ITF":
+        assert "competition_not_approved" not in rejection_reasons(card)

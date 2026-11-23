@@ -51,20 +51,21 @@ def test_top_five_ranks_main_tours_before_challenger_and_excludes_itf():
     assert rows == before
 
 
-def test_low_itf_m15_w15_remain_protected_pending_evidence():
+def test_itf_m15_w15_qualify_under_standard_top_rules():
     from test_top_priority_policy import pick
     m15 = pick("m15", .99, "ITF Men")
     m15["tournament"] = "ITF M15 Monastir"
     w15 = pick("w15", .99, "ITF Women")
+    w15["tour"] = "WTA"  # Native ITF women category, not a generic ATP gender guess.
     w15["tournament"] = "ITF W15 Monastir"
-    for row in (m15, w15):
-        row["quality"]["feature_evidence"] = {
+    for item in (m15, w15):
+        item["quality"]["feature_evidence"] = {
             "serve_return_known_both": True,
             "surface_serve_return_known_both": True,
         }
     out = select_market_sections([m15, w15])
-    assert out["top_daily_picks"] == []
+    assert [item["event_id"] for item in out["top_daily_picks"]] == ["m15", "w15"]
     assert out["market_selection"]["top_daily_rule"]["competition_priority"] == [
-        ["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"]
+        ["ATP", "WTA"], ["Challenger", "WTA 125", "BJK Cup", "Davis Cup"], ["ITF"]
     ]
-    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 3
+    assert out["market_selection"]["selection_counts"]["top_daily_shortfall"] == 1

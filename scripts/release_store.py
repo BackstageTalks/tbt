@@ -159,30 +159,21 @@ class ReleaseStore:
                 f"repos/{repository}/releases/tags/{tag}",
             ]
         )
-        if lookup.returncode:
-            stderr = lookup.stderr.strip()
-            if (
-                "HTTP 404" in stderr
-                or "Not Found" in stderr
-                or "not found" in stderr.lower()
-            ):
-                gh(
-                    "release",
-                    "create",
-                    tag,
-                    "--repo",
-                    repository,
-                    "--title",
-                    "TBT private tennis history",
-                    "--notes",
-                    "Compact training partitions and resumable download progress. No API credentials.",
-                )
-            else:
-                raise RuntimeError(
-                    "GitHub release lookup failed: "
-                    + stderr[:500]
-                )
+        self._missing_release = bool(lookup.returncode)
+        if self._missing_release and "HTTP 404" not in lookup.stderr:
+            raise RuntimeError("GitHub release lookup failed: " + lookup.stderr[:500])
         self.directory.mkdir(parents=True, exist_ok=True)
+
+    def _ensure_release_for_write(self):
+        if not getattr(self, "_missing_release", False):
+            return
+        current = _run_gh(["api", f"repos/{self.repository}/releases/tags/{self.tag}"])
+        if current.returncode:
+            if "HTTP 404" not in current.stderr:
+                raise RuntimeError("Cannot verify release before write")
+            gh("release", "create", self.tag, "--repo", self.repository,
+               "--title", "TBT private tennis history", "--notes", "Private BlinQ release.")
+        self._missing_release = False
 
     BUNDLE_MANIFEST = "_tbt_bundle_manifest.json"
 
@@ -195,6 +186,8 @@ class ReleaseStore:
         return digest.hexdigest()
 
     def _asset_names(self) -> set[str]:
+        if getattr(self, "_missing_release", False):
+            return set()
         # Preserve the normal gh release view contract. A stale tag view can
         # report "release not found" even when the authenticated release ID
         # and its assets exist. Only in that specific case, consult the
@@ -478,6 +471,7 @@ class ReleaseStore:
     def upload(self, paths):
         paths = [str(p) for p in paths if Path(p).is_file()]
         if paths:
+            self._ensure_release_for_write()
             gh(
                 "release",
                 "upload",
@@ -864,6 +858,7 @@ class ReleaseStore:
         removals = {str(name) for name in remove_names}
         if self.repository == "BackstageTalks/tbt-data" and self.tag == "tbt-data-v1":
             assert_history_partition_bundle_atomic(files, removals)
+        self._ensure_release_for_write()
         previous = self._remote_bundle_files()
         if before_upload is not None:
             before_upload()

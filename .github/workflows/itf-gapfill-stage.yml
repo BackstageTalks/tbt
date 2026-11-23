@@ -90,8 +90,13 @@ jobs:
           START="$IN_START"; END="$IN_END"; PREFIX=itf
           [[ -n "$START" ]] || PREFIX=itf-auto
           if [[ -z "$START" ]]; then
-            last=$(gh release view itf-gapfill-staging-v1 -R BackstageTalks/tbt-data --json assets --jq '.assets[].name' 2>/dev/null \
-              | grep -oE '^itf-auto-[0-9-]{10}-[0-9]{4}-[0-9]{2}-[0-9]{2}\.jsonl\.gz$' | sed -E 's/^itf-auto-[0-9-]{10}-([0-9-]{10})\.jsonl\.gz$/\1/' | sort | tail -1 || true)
+            repo=BackstageTalks/tbt-data
+            release_id=$(gh api --paginate "repos/$repo/releases" --jq '.[] | select(.tag_name == "itf-gapfill-staging-v1") | .id')
+            last=""
+            if [[ -n "$release_id" ]]; then
+              names=$(gh api --paginate "repos/$repo/releases/$release_id/assets" --jq '.[].name')
+              last=$(sed -nE 's/^itf-auto-[0-9-]{10}-([0-9-]{10})\.jsonl\.gz$/\1/p' <<< "$names" | sort | tail -1)
+            fi
             if [[ -n "$last" ]]; then START=$(date -u -d "$last + 1 day" +%F); else START=2016-01-01; fi
           fi
           [[ -n "$END" ]] || END=$(date -u -d "$START + 365 days" +%F)
@@ -105,7 +110,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .cache/cdb
-          for y in $(seq "${START:0:4}" "${END:0:4}"); do
+          for y in $(seq "$(date -u -d "$START - 6 days" +%Y)" "$(date -u -d "$END + 6 days" +%Y)"); do
+            (( y >= 2016 )) || continue
             gh release download tbt-data-v1 -R BackstageTalks/tbt-data -p "history-$y.parquet" -D .cache/cdb --clobber
           done
       - name: Link + fetch statistics into staging

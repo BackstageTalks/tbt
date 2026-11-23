@@ -16,7 +16,7 @@ import subprocess
 import tempfile
 
 from .admin_storage import _table, UI_TABLE, AdminStorageUnavailable
-from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, github, inspect, status as training_status
+from .model_training import APP, DATA, TrainingBlocked, TrainingUnavailable, admission, github, inspect, status as training_status
 
 PARTITION = "model-lab-queue"
 WORKFLOWS = {
@@ -372,12 +372,15 @@ def start(payload, actor):
         "snapshot_at": current["observed_at"],
         "expected_feed_sha256": current.get("feed_sha256") if action == "refresh_champion_inputs" else None,
     }
-    if action == "promote_production":
-        request.update(calibration_override=True, reason=payload["reason"].strip(),
-                       confirmation=payload["confirmation"])
-        # Keep approval identity and rationale after the transient guard is cleared.
-        _put("approval-" + request["id"], request)
-    _create("active", request)
+    with admission(_table(UI_TABLE), actor):
+        if not training_status().get("can_start"):
+            raise TrainingBlocked("Ochranná fronta tréningu je obsadená.")
+        if action == "promote_production":
+            request.update(calibration_override=True, reason=payload["reason"].strip(),
+                           confirmation=payload["confirmation"])
+            # Keep approval identity and rationale after the transient guard is cleared.
+            _put("approval-" + request["id"], request)
+        _create("active", request)
     return {"state": "QUEUED", "id": request["id"],
             "message": "Požiadavka je uložená. Worker ju spustí raz; priebeh sleduj v Model Lab."}
 
