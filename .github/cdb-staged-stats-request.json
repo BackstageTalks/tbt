@@ -1,0 +1,7 @@
+{
+  "workflow": "cdb-staged-stats-import.yml",
+  "mode": "dry-run",
+  "approved_by_operator": false,
+  "input": "data/staging/sackmann_all_2016_2026.jsonl.gz",
+  "source_attribution": "Jeff Sackmann / Tennis Abstract; TennisMyLife (CC BY-NC, non-commercial BlinQ)"
+}
