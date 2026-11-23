@@ -15,6 +15,10 @@ on:
         description: Max paid requests (<= 5000)
         required: true
         default: '5000'
+      owner_evening_cap:
+        description: Owner-approved one-off global cap for 18-23h Bratislava (0 = off, max 10000; per run still <= 5000)
+        required: false
+        default: '0'
 
 permissions:
   contents: read
@@ -49,6 +53,7 @@ jobs:
         env:
           BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
           WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          OWNER_EVENING_CAP: ${{ inputs.owner_evening_cap || '0' }}
         shell: python
         run: |
           import json, os, urllib.request
@@ -63,6 +68,9 @@ jobs:
           # Daytime only (owner can watch it). Cumulative global ceiling by
           # Bratislava hour; provider day resets at 18:09 Bratislava.
           ceiling = {11: 5000, 12: 6600, 13: 8200, 14: 9800, 15: 11400, 16: 13050, 17: 14500}.get(h, 0)  # 90 % by 16h, top-up at 17:30, reset 18:09
+          if ceiling == 0 and 18 <= h <= 23:
+              # Manual owner-approved evening pull after the 18:09 reset; scheduled crons never set it.
+              ceiling = max(0, min(10000, int(os.environ.get("OWNER_EVENING_CAP") or 0)))
           allowed = max(0, min(5000, ceiling - spent))
           print(f"global_spent={spent} hour={h} ceiling={ceiling} allowed_this_run={allowed}")
           with open(os.environ["GITHUB_ENV"], "a") as fp:
