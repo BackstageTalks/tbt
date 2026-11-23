@@ -9,7 +9,7 @@
 ## Denník nasadení a návrat
 | Dátum | PR / commit | Čo | Návrat |
 |---|---|---|---|
-| 2026-11-23 | (PR itf-auto) | ITF zber pokračuje automaticky od posledného dokončeného týždňa (assety `itf-auto-*`), 2016–2024; externý cron len zavolá workflow bez vstupov; max 5 000/beh; globálne stropy od resetu: do 21:00 3 600, do 01:00 7 250, do 04:00 8 700, 04:00–18:00 ITF zber nebeží | revert PR |
+| 2026-11-23 | (PR itf-auto) | ITF zber pokračuje automaticky od posledného dokončeného týždňa (assety `itf-auto-*`), 2016–2024; externý cron len zavolá workflow bez vstupov; max 5 000/beh; beží len cez deň 12:00–17:59 (Bratislava); globálny strop podľa hodiny: 12h 6 000, 13h 7 500, 14h 9 000, 15h 10 500, 16h 12 000, 17h 14 000; v noci nič | revert PR |
 | 2026-11-23 | (PR itf-gapfill) | ITF gap-fill staging: párovanie hist-js ITF zápasov na RapidAPI (týždenný kalendár, oba priezviská, jednoznačne) + štatistiky do release `itf-gapfill-staging-v1` v tbt-data; CDB bez zmeny; ranné okno 04:00–07:30 chránené | zmazať workflow a release |
 | 2026-11-23 | #1778 | zmazaný DIL kód (skripty, testy, workflowy, docs); DIL DB na Drive maže majiteľ | `git revert` PR |
 | 2026-11-23 | (PR cleanup) | zmazaných 66 nepoužívaných workflowov (zoznam v UPRATANIE.md) | `git revert` PR obnoví všetky |
