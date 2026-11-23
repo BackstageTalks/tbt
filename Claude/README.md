@@ -9,6 +9,7 @@
 ## Denník nasadení a návrat
 | Dátum | PR / commit | Čo | Návrat |
 |---|---|---|---|
+| 2026-11-23 | (PR identity) | HOTFIX: zmena hráča v zápase (lucky loser) už nezastaví celé ranné zverejnenie; nezverejnená predikcia sa nahradí, zverejnená ostane | revert PR |
 | 2026-11-23 | (PR bulk odds) | read-only workflow: denné kurzy RapidAPI do artefaktu, 1 volanie/deň, bez zápisu do CDB | zmazať workflow; nič iné sa nemení |
 | 2026-11-23 | (tento PR) | Value: prah podanie+príjem ≥ 0,06 (`TBT_VALUE_SERVE_RETURN_MIN`) | vrátiť PR alebo zmazať `TBT_VALUE_SERVE_RETURN_OWNER_APPROVED` |
 | 2026-11-23 | #1766 → `c4ed468` | opravy + prepínače (všetky OFF) | `git revert -m 1 c4ed468` alebo zrušiť príslušnú `_OWNER_APPROVED` premennú |
