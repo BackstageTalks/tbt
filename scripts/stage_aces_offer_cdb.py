@@ -78,7 +78,7 @@ def persist(path, *, work):
     from release_store import ReleaseStore
 
     state = Path(".cdb-global-writer-lock.json")
-    acquire(REPOSITORY, state, wait_seconds=0)
+    acquire(REPOSITORY, state, wait_seconds=900)
     try:
         # Dated immutable name: reruns never replace an observed snapshot.
         store = ReleaseStore(REPOSITORY, RELEASE, work / "store")

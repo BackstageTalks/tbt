@@ -28,6 +28,11 @@ on:
         required: false
         type: boolean
         default: false
+      source_capture_run:
+        description: "Candidate CDB retry: reuse this run's stored report, ZERO provider requests"
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -49,6 +54,7 @@ jobs:
       INPUT_ALLOW_SAME_DAY: ${{ github.event.client_payload.allow_same_day || inputs.allow_same_day || false }}
       CANDIDATE_CDB: ${{ inputs.candidate_cdb || false }}
       PYTHONPATH: api:scripts
+      SOURCE_CAPTURE_RUN: ${{ inputs.source_capture_run || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,7 +89,16 @@ jobs:
           datetime.date.fromisoformat(sys.argv[1])
           PY
           echo "date=$target" >> "$GITHUB_OUTPUT"
+      - name: Restore an already captured report without calling PropLine again
+        if: inputs.source_capture_run != ''
+        run: |
+          set -euo pipefail
+          [[ "$CANDIDATE_CDB" == "true" && "$SOURCE_CAPTURE_RUN" =~ ^[0-9]+$ ]]
+          gh run download "$SOURCE_CAPTURE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "blinq-propline-evening-research-$SOURCE_CAPTURE_RUN" --dir reports
+          test -f reports/propline-evening/odds.json
       - name: Capture existing free PropLine bookmaker markets without CDB changes
+        if: inputs.source_capture_run == ''
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
