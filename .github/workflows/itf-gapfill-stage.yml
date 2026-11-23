@@ -60,7 +60,7 @@ jobs:
           h = datetime.now(ZoneInfo("Europe/Bratislava")).hour
           # Daytime only (owner can watch it). Cumulative global ceiling by
           # Bratislava hour; provider day resets at 18:09 Bratislava.
-          ceiling = {12: 6000, 13: 7500, 14: 9000, 15: 10500, 16: 12000, 17: 14000}.get(h, 0)
+          ceiling = {11: 5000, 12: 6600, 13: 8200, 14: 9800, 15: 11400, 16: 13050, 17: 14500}.get(h, 0)  # 90 % by 16h, top-up at 17:30, reset 18:09
           allowed = max(0, min(5000, ceiling - spent))
           print(f"global_spent={spent} hour={h} ceiling={ceiling} allowed_this_run={allowed}")
           with open(os.environ["GITHUB_ENV"], "a") as fp:
