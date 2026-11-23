@@ -19,7 +19,7 @@ import json
 import re
 import unicodedata
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -92,8 +92,20 @@ def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
                     stats, payload = {}, {"error": type(exc).__name__}
                 rep["stats_rows"] += int(bool(stats))
                 rep["stats_with_serve_return"] += int("p1_service_points_won" in stats)
+                # CDB-ready row: canonical parsed stats + the raw provider
+                # payload + the same identity/marker keys the CDB writer
+                # uses, so import is a pure merge (no second API call ever).
                 fp.write(json.dumps({"match_id": t["match_id"], "provider_event_id": eid,
-                                     "week": start.isoformat(), "stats": stats}) + "\n")
+                                     "week": start.isoformat(), "stats": stats,
+                                     "home_is_player1": home_last == norm_last(t["p1"]),
+                                     "raw_statistics": payload,
+                                     "provider_context": {
+                                         "_tbt_provider_event_id": str(eid),
+                                         "_tbt_statistics": {
+                                             "schema": 3, "event_id": str(eid), "source": "tennisapi1",
+                                             "fetched_at": datetime.now(timezone.utc).isoformat(),
+                                             "status": "ok" if stats else "unavailable",
+                                             "origin": "itf_week_gapfill_stage"}}}) + "\n")
             else:
                 rep["last_complete_week"] = start.isoformat()
                 continue
