@@ -223,6 +223,14 @@ def extract_sent(state, target_day):
     return list(picked.values())
 
 
+def _line_key(value):
+    """AUD-05: 8, 8.0 and "8.0" are the same market line."""
+    try:
+        return f"{float(value):.2f}"
+    except (TypeError, ValueError):
+        return str(value or "")
+
+
 def match_result(sent, settled):
     """Match exactly one authoritative settlement (no fuzzy name matches)."""
     found=[]
@@ -237,7 +245,7 @@ def match_result(sent, settled):
         if frozen_pub and frozen_pub != archived_pub:
             continue
         if sent.get("market")=="aces":
-            if str(sent.get("market_line") or "") != str(row.get("market_line") or ""):
+            if _line_key(sent.get("market_line")) != _line_key(row.get("market_line")):
                 continue
             if str(sent.get("projection_direction") or "") != str(row.get("projection_direction") or ""):
                 continue

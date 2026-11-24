@@ -2254,7 +2254,7 @@
   }
   function previewStableRandomSlots(tab,total,count){
     const pool=Math.min(Math.max(0,total),10),wanted=Math.min(Math.max(0,count),pool);
-    const dateKey=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()-6*3600*1000));
+    const dateKey=bratislavaBettingDayKey(Date.now(),6); // AUD-03: wall-clock 06:00, DST-safe
     const seed=`${state.previewPlan||accountPlan()}|${dateKey}|${tab}`;
     const hash=text=>{let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;};
     return new Set(Array.from({length:pool},(_,i)=>[hash(`${seed}|${i}`),i]).sort((a,b)=>a[0]-b[0]).slice(0,wanted).map(item=>item[1]));

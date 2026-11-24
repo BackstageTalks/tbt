@@ -929,6 +929,8 @@ def _selection_identity(row: dict[str, Any]) -> str:
     selection_id = str(betting.get("selection_id") or row.get("selection_id") or "").strip()
     market = str(betting.get("market") or row.get("market") or "match_winner").strip()
     betting_day = str(betting.get("betting_day") or row.get("betting_day") or "").strip()
+    if not event_id or not selection_id:
+        return ""  # AUD-02: incomplete identity never claims a public slot
     return f"{market}:{betting_day}:{event_id}:{selection_id}"
 
 
