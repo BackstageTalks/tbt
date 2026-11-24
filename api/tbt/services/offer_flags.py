@@ -48,6 +48,20 @@ FLAGS: list[dict] = [
      "label": "Gemy: pozastaviť", "help": "Dočasne nepublikovať predikcie na gemy.", "default": False},
     {"key": "TBT_SETS_SUSPENDED", "type": "bool", "group": "Gemy / Sety",
      "label": "Sety: pozastaviť", "help": "Dočasne nepublikovať predikcie na sety.", "default": False},
+    {"key": "TBT_RANK_SOURCE", "type": "bool", "group": "TOP",
+     "label": "TOP: poradie podľa trhu (market-anchored)",
+     "help": "Zapnuté = poradie TOP kombinuje model a trh. Vypnuté = čistý model (predvolené).",
+     "default": False, "env_true": "market_anchored", "env_false": "model"},
+    {"key": "TBT_TOP_EMERGENCY_FILL", "type": "bool", "group": "TOP",
+     "label": "TOP: núdzové doplnenie",
+     "help": "Ak ani po doplnení od 1,40 nie je dosť TOP tipov, doplní najlepšie zostávajúce.",
+     "default": False},
+    {"key": "TBT_ACES_REAL_LINE_STRICT", "type": "bool", "group": "Esá",
+     "label": "Esá: len reálne hranice",
+     "help": "Esá len s hranicou od bookmakera; bez nej sa zápas neponúkne.", "default": False},
+    {"key": "TBT_OFFER_SHADOW_DISABLED", "type": "bool", "group": "Shadow testing",
+     "label": "Shadow testing: vypnúť",
+     "help": "Zastaví zber virtuálnych (nepublikovaných) predikcií.", "default": False},
 ]
 BY_KEY = {f["key"]: f for f in FLAGS}
 
@@ -134,7 +148,10 @@ def as_env(saved: dict) -> dict[str, str]:
     env = {}
     for key, row in saved.items():
         v = row.get("value")
-        if isinstance(v, bool):
+        spec = BY_KEY.get(key, {})
+        if isinstance(v, bool) and "env_true" in spec:
+            env[key] = spec["env_true"] if v else spec["env_false"]
+        elif isinstance(v, bool):
             env[key] = "true" if v else "false"
         elif isinstance(v, float):
             env[key] = "" if v == 0 else f"{v:g}"

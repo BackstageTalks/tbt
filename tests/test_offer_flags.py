@@ -42,3 +42,10 @@ def test_offer_flag_validation_and_env():
 def test_zero_means_code_default():
     env = offer_flags.as_env({"TBT_TOP_MIN_PICKS": {"value": 0.0}, "TBT_ACES_MIN_GAP": {"value": 0.0}})
     assert env == {"TBT_TOP_MIN_PICKS": "", "TBT_ACES_MIN_GAP": ""}
+
+
+def test_rank_source_switch_maps_to_pipeline_values():
+    from tbt.services.offer_flags import as_env
+    assert as_env({"TBT_RANK_SOURCE": {"value": True}}) == {"TBT_RANK_SOURCE": "market_anchored"}
+    assert as_env({"TBT_RANK_SOURCE": {"value": False}}) == {"TBT_RANK_SOURCE": "model"}
+    assert as_env({"TBT_TOP_EMERGENCY_FILL": {"value": True}}) == {"TBT_TOP_EMERGENCY_FILL": "true"}
