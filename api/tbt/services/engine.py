@@ -436,6 +436,12 @@ def predict(
             "reliability_status": "not_established_by_history_count",
             "data_depth": f["data_depth"],
             "stats_available": bool(f["stats_known_both"]), "signals": signals,
+            # Pre-match serve+return edge from player1's view (surface first).
+            "serve_return_edge": (
+                round(float(f["surface_serve_quality_diff"]) + float(f["surface_return_quality_diff"]), 5)
+                if f.get("surface_stats_known_both") else
+                round(float(f["serve_quality_diff"]) + float(f["return_quality_diff"]), 5)
+                if f.get("stats_known_both") else None),
             "model_version": model.version, "created_at": now.isoformat(),
             "issued_at": None, "publication_status": "pending", "result": None})
     if return_context:

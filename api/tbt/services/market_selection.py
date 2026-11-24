@@ -7,6 +7,8 @@ fabricated here.
 """
 from __future__ import annotations
 
+import os
+
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import math
@@ -1030,6 +1032,23 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
             _selection_identity(card))
 
 
+ENV_VALUE_SERVE_RETURN = "TBT_VALUE_SERVE_RETURN"
+
+
+def value_serve_return_ok(card: dict[str, Any]) -> bool:
+    """Owner-gated VALUE filter (default OFF): publish only the side with the
+    better pre-match serve+return quality. Missing stats never pass when ON."""
+    if str(os.environ.get(ENV_VALUE_SERVE_RETURN, "")).strip().lower() not in {"1", "true", "yes", "on"}:
+        return True
+    edge = _number(card.get("serve_return_edge"))
+    if edge is None or edge == 0:
+        return False
+    p1 = card.get("player1") if isinstance(card.get("player1"), dict) else {}
+    winner = str(card.get("winner_id") or "")
+    picks_p1 = winner and winner == str(p1.get("id") or "")
+    return (edge > 0) == bool(picks_p1)
+
+
 def _rank_full_slate_top(core: list[dict[str, Any]], backup: list[dict[str, Any]],
                          *, target: int | None = None,
                          minimum: int = TOP_MIN_COUNT) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
@@ -1221,6 +1240,7 @@ def select_market_sections(
                 min_surface_matches=value_min_surface_matches,
             )
             and _is_close_odds_value(card)
+            and value_serve_return_ok(card)
         ):
             value_qualified.append(card)
 

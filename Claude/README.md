@@ -78,3 +78,5 @@ Ranný beh: štart 05:15, hotovo ≈ 06:20 (Bratislava). Deň tipov sa zámerne 
 - Blokér nasadenia: CI na main padal na 3 zastaraných testoch → web sa nenasadzoval (watchdog, issue #1765). PR #1766 to opravuje.
 
 - Rozhodnutie majiteľa 22.11.: lokálny kurzový fallback, KPI (ROI/yield/auto) a stĺpec KURZ sa nemenia. `TBT_ACES_REAL_LINE_STRICT` ostáva vypnutý.
+- Esá – pravidlo rezervy majiteľa (`TBT_ACES_CUSHION_RULE` + `_OWNER_APPROVED`, default OFF): z reálnych hraníc (aj jednostranných „N+“) Over len ak projekcia − hranica ≥ 1,5; Under len ak hranica − projekcia ≥ 1,5 (symetricky, rozhodnutie majiteľa 22.11.); z vyhovujúcich najvyšší kurz ≥ 1,50. Smer vyberá podľa ponuky. Platí pre hráča vybraného modelom (Viac es); oboch hráčov rieši line-first (GPT prompt).
+- Value – podanie+príjem (`TBT_VALUE_SERVE_RETURN` + `_OWNER_APPROVED`, default OFF): zverejní len Value, kde vybraný hráč má lepší súčet kvality podania a príjmu (povrch, inak celkovo). Neoverené na histórii; majiteľ chce test v praxi. Engine pridáva `serve_return_edge` ku každej predikcii.
