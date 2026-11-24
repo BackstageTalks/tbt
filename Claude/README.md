@@ -6,6 +6,7 @@ Všetky nové prepínače sú predvolene VYPNUTÉ a zapína ich len majiteľ (Gi
 ## Zmeny
 | Dátum | Stav | Čo | Prečo | Prepínač |
 |---|---|---|---|---|
+| 2026-11-22 | PREPARED (samostatný Draft PR; CI prebieha/neoverené na reálnom mobile) | Mobilný #dailyHubTabs: vodorovný posun so zobrazeným úzkym scrollbarom, 20 px koncový priestor, bez maskovacieho fade; verzovaný CSS URL; statický test | Posledná karta DVOJCHYBY bola orezaná; všetky taby majú zostať dostupné dotykom | – |
 | 2026-11-22 | PR #1766 | `finalize_dil_from_cdb_v2.py`: ATTACH cez `as_uri()` + `uri=True` | 16 testov padalo (`unable to open database`) | – |
 | 2026-11-22 | PR #1766 | `probe_tennisapi_extended_contract.py`: import `ProviderError` | `NameError` pri chybe | – |
 | 2026-11-22 | PR #1766 | `market_selection._confidence`: odstránený nedosiahnuteľný kód | nedefinovaná premenná | – |
