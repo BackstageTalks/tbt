@@ -7404,7 +7404,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
 
   function renderAdminOffer(){
     const d=state.adminOffer;
-    if(!d&&!state.adminOfferLoading){state.adminOfferLoading=true;BlinqAuth.adminOfferFlags().then(r=>{state.adminOffer=r;state.adminOfferError='';}).catch(e=>{state.adminOfferError=e?.message||'Nepodarilo sa načítať Ponuku.';}).finally(()=>{state.adminOfferLoading=false;render();});}
+    if(!d&&!state.adminOfferLoading){state.adminOfferLoading=true;BlinqAuth.adminOfferFlags().then(r=>{state.adminOffer=r;state.adminOfferError='';}).catch(e=>{state.adminOfferError=e?.message||'Nepodarilo sa načítať Ponuku.';}).finally(()=>{state.adminOfferLoading=false;setTimeout(rerenderAdmin,0);});}
     if(state.adminOfferError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminOfferError)+'</p></section>';
     if(!d)return '<section class="admin-ux-section"><p role="status">Načítava sa…</p></section>';
     const groups={};(d.items||[]).forEach(it=>{(groups[it.group]=groups[it.group]||[]).push(it);});
@@ -7423,10 +7423,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(t==='bool')updates[k]=el.checked;
       else if(t==='number'){const v=Number(el.value);if(Number.isFinite(v))updates[k]=v;}
       else updates[k]=[...el.querySelectorAll('input:checked')].map(i=>i.value).join(',');});
-    state.adminOfferSaving=true;render();
+    state.adminOfferSaving=true;rerenderAdmin();
     try{state.adminOffer=await BlinqAuth.adminOfferFlags(updates);showStatus('Ponuka uložená · platí od najbližšieho behu.');}
     catch(e){showStatus(e?.message||'Uloženie Ponuky zlyhalo.');}
-    finally{state.adminOfferSaving=false;render();}
+    finally{state.adminOfferSaving=false;rerenderAdmin();}
   }
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard · KPI','3 karty · KPI'],['offer','Ponuka','Pravidlá výberu predikcií'],['testresults','Testovacie tipy','Manuálne vylúčenia'],['dataexport','Export CSV','Výsledky · predikcie'],['monthlyresults','Mesačný výkon','ROI · profit · filtre'],['layout','Zobrazenie','Prístupy · panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram skupiny','Skupiny · odkazy'],['tgbot','Telegram bot','Tipy · rozvrh'],['insights','INFO & LIVE','Správy · radar'],['calibration','Model Lab','Tréning · kalibrácia'],['system','Systém','Diagnostika']];
