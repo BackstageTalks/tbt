@@ -593,7 +593,7 @@ def _publish_predictions(
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
     settlement_matches=None, comparator_artifact=None,
     betting_day_start_hour=6, morning_refresh=False,
-    champion_sha256=None,
+    champion_sha256=None, ace_shadow_rows=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -771,7 +771,8 @@ def _publish_predictions(
             from tbt.services.offer_shadow import build_offer_shadow, first_day_capture
             if first_day_capture(candidate_history, public_offer_day=public_offer_day) is None:
                 offer_shadow = build_offer_shadow(
-                    predictions, observed_at=now, public_offer_day=public_offer_day)
+                    predictions, observed_at=now, public_offer_day=public_offer_day,
+                    extra_variants={"aces_all_levels": ace_shadow_rows or []})
                 if offer_shadow is not None:
                     candidate_snapshot["offer_shadow"] = offer_shadow
                     print(json.dumps({"offer_shadow_capture": {
@@ -1440,6 +1441,7 @@ def main():
     ace_report = None
     propline_aces_shadow_result = {"status": "NOT_ENABLED"}
     ace_winner_picks = []
+    ace_shadow_rows = None
     ace_winner_report = None
     sg_picks = []
     sg_report = None
@@ -1763,6 +1765,16 @@ def main():
         ace_winner_picks, ace_winner_report = select_ace_winner_picks(
             matches, ace_predictions, now=selection_now,
         )
+        if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
+            try:
+                from tbt.services.offer_shadow import build_ace_shadow
+                ace_shadow_rows = build_ace_shadow(
+                    matches, ace_predictions, now=selection_now,
+                    live_picks=list(ace_picks) + list(ace_winner_picks))
+            except Exception as exc:
+                print(json.dumps({"warning": "ace_shadow_failed",
+                                  "error_type": type(exc).__name__,
+                                  "detail": str(exc)[:280]}), flush=True)
         if isinstance(ace_report, dict):
             ace_report["rank_supplement"] = ace_rank_report
         if isinstance(ace_report, dict):
@@ -2215,6 +2227,7 @@ def main():
         prior_feed=prior_feed, prior_snapshot=prior_snapshot,
         settlement_matches=settlement_history,
         comparator_artifact=comparator_artifact,
+        ace_shadow_rows=ace_shadow_rows,
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
         champion_sha256=(

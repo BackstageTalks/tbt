@@ -53,3 +53,33 @@ def test_not_settled_before_start():
 def test_category_splits_itf_by_tour():
     assert osh.category({"competition": "ITF", "tour": "ATP"}) == "ITF-M"
     assert osh.category({"competition": "ITF", "tour": "WTA"}) == "ITF-W"
+
+
+def _ace_hist(rows):
+    cap = {"schema": 1, "public_offer_day": "2026-11-24",
+           "captured_at": "2026-11-24T05:00:00+00:00",
+           "variants": {"aces_all_levels": rows}}
+    cap["sha256"] = osh._digest(cap)
+    return {"snapshots": [{"offer_shadow": cap}]}
+
+
+def test_aces_and_double_faults_graded_by_superiority():
+    rows = [dict(_row("1", "a", None, cat="ITF-M"), section="most_aces"),
+            dict(_row("2", "a", None, cat="ITF-M"), section="most_aces"),
+            dict(_row("3", "b", None, cat="WTA 125"), section="double_faults"),
+            dict(_row("4", "a", None, cat="ITF-M"), section="most_aces")]
+    ms = [SimpleNamespace(**vars(_m("1", "a")), stats={"p1_aces": 7, "p2_aces": 3}),
+          SimpleNamespace(**vars(_m("2", "b")), stats={"p1_aces": 2, "p2_aces": 5}),
+          SimpleNamespace(**vars(_m("3", "a")), stats={"p1_double_faults": 1, "p2_double_faults": 4}),
+          SimpleNamespace(**vars(_m("4", "a")), stats={"p1_aces": 4, "p2_aces": 4})]
+    rep = osh.settle_month(_ace_hist(rows), ms, asof=datetime(2026, 11, 25, tzinfo=timezone.utc))
+    v = rep["variants"]["aces_all_levels"]
+    assert v["Viac es · ITF-M"]["issued"] == 3
+    assert v["Viac es · ITF-M"]["settled"] == 2 and v["Viac es · ITF-M"]["correct"] == 1
+    assert v["Dvojchyby · WTA 125"]["correct"] == 1
+
+
+def test_calibrated_probability_slopes():
+    assert osh.calibrated_probability(0.7, "ITF-M") == 0.7 or abs(osh.calibrated_probability(0.7, "ITF-M") - 0.7) < 1e-12
+    assert osh.calibrated_probability(0.7, "Challenger") < 0.7
+    assert osh.calibrated_probability(None, "UTR") is None
