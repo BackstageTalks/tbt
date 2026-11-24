@@ -29,16 +29,19 @@ from typing import Callable
 
 import pandas as pd
 
-SCHEMA = 1
+SCHEMA = 2  # v2: per-file SHA-256 + whole-package fingerprint
 KEEP_STATES = 3  # states are large; keep only the most recent years
 
 
 def _config_fingerprint(builder) -> str:
     from . import feature_builder as fb_module
-    from .. import schemas as schemas_module
+    # Hash the whole tbt package source: any helper (Elo, rates, schemas…)
+    # change invalidates the cache. Costs only speed, never correctness.
+    package_root = Path(fb_module.__file__).resolve().parents[1]
     digest = sha256()
-    for module in (fb_module, schemas_module):
-        digest.update(Path(module.__file__).read_bytes())
+    for source in sorted(package_root.rglob("*.py")):
+        digest.update(str(source.relative_to(package_root)).encode())
+        digest.update(source.read_bytes())
     flags = {k: v for k, v in sorted(vars(builder).items())
              if isinstance(v, (bool, int, float, str))}
     digest.update(json.dumps({"schema": SCHEMA, "flags": flags,
@@ -83,13 +86,18 @@ def build_with_checkpoints(builder_factory: Callable[[], object], matches,
         manifest = {}
     stored = manifest.get("years", {}) if manifest.get("config") == config else {}
 
+    def file_ok(name, expected):
+        path = cache_dir / name
+        return (isinstance(expected, str) and path.is_file()
+                and sha256(path.read_bytes()).hexdigest() == expected)
+
     resume_year = None
     for year in reversed(years):
         entry = stored.get(str(year))
         if (entry and entry.get("prefix_sha256") == hashes[year]
-                and (cache_dir / f"state-{year}.pkl").is_file()
-                and all((cache_dir / f"frame-{y}.pkl").is_file()
-                        and stored.get(str(y), {}).get("prefix_sha256") == hashes[y]
+                and file_ok(f"state-{year}.pkl", entry.get("state_sha256"))
+                and all(stored.get(str(y), {}).get("prefix_sha256") == hashes[y]
+                        and file_ok(f"frame-{y}.pkl", stored.get(str(y), {}).get("frame_sha256"))
                         for y in years if y < year)):
             resume_year = year
             break
@@ -113,10 +121,15 @@ def build_with_checkpoints(builder_factory: Callable[[], object], matches,
     for y in years:
         if start is None or y < start:
             continue
-        (cache_dir / f"state-{y}.pkl").write_bytes(pickle.dumps(builder, protocol=5))
+        state_bytes = pickle.dumps(builder, protocol=5)
+        (cache_dir / f"state-{y}.pkl").write_bytes(state_bytes)
         frame = builder.build_training_frame(by_year[y])
         frame.to_pickle(cache_dir / f"frame-{y}.pkl")
-        new_years[str(y)] = {"prefix_sha256": hashes[y], "rows": int(len(frame))}
+        new_years[str(y)] = {
+            "prefix_sha256": hashes[y], "rows": int(len(frame)),
+            "state_sha256": sha256(state_bytes).hexdigest(),
+            "frame_sha256": sha256((cache_dir / f"frame-{y}.pkl").read_bytes()).hexdigest(),
+        }
         frames.append(frame)
 
     keep = set(years[-KEEP_STATES:])

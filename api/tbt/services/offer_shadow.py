@@ -62,11 +62,12 @@ def _ts(value):
 
 
 def _num(value):
+    import math
     try:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return number if number == number else None
+    return number if math.isfinite(number) else None
 
 
 def category(card: dict[str, Any]) -> str:
@@ -310,9 +311,15 @@ def settle_month(history, matches, *, asof) -> dict:
         for variant, rows in (cap.get("variants") or {}).items():
             if variant not in out:
                 continue
+            seen_contracts = set()
             for row in rows:
                 if row.get("published"):
                     continue  # already measured as a live pick
+                contract = (row.get("section"), row.get("event_id"), row.get("selected_player_id"),
+                            row.get("ou_side"), row.get("market_line"))
+                if contract in seen_contracts:
+                    continue  # one virtual stake per contract per day
+                seen_contracts.add(contract)
                 key = row.get("category") or "unknown"
                 if variant in MULTI_SECTION:
                     key = SECTION_LABELS.get(row.get("section"), str(row.get("section"))) + " · " + key

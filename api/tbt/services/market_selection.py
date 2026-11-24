@@ -1046,12 +1046,16 @@ def _low_odds_fill_floor() -> float | None:
 
 
 def _low_odds_fill_floor() -> float | None:
-    """TBT_TOP_LOW_ODDS_FLOOR (e.g. 1.40): conditional TOP fill below 1.50."""
-    try:
-        v = float(os.environ.get("TBT_TOP_LOW_ODDS_FLOOR", "") or 0)
-    except ValueError:
-        return None
-    return v if 1.30 <= v < 1.50 else None
+    """Conditional TOP fill below 1.50. The admin 'Ponuka' key
+    TBT_TOP_LOW_ODDS_FILL wins; TBT_TOP_LOW_ODDS_FLOOR is the workflow default."""
+    for key in ("TBT_TOP_LOW_ODDS_FILL", "TBT_TOP_LOW_ODDS_FLOOR"):
+        try:
+            v = float(os.environ.get(key, "") or 0)
+        except ValueError:
+            continue
+        if 1.30 <= v < 1.50:
+            return v
+    return None
 
 
 def value_level_ok(card: dict[str, Any]) -> bool:
