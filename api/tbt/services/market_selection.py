@@ -1334,7 +1334,9 @@ def select_market_sections(
     value_qualified.sort(key=rank, reverse=True)
 
     # VALUE retains exclusive priority. TOP ranks the remaining full priced slate.
-    value_ids = {_selection_identity(card) for card in value_qualified}
+    # AUD-01: reserve only the Value picks that will actually be issued.
+    issued_value = value_qualified if value_limit is None else value_qualified[:max(0, int(value_limit))]
+    value_ids = {_selection_identity(card) for card in issued_value}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
 

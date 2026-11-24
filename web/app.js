@@ -9,9 +9,11 @@
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
-  const fmtTime = value => value ? new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Bratislava'}).format(new Date(value)) : publicText('TBA');
-  const fmtResultDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'2-digit',year:'2-digit',timeZone:'Europe/Bratislava'}).format(new Date(value)).replace(/\s/g,'') : '—';
-  const fmtDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Bratislava'}).format(new Date(value)) : '—';
+  // AUD-12: an invalid stored date must render '—', never throw RangeError.
+  const validDate = value => value && Number.isFinite(new Date(value).getTime());
+  const fmtTime = value => validDate(value) ? new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit',timeZone:'Europe/Bratislava'}).format(new Date(value)) : publicText('TBA');
+  const fmtResultDate = value => validDate(value) ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'2-digit',year:'2-digit',timeZone:'Europe/Bratislava'}).format(new Date(value)).replace(/\s/g,'') : '—';
+  const fmtDate = value => validDate(value) ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'short',year:'numeric',timeZone:'Europe/Bratislava'}).format(new Date(value)) : '—';
   const fmtCompactDate = value => {
     if(!value)return '—';
     const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
