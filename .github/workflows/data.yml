@@ -168,8 +168,10 @@ jobs:
       # Separate owner approval; a market disagreement may LOWER TOP coverage.
       # A merge never enables this non-silence-affecting product rule.
       # Owner-gated daily TOP minimum (3-10). Reaches it only together with TBT_TOP_EMERGENCY_FILL.
-      TBT_GAMES_SUSPENDED: ${{ vars.TBT_GAMES_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_GAMES_SUSPENDED == 'true' && 'true' || 'false' }}
-      TBT_SETS_SUSPENDED: ${{ vars.TBT_SETS_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_SETS_SUSPENDED == 'true' && 'true' || 'false' }}
+      # Owner 2026-11-24: suspended by default (games 49.5 % hit, sets below base rate).
+      # Re-enable in admin Ponuka (saved 'false' overrides) or Variable TBT_GAMES_SUSPENDED=false.
+      TBT_GAMES_SUSPENDED: ${{ vars.TBT_GAMES_SUSPENDED == 'false' && 'false' || 'true' }}
+      TBT_SETS_SUSPENDED: ${{ vars.TBT_SETS_SUSPENDED == 'false' && 'false' || 'true' }}
       TBT_ACES_MIN_GAP: ${{ vars.TBT_ACES_MIN_GAP_OWNER_APPROVED == 'true' && vars.TBT_ACES_MIN_GAP || '' }}
       TBT_ACES_REAL_LINE_STRICT: ${{ vars.TBT_ACES_REAL_LINE_STRICT_OWNER_APPROVED == 'true' && vars.TBT_ACES_REAL_LINE_STRICT == 'true' && 'true' || 'false' }}
       TBT_ACES_LINE_FIRST_CANDIDATE: ${{ vars.TBT_ACES_LINE_FIRST_CANDIDATE_OWNER_APPROVED == 'true' && vars.TBT_ACES_LINE_FIRST_CANDIDATE == 'true' && 'true' || 'false' }}
