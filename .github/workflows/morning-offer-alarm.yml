@@ -17,5 +17,3 @@ jobs:
         env:
           PUBLIC_BASE: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
           WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
-          TGB: ${{ secrets.TGB }}
-          TG_ADMIN_CHAT_ID: ${{ secrets.TG_ADMIN_CHAT_ID }}

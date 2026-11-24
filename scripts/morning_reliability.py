@@ -28,18 +28,10 @@ def alarm():
         reason = "chýba aktuálny publikovaný TOP alebo Value tip"
     except (OSError, ValueError, TypeError, AttributeError):
         reason = "publikovaný feed sa nepodarilo overiť"
-    token, chat = os.environ.get("TGB"), os.environ.get("TG_ADMIN_CHAT_ID")
-    if not token or not chat:
-        raise SystemExit("Admin Telegram destination or bot not configured")
-    body = json.dumps({"chat_id": chat, "text": f"BlinQ 06:30 — {day}: {reason}."}).encode()
-    try:
-        with urlopen(Request("https://api.telegram.org/bot" + token + "/sendMessage",
-                             data=body, headers={"Content-Type": "application/json"}), timeout=15) as result:
-            if not json.load(result).get("ok"):
-                raise ValueError()
-    except Exception:
-        raise SystemExit("Telegram admin delivery not confirmed") from None
-
+    # Alarm = failed workflow run. GitHub e-mails the owner about failed
+    # scheduled runs (Settings → Notifications → Actions), no extra secrets.
+    print(f"::error title=BlinQ 06:30 alarm::{day}: {reason}")
+    raise SystemExit(f"BlinQ 06:30 — {day}: {reason}")
 
 if __name__ == "__main__":
     alarm()

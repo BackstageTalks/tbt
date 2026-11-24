@@ -10,22 +10,21 @@ import morning_reliability as mr
 ROOT = Path(__file__).resolve().parents[1]
 
 
-@pytest.mark.parametrize("top,value,sends", [(0, 0, 1), (1, 0, 0), (0, 1, 0)])
-def test_alarm_uses_only_admin_destination(monkeypatch, top, value, sends):
-    for k in ("WORKER_TOKEN", "TGB", "TG_ADMIN_CHAT_ID"):
-        monkeypatch.setenv(k, "test")
+@pytest.mark.parametrize("top,value,fails", [(0, 0, True), (1, 0, False), (0, 1, False)])
+def test_alarm_fails_run_only_without_offer(monkeypatch, top, value, fails):
+    monkeypatch.setenv("WORKER_TOKEN", "test")
     monkeypatch.setenv("PUBLIC_BASE", "https://example.invalid")
-    calls = []
     def open_request(req, **kw):
-        if req.data:
-            calls.append(json.loads(req.data)["chat_id"])
-            return io.BytesIO(b'{"ok":true}')
+        assert not req.data  # read-only: no outgoing message
         return io.BytesIO(json.dumps({"betting_day":datetime.now(mr.ZONE).date().isoformat(),
             "stale":False, "visible_counts":{"top_daily_picks":top,"value_picks":value},
             "offer_authority_keys":{"top":["t"] if top else [], "value":["v"] if value else []}}).encode())
     monkeypatch.setattr(mr, "urlopen", open_request)
-    mr.alarm()
-    assert calls == ["test"] * sends
+    if fails:
+        with pytest.raises(SystemExit):
+            mr.alarm()
+    else:
+        mr.alarm()
 
 
 def test_bad_feature_row_preserves_other_prediction(match_factory, monkeypatch):
