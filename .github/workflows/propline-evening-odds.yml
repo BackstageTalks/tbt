@@ -52,7 +52,6 @@ jobs:
       - name: Offline source/parser regressions (no provider requests)
         run: |
           python -m unittest discover -s tests -p 'test_propline_evening_*.py' -v
-          python -m unittest discover -s tests -p 'test_propline_drive_archive.py' -v
       - name: Resolve next Bratislava betting day
         id: day
         shell: bash
@@ -203,20 +202,9 @@ jobs:
                             "source_errors": len(report["errors"]),
                             "cdb_writes": 0}, sort_keys=True))
           PY
-      - name: Install scoped Google Drive authenticated client
-        run: python -m pip install --disable-pip-version-check google-auth requests
-      - name: Archive to PropLine Google Drive folder and verify actual bytes
-        env:
-          BLINQ_DRIVE_WRITER_JSON: ${{ secrets.BLINQ_DRIVE_WRITER_JSON }}
-          BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
-          BETTING_DAY: ${{ steps.day.outputs.date }}
-          PROPLINE_DRIVE_FOLDER_ID: "1C7_B2LB37IVTK9gBu2TT9dSj5XClIUKh"
-        run: |
-          set -euo pipefail
-          python scripts/propline_drive_archive.py \
-            --report reports/propline-evening/odds.json \
-            --day "$BETTING_DAY" --run-id "$GITHUB_RUN_ID" \
-            --folder "$PROPLINE_DRIVE_FOLDER_ID"
+      # Drive archive removed 2026-11-24 (owner): service accounts have no
+      # storage quota on a personal My Drive (HTTP 403). Quotes persist in
+      # tbt-data research/propline-evening-odds with verified read-back above.
       - name: Keep local evidence even if provider access is blocked
         if: always()
         uses: actions/upload-artifact@v4
