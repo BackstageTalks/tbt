@@ -878,11 +878,11 @@ def enrich_current_betting_day_odds(
             if quarantine is None:
                 raise
             quarantine.append({"event_id": event_id, "stage": "odds", "reason": type(exc).__name__})
-            # Keep the model prediction; only this match's odds are skipped.
-            indexed[event_id] = deepcopy(row)
+            indexed[event_id] = None
 
 
     enriched = [indexed.get(str(row.get("event_id") or ""), deepcopy(row)) for row in predictions]
+    enriched = [row for row in enriched if row is not None]
     report["coverage"] = (
         report["odds_available"] / report["odds_requested"]
         if report["odds_requested"] else 0.0
