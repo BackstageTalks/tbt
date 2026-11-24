@@ -804,6 +804,11 @@
       method: 'POST', body: JSON.stringify(payload),
     } : undefined);
   }
+  async function adminOfferFlags(updates) {
+    return apiWithSession('/api/v1/admin/offer-flags', updates ? {
+      method: 'POST', body: JSON.stringify({ updates }),
+    } : undefined);
+  }
   async function adminModelTraining(payload) {
     return apiWithSession('/api/v1/admin/model-training', payload ? {
       method: 'POST', body: JSON.stringify(payload),
@@ -968,7 +973,7 @@
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults,
     adminResultTestExclusions, adminSetResultTestExclusions,
-    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminUsers, adminAccountAudit, adminAccountTelemetry, adminSetTelemetryRetention, adminClearTelemetry, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminModelCalibration, adminModelLab, adminModelTraining, adminOfferFlags, adminUsers, adminAccountAudit, adminAccountTelemetry, adminSetTelemetryRetention, adminClearTelemetry, adminSetAccountActivityRetention, adminClearAccountActivity, adminConfirmTelegramCleanup, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews, comparatorPlayers, comparatorCompare,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, adminUploadInsightMedia, insightMedia, clear,
     sessionStorageKeys, sessionEpochKey,
