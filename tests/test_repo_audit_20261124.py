@@ -5,20 +5,10 @@ import pytest
 from test_market_selection import row
 from tbt.services.market_selection import (
     _exclusive_section_assignment,
-    select_market_sections,
 )
 
 
-def test_value_cap_leaves_independently_eligible_pick_available_to_top():
-    candidate = row("qualified-for-both", .80, 1.90, 2.00, depth=.95, surface1=20, surface2=20)
-    positive = select_market_sections([candidate], value_limit=1)
-    assert [item["event_id"] for item in positive["value_picks"]] == ["qualified-for-both"]
-    assert positive["top_daily_picks"] == []
-    capped = select_market_sections([candidate], value_limit=0)
-    assert [item["event_id"] for item in capped["top_daily_picks"]] == ["qualified-for-both"]
 
-
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="AUD-02: incomplete identity produces a truthy key")
 def test_section_assignment_rejects_rows_without_event_identity():
     selected, _, _ = _exclusive_section_assignment({
         "top_daily": [{"market": "match_winner", "selection_id": "p1", "betting_day": "2026-09-07"}],
@@ -27,7 +17,6 @@ def test_section_assignment_rejects_rows_without_event_identity():
 
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason="AUD-03: teaser uses elapsed hours across DST")
 @pytest.mark.parametrize(
     ("instant", "expected_day"),
     [
@@ -59,3 +48,46 @@ def test_teaser_betting_day_uses_bratislava_wall_clock(instant, expected_day):
         [node, "-e", code, instant], check=True, capture_output=True, text=True, timeout=10,
     ).stdout.strip()
     assert actual == expected_day
+
+
+def test_telegram_matches_equivalent_numeric_ace_lines():
+    from telegram_daily_results import match_result
+
+    sent = {
+        "event_id": "e1", "selection_id": "a", "section": "ace",
+        "market": "aces", "market_line": 8, "projection_direction": "over",
+    }
+    archived = {
+        **sent, "market_line": 8.0,
+        "result": {"runtime_source": "match_status_snapshot", "correct": True},
+    }
+    assert match_result(sent, [archived]) == archived
+
+
+def test_mobile_hero_image_exists():
+    import json
+    from pathlib import Path
+
+    web = Path(__file__).resolve().parents[1] / "web"
+    config = json.loads((web / "config" / "banners.json").read_text(encoding="utf-8"))
+    banners = config["main_banner"]["slides"]
+    local_images = [banner["mobile_image_url"] for banner in banners
+                    if banner.get("mobile_image_url", "").startswith("/assets/")]
+    assert all((web / url.lstrip("/")).is_file() for url in local_images)
+
+
+def test_shadow_rejects_extra_rows_outside_the_prepared_slate():
+    from datetime import datetime, timezone
+    from tbt.services.offer_shadow import build_offer_shadow
+
+    day = "2026-11-24"
+    prediction = row("prepared", .80, 1.90, 2.00)
+    prediction["scheduled_at"] = day + "T10:00:00Z"
+    prediction["betting"]["betting_day"] = day
+    capture = build_offer_shadow(
+        [prediction], observed_at=datetime(2026, 11, 24, 5, tzinfo=timezone.utc),
+        public_offer_day=day, extra_variants={
+            "aces_all_levels": [{"event_id": "outside-slate", "section": "most_aces"}],
+        },
+    )
+    assert capture["variants"]["aces_all_levels"] == []

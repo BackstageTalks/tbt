@@ -242,7 +242,9 @@ def build_offer_shadow(predictions, *, observed_at, public_offer_day, extra_vari
         variants[name] = rows
     for name, rows in (extra_variants or {}).items():
         if name in VARIANT_LABELS and isinstance(rows, list):
-            variants[name] = rows
+            # AUD-19: only fixtures of today's prepared pre-start slate.
+            variants[name] = [r for r in rows if isinstance(r, dict)
+                              and str(r.get("event_id") or "") in by_event]
     capture = {"schema": SCHEMA, "public_offer_day": public_offer_day,
                "captured_at": clock.isoformat(), "variants": variants}
     capture["sha256"] = _digest(capture)
