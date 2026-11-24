@@ -123,9 +123,21 @@ jobs:
           python scripts/guarded_candidate_backup.py verify
       - name: Release canonical writer immediately after complete immutable snapshot
         run: python scripts/cdb_global_writer_lock.py release
+      - name: Restore point-in-time feature checkpoints (optional speed-up)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # Missing/stale checkpoints only mean a full replay; content is
+          # validated by config fingerprint + full prefix SHA-256 per year.
+          mkdir -p .cache/tbt/feature-checkpoints
+          gh release download tbt-feature-checkpoints-v1 -R BackstageTalks/tbt-data \
+            -p "feature-checkpoints-${BLINQ_TRAINING_PROFILE}.tar" -D .cache/tbt || exit 0
+          tar -xf ".cache/tbt/feature-checkpoints-${BLINQ_TRAINING_PROFILE}.tar" -C .cache/tbt/feature-checkpoints
+          rm -f ".cache/tbt/feature-checkpoints-${BLINQ_TRAINING_PROFILE}.tar"
       - name: Audit frozen training history for identity and point-in-time leakage
         run: |
           set -euo pipefail
+          export TBT_FEATURE_CHECKPOINT_DIR=.cache/tbt/feature-checkpoints
           # Read-only audit after the immutable input snapshot; fit is forbidden
           # unless all checks pass and the run-bound backup remains valid.
           python scripts/audit_training_leakage.py \
@@ -220,6 +232,19 @@ jobs:
           with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f:
               f.write('\n'.join(rows)+'\n')
           PY
+      - name: Save point-in-time feature checkpoints for the next run
+        if: success()
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          test -f .cache/tbt/feature-checkpoints/manifest.json
+          tar -cf "feature-checkpoints-${BLINQ_TRAINING_PROFILE}.tar" -C .cache/tbt/feature-checkpoints .
+          gh release view tbt-feature-checkpoints-v1 -R BackstageTalks/tbt-data >/dev/null 2>&1 || \
+            gh release create tbt-feature-checkpoints-v1 -R BackstageTalks/tbt-data \
+              --title "Training feature checkpoints (cache, safe to delete)" \
+              --notes "Speed-up cache for point-in-time feature replay. Deleting it only forces a full replay."
+          gh release upload tbt-feature-checkpoints-v1 -R BackstageTalks/tbt-data \
+            "feature-checkpoints-${BLINQ_TRAINING_PROFILE}.tar" --clobber
       - name: Persist non-sensitive run proof as GitHub artifact
         if: always()
         uses: actions/upload-artifact@v4
