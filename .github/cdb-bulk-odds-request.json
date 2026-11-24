@@ -1,0 +1,14 @@
+{
+  "workflow": "cdb-bulk-odds-import.yml",
+  "mode": "write",
+  "approved_by_operator": true,
+  "source": "tennisapi1 daily bulk odds artifact run 45135311353 (already paid, 1000 days)",
+  "approved_in_chat": "2026-11-23 19:27 owner: ok, kurzy, potom rebricky, potom sety a gemy, pokracuj",
+  "expected_staged_matches": 133888,
+  "expected_new_stat_values": 0,
+  "expected_changed_years": [
+    2024,
+    2025,
+    2026
+  ]
+}

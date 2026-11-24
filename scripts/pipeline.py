@@ -588,7 +588,7 @@ def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None,
 
 def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
-    *, odds_report=None, ace_picks=None, ace_report=None, ace_winner_picks=None,
+    *, shadow_ace_rows=None, odds_report=None, ace_picks=None, ace_report=None, ace_winner_picks=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
     settlement_matches=None, comparator_artifact=None,
@@ -764,6 +764,23 @@ def _publish_predictions(
                               "error_type": type(exc).__name__,
                               "detail": str(exc)[:280],
                               "production_modified": False}), flush=True)
+    # Offer SHADOW testing: virtual, never-published picks in categories the
+    # admin 'Ponuka' excludes. Frozen once per betting day; research only.
+    if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
+        try:
+            from tbt.services.offer_shadow import build_offer_shadow, first_day_capture
+            if first_day_capture(candidate_history, public_offer_day=public_offer_day) is None:
+                offer_shadow = build_offer_shadow(
+                    predictions, observed_at=now, public_offer_day=public_offer_day,
+                    ace_candidates=shadow_ace_rows)
+                if offer_shadow is not None:
+                    candidate_snapshot["offer_shadow"] = offer_shadow
+                    print(json.dumps({"offer_shadow_capture": {
+                        k: len(v) for k, v in offer_shadow["variants"].items()}}), flush=True)
+        except Exception as exc:
+            print(json.dumps({"warning": "offer_shadow_capture_failed",
+                              "error_type": type(exc).__name__,
+                              "detail": str(exc)[:280]}), flush=True)
     candidate_history["snapshots"].append(candidate_snapshot)
     with gzip.open(candidate_month_path, "wt", encoding="utf-8", compresslevel=6) as handle:
         json.dump(clean(candidate_history), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
@@ -797,6 +814,13 @@ def _publish_predictions(
         before_upload=_telegram_offer_before_upload,
         remove_names=("comparator.json.gz",) if not isinstance(comparator_artifact, dict) else (),
     )
+    if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
+        try:
+            _publish_offer_shadow(candidate_history, settlement_source, now)
+        except Exception as exc:
+            print(json.dumps({"warning": "offer_shadow_publish_failed",
+                              "error_type": type(exc).__name__,
+                              "detail": str(exc)[:280]}), flush=True)
     if os.getenv("TBT_MARKET_RANK_SHADOW_ENABLED", "").lower() == "true":
         try:
             from tbt.services.market_rank_shadow import (
@@ -847,6 +871,25 @@ def _publish_predictions(
                               "detail": str(exc)[:280],
                               "production_modified": False}), flush=True)
     return feed
+
+
+def _publish_offer_shadow(candidate_history, settlement_source, now) -> None:
+    """Settle this month's virtual picks and send aggregates to Admin."""
+    from urllib.request import Request, urlopen
+    from tbt.services.offer_shadow import settle_month
+    report = settle_month(candidate_history, settlement_source, asof=now)
+    print(json.dumps({"offer_shadow_month": report}, ensure_ascii=False), flush=True)
+    base = os.getenv("BLINQ_SHARED_API_BUDGET_URL", "")
+    token = os.getenv("BLINQ_SHARED_API_BUDGET_TOKEN", "")
+    if not base.endswith("/api-budget/reserve") or not token or not report["days"]:
+        return
+    url = base[: -len("/api-budget/reserve")] + "/offer-shadow"
+    body = json.dumps({"month": candidate_history.get("month") or f"{now:%Y-%m}",
+                       "report": report}).encode()
+    request = Request(url, data=body, method="POST", headers={
+        "Content-Type": "application/json", "X-Blinq-Worker-Token": token})
+    with urlopen(request, timeout=20) as response:
+        print(json.dumps({"offer_shadow_publish": response.status}), flush=True)
 
 
 def _require_training_backup_gate(*, read_only_frozen: bool = False) -> dict:
@@ -1395,6 +1438,7 @@ def main():
     upcoming = []
     odds_report = None
     ace_picks = []
+    shadow_ace_rows = None
     ace_report = None
     propline_aces_shadow_result = {"status": "NOT_ENABLED"}
     ace_winner_picks = []
@@ -1968,11 +2012,11 @@ def main():
                 if candidate_archive is None:
                     candidate_archive, candidate_source = load_propline_evening_report(
                         betting_day=candidate_day, now=candidate_now)
-                projection_odds_report["line_first_candidate"] = select_candidate(
+                candidate_result = select_candidate(
                     project_candidates(matches, predictions, now=candidate_now),
                     candidate_archive, now=candidate_now,
                     betting_day=candidate_day, rapid_payloads=projection_market_cache)
-                projection_odds_report["line_first_candidate"]["source_status"] = candidate_source
+                shadow_ace_rows = candidate_result["picks"]
             except Exception as exc:
                 projection_odds_report["line_first_candidate"] = {
                     "status": "blocked", "error_type": type(exc).__name__,
@@ -2187,7 +2231,7 @@ def main():
     feed = _publish_predictions(
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
-        odds_report=odds_report, ace_picks=ace_picks, ace_report=ace_report,
+        shadow_ace_rows=shadow_ace_rows, odds_report=odds_report, ace_picks=ace_picks, ace_report=ace_report,
         ace_winner_picks=ace_winner_picks,
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,

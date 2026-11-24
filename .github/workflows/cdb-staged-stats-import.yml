@@ -53,6 +53,9 @@ jobs:
             test -f "$(jq -r '.input' .github/cdb-staged-stats-request.json)"
           fi
           test "$TBT_DATA_REPOSITORY" = "BackstageTalks/tbt-data"
+          if [[ "$(jq -r '.allow_score_fields // false' .github/cdb-staged-stats-request.json)" == "true" ]]; then
+            echo "TBT_STAGED_ALLOW_SCORE=1" >> "$GITHUB_ENV"
+          fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "Staged stats import mode: $mode"
 

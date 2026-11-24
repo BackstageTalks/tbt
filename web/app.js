@@ -4648,6 +4648,7 @@
       if(Object.prototype.hasOwnProperty.call(counts,item.outcome))counts[item.outcome]++;
     });
     let dailyRunning=0;
+    // Accumulate chronologically, then show the most recent day first.
     const focusedRows=daysWithResults.map((date,index)=>{
       const settled=dailyOutcomes.get(date)||{win:0,loss:0,void:0};
       const dayProfit=m?.daily.get(date);
@@ -4658,7 +4659,7 @@
         '<td class="monthly-unit'+(dayDisplay==null?' monthly-cell-empty':moneyClass(dayDisplay))+'">'+
         (dayDisplay==null?'·':escapeHtml(signed(dayDisplay))+' u')+'</td>'+
         '<td class="monthly-unit'+moneyClass(dailyRunning)+'">'+escapeHtml(signed(roundUnits(dailyRunning)))+' u</td></tr>';
-    }).join('');
+    }).reverse().join('');
     const periodText=singleDay?(Number(from.slice(-2))+'. deň · 06:00–06:00'):
       days?(from.slice(8)==='01'&&!spansMonths?'1. – '+Number(to.slice(-2))+'. deň · 06:00–06:00':
         rangeLabel+' · 06:00–06:00'):'bez dát';
@@ -7400,11 +7401,50 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function renderAdminMonthlyResults(){
     return '<section class="admin-ux-section">'+renderMonthlyPerformance()+'</section>';
   }
+
+  function renderAdminOffer(){
+    const d=state.adminOffer;
+    if(!d&&!state.adminOfferLoading){state.adminOfferLoading=true;BlinqAuth.adminOfferFlags().then(r=>{state.adminOffer=r;state.adminOfferError='';}).catch(e=>{state.adminOfferError=e?.message||'Nepodarilo sa načítať Ponuku.';}).finally(()=>{state.adminOfferLoading=false;setTimeout(rerenderAdmin,0);});}
+    if(state.adminOfferError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminOfferError)+'</p></section>';
+    if(!d)return '<section class="admin-ux-section"><p role="status">Načítava sa…</p></section>';
+    const groups={};(d.items||[]).forEach(it=>{(groups[it.group]=groups[it.group]||[]).push(it);});
+    const field=it=>{const id='offer-'+it.key;let input='';
+      if(it.type==='bool')input='<input type="checkbox" id="'+id+'" data-offer-key="'+it.key+'" data-offer-type="bool" '+(it.value?'checked':'')+'>';
+      else if(it.type==='number')input='<input type="number" id="'+id+'" data-offer-key="'+it.key+'" data-offer-type="number" min="'+it.min+'" max="'+it.max+'" step="'+it.step+'" value="'+escapeHtml(String(it.value))+'">';
+      else{const cur=String(it.value||'').split(',');input='<span class="admin-offer-multi" data-offer-key="'+it.key+'" data-offer-type="multi">'+(it.options||[]).map(o=>'<label><input type="checkbox" value="'+escapeHtml(o)+'" '+(cur.includes(o)?'checked':'')+'> '+escapeHtml(o)+'</label>').join(' ')+'</span>';}
+      const meta=it.saved?('Uložené '+escapeHtml(fmtDate(it.updated_at)+' · '+fmtTime(it.updated_at))):'Neuložené · platí GitHub Variable';
+      return '<div class="admin-form-row"><label for="'+id+'"><strong>'+escapeHtml(it.label)+'</strong><small>'+escapeHtml(it.help||'')+'</small><small>'+meta+'</small></label>'+input+'</div>';};
+    const body=Object.keys(groups).map(g=>'<div class="admin-form-section"><div class="admin-form-section-title"><strong>'+escapeHtml(g)+'</strong></div>'+groups[g].map(field).join('')+'</div>').join('');
+    return '<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>PONUKA</small><h2>Pravidlá výberu predikcií</h2><p>Zmena platí od najbližšieho ranného/obnovovacieho behu. Neuložené položky sa riadia GitHub Variables.</p></div><div class="admin-system-actions"><button class="btn btn-primary" type="button" data-admin-action="offer-save" '+(state.adminOfferSaving?'disabled aria-busy="true"':'')+'>Uložiť Ponuku</button></div></div>'+body+'</section>';
+  }
+  function renderAdminShadow(){
+    const d=state.adminShadow;
+    if(!d&&!state.adminShadowLoading){state.adminShadowLoading=true;BlinqAuth.adminOfferShadow().then(r=>{state.adminShadow=r;state.adminShadowError='';}).catch(e=>{state.adminShadowError=e?.message||'Shadow testing sa nepodarilo načítať.';}).finally(()=>{state.adminShadowLoading=false;setTimeout(rerenderAdmin,0);});}
+    if(state.adminShadowError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminShadowError)+'</p></section>';
+    if(!d)return '<section class="admin-ux-section"><p role="status">Načítava sa…</p></section>';
+    const pct=v=>v==null?'—':(v*100).toFixed(1).replace('.',',')+' %';
+    const num=v=>v==null?'—':v.toFixed(2).replace('.',',');
+    const rows=(d.rows||[]).map(r=>{const cls=r.roi==null?'':(r.roi>=0?' style="color:var(--success,#1a7f37)"':' style="color:var(--danger,#c62828)"');
+      return '<tr><td>'+escapeHtml(r.label)+'</td><td>'+escapeHtml(r.category)+'</td><td>'+r.issued+'</td><td>'+r.settled+'</td><td>'+pct(r.hit_rate)+'</td><td>'+num(r.avg_odds)+'</td><td'+cls+'>'+pct(r.roi)+'</td><td'+cls+'>'+num(r.profit_units)+'</td></tr>';}).join('');
+    const table=rows?'<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Test</th><th>Kategória</th><th>Vydané</th><th>Vyhodnotené</th><th>Úspešnosť</th><th>Ø kurz</th><th>ROI</th><th>Zisk (j.)</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p role="status">Zatiaľ bez záznamov. Prvé virtuálne predikcie pribudnú pri najbližšom behu.</p>';
+    return '<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SHADOW TESTING</small><h2>Nepublikované predikcie</h2><p>Virtuálne predikcie v kategóriách, ktoré Ponuka vylučuje. Nepublikujú sa, len sa vyhodnocujú, aby bolo vidno, kedy sa oplatí kategóriu zapnúť. Dni: '+(d.days||0)+' · mesiace: '+escapeHtml((d.months||[]).join(', ')||'—')+'.</p></div><div class="admin-system-actions"><button class="btn" type="button" data-admin-action="shadow-reload">Obnoviť</button></div></div>'+table+'<p class="admin-detail-help">Rovný vklad 1 jednotka. Zarátané len predikcie, ktoré naživo publikované neboli. Odporúčanie: kategóriu zapnúť až pri aspoň 200 vyhodnotených a kladnom ROI.</p></section>';
+  }
+  async function saveAdminOffer(){
+    const updates={};
+    document.querySelectorAll('[data-offer-key]').forEach(el=>{const k=el.dataset.offerKey,t=el.dataset.offerType;
+      if(t==='bool')updates[k]=el.checked;
+      else if(t==='number'){const v=Number(el.value);if(Number.isFinite(v))updates[k]=v;}
+      else updates[k]=[...el.querySelectorAll('input:checked')].map(i=>i.value).join(',');});
+    state.adminOfferSaving=true;rerenderAdmin();
+    try{state.adminOffer=await BlinqAuth.adminOfferFlags(updates);showStatus('Ponuka uložená · platí od najbližšieho behu.');}
+    catch(e){showStatus(e?.message||'Uloženie Ponuky zlyhalo.');}
+    finally{state.adminOfferSaving=false;rerenderAdmin();}
+  }
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard · KPI','3 karty · KPI'],['testresults','Testovacie tipy','Manuálne vylúčenia'],['dataexport','Export CSV','Výsledky · predikcie'],['monthlyresults','Mesačný výkon','ROI · profit · filtre'],['layout','Zobrazenie','Prístupy · panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram skupiny','Skupiny · odkazy'],['tgbot','Telegram bot','Tipy · rozvrh'],['insights','INFO & LIVE','Správy · radar'],['calibration','Model Lab','Tréning · kalibrácia'],['system','Systém','Diagnostika']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard · KPI','3 karty · KPI'],['offer','Ponuka','Pravidlá výberu predikcií'],['shadow','Shadow testing','Nepublikované · vyhodnotenie'],['testresults','Testovacie tipy','Manuálne vylúčenia'],['dataexport','Export CSV','Výsledky · predikcie'],['monthlyresults','Mesačný výkon','ROI · profit · filtre'],['layout','Zobrazenie','Prístupy · panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram skupiny','Skupiny · odkazy'],['tgbot','Telegram bot','Tipy · rozvrh'],['insights','INFO & LIVE','Správy · radar'],['calibration','Model Lab','Tréning · kalibrácia'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,testresults:renderAdminTestList,dataexport:renderAdminDataExport,monthlyresults:renderAdminMonthlyResults,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,tgbot:renderAdminTelegramBot,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
-    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard · KPI','Nastavenie troch hlavných metrík bez zmeny grafiky.'],testresults:['Testovacie tipy','Manuálne vylúčenie testovacích predikcií.'],dataexport:['Export CSV','Kompletné výsledky a publikované predikcie na stiahnutie.'],monthlyresults:['Mesačný výkon','Mesačné výsledky a nastaviteľné filtre výpočtu.'],layout:['Zobrazenie','Všetky prístupy levelov, história výsledkov, panely a denné riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram skupiny','Skupiny, odkazy a minimálna úroveň prístupu.'],tgbot:['Telegram bot','TOP, Value, Esá · čas a formát odosielania.'],insights:['INFO & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Model Lab & kalibrácia','Riadený tréning, shadow a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,offer:renderAdminOffer,shadow:renderAdminShadow,testresults:renderAdminTestList,dataexport:renderAdminDataExport,monthlyresults:renderAdminMonthlyResults,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,tgbot:renderAdminTelegramBot,insights:renderAdminInsights,calibration:()=>renderAdminModelLab()+renderAdminCalibration(),system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard · KPI','Nastavenie troch hlavných metrík bez zmeny grafiky.'],offer:['Ponuka','Prepínače, ktoré menia výber publikovaných predikcií. Platí od najbližšieho behu.'],shadow:['Shadow testing','Nepublikované predikcie vylúčených kategórií a ich vyhodnotenie.'],testresults:['Testovacie tipy','Manuálne vylúčenie testovacích predikcií.'],dataexport:['Export CSV','Kompletné výsledky a publikované predikcie na stiahnutie.'],monthlyresults:['Mesačný výkon','Mesačné výsledky a nastaviteľné filtre výpočtu.'],layout:['Zobrazenie','Všetky prístupy levelov, história výsledkov, panely a denné riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram skupiny','Skupiny, odkazy a minimálna úroveň prístupu.'],tgbot:['Telegram bot','TOP, Value, Esá · čas a formát odosielania.'],insights:['INFO & LIVE','Správy podľa levelu a Comeback radar.'],calibration:['Model Lab & kalibrácia','Riadený tréning, shadow a porovnanie s produkciou.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov ulož tlačidlom Uložiť · bez globálneho Publikovať</div>';
     else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Projektové operácie majú vlastné uloženie · bez globálneho Publikovať</div>';
@@ -8201,6 +8241,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         if(!await confirmAdminModelOperation('Natrénovať kandidáta '+label+'? '+(profile==='standard'?'Model sa uloží bez aktivácie.':'Po úspešných nezávislých kontrolách sa aktivuje iba v shadow.')+' Produkčný champion sa nemení.'))return;
         loadAdminTraining(true,profile);return;
       }
+      if(action==='offer-save'){saveAdminOffer();return;}
+      if(action==='shadow-reload'){state.adminShadow=null;rerenderAdmin();return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};

@@ -1035,6 +1035,38 @@ def _top_quality_rank(card: dict[str, Any]) -> tuple:
 ENV_VALUE_SERVE_RETURN = "TBT_VALUE_SERVE_RETURN"
 
 
+def _low_odds_fill_floor() -> float | None:
+    """TBT_TOP_LOW_ODDS_FILL (e.g. 1.40): admit 1.40-1.49 TOP picks ONLY when
+    fewer than the TOP minimum qualify at >=1.50. Empty/0 = off."""
+    try:
+        v = float(os.environ.get("TBT_TOP_LOW_ODDS_FILL", "") or 0)
+    except ValueError:
+        return None
+    return v if 1.01 <= v < 1.50 else None
+
+
+def _low_odds_fill_floor() -> float | None:
+    """TBT_TOP_LOW_ODDS_FLOOR (e.g. 1.40): conditional TOP fill below 1.50."""
+    try:
+        v = float(os.environ.get("TBT_TOP_LOW_ODDS_FLOOR", "") or 0)
+    except ValueError:
+        return None
+    return v if 1.30 <= v < 1.50 else None
+
+
+def value_level_ok(card: dict[str, Any]) -> bool:
+    """Admin 'Ponuka': Value only in listed competitions (empty = all).
+    ITF is split by tour: ITF-M (ATP tour) / ITF-W (WTA tour)."""
+    raw = str(os.environ.get("TBT_VALUE_LEVELS", "")).strip()
+    if not raw:
+        return True
+    from .top_policy import competition_group
+    group = competition_group(card)
+    if group == "ITF":
+        group = "ITF-M" if str(card.get("tour") or "").upper() == "ATP" else "ITF-W"
+    return group in {x.strip() for x in raw.split(",") if x.strip()}
+
+
 def value_serve_return_ok(card: dict[str, Any]) -> bool:
     """Owner-gated VALUE filter (default OFF): publish only the side with the
     better pre-match serve+return quality. Missing stats never pass when ON."""
@@ -1214,6 +1246,8 @@ def select_market_sections(
     top_fallback: list[dict[str, Any]] = []
     top_rejection_counts: dict[str, int] = {}
     top_emergency_pool: list[dict[str, Any]] = []
+    top_low_odds_pool: list[dict[str, Any]] = []
+    top_low_odds_pool: list[dict[str, Any]] = []
     # Daily TOP minimum: champion 3, or owner-approved TBT_TOP_MIN_PICKS (3-10).
     _top_min = top_min_picks(TOP_MIN_COUNT)
 
@@ -1246,6 +1280,7 @@ def select_market_sections(
             )
             and _is_close_odds_value(card)
             and value_serve_return_ok(card)
+            and value_level_ok(card)
         ):
             value_qualified.append(card)
 
@@ -1278,6 +1313,9 @@ def select_market_sections(
             tagged = deepcopy(card)
             tagged["selection_tier"] = "ranked_core"
             top_core.append(tagged)
+        elif reasons == ["missing_or_low_odds"] and _low_odds_fill_floor() is not None \
+                and (_number(card.get("odds")) or 0.0) + 1e-12 >= _low_odds_fill_floor():
+            top_low_odds_pool.append(deepcopy(card))
         elif emergency_pool_member(card, reasons):
             # Rejected ONLY by model floor; never include unless separate
             # emergency-fill owner flag is explicitly enabled.
@@ -1302,6 +1340,18 @@ def select_market_sections(
     top_qualified, top_fallback_added, top_fallback_applied = _rank_full_slate_top(
         top_core, top_fallback, target=top_limit, minimum=_top_min,
     )
+    # Owner rule: 1.40-1.49 TOP only when the >=1.50 slate is below minimum.
+    if len(top_qualified) < _top_min and top_low_odds_pool:
+        used = {_selection_identity(card) for card in top_qualified}
+        for card in sorted(top_low_odds_pool, key=rank, reverse=True):
+            if len(top_qualified) >= _top_min:
+                break
+            ident = _selection_identity(card)
+            if ident in used or ident in value_ids:
+                continue
+            card["selection_tier"] = "low_odds_fill"
+            top_qualified.append(card)
+            used.add(ident)
     top_qualified = emergency_fill(
         top_qualified,
         [card for card in top_emergency_pool if _selection_identity(card) not in value_ids],

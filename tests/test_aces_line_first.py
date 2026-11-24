@@ -209,3 +209,20 @@ def test_staging_preserves_observed_events_after_start():
     from datetime import timedelta
     archive = report()
     assert stage(archive, day=DAY, now=MORNING) == stage(archive, day=DAY, now=MORNING + timedelta(hours=8))
+
+def test_evening_repeat_skips_capture_and_write(tmp_path):
+    from prepare_evening_aces import prepare
+    day = "2026-11-24"
+    def request(path, *args, **kwargs):
+        assert not args
+        return [{"name": "aces-offers-2026-11-24.json"}] if "/assets?" in path else {"id": 123}
+    assert prepare(day, tmp_path / "report", request=request) == "complete"
+    assert not list(tmp_path.iterdir())
+
+
+def test_unpaired_under_without_price_cannot_be_selected():
+    from aces_line_first import offered_contracts
+    event = {"provider_raw_event": {"bookmakers": [{"key": "book", "markets": [
+        {"key": "player_aces", "outcomes": [{"name": "Under", "point": 12.5,
+        "price": None, "description": "Ben Shelton"}]}]}]}}
+    assert not list(offered_contracts(event, "Ben Shelton"))

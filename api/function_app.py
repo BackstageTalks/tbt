@@ -2986,6 +2986,75 @@ def admin_result_test_exclusions(req):
         return response({"error": "result_exclusion_storage_unavailable"}, 503)
 
 
+@app.route(route="v1/admin/offer-flags", methods=["GET", "POST"])
+def admin_offer_flags(req):
+    """Admin 'Ponuka': switches that shape the published offer."""
+    from tbt.services.offer_flags import describe, set_offer_flags
+    admin, denied = _admin_user(req)
+    if denied:
+        return denied
+    try:
+        if req.method == "GET":
+            return response(describe())
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        updates = payload.get("updates") if isinstance(payload, dict) else None
+        set_offer_flags(updates, str(admin.get("id") or ""))
+        return response(describe())
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        logging.exception("Offer flag storage unavailable")
+        return response({"error": "offer_flags_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/internal/offer-flags", methods=["GET"])
+def internal_offer_flags(req):
+    """Pipeline reads admin-saved switches; unsaved keys keep GitHub Variables."""
+    from tbt.services.offer_flags import as_env, load_offer_flags
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        return response({"ok": True, "env": as_env(load_offer_flags())})
+    except AdminStorageUnavailable:
+        return response({"ok": False, "error": "offer_flags_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/internal/offer-shadow", methods=["POST"])
+def internal_offer_shadow(req):
+    """Pipeline sends monthly aggregates of virtual (unpublished) picks."""
+    from tbt.services.offer_shadow import save_month
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    if len(req.get_body()) > 32_000:
+        return response({"error": "payload_too_large"}, 413)
+    try:
+        body = req.get_json()
+        save_month(str(body.get("month")), body.get("report"))
+        return response({"ok": True})
+    except (ValueError, AttributeError):
+        return response({"error": "invalid_offer_shadow"}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "offer_shadow_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/offer-shadow", methods=["GET"])
+def admin_offer_shadow(req):
+    """Admin 'Shadow testing': results of virtual picks by category."""
+    from tbt.services.offer_shadow import load_months, summarize
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        return response({"ok": True, **summarize(load_months())})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "offer_shadow_storage_unavailable"}, 503)
+
+
 @app.route(route="v1/admin/live-radar/results", methods=["GET"])
 def admin_live_radar_results(req):
     admin, denied = _admin_user(req)

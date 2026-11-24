@@ -106,10 +106,27 @@ RICH_CHARTING_FEATURE_NAMES = [
 ]
 
 
-def stats_surface_key(surface: str) -> str:
-    """Surface bucket used by performance statistics. Indoor hard shares the hard pool; indoor remains a separate feature."""
+_SURFACE_KEY_CACHE: dict = {}
+
+
+def _stats_surface_key_uncached(surface: str) -> str:
     value = str(surface or "unknown").strip().lower()
     return "hard" if value == "indoor_hard" else value
+
+
+def stats_surface_key(surface: str) -> str:
+    """Surface bucket used by performance statistics. Indoor hard shares the hard pool; indoor remains a separate feature."""
+    try:
+        return _SURFACE_KEY_CACHE[surface]
+    except (KeyError, TypeError):
+        pass
+    result = _stats_surface_key_uncached(surface)
+    try:
+        if len(_SURFACE_KEY_CACHE) < 4096:
+            _SURFACE_KEY_CACHE[surface] = result
+    except TypeError:
+        pass
+    return result
 
 
 @dataclass
@@ -509,12 +526,21 @@ class FeatureBuilder:
 
         denominator = prior_weight
 
+        # Hot path (called ~20x per match). The surface key is hoisted and
+        # missing values are skipped before the weight is computed; the
+        # arithmetic and its order are unchanged, so results are bit-identical.
+        target_key = stats_surface_key(surface) if surface else "unknown"
+        filter_surface = target_key != "unknown"
         for item in recent:
-            if (
-                surface
-                and stats_surface_key(surface) != "unknown"
-                and stats_surface_key(item.surface) != stats_surface_key(surface)
-            ):
+            if filter_surface and stats_surface_key(item.surface) != target_key:
+                continue
+
+            value = getattr(
+                item,
+                field_name,
+            )
+
+            if value is None:
                 continue
 
             age_days = max(
@@ -532,14 +558,6 @@ class FeatureBuilder:
                     / half_life_days
                 )
             )
-
-            value = getattr(
-                item,
-                field_name,
-            )
-
-            if value is None:
-                continue
 
             numerator += (
                 weight
@@ -638,6 +656,7 @@ class FeatureBuilder:
         *,
         surface: str | None = None,
     ) -> float | None:
+        target_key = stats_surface_key(surface) if surface else "unknown"
         observed = [
             getattr(
                 item,
@@ -645,9 +664,8 @@ class FeatureBuilder:
             )
             for item in state.recent
             if (
-                not surface
-                or stats_surface_key(surface) == "unknown"
-                or stats_surface_key(item.surface) == stats_surface_key(surface)
+                target_key == "unknown"
+                or stats_surface_key(item.surface) == target_key
             )
         ]
 

@@ -1,4 +1,4 @@
-name: BlinQ PropLine evening odds archive (Drive + private recovery)
+name: BlinQ PropLine evening odds archive (private research + CDB)
 
 # External 23:00 Europe/Bratislava scheduler; old event type is a temporary alias.
 # No second schedule is created. New scheduler may migrate to blinq-propline-odds-tick.
@@ -23,16 +23,6 @@ on:
         required: false
         type: boolean
         default: false
-      candidate_cdb:
-        description: "Explicit candidate-only CDB capture: one bulk request, zero match requests, verified CDB sidecar"
-        required: false
-        type: boolean
-        default: false
-      source_capture_run:
-        description: "Candidate CDB retry: reuse this run's stored report, ZERO provider requests"
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -52,9 +42,6 @@ jobs:
       MAX_EVENTS: ${{ inputs.max_events || 0 }}
       INPUT_TARGET_DAY: ${{ github.event.client_payload.target_day || inputs.target_day || '' }}
       INPUT_ALLOW_SAME_DAY: ${{ github.event.client_payload.allow_same_day || inputs.allow_same_day || false }}
-      CANDIDATE_CDB: ${{ inputs.candidate_cdb || false }}
-      PYTHONPATH: api:scripts
-      SOURCE_CAPTURE_RUN: ${{ inputs.source_capture_run || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -65,7 +52,6 @@ jobs:
       - name: Offline source/parser regressions (no provider requests)
         run: |
           python -m unittest discover -s tests -p 'test_propline_evening_*.py' -v
-          python -m unittest discover -s tests -p 'test_propline_drive_archive.py' -v
       - name: Resolve next Bratislava betting day
         id: day
         shell: bash
@@ -89,38 +75,25 @@ jobs:
           datetime.date.fromisoformat(sys.argv[1])
           PY
           echo "date=$target" >> "$GITHUB_OUTPUT"
-      - name: Restore an already captured report without calling PropLine again
-        if: inputs.source_capture_run != ''
-        run: |
-          set -euo pipefail
-          [[ "$CANDIDATE_CDB" == "true" && "$SOURCE_CAPTURE_RUN" =~ ^[0-9]+$ ]]
-          gh run download "$SOURCE_CAPTURE_RUN" --repo "$GITHUB_REPOSITORY" \
-            --name "blinq-propline-evening-research-$SOURCE_CAPTURE_RUN" --dir reports
-          test -f reports/propline-evening/odds.json
+      - name: Check CDB and reserve the daily board request
+        id: daily
+        env:
+          BETTING_DAY: ${{ steps.day.outputs.date }}
+        run: python scripts/prepare_evening_aces.py
       - name: Capture existing free PropLine bookmaker markets without CDB changes
-        if: inputs.source_capture_run == ''
+        if: steps.daily.outputs.mode == 'fetch'
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
           set -euo pipefail
-          args=(--target-day "$BETTING_DAY" --max-events "$MAX_EVENTS"
+          args=(--bulk-only --target-day "$BETTING_DAY" --max-events "$MAX_EVENTS"
                 --out reports/propline-evening/odds.json)
           if [[ "${INPUT_ALLOW_SAME_DAY,,}" == "true" ]]; then
             args+=(--allow-same-day)
           fi
-          if [[ "$CANDIDATE_CDB" == "true" ]]; then
-            args+=(--bulk-only)
-          fi
           python scripts/propline_evening_odds.py "${args[@]}"
-      - name: Persist authorized candidate offers under global CDB writer lock and verify read-back
-        if: inputs.candidate_cdb
-        run: |
-          python scripts/stage_aces_offer_cdb.py --day '${{ steps.day.outputs.date }}' \
-            --report reports/propline-evening/odds.json --out reports/aces-cdb --apply
-      - name: Release candidate CDB lock after interrupted staging
-        if: always() && inputs.candidate_cdb
-        run: python scripts/cdb_global_writer_lock.py release --if-held
       - name: Validate audit and create-only store in separate private research path
+        if: steps.daily.outputs.mode == 'fetch'
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
@@ -236,29 +209,19 @@ jobs:
                             "source_errors": len(report["errors"]),
                             "cdb_writes": 0}, sort_keys=True))
           PY
-      - name: Install scoped Google Drive authenticated client
-        if: ${{ !inputs.candidate_cdb }}
-        run: python -m pip install --disable-pip-version-check google-auth requests
-      - name: Archive to PropLine Google Drive folder and verify actual bytes
-        if: ${{ !inputs.candidate_cdb }}
+      # Drive archive removed 2026-11-24 (owner): service accounts have no
+      # storage quota on a personal My Drive (HTTP 403). Quotes persist in
+      # tbt-data research/propline-evening-odds with verified read-back above.
+      - name: Store verified offers under the global CDB writer lock
+        if: steps.daily.outputs.mode != 'complete' && success()
         env:
-          BLINQ_DRIVE_WRITER_JSON: ${{ secrets.BLINQ_DRIVE_WRITER_JSON }}
-          BLINQ_DRIVE_READER_JSON: ${{ secrets.BLINQ_DRIVE_READER_JSON }}
           BETTING_DAY: ${{ steps.day.outputs.date }}
-          PROPLINE_DRIVE_FOLDER_ID: "1C7_B2LB37IVTK9gBu2TT9dSj5XClIUKh"
-        run: |
-          set -euo pipefail
-          python scripts/propline_drive_archive.py \
-            --report reports/propline-evening/odds.json \
-            --day "$BETTING_DAY" --run-id "$GITHUB_RUN_ID" \
-            --folder "$PROPLINE_DRIVE_FOLDER_ID"
+        run: python scripts/stage_aces_offer_cdb.py --day "$BETTING_DAY" --report reports/propline-evening/odds.json --out reports/cdb --apply
       - name: Keep local evidence even if provider access is blocked
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: blinq-propline-evening-research-${{ github.run_id }}
-          path: |
-            reports/propline-evening/odds.json
-            reports/aces-cdb/*.json
+          path: reports/propline-evening/odds.json
           if-no-files-found: warn
           retention-days: 14

@@ -88,7 +88,7 @@ def offered_contracts(event, player):
                 continue
             for outcome in market.get("outcomes", []):
                 side = str(outcome.get("name") or "").lower()
-                if (side in ("over", "under") and outcome.get("price") is None
+                if (side == "over" and outcome.get("price") is None
                         and _same_person(outcome.get("description"), player)):
                     yield {"line": outcome.get("point"), "side": side,
                            "odds": None, "bookmaker": bookmaker}
