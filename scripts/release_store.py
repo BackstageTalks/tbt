@@ -17,6 +17,15 @@ _TRANSIENT_GH_ERROR = re.compile(
 )
 
 
+_GH_TIMEOUT_SECONDS = int(os.environ.get("TBT_GH_TIMEOUT_SECONDS", "1800"))
+_URL = re.compile(r"https?://\S+")
+
+
+def _redact(text):
+    """AUD-18: never echo URLs (signed asset links, private paths) into logs."""
+    return _URL.sub("<url>", str(text or ""))
+
+
 def _run_gh(args, *, max_attempts=5):
     """Run gh with bounded retries for transient GitHub/API failures.
 
@@ -27,7 +36,12 @@ def _run_gh(args, *, max_attempts=5):
     command = ["gh", *map(str, args)]
     result = None
     for attempt in range(max_attempts):
-        result = subprocess.run(command, capture_output=True, text=True)
+        try:
+            # AUD-10: a hung gh process must not block the run forever.
+            result = subprocess.run(command, capture_output=True, text=True,
+                                    timeout=_GH_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            result = subprocess.CompletedProcess(command, 124, "", "gh operation timed out")
         if result.returncode == 0:
             return result
         stderr = result.stderr.strip()
@@ -37,7 +51,7 @@ def _run_gh(args, *, max_attempts=5):
         delay = min(2 ** (attempt + 1), 16)
         print(
             f"GitHub CLI transient failure; retrying in {delay}s "
-            f"({attempt + 2}/{max_attempts}): {stderr[:220]}",
+            f"({attempt + 2}/{max_attempts}): {_redact(stderr)[:220]}",
             file=sys.stderr,
         )
         time.sleep(delay)
@@ -47,7 +61,7 @@ def _run_gh(args, *, max_attempts=5):
 def gh(*args):
     result = _run_gh(args)
     if result.returncode:
-        raise RuntimeError(f"GitHub CLI operation failed: {result.stderr.strip()[:500]}")
+        raise RuntimeError(f"GitHub CLI operation failed: {_redact(result.stderr.strip())[:500]}")
     return result.stdout
 
 
