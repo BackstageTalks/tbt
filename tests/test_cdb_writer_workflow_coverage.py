@@ -12,6 +12,7 @@ WRITERS = (
     "cdb-rank-import.yml",
     "cdb-bulk-odds-import.yml",
     "cdb-stats-orientation-fix.yml",
+    "cdb-dedupe-hist-js.yml",
     "data.yml",
     "drive-pbpx-canonical-enrichment.yml",
     "kaggle-hwaitt-history-enrichment.yml",

@@ -153,3 +153,9 @@ Alarm má samostatný plán na 06:30 Europe/Bratislava. Kontroluje denný kľú�
 Ranná prognóza hlási izolované chyby vstupu, príznakov, skórovania a priradenia kurzu cez row_quarantine (počet, identita, fáza, typ výnimky) v refresh_report.json. Chybný hromadný vstup modelu skúša opätovne po riadkoch lokálne. Globálna chyba modelu ostáva zlyhaním. Platné riadky idú do existujúcich selektorov.
 
 Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overiť súkromné doručenie na správny chat, produkčný readback a simulovaný neúspech po uložení cache. Opakovanie pridáva 0 RapidAPI a 0 Prop-Line volaní. Alarm používa jeden produkčný readback a pri probléme jednu Telegram správu.
+
+### 24.11 – odstránenie duplicitných hist-js zápasov (pripravené, čaká na schválenie)
+- `scripts/cdb_dedupe_hist_js.py` + workflow `cdb-dedupe-hist-js.yml`: hist-js riadok sa odstráni len ak natívny riadok má rovnaký ISO týždeň, rovnakú dvojicu ID hráčov a rovnakého víťaza (jednoznačne). Štatistiky, ktoré má len kópia, sa najprv presunú (NULL-only, správna orientácia).
+- `release_store`: poistky počtu riadkov a identít povolia odstrániť **presne** schválený zoznam ID (inak blokujú ako doteraz).
+- Zápis až po `approved_by_operator: true` v `.github/cdb-dedupe-request.json`.
+- Návrat: obnova z release `blinq-cdb-dedupe-prewrite-<run_id>-1`.

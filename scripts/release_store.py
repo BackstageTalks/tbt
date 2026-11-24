@@ -51,7 +51,7 @@ def gh(*args):
     return result.stdout
 
 
-def assert_history_rows_monotonic(previous, proposed):
+def assert_history_rows_monotonic(previous, proposed, *, approved_removals=None):
     """Reject any CDB year-row regression before publishing a canonical bundle.
 
     This is a conservation guard, not a replacement for exact identity QA.
@@ -69,7 +69,8 @@ def assert_history_rows_monotonic(previous, proposed):
         candidate = new.get(year)
         if not isinstance(candidate, dict) or type(candidate.get("rows")) is not int:
             raise ValueError(f"CDB year removed or row count invalid: {year}")
-        if candidate["rows"] < metadata["rows"]:
+        allowed = len((approved_removals or {}).get(int(year), ()))
+        if candidate["rows"] < metadata["rows"] - allowed:
             raise ValueError(
                 f"CDB_YEAR_ROW_REGRESSION_BLOCKED year={year} "
                 f"previous={metadata['rows']} proposed={candidate['rows']}"
@@ -95,7 +96,7 @@ def assert_history_partition_bundle_atomic(paths, remove_names=()):
 
 
 
-def assert_history_identities_conserved(previous_file, candidate_file, *, year):
+def assert_history_identities_conserved(previous_file, candidate_file, *, year, approved_removed_ids=()):
     """Fail before upload if an existing canonical match ID/identity disappears.
 
     Row-count floors alone cannot detect a delete/rekey replaced by another
@@ -130,7 +131,15 @@ def assert_history_identities_conserved(previous_file, candidate_file, *, year):
     proposed = identities(candidate_file)
     old_ids = set(original)
     new_ids = set(proposed)
-    missing = len(old_ids - new_ids)
+    approved = set(approved_removed_ids or ())
+    removed = old_ids - new_ids
+    # Reviewed de-duplication only: exactly the approved IDs may disappear.
+    if approved and removed != approved:
+        raise ValueError(
+            f"CDB_APPROVED_REMOVAL_MISMATCH year={year} "
+            f"removed={len(removed)} approved={len(approved)}"
+        )
+    missing = len(removed - approved)
     altered = sum(original[mid] != proposed[mid] for mid in old_ids & new_ids)
     if missing or altered:
         raise ValueError(
@@ -842,7 +851,7 @@ class ReleaseStore:
             "committed_generation_verified" if committed
             else "previous_generation_restored")}
 
-    def upload_bundle(self, paths, *, before_upload=None, remove_names=()):
+    def upload_bundle(self, paths, *, before_upload=None, remove_names=(), approved_removals=None):
         """Upload related assets, then commit their checksums last.
 
         Readers that see a partial overwrite will fail checksum verification
@@ -901,6 +910,7 @@ class ReleaseStore:
                     assert_history_rows_monotonic(
                         json.loads(remote.read_text(encoding="utf-8")),
                         json.loads(candidate_path.read_text(encoding="utf-8")),
+                        approved_removals=approved_removals,
                     )
 
         # The count-only manifest guard can miss an old ID silently removed
@@ -929,8 +939,10 @@ class ReleaseStore:
                             raise RuntimeError(
                                 "CDB_AUTHORITATIVE_YEAR_MOVED_OR_CORRUPT " + path.name
                             )
+                        year_number = int(path.stem.split("-")[-1])
                         assert_history_identities_conserved(
-                            remote, path, year=int(path.stem.split("-")[-1])
+                            remote, path, year=year_number,
+                            approved_removed_ids=(approved_removals or {}).get(year_number, ()),
                         )
 
         guarded = (
