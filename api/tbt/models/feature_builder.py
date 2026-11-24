@@ -109,14 +109,18 @@ RICH_CHARTING_FEATURE_NAMES = [
 _SURFACE_KEY_CACHE: dict = {}
 
 
+def _stats_surface_key_uncached(surface: str) -> str:
+    value = str(surface or "unknown").strip().lower()
+    return "hard" if value == "indoor_hard" else value
+
+
 def stats_surface_key(surface: str) -> str:
     """Surface bucket used by performance statistics. Indoor hard shares the hard pool; indoor remains a separate feature."""
     try:
         return _SURFACE_KEY_CACHE[surface]
     except (KeyError, TypeError):
         pass
-    value = str(surface or "unknown").strip().lower()
-    result = "hard" if value == "indoor_hard" else value
+    result = _stats_surface_key_uncached(surface)
     try:
         if len(_SURFACE_KEY_CACHE) < 4096:
             _SURFACE_KEY_CACHE[surface] = result
