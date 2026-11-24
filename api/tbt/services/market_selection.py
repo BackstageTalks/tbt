@@ -1055,12 +1055,16 @@ def _low_odds_fill_floor() -> float | None:
 
 
 def _low_odds_fill_floor() -> float | None:
-    """TBT_TOP_LOW_ODDS_FLOOR (e.g. 1.40): conditional TOP fill below 1.50."""
-    try:
-        v = float(os.environ.get("TBT_TOP_LOW_ODDS_FLOOR", "") or 0)
-    except ValueError:
-        return None
-    return v if 1.30 <= v < 1.50 else None
+    """Conditional TOP fill below 1.50. The admin 'Ponuka' key
+    TBT_TOP_LOW_ODDS_FILL wins; TBT_TOP_LOW_ODDS_FLOOR is the workflow default."""
+    for key in ("TBT_TOP_LOW_ODDS_FILL", "TBT_TOP_LOW_ODDS_FLOOR"):
+        try:
+            v = float(os.environ.get(key, "") or 0)
+        except ValueError:
+            continue
+        if 1.30 <= v < 1.50:
+            return v
+    return None
 
 
 def value_level_ok(card: dict[str, Any]) -> bool:
@@ -1339,7 +1343,9 @@ def select_market_sections(
     value_qualified.sort(key=rank, reverse=True)
 
     # VALUE retains exclusive priority. TOP ranks the remaining full priced slate.
-    value_ids = {_selection_identity(card) for card in value_qualified}
+    # AUD-01: reserve only the Value picks that will actually be issued.
+    issued_value = value_qualified if value_limit is None else value_qualified[:max(0, int(value_limit))]
+    value_ids = {_selection_identity(card) for card in issued_value}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
 
