@@ -2,23 +2,10 @@
   "workflow": "cdb-staged-stats-import.yml",
   "mode": "write",
   "approved_by_operator": true,
-  "allow_score_fields": true,
-  "input": "data/staging/sackmann_scores_2016_2026.jsonl.gz",
-  "source_attribution": "Jeff Sackmann match scores (CC BY-NC) parsed with tbt.providers.score.parse_event_score; 98.45 % exact vs existing API score stats",
-  "approved_in_chat": "2026-11-23 19:27 owner: super, ak sa daju zadarmo, tak ich pls dopln, idealne presne ako z api",
-  "expected_staged_matches": 346361,
-  "expected_new_stat_values": 5888137,
-  "expected_changed_years": [
-    2016,
-    2017,
-    2018,
-    2019,
-    2020,
-    2021,
-    2022,
-    2023,
-    2024,
-    2025,
-    2026
-  ]
+  "input": "data/staging/itf_gapfill_2016_2023.jsonl.gz",
+  "source_attribution": "RapidAPI tennisapi1 ITF event statistics collected by itf-gapfill-stage (paid quota, 2016-2018 + 2023-03); oriented via home_is_player1; 95.0 % winner-has-more-points consistency",
+  "approved_in_chat": "2026-11-24 21:04 owner: 4 a 7 podme hned (ITF staging do CDB)",
+  "expected_staged_matches": 15643,
+  "expected_new_stat_values": 246474,
+  "expected_changed_years": [2016, 2017, 2018, 2023]
 }
