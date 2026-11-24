@@ -1437,6 +1437,7 @@ def main():
     now = datetime.now(timezone.utc)
     refresh_error = None
     upcoming = []
+    row_quarantine = []
     odds_report = None
     ace_picks = []
     ace_report = None
@@ -1599,7 +1600,7 @@ def main():
             atp_rank_history=atp_rank_history,
             wta_rank_history=wta_rank_history,
             wta_season_stats=wta_season_stats,
-            return_context=True,
+            return_context=True, quarantine=row_quarantine if args.morning_refresh else None,
         )
         comparator_artifact = None
         try:
@@ -1832,6 +1833,7 @@ def main():
                 max_events=projection_odds_cap, provider_id=1,
                 timezone_name="Europe/Bratislava",
                 start_hour=args.betting_day_start_hour,
+                quarantine=row_quarantine if args.morning_refresh else None,
                 prefetched_payloads=projection_market_cache,
             )
 
@@ -2267,6 +2269,7 @@ def main():
     target.parent.mkdir(parents=True, exist_ok=True)
     write_json(target, feed)
     refresh_report = {
+        "row_quarantine": {"count": len(row_quarantine), "rows": row_quarantine},
         "requests": provider.request_count,
         "upcoming": len(feed["upcoming"]),
         "top200": len(feed.get("top200_picks", [])),

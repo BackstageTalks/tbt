@@ -143,3 +143,13 @@ Variant `aces_line_first` je predvolene vypnutý a jeho virtuálne tipy sa uklad
 - Shadow záznamy `aces_line_first` vznikajú vždy (nepublikujú sa), nezávisle od `TBT_ACES_LINE_FIRST_CANDIDATE`; ten prepínač ostáva len pre prípadné budúce zverejnenie.
 - Vyhodnotenie: počet es vybraného hráča v CDB vs. ponúknutá hranica; presná zhoda = neplatné.
 - Vypnutie: `TBT_OFFER_SHADOW_DISABLED=true`. Revert: revert merge commitu.
+
+## 06:00 – spoľahlivosť ranného zverejnenia (kandidát v PR)
+
+Neúspešný ranný data.yml má jeden pokus o obnovu z posledného kompletného prediction release/ledger cez režim deploy-current. Používa rovnakú produkčnú concurrency skupinu. Supervízor čaká na terminálny stav prvého behu a lokálnych 06:20 v Bratislave. Pri neskoršom zlyhaní pokračuje hneď po jeho zistení. Druhý pokus nespúšťa platený refresh. Pred nasadením sa musí potvrdiť dnešný použiteľný cache s TOP alebo Value. Ak prvý beh padol pred uložením kompletného feedu a ledgeru, obnova nevytvorí nové predikcie z čiastkových dát.
+
+Alarm má samostatný plán na 06:30 Europe/Bratislava. Kontroluje denný kľúč, čerstvosť, viditeľné počty a identitu vydaného TOP alebo Value na nasadenej službe. Prázdny, starý či neoveriteľný feed hlási cez existujúceho Telegram bota TGB. Pred aktiváciou nastaviť TG_ADMIN_CHAT_ID na ID existujúceho admin chatu. TGCH používa publikovanie tipov. Chýbajúci admin cieľ alebo neúspešná odpoveď Telegramu spôsobí červený alarmový job. GitHub môže plánovaný čas oneskoriť.
+
+Ranná prognóza hlási izolované chyby vstupu, príznakov, skórovania a priradenia kurzu cez row_quarantine (počet, identita, fáza, typ výnimky) v refresh_report.json. Chybný hromadný vstup modelu skúša opätovne po riadkoch lokálne. Globálna chyba modelu ostáva zlyhaním. Platné riadky idú do existujúcich selektorov.
+
+Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overiť súkromné doručenie na správny chat, produkčný readback a simulovaný neúspech po uložení cache. Opakovanie pridáva 0 RapidAPI a 0 Prop-Line volaní. Alarm používa jeden produkčný readback a pri probléme jednu Telegram správu.

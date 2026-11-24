@@ -1,0 +1,21 @@
+name: Morning published offer alarm
+on:
+  schedule:
+    - cron: '30 6 * * *'
+      timezone: Europe/Bratislava
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python scripts/morning_reliability.py
+        env:
+          PUBLIC_BASE: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+          TGB: ${{ secrets.TGB }}
+          TG_ADMIN_CHAT_ID: ${{ secrets.TG_ADMIN_CHAT_ID }}
