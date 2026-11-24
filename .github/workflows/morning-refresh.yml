@@ -109,7 +109,11 @@ jobs:
             local before=".cache/tbt/morning/before-$attempt.txt"
             gh api "$workflow_runs_api" --jq '.workflow_runs[].id' > "$before"
 
-            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f morning_parent_run_id="$GITHUB_RUN_ID" -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=-1 -f doubles_odds_max_events=-1 -f propline_max_events=-1 -f betting_day_start_hour=6
+            if [[ "$attempt" == 2 ]]; then
+              gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f morning_parent_run_id="$GITHUB_RUN_ID" -f mode=deploy-current -f max_requests=1
+            else
+              gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f morning_parent_run_id="$GITHUB_RUN_ID" -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=-1 -f doubles_odds_max_events=-1 -f propline_max_events=-1 -f betting_day_start_hour=6
+            fi
 
             CHILD_RUN_ID=""
             for _ in $(seq 1 30); do
@@ -145,18 +149,15 @@ jobs:
             done
           }
 
-          # One retry is allowed only if the cancelled run never created a job.
-          # In that case no paid refresh code could have executed.
           dispatch_child 1
           first_child="$CHILD_RUN_ID"
           wait_child "$first_child"
-
           final_child="$first_child"
-          if [[ "$CHILD_CONCLUSION" == "cancelled" ]]; then
-            jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$first_child/jobs?filter=all&per_page=100" --jq '.total_count')"
-            if [[ "$jobs" == "0" ]]; then
-              echo "::warning::Morning child was cancelled before a job started; retrying once without duplicate API use."
-              sleep 10
+          if [[ "$CHILD_CONCLUSION" == failure || "$CHILD_CONCLUSION" == timed_out || "$CHILD_CONCLUSION" == cancelled ]]; then
+            # One recovery dispatch per original wrapper; never rerun the paid job.
+            if [[ "$GITHUB_RUN_ATTEMPT" == 1 ]]; then
+              delay="$(TZ=Europe/Bratislava python -c 'from datetime import datetime; n=datetime.now(); print(max(0,int((n.replace(hour=6,minute=20,second=0,microsecond=0)-n).total_seconds())))')"
+              sleep "$delay"
               dispatch_child 2
               final_child="$CHILD_RUN_ID"
               wait_child "$final_child"

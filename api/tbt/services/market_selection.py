@@ -738,6 +738,7 @@ def enrich_current_betting_day_odds(
     candidate_min_probability: float = min(VALUE_MIN_PROBABILITY, TOP_MIN_PROBABILITY),
     candidate_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
     candidate_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
+    quarantine=None,
     prefetched_payloads: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fetch provider-1 odds only for plausible published betting candidates.
@@ -864,16 +865,24 @@ def enrich_current_betting_day_odds(
         if market is None:
             report["odds_unavailable"] += 1
             continue
-        report["odds_available"] += 1
-        indexed[event_id] = attach_match_winner_market(
-            row,
-            market,
-            captured_at=now,
-            provider_id=provider_id,
-            betting_day=day_key,
-        )
+        try:
+            indexed[event_id] = attach_match_winner_market(
+                row,
+                market,
+                captured_at=now,
+                provider_id=provider_id,
+                betting_day=day_key,
+            )
+            report["odds_available"] += 1
+        except Exception as exc:
+            if quarantine is None:
+                raise
+            quarantine.append({"event_id": event_id, "stage": "odds", "reason": type(exc).__name__})
+            indexed[event_id] = None
+
 
     enriched = [indexed.get(str(row.get("event_id") or ""), deepcopy(row)) for row in predictions]
+    enriched = [row for row in enriched if row is not None]
     report["coverage"] = (
         report["odds_available"] / report["odds_requested"]
         if report["odds_requested"] else 0.0

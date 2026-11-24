@@ -247,7 +247,7 @@ def predict(
     wta_rank_history=None,
     wta_season_stats=None,
     *,
-    return_context=False,
+    return_context=False, quarantine=None,
 ):
     now = now or datetime.now(timezone.utc)
     # Match completion timestamps are unavailable. Use previous UTC days only,
@@ -275,8 +275,21 @@ def predict(
         point_weighted_quality=point_weighted_quality,
     )
     builder.replay(replay_history, before=cutoff)
-    future = sorted((m for m in upcoming if not m.is_completed and m.scheduled_at > now
-                     and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
+    def record_failure(match, stage, exc):
+        if quarantine is None:
+            raise exc
+        quarantine.append({"match_id": str(getattr(match, "match_id", "") or ""),
+                           "stage": stage, "reason": type(exc).__name__})
+
+    future = []
+    for match in upcoming:
+        try:
+            if (not match.is_completed and match.scheduled_at > now
+                    and match.status in {"upcoming", "notstarted", "scheduled"}):
+                future.append(match)
+        except Exception as exc:
+            record_failure(match, "fixture", exc)
+    future.sort(key=lambda m: (m.scheduled_at, str(m.match_id)))
     if not future:
         empty = []
         if return_context:
@@ -328,122 +341,153 @@ def predict(
             "WTA-enabled model requires the verified previous-season serving/returning snapshot"
         )
     features = []
+    scored = []
     for match in future:
-        values = builder.snapshot(match)
-        if atp_leaderboards is not None:
-            values.update(
-                atp_leaderboards.features_for_match(match, current=True)
-            )
-        if atp_rank_history is not None:
-            values.update(atp_rank_history.features_for_match(match))
-        if wta_rank_history is not None:
-            values.update(wta_rank_history.features_for_match(match))
-        if wta_season_stats is not None:
-            values.update(
-                wta_season_stats.features_for_match(match, current=True)
-            )
-        features.append(values)
+        try:
+            values = builder.snapshot(match)
+            if atp_leaderboards is not None:
+                values.update(
+                    atp_leaderboards.features_for_match(match, current=True)
+                )
+            if atp_rank_history is not None:
+                values.update(atp_rank_history.features_for_match(match))
+            if wta_rank_history is not None:
+                values.update(wta_rank_history.features_for_match(match))
+            if wta_season_stats is not None:
+                values.update(
+                    wta_season_stats.features_for_match(match, current=True)
+                )
+            if quarantine is not None and any(k not in values for k in feature_names):
+                raise KeyError('missing feature')
+            features.append(values)
+            scored.append(match)
+        except Exception as exc:
+            record_failure(match, 'features', exc)
+    future = scored
     # Serving is artifact-schema driven. This keeps an already-deployed legacy
     # champion usable while the repository evolves to a richer feature schema;
     # a newly trained model opts into new features through its persisted list.
-    missing = [name for name in feature_names if name not in features[0]]
+    missing = [name for name in feature_names if features and name not in features[0]]
     if missing:
         raise ValueError(f"Model artifact requests unavailable features: {missing}")
-    probabilities = model.predict_proba(pd.DataFrame(features, columns=feature_names))
+    frame = pd.DataFrame(features, columns=feature_names)
+    try:
+        probabilities = model.predict_proba(frame) if features else []
+    except Exception:
+        if quarantine is None:
+            raise
+        # The batch may contain one invalid feature value. Reuse the built
+        # frame and model locally; no history replay or provider call.
+        probabilities, valid_matches, valid_features = [], [], []
+        for i, match in enumerate(future):
+            try:
+                probability, = model.predict_proba(frame.iloc[[i]])
+            except Exception as exc:
+                record_failure(match, "model_input", exc)
+                continue
+            probabilities.append(probability)
+            valid_matches.append(match)
+            valid_features.append(features[i])
+        if not valid_matches:
+            raise  # A broken model is a run failure, not an empty success.
+        future, features = valid_matches, valid_features
     rows = []
     for match, f, probability in zip(future, features, probabilities):
-        p = float(probability)
-        if not np.isfinite(p) or not 0 < p < 1:
-            raise ValueError("Invalid model probability")
-        winner = match.player1_id if p >= .5 else match.player2_id
-        factors = [("Sila na povrchu", f["surface_elo_diff"], .12),
-                   ("Celková výkonnosť", f["elo_diff"], .12),
-                   ("Aktuálna forma", f["recent_form_diff"], .08),
-                   ("Servis", f["serve_quality_diff"], .04)]
-        signals = [{"label": name, "player_id": match.player1_id if value >= 0 else match.player2_id}
-                   for name, value, scale in sorted(factors, key=lambda x: abs(x[1] / x[2]), reverse=True)
-                   if abs(value) >= scale][:3]
-        tournament_obj = match.provider_payload.get("tournament") if isinstance(match.provider_payload, dict) else None
-        unique_tournament = tournament_obj.get("uniqueTournament") if isinstance(tournament_obj, dict) else None
-        tournament_logo_id = ""
-        if isinstance(unique_tournament, dict):
-            tournament_logo_id = str(unique_tournament.get("id") or "").strip()
-        tournament_logo_id = tournament_logo_id or str(match.tournament_id or "")
-        tournament_context = _provider_tournament_context(match.provider_payload)
-        h2h_p1, h2h_p2 = _h2h_record(builder, match)
-        profile1 = _presentation_player_profile(builder, match, player1=True)
-        profile2 = _presentation_player_profile(builder, match, player1=False)
-        profile1["h2h_wins"] = h2h_p1
-        profile1["h2h_losses"] = h2h_p2
-        profile2["h2h_wins"] = h2h_p2
-        profile2["h2h_losses"] = h2h_p1
-        provider_custom_id = ""
-        match_format = {}
-        if isinstance(match.provider_payload, dict):
-            provider_custom_id = str(match.provider_payload.get("customId") or match.provider_payload.get("custom_id") or "").strip()
-            marker = match.provider_payload.get("_tbt_match_format")
-            match_format = marker if isinstance(marker, dict) else {}
-        evidence = coverage(builder, match)
-        # Descriptive PRE-MATCH feature availability, separate from count-based
-        # data_depth. Never reinterpret this as calibrated model confidence.
-        evidence["feature_evidence"] = {
-            "historical_count_depth": float(f["data_depth"]),
-            "serve_return_known_both": bool(f["stats_known_both"]),
-            "surface_serve_return_known_both": bool(f["surface_stats_known_both"]),
-            "rank_values_known_both": bool(f["rank_known_both"]),
-            "meaning": "pre_match_feature_availability_not_calibrated_confidence",
-        }
-        rows.append({"id": match.match_id, "event_id": event_id(match), "custom_id": provider_custom_id, "tour": match.tour.upper(),
-            "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
-            "tournament_id": str(match.tournament_id or ""),
-            "tournament_logo_id": tournament_logo_id,
-            "tournament_country_code": tournament_context["country_code"],
-            "tournament_country": tournament_context["country_name"],
-            "tournament_city": tournament_context["city"],
-            "venue_name": tournament_context["venue_name"],
-            "venue_city": tournament_context["city"],
-            "venue_country_code": tournament_context["country_code"],
-            "venue_country": tournament_context["country_name"],
-            "location": {
-                "city": tournament_context["city"],
-                "country": tournament_context["country_name"],
-                "country_code": tournament_context["country_code"],
-                "venue": tournament_context["venue_name"],
-            },
-            "surface": match.surface, "round": match.round_name,
-            "best_of": match.best_of,
-            "best_of_source": str(match_format.get("source") or ""),
-            "competition": match.tournament_level or "unknown", "quality": evidence,
-            "player1": {
-                "id": match.player1_id, "name": match.player1_name,
-                "probability": p, "rank": match.player1_rank,
-                "country_code": _provider_player_country(match.provider_payload, player1=True),
-                "photo_url": "",  # r40: presentation release attaches cached artwork; public API never spends provider quota
-                "presentation": profile1,
-            },
-            "player2": {
-                "id": match.player2_id, "name": match.player2_name,
-                "probability": 1 - p, "rank": match.player2_rank,
-                "country_code": _provider_player_country(match.provider_payload, player1=False),
-                "photo_url": "",  # r40: presentation release attaches cached artwork; public API never spends provider quota
-                "presentation": profile2,
-            },
-            "winner_id": winner, "confidence": max(p, 1 - p),
-            "raw_model_confidence": max(p, 1 - p),
-            "blinq_probability": 0.5 + (max(p, 1 - p) - 0.5) * float(f["data_depth"]),
-            "historical_count_depth": float(f["data_depth"]),
-            "probability_reliability": None,
-            "reliability_status": "not_established_by_history_count",
-            "data_depth": f["data_depth"],
-            "stats_available": bool(f["stats_known_both"]), "signals": signals,
-            # Pre-match serve+return edge from player1's view (surface first).
-            "serve_return_edge": (
-                round(float(f["surface_serve_quality_diff"]) + float(f["surface_return_quality_diff"]), 5)
-                if f.get("surface_stats_known_both") else
-                round(float(f["serve_quality_diff"]) + float(f["return_quality_diff"]), 5)
-                if f.get("stats_known_both") else None),
-            "model_version": model.version, "created_at": now.isoformat(),
-            "issued_at": None, "publication_status": "pending", "result": None})
+        try:
+            p = float(probability)
+            if not np.isfinite(p) or not 0 < p < 1:
+                raise ValueError("Invalid model probability")
+            winner = match.player1_id if p >= .5 else match.player2_id
+            factors = [("Sila na povrchu", f["surface_elo_diff"], .12),
+                       ("Celková výkonnosť", f["elo_diff"], .12),
+                       ("Aktuálna forma", f["recent_form_diff"], .08),
+                       ("Servis", f["serve_quality_diff"], .04)]
+            signals = [{"label": name, "player_id": match.player1_id if value >= 0 else match.player2_id}
+                       for name, value, scale in sorted(factors, key=lambda x: abs(x[1] / x[2]), reverse=True)
+                       if abs(value) >= scale][:3]
+            tournament_obj = match.provider_payload.get("tournament") if isinstance(match.provider_payload, dict) else None
+            unique_tournament = tournament_obj.get("uniqueTournament") if isinstance(tournament_obj, dict) else None
+            tournament_logo_id = ""
+            if isinstance(unique_tournament, dict):
+                tournament_logo_id = str(unique_tournament.get("id") or "").strip()
+            tournament_logo_id = tournament_logo_id or str(match.tournament_id or "")
+            tournament_context = _provider_tournament_context(match.provider_payload)
+            h2h_p1, h2h_p2 = _h2h_record(builder, match)
+            profile1 = _presentation_player_profile(builder, match, player1=True)
+            profile2 = _presentation_player_profile(builder, match, player1=False)
+            profile1["h2h_wins"] = h2h_p1
+            profile1["h2h_losses"] = h2h_p2
+            profile2["h2h_wins"] = h2h_p2
+            profile2["h2h_losses"] = h2h_p1
+            provider_custom_id = ""
+            match_format = {}
+            if isinstance(match.provider_payload, dict):
+                provider_custom_id = str(match.provider_payload.get("customId") or match.provider_payload.get("custom_id") or "").strip()
+                marker = match.provider_payload.get("_tbt_match_format")
+                match_format = marker if isinstance(marker, dict) else {}
+            evidence = coverage(builder, match)
+            # Descriptive PRE-MATCH feature availability, separate from count-based
+            # data_depth. Never reinterpret this as calibrated model confidence.
+            evidence["feature_evidence"] = {
+                "historical_count_depth": float(f["data_depth"]),
+                "serve_return_known_both": bool(f["stats_known_both"]),
+                "surface_serve_return_known_both": bool(f["surface_stats_known_both"]),
+                "rank_values_known_both": bool(f["rank_known_both"]),
+                "meaning": "pre_match_feature_availability_not_calibrated_confidence",
+            }
+            rows.append({"id": match.match_id, "event_id": event_id(match), "custom_id": provider_custom_id, "tour": match.tour.upper(),
+                "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
+                "tournament_id": str(match.tournament_id or ""),
+                "tournament_logo_id": tournament_logo_id,
+                "tournament_country_code": tournament_context["country_code"],
+                "tournament_country": tournament_context["country_name"],
+                "tournament_city": tournament_context["city"],
+                "venue_name": tournament_context["venue_name"],
+                "venue_city": tournament_context["city"],
+                "venue_country_code": tournament_context["country_code"],
+                "venue_country": tournament_context["country_name"],
+                "location": {
+                    "city": tournament_context["city"],
+                    "country": tournament_context["country_name"],
+                    "country_code": tournament_context["country_code"],
+                    "venue": tournament_context["venue_name"],
+                },
+                "surface": match.surface, "round": match.round_name,
+                "best_of": match.best_of,
+                "best_of_source": str(match_format.get("source") or ""),
+                "competition": match.tournament_level or "unknown", "quality": evidence,
+                "player1": {
+                    "id": match.player1_id, "name": match.player1_name,
+                    "probability": p, "rank": match.player1_rank,
+                    "country_code": _provider_player_country(match.provider_payload, player1=True),
+                    "photo_url": "",  # r40: presentation release attaches cached artwork; public API never spends provider quota
+                    "presentation": profile1,
+                },
+                "player2": {
+                    "id": match.player2_id, "name": match.player2_name,
+                    "probability": 1 - p, "rank": match.player2_rank,
+                    "country_code": _provider_player_country(match.provider_payload, player1=False),
+                    "photo_url": "",  # r40: presentation release attaches cached artwork; public API never spends provider quota
+                    "presentation": profile2,
+                },
+                "winner_id": winner, "confidence": max(p, 1 - p),
+                "raw_model_confidence": max(p, 1 - p),
+                "blinq_probability": 0.5 + (max(p, 1 - p) - 0.5) * float(f["data_depth"]),
+                "historical_count_depth": float(f["data_depth"]),
+                "probability_reliability": None,
+                "reliability_status": "not_established_by_history_count",
+                "data_depth": f["data_depth"],
+                "stats_available": bool(f["stats_known_both"]), "signals": signals,
+                # Pre-match serve+return edge from player1's view (surface first).
+                "serve_return_edge": (
+                    round(float(f["surface_serve_quality_diff"]) + float(f["surface_return_quality_diff"]), 5)
+                    if f.get("surface_stats_known_both") else
+                    round(float(f["serve_quality_diff"]) + float(f["return_quality_diff"]), 5)
+                    if f.get("stats_known_both") else None),
+                "model_version": model.version, "created_at": now.isoformat(),
+                "issued_at": None, "publication_status": "pending", "result": None})
+        except Exception as exc:
+            record_failure(match, 'prediction_row', exc)
     if return_context:
         return rows, {"builder": builder, "cutoff": cutoff, "replay_history": replay_history}
     return rows
