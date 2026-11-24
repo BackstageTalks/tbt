@@ -2988,39 +2988,6 @@ def admin_result_test_exclusions(req):
 
 @app.route(route="v1/admin/offer-flags", methods=["GET", "POST"])
 def admin_offer_flags(req):
-    admin, denied = _admin_user(req)
-    if denied:
-        return denied
-    from tbt.services import offer_flags
-    try:
-        if req.method == "GET":
-            return response(offer_flags.describe())
-        try:
-            payload = req.get_json()
-        except ValueError:
-            return response({"error": "invalid_json"}, 400)
-        updates = payload.get("flags") if isinstance(payload, dict) else None
-        return response(offer_flags.set_offer_flags(updates, str(admin.get("id") or "")))
-    except ValueError as exc:
-        return response({"error": str(exc)}, 400)
-    except AdminStorageUnavailable:
-        logging.exception("Offer flag storage unavailable")
-        return response({"error": "offer_flag_storage_unavailable"}, 503)
-
-
-@app.route(route="v1/internal/offer-flags", methods=["GET"])
-def internal_offer_flags(req):
-    if not _live_worker_token_ok(req):
-        return response({"error": "forbidden"}, 403)
-    from tbt.services import offer_flags
-    try:
-        return response({"ok": True, "env": offer_flags.as_env(offer_flags.load_offer_flags())})
-    except AdminStorageUnavailable:
-        return response({"ok": False, "error": "offer_flag_storage_unavailable"}, 503)
-
-
-@app.route(route="v1/admin/offer-flags", methods=["GET", "POST"])
-def admin_offer_flags(req):
     """Admin 'Ponuka': switches that shape the published offer."""
     from tbt.services.offer_flags import describe, set_offer_flags
     admin, denied = _admin_user(req)
