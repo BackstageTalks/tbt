@@ -139,7 +139,7 @@ def test_width(browser,width):
     assert page.locator('[data-admin-subtab="insights:messages"]').get_attribute('aria-pressed')=='true'
     # All 15 Admin destinations share the same neutral visual language.
     # This reads synthetic state only; no API writes, previews or publishing.
-    tabs=('accounts','projects','levels','dashboard','offer','testresults','dataexport',
+    tabs=('accounts','projects','levels','dashboard','offer','shadow','testresults','dataexport',
           'monthlyresults','layout','banners','telegram','tgbot','insights',
           'calibration','system')
     screenshots=os.getenv("BLINQ_SCREENSHOTS")
@@ -160,7 +160,7 @@ def test_width(browser,width):
             guideColor:getComputedStyle(document.querySelector('.admin-nav-toolbar button')).backgroundColor
           };
         }""",tab)
-        assert style["tabCount"]==15,(width,tab,style)
+        assert style["tabCount"]==16,(width,tab,style)
         assert style["heading"] and style["active"],(width,tab,style)
         assert style["accent"]=="#70dab0",(width,tab,style)
         if width<=900:
