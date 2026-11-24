@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any
 
@@ -70,12 +71,21 @@ def audit(history_dir: Path, *, training_profile: str = "standard",
     ]
     if training_profile not in {"standard", "top-7.2.1", "accuracy-7.2.2"}:
         raise ValueError("Unknown training profile")
-    builder = FeatureBuilder(
-        independent_serve_return=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
-        independent_direct_rates=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
-        point_weighted_quality=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
-    )
-    frame = builder.build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+    def new_builder():
+        return FeatureBuilder(
+            independent_serve_return=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+            independent_direct_rates=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+            point_weighted_quality=training_profile in {"top-7.2.1", "accuracy-7.2.2"},
+        )
+
+    checkpoint_dir = os.environ.get("TBT_FEATURE_CHECKPOINT_DIR", "").strip()
+    if checkpoint_dir:
+        # Bit-identical to a full replay; reuses unchanged earlier years.
+        from tbt.models.feature_checkpoints import build_with_checkpoints
+        built, _ = build_with_checkpoints(new_builder, cleaned, Path(checkpoint_dir))
+    else:
+        built = new_builder().build_training_frame(cleaned)
+    frame = built.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
 
     forbidden = sorted(set(FEATURE_NAMES) & FORBIDDEN_MODEL_FEATURES)
     posthoc_violations = [m.match_id for m in accepted if _posthoc_weather_training_violation(m)]

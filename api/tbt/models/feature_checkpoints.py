@@ -23,6 +23,7 @@ from __future__ import annotations
 from datetime import timezone
 from hashlib import sha256
 import json
+import pickle
 from pathlib import Path
 from typing import Callable
 
@@ -67,8 +68,6 @@ def _prefix_hashes(completed) -> dict[int, str]:
 
 def build_with_checkpoints(builder_factory: Callable[[], object], matches,
                            cache_dir: Path, *, log=print) -> tuple[pd.DataFrame, dict]:
-    import cloudpickle
-
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     completed = sorted((m for m in matches if m.is_completed),
@@ -97,7 +96,7 @@ def build_with_checkpoints(builder_factory: Callable[[], object], matches,
 
     frames: list[pd.DataFrame] = []
     if resume_year is not None:
-        builder = cloudpickle.loads((cache_dir / f"state-{resume_year}.pkl").read_bytes())
+        builder = pickle.loads((cache_dir / f"state-{resume_year}.pkl").read_bytes())
         for y in years:
             if y < resume_year:
                 frames.append(pd.read_pickle(cache_dir / f"frame-{y}.pkl"))
@@ -114,7 +113,7 @@ def build_with_checkpoints(builder_factory: Callable[[], object], matches,
     for y in years:
         if start is None or y < start:
             continue
-        (cache_dir / f"state-{y}.pkl").write_bytes(cloudpickle.dumps(builder, protocol=5))
+        (cache_dir / f"state-{y}.pkl").write_bytes(pickle.dumps(builder, protocol=5))
         frame = builder.build_training_frame(by_year[y])
         frame.to_pickle(cache_dir / f"frame-{y}.pkl")
         new_years[str(y)] = {"prefix_sha256": hashes[y], "rows": int(len(frame))}
