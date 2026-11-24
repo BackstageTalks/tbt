@@ -416,3 +416,39 @@ body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel:has(.results-catego
 body#blinqPremium.blinq-route:not(.blinq-admin) .results-category-options {
   max-height:min(360px, 50dvh)!important;
 }
+
+
+/* 2026-11-22: full-width touch-scroll for every daily-market tab on mobile.
+   Previous hidden scrollbar + fade masked the final Dvojchyby tab. A visible
+   narrow scrollbar and trailing space make the last tab fully reachable. */
+@media (max-width:900px) {
+  body#blinqPremium:not(.blinq-admin) #dailyHubTabs.daily-tabs {
+    display:flex!important;
+    flex-wrap:nowrap!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    padding-inline-end:20px!important;
+    scroll-padding-inline-end:20px!important;
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior-x:contain;
+    scrollbar-width:thin!important;
+    scrollbar-color:rgba(76,185,137,.75) transparent!important;
+    -webkit-mask-image:none!important;
+    mask-image:none!important;
+  }
+  body#blinqPremium:not(.blinq-admin) #dailyHubTabs.daily-tabs::-webkit-scrollbar {
+    display:block!important;
+    height:3px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) #dailyHubTabs.daily-tabs::-webkit-scrollbar-thumb {
+    background:rgba(76,185,137,.75)!important;
+    border-radius:3px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) #dailyHubTabs .daily-hub-tab {
+    flex:0 0 auto!important;
+    scroll-snap-align:start;
+  }
+}

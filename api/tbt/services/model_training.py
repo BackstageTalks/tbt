@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
@@ -32,16 +33,40 @@ def github(path, payload=None, missing_ok=False):
                   headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                            "Content-Type": "application/json", "User-Agent": "BlinQ-Model-Lab"},
                   method="POST" if payload is not None else "GET")
-    try:
-        with urlopen(req, timeout=15) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else {}
-    except HTTPError as exc:
-        if exc.code == 404 and missing_ok:
-            return None
-        raise TrainingUnavailable("GitHub požiadavku nepotvrdil. Stav treba obnoviť; neopakuj spustenie naslepo.") from exc
-    except (URLError, TimeoutError, ValueError) as exc:
-        raise TrainingUnavailable("GitHub je nedostupný; výsledok požiadavky nie je potvrdený.") from exc
+    # Retry reads only. POST dispatches are not idempotent without a separate
+    # request ID/read-back and must NEVER be blindly replayed after a timeout.
+    attempts = 3 if payload is None else 1
+    for attempt in range(attempts):
+        try:
+            with urlopen(req, timeout=15) as response:
+                raw = response.read()
+                return json.loads(raw) if raw else {}
+        except HTTPError as exc:
+            if exc.code == 404 and missing_ok:
+                return None
+            if (payload is None and exc.code in (429, 500, 502, 503, 504)
+                    and attempt + 1 < attempts):
+                print("MODEL_TRAINING_GITHUB_READ_RETRY attempt="
+                      + str(attempt + 1) + " http=" + str(exc.code), flush=True)
+                time.sleep(2 ** attempt)
+                continue
+            raise TrainingUnavailable(
+                "GitHub požiadavku nepotvrdil. Stav treba obnoviť; neopakuj spustenie naslepo."
+            ) from exc
+        except (URLError, TimeoutError) as exc:
+            if payload is None and attempt + 1 < attempts:
+                print("MODEL_TRAINING_GITHUB_READ_RETRY attempt="
+                      + str(attempt + 1) + " network_timeout", flush=True)
+                time.sleep(2 ** attempt)
+                continue
+            raise TrainingUnavailable(
+                "GitHub je nedostupný; výsledok požiadavky nie je potvrdený."
+            ) from exc
+        except ValueError as exc:
+            raise TrainingUnavailable(
+                "GitHub vrátil neplatnú odpoveď; výsledok nie je potvrdený."
+            ) from exc
+    raise TrainingUnavailable("GitHub read retry limit reached; result unverified.")
 
 
 def inspect(read=github):
