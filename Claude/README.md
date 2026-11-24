@@ -138,3 +138,8 @@ Zistenie: ledger vs provider rozdiel ~1 000/deň; ochrana = provider reserve 500
 ### Večerný zber a admin Shadow testing
 Večerný workflow najprv skontroluje denný súbor v CDB. Ak existuje, skončí bez zápisu a bez volania poskytovateľa. Existujúci research archív použije pred novým zberom. Pred jediným súhrnným dotazom rezervuje deň v súkromnom research adresári. Pri páde po rezervácii skontrolovať pôvodný artefakt, aby sa platený dotaz neopakoval. Ponuky ukladá pod globálnym CDB zámkom. Drive sa nepoužíva.
 Variant `aces_line_first` je predvolene vypnutý a jeho virtuálne tipy sa ukladajú do admin Shadow testing. Under vyžaduje overený pár. Vyrovnanie používa počet es vybraného hráča podľa identity v CDB. Chýbajúci počet ostáva nevyhodnotený. Vypnutie ktoréhokoľvek existujúceho prepínača kandidáta zastaví nové virtuálne tipy. Návrat večerného workflowu: revert tejto zmeny verzus main.
+
+### 24.11 – Esá line-first napojené na Shadow testing (Claude, merge s #1815)
+- Shadow záznamy `aces_line_first` vznikajú vždy (nepublikujú sa), nezávisle od `TBT_ACES_LINE_FIRST_CANDIDATE`; ten prepínač ostáva len pre prípadné budúce zverejnenie.
+- Vyhodnotenie: počet es vybraného hráča v CDB vs. ponúknutá hranica; presná zhoda = neplatné.
+- Vypnutie: `TBT_OFFER_SHADOW_DISABLED=true`. Revert: revert merge commitu.

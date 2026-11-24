@@ -54,15 +54,63 @@ def test_category_splits_itf_by_tour():
     assert osh.category({"competition": "ITF", "tour": "ATP"}) == "ITF-M"
     assert osh.category({"competition": "ITF", "tour": "WTA"}) == "ITF-W"
 
-def test_aces_settlement_uses_selected_players_cdb_count():
-    rows = [dict(_row("1", "b", 1.8), ou_side="over", market_line=3.5),
-            dict(_row("2", "a", 1.8), ou_side="under", market_line=12.5)]
-    history = _cap(rows)
-    cap = history["snapshots"][0]["offer_shadow"]
-    cap["variants"] = {"aces_line_first": rows}
+
+def _ace_hist(rows):
+    cap = {"schema": 1, "public_offer_day": "2026-11-24",
+           "captured_at": "2026-11-24T05:00:00+00:00",
+           "variants": {"aces_all_levels": rows}}
     cap["sha256"] = osh._digest(cap)
-    matches = [_m("1", "a"), _m("2", "b")]
-    for m in matches:
-        m.stats = {"p1_aces": 10, "p2_aces": 5}
-    report = osh.settle_month(history, matches, asof=datetime(2026, 11, 25, tzinfo=timezone.utc))
-    assert report["variants"]["aces_line_first"]["WTA"]["correct"] == 2
+    return {"snapshots": [{"offer_shadow": cap}]}
+
+
+def test_aces_and_double_faults_graded_by_superiority():
+    rows = [dict(_row("1", "a", None, cat="ITF-M"), section="most_aces"),
+            dict(_row("2", "a", None, cat="ITF-M"), section="most_aces"),
+            dict(_row("3", "b", None, cat="WTA 125"), section="double_faults"),
+            dict(_row("4", "a", None, cat="ITF-M"), section="most_aces")]
+    ms = [SimpleNamespace(**vars(_m("1", "a")), stats={"p1_aces": 7, "p2_aces": 3}),
+          SimpleNamespace(**vars(_m("2", "b")), stats={"p1_aces": 2, "p2_aces": 5}),
+          SimpleNamespace(**vars(_m("3", "a")), stats={"p1_double_faults": 1, "p2_double_faults": 4}),
+          SimpleNamespace(**vars(_m("4", "a")), stats={"p1_aces": 4, "p2_aces": 4})]
+    rep = osh.settle_month(_ace_hist(rows), ms, asof=datetime(2026, 11, 25, tzinfo=timezone.utc))
+    v = rep["variants"]["aces_all_levels"]
+    assert v["Viac es · ITF-M"]["issued"] == 3
+    assert v["Viac es · ITF-M"]["settled"] == 2 and v["Viac es · ITF-M"]["correct"] == 1
+    assert v["Dvojchyby · WTA 125"]["correct"] == 1
+
+
+def test_calibrated_probability_slopes():
+    assert osh.calibrated_probability(0.7, "ITF-M") == 0.7 or abs(osh.calibrated_probability(0.7, "ITF-M") - 0.7) < 1e-12
+    assert osh.calibrated_probability(0.7, "Challenger") < 0.7
+    assert osh.calibrated_probability(None, "UTR") is None
+
+
+def test_line_first_rows_and_ou_settlement():
+    preds = [{"event_id": "1", "id": "1", "tour": "ATP", "competition": "ATP",
+              "scheduled_at": "2026-11-24T10:00:00+00:00",
+              "player1": {"id": "a"}, "player2": {"id": "b"}},
+             {"event_id": "2", "id": "2", "tour": "ATP", "competition": "ATP",
+              "scheduled_at": "2026-11-24T10:00:00+00:00",
+              "player1": {"id": "a"}, "player2": {"id": "b"}}]
+    picks = [{"candidate_only": True, "event_id": "1", "selection_id": "a", "ou_side": "over",
+              "market_line": 3.5, "odds": 1.8, "probability": 0.7, "projection": 5},
+             {"candidate_only": True, "event_id": "2", "selection_id": "b", "ou_side": "under",
+              "market_line": 12.5, "odds": 1.9, "probability": 0.6, "projection": 10.5},
+             {"candidate_only": True, "event_id": "2", "selection_id": "b", "ou_side": "under",
+              "market_line": None}]
+    rows = osh.line_first_rows(picks, preds)
+    assert [r["section"] for r in rows] == ["aces_over", "aces_under"]
+    ms = [SimpleNamespace(**vars(_m("1", "a")), stats={"p1_aces": 6, "p2_aces": 1}),
+          SimpleNamespace(**vars(_m("2", "a")), stats={"p1_aces": 9, "p2_aces": 14})]
+    rep = osh.settle_month(_ace_hist_variant("aces_line_first", rows), ms,
+                           asof=datetime(2026, 11, 25, tzinfo=timezone.utc))
+    v = rep["variants"]["aces_line_first"]
+    assert v["Esá over · ATP"]["correct"] == 1
+    assert v["Esá under · ATP"]["settled"] == 1 and v["Esá under · ATP"]["correct"] == 0
+
+
+def _ace_hist_variant(name, rows):
+    cap = {"schema": 1, "public_offer_day": "2026-11-24",
+           "captured_at": "2026-11-24T05:00:00+00:00", "variants": {name: rows}}
+    cap["sha256"] = osh._digest(cap)
+    return {"snapshots": [{"offer_shadow": cap}]}

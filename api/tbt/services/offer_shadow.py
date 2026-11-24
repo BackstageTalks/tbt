@@ -29,12 +29,25 @@ VARIANTS: dict[str, dict[str, str]] = {
     "value_all_no_sr": {"TBT_VALUE_LEVELS": ALL_LEVELS, "TBT_VALUE_SERVE_RETURN": "false"},
     # TOP always topped up from 1.40 (live only fills when short).
     "top_low_odds": {"TBT_TOP_LOW_ODDS_FLOOR": "1.40", "TBT_TOP_MIN_PICKS": "10"},
+    # TOP + Value ranked by the calibrated raw model instead of the
+    # depth-shrunk BlinQ %, which under-states ITF/UTR favourites (24.11
+    # audit, 11,640 settled: ITF-W shown 63 % vs 70 % won; raw model 69.5 %).
+    "calibrated_model": {},
 }
+MULTI_SECTION = {"calibrated_model", "aces_all_levels", "aces_line_first"}
+SECTION_LABELS = {"top": "TOP", "value": "Value", "most_aces": "Viac es",
+                  "aces_over": "Esá over", "aces_under": "Esá under",
+                  "double_faults": "Dvojchyby", "aces": "Esá"}
+# Logit slope per competition on the raw model probability (24.11 audit,
+# 10.10-22.11). 1.0 = raw model already calibrated.
+CALIBRATION_SLOPES = {"Challenger": 0.80, "UTR": 0.85, "unknown": 0.90}
 VARIANT_LABELS = {
     "value_all_levels": "Value · všetky súťaže",
     "value_all_no_sr": "Value · bez podania+príjmu",
-    "aces_line_first": "Esá · line-first",
     "top_low_odds": "TOP · kurz od 1,40",
+    "calibrated_model": "TOP + Value · kalibrovaný model",
+    "aces_all_levels": "Viac es / Dvojchyby · všetky súťaže",
+    "aces_line_first": "Esá · line-first (Prop-Line)",
 }
 
 
@@ -64,7 +77,103 @@ def category(card: dict[str, Any]) -> str:
     return str(group or "unknown")
 
 
-def build_offer_shadow(predictions, *, observed_at, public_offer_day, ace_candidates=None):
+def calibrated_probability(raw, group):
+    import math
+    p = _num(raw)
+    if p is None or not 0 < p < 1:
+        return None
+    slope = CALIBRATION_SLOPES.get(group, 1.0)
+    return 1.0 / (1.0 + math.exp(-slope * math.log(p / (1.0 - p))))
+
+
+def _calibrated_rows(rows):
+    out = []
+    for row in rows:
+        copied = deepcopy(row)
+        betting = copied.get("betting")
+        if isinstance(betting, dict):
+            p = calibrated_probability(betting.get("model_probability"), category(copied))
+            if p is not None:
+                betting["blinq_probability"] = p
+                copied["blinq_probability"] = p
+        out.append(copied)
+    return out
+
+
+def line_first_rows(picks, predictions) -> list[dict]:
+    """Virtual Aces O/U tips from the Prop-Line line-first candidate (PR #1798).
+
+    Only real offered lines; under only with a real over/under pair (enforced
+    by the candidate). Graded against the selected player's CDB ace count.
+    """
+    by_event = {str(r.get("event_id")): r for r in predictions or [] if isinstance(r, dict)}
+    rows = []
+    for pick in picks or []:
+        if not isinstance(pick, dict) or not pick.get("candidate_only"):
+            continue
+        event = str(pick.get("event_id") or "")
+        source = by_event.get(event)
+        side = str(pick.get("ou_side") or "").lower()
+        line = _num(pick.get("market_line"))
+        if source is None or side not in ("over", "under") or line is None:
+            continue
+        p1 = str((source.get("player1") or {}).get("id") or "")
+        p2 = str((source.get("player2") or {}).get("id") or "")
+        sel = str(pick.get("selection_id") or "")
+        if not (p1 and p2 and sel in (p1, p2)):
+            continue
+        rows.append({
+            "section": "aces_" + side, "category": category(source), "event_id": event,
+            "match_id": str(source.get("id") or ""), "selected_player_id": sel,
+            "player1_id": p1, "player2_id": p2,
+            "scheduled_at": str(source.get("scheduled_at")),
+            "odds": _num(pick.get("odds")), "probability": _num(pick.get("probability")),
+            "projection": _num(pick.get("projection")), "market_line": line,
+            "ou_side": side, "tier": pick.get("selection_rule"), "published": False,
+        })
+    return rows
+
+
+def build_ace_shadow(history, predictions, *, now, live_picks) -> list[dict]:
+    """Most Aces + Double Faults candidates with the tour gate opened.
+
+    Graded as player superiority (selected player more aces / DFs than the
+    opponent). O/U lines come later with the Prop-Line line-first candidate.
+    """
+    from . import ace_selection
+    live = {(str(c.get("event_id")), str(c.get("market")), str(c.get("selection_id")))
+            for c in live_picks or [] if isinstance(c, dict)}
+    live |= {(e, "most_aces" if m == "aces" else m, sid) for e, m, sid in live}
+    universe = max(1, len(predictions))
+    with patch.object(ace_selection, "ace_eligibility_reason", lambda _row: "eligible"):
+        winners, _ = ace_selection.select_ace_winner_picks(history, predictions, now=now)
+        others, _ = ace_selection.select_ace_picks(
+            history, predictions, now=now, per_market_limit=universe,
+            total_limit=2 * universe, target_count=universe,
+            available_markets_by_event=None, allow_local_aces_fallback=False)
+    rows = []
+    for card in list(winners) + [c for c in others if c.get("market") == "double_faults"]:
+        p1 = str((card.get("player1") or {}).get("id") or "")
+        p2 = str((card.get("player2") or {}).get("id") or "")
+        sel = str(card.get("selection_id") or "")
+        event = str(card.get("event_id") or "")
+        if not (p1 and p2 and sel in (p1, p2) and event):
+            continue
+        market = str(card.get("market"))
+        rows.append({
+            "section": market, "category": category(card), "event_id": event,
+            "match_id": str(card.get("id") or ""), "selected_player_id": sel,
+            "player1_id": p1, "player2_id": p2,
+            "scheduled_at": str(card.get("scheduled_at")), "odds": None,
+            "probability": _num(card.get("projection_confidence")),
+            "projection": _num(card.get("projection")),
+            "tier": card.get("projection_model"),
+            "published": (event, market, sel) in live,
+        })
+    return rows
+
+
+def build_offer_shadow(predictions, *, observed_at, public_offer_day, extra_variants=None):
     from .market_selection import (select_market_sections, value_level_ok,
                                    _belongs_to_public_offer_day)
     clock = _ts(observed_at)
@@ -95,8 +204,9 @@ def build_offer_shadow(predictions, *, observed_at, public_offer_day, ace_candid
                  for s, k in SECTIONS.items() for c in live.get(k, [])}
     variants = {}
     for name, env in VARIANTS.items():
+        source_rows = _calibrated_rows(prepared) if name == "calibrated_model" else deepcopy(prepared)
         with patch.dict(os.environ, env):
-            result = select_market_sections(deepcopy(prepared), public_offer_day=public_offer_day)
+            result = select_market_sections(source_rows, public_offer_day=public_offer_day)
         rows = []
         for section, key in SECTIONS.items():
             if name.startswith("value") and section != "value":
@@ -129,22 +239,9 @@ def build_offer_shadow(predictions, *, observed_at, public_offer_day, ace_candid
                     "published": published,
                 })
         variants[name] = rows
-    if ace_candidates is not None:
-        rows = []
-        for pick in ace_candidates:
-            event = str(pick.get("event_id") or "")
-            source = by_event.get(event)
-            if not source or not pick.get("candidate_only"):
-                continue
-            players = [str(source[key]["id"]) for key in ("player1", "player2")]
-            if str(pick.get("selection_id")) not in players:
-                continue
-            rows.append({**{key: pick[key] for key in ("projection", "market_line", "ou_side", "odds", "probability")},
-                         "event_id": event, "match_id": str(source.get("id") or ""),
-                         "selected_player_id": str(pick["selection_id"]), "player1_id": players[0],
-                         "player2_id": players[1], "scheduled_at": source["scheduled_at"],
-                         "section": "aces", "category": category(source), "published": False})
-        variants["aces_line_first"] = rows
+    for name, rows in (extra_variants or {}).items():
+        if name in VARIANT_LABELS and isinstance(rows, list):
+            variants[name] = rows
     capture = {"schema": SCHEMA, "public_offer_day": public_offer_day,
                "captured_at": clock.isoformat(), "variants": variants}
     capture["sha256"] = _digest(capture)
@@ -165,6 +262,28 @@ def first_day_capture(history, *, public_offer_day):
     return None
 
 
+def _row_won(row, match):
+    """Winner sections: match winner. Aces/DF: player superiority; ties void."""
+    section = row.get("section")
+    if section in ("top", "value", "prime"):
+        return str(match.winner_id) == row["selected_player_id"]
+    stats = getattr(match, "stats", None) or {}
+    mine = "p1" if str(match.player1_id) == row["selected_player_id"] else "p2"
+    if section in ("aces_over", "aces_under"):
+        count, line = _num(stats.get(f"{mine}_aces")), _num(row.get("market_line"))
+        if count is None or line is None or count < 0 or count == line:
+            return None
+        return count > line if section == "aces_over" else count < line
+    stat = {"most_aces": "aces", "aces": "aces", "double_faults": "double_faults"}.get(section)
+    if not stat:
+        return None
+    other = "p2" if mine == "p1" else "p1"
+    a, b = _num(stats.get(f"{mine}_{stat}")), _num(stats.get(f"{other}_{stat}"))
+    if a is None or b is None or a == b:
+        return None
+    return a > b
+
+
 def _blank():
     return {"issued": 0, "settled": 0, "correct": 0, "staked": 0, "returned": 0.0,
             "odds_sum": 0.0}
@@ -179,7 +298,7 @@ def settle_month(history, matches, *, asof) -> dict:
             mid = str(getattr(m, "match_id", "") or "")
             if mid:
                 by_match[mid] = m
-    out: dict[str, dict[str, dict]] = {v: {} for v in VARIANTS}
+    out: dict[str, dict[str, dict]] = {v: {} for v in VARIANT_LABELS}
     days = set()
     for snap in (history or {}).get("snapshots") or []:
         cap = snap.get("offer_shadow")
@@ -189,14 +308,15 @@ def settle_month(history, matches, *, asof) -> dict:
             continue
         days.add(cap["public_offer_day"])
         for variant, rows in (cap.get("variants") or {}).items():
-            if variant == "aces_line_first":
-                out.setdefault(variant, {})
             if variant not in out:
                 continue
             for row in rows:
                 if row.get("published"):
                     continue  # already measured as a live pick
-                dest = out[variant].setdefault(row.get("category") or "unknown", _blank())
+                key = row.get("category") or "unknown"
+                if variant in MULTI_SECTION:
+                    key = SECTION_LABELS.get(row.get("section"), str(row.get("section"))) + " · " + key
+                dest = out[variant].setdefault(key, _blank())
                 dest["issued"] += 1
                 match = by_match.get(row.get("match_id"))
                 start = _ts(row.get("scheduled_at"))
@@ -205,13 +325,9 @@ def settle_month(history, matches, *, asof) -> dict:
                         != {row["player1_id"], row["player2_id"]}
                         or str(match.winner_id) not in (row["player1_id"], row["player2_id"])):
                     continue
-                won = str(match.winner_id) == row["selected_player_id"]
-                if variant == "aces_line_first":
-                    slot = "p1" if str(match.player1_id) == row["selected_player_id"] else "p2"
-                    count = (match.stats or {}).get(slot + "_aces")
-                    if type(count) not in (int, float) or count < 0 or not float(count).is_integer():
-                        continue
-                    won = count > row["market_line"] if row["ou_side"] == "over" else count < row["market_line"]
+                won = _row_won(row, match)
+                if won is None:
+                    continue
                 dest["settled"] += 1
                 odds = row.get("odds")
                 priced = isinstance(odds, (int, float)) and odds > 1

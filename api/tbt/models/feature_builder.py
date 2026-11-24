@@ -109,6 +109,15 @@ RICH_CHARTING_FEATURE_NAMES = [
 _SURFACE_KEY_CACHE: dict = {}
 
 
+def _zero_float_pair() -> list[float]:
+    # Named (not a lambda) so builder state is picklable for checkpoints.
+    return [0., 0.]
+
+
+def _zero_int_pair() -> list[int]:
+    return [0, 0]
+
+
 def _stats_surface_key_uncached(surface: str) -> str:
     value = str(surface or "unknown").strip().lower()
     return "hard" if value == "indoor_hard" else value
@@ -222,7 +231,7 @@ class FeatureBuilder:
         self.independent_direct_rates = bool(independent_direct_rates)
         self.point_weighted_quality = bool(point_weighted_quality)
         # Sequential, pre-match tour priors. [won points, total points].
-        self.quality_baselines = defaultdict(lambda: [0., 0.])
+        self.quality_baselines = defaultdict(_zero_float_pair)
         self.players: dict[
             str,
             PlayerState,
@@ -234,7 +243,7 @@ class FeatureBuilder:
             tuple[str, str],
             list[int],
         ] = defaultdict(
-            lambda: [0, 0]
+            _zero_int_pair
         )
 
         # Surface-specific H2H is kept separately so the ordinary lifetime H2H
@@ -244,7 +253,7 @@ class FeatureBuilder:
             tuple[str, str, str],
             list[int],
         ] = defaultdict(
-            lambda: [0, 0]
+            _zero_int_pair
         )
 
     @staticmethod
