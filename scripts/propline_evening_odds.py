@@ -256,6 +256,18 @@ def collect(target_day, *, max_events=0, allow_same_day=False,
              str(e.get("id") or "").isdigit() and
              str(e.get("home_team") or "").strip() and
              str(e.get("away_team") or "").strip()]
+    # Paid event detail is at most once per provider fixture. Conflicting
+    # identities sharing an ID are quarantined before any detail request.
+    unique, conflicts = {}, set()
+    for event in valid:
+        ident = str(event["id"])
+        previous = unique.get(ident)
+        if previous is not None and any(previous.get(k) != event.get(k) for k in
+                ("home_team", "away_team", "commence_time", "start_time")):
+            conflicts.add(ident)
+        unique.setdefault(ident, event)
+    duplicate_rows = len(valid) - len(unique)
+    valid = [event for ident, event in unique.items() if ident not in conflicts]
     # Provider order is preserved so a rerun remains deterministic for fixed data.
     selected = valid if max_events == 0 else valid[:max_events]
     report = {
@@ -270,6 +282,8 @@ def collect(target_day, *, max_events=0, allow_same_day=False,
         "probed_tournaments": len({_tournament(e) for e in selected if _tournament(e)}),
         "probed_urls": len(selected),
         "candidate_events": len(valid), "probed_events": len(selected),
+        "duplicate_event_rows_skipped": duplicate_rows,
+        "conflicting_event_ids_skipped": len(conflicts),
         "provider_remaining": remaining,
         "provider_requests": 1, "provider_event_requests": 0,
         "event_detail_enabled": get_event is not None,
@@ -408,10 +422,13 @@ def main():
     p.add_argument("--max-events", type=int, default=0,
                    help="0 = all events returned in one API response")
     p.add_argument("--allow-same-day", action="store_true")
+    p.add_argument("--bulk-only", action="store_true",
+                   help="One board request, no per-match requests (reuse paid event observations)")
     p.add_argument("--out", default="reports/propline-evening/odds.json")
     args = p.parse_args()
     report = collect(args.target_day, max_events=args.max_events,
-                     allow_same_day=args.allow_same_day, get_event=fetch_event)
+                     allow_same_day=args.allow_same_day,
+                     get_event=None if args.bulk_only else fetch_event)
     destination = Path(args.out)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(

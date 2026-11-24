@@ -1,4 +1,4 @@
-name: BlinQ PropLine evening odds archive (Drive + private recovery)
+name: BlinQ PropLine evening odds archive (private research + CDB)
 
 # External 23:00 Europe/Bratislava scheduler; old event type is a temporary alias.
 # No second schedule is created. New scheduler may migrate to blinq-propline-odds-tick.
@@ -75,18 +75,25 @@ jobs:
           datetime.date.fromisoformat(sys.argv[1])
           PY
           echo "date=$target" >> "$GITHUB_OUTPUT"
+      - name: Check CDB and reserve the daily board request
+        id: daily
+        env:
+          BETTING_DAY: ${{ steps.day.outputs.date }}
+        run: python scripts/prepare_evening_aces.py
       - name: Capture existing free PropLine bookmaker markets without CDB changes
+        if: steps.daily.outputs.mode == 'fetch'
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
           set -euo pipefail
-          args=(--target-day "$BETTING_DAY" --max-events "$MAX_EVENTS"
+          args=(--bulk-only --target-day "$BETTING_DAY" --max-events "$MAX_EVENTS"
                 --out reports/propline-evening/odds.json)
           if [[ "${INPUT_ALLOW_SAME_DAY,,}" == "true" ]]; then
             args+=(--allow-same-day)
           fi
           python scripts/propline_evening_odds.py "${args[@]}"
       - name: Validate audit and create-only store in separate private research path
+        if: steps.daily.outputs.mode == 'fetch'
         env:
           BETTING_DAY: ${{ steps.day.outputs.date }}
         run: |
@@ -205,6 +212,11 @@ jobs:
       # Drive archive removed 2026-11-24 (owner): service accounts have no
       # storage quota on a personal My Drive (HTTP 403). Quotes persist in
       # tbt-data research/propline-evening-odds with verified read-back above.
+      - name: Store verified offers under the global CDB writer lock
+        if: steps.daily.outputs.mode != 'complete' && success()
+        env:
+          BETTING_DAY: ${{ steps.day.outputs.date }}
+        run: python scripts/stage_aces_offer_cdb.py --day "$BETTING_DAY" --report reports/propline-evening/odds.json --out reports/cdb --apply
       - name: Keep local evidence even if provider access is blocked
         if: always()
         uses: actions/upload-artifact@v4

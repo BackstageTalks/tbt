@@ -593,7 +593,7 @@ def _publish_predictions(
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
     settlement_matches=None, comparator_artifact=None,
     betting_day_start_hour=6, morning_refresh=False,
-    champion_sha256=None, ace_shadow_rows=None,
+    champion_sha256=None, ace_shadow_rows=None, line_first_shadow_rows=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -772,7 +772,8 @@ def _publish_predictions(
             if first_day_capture(candidate_history, public_offer_day=public_offer_day) is None:
                 offer_shadow = build_offer_shadow(
                     predictions, observed_at=now, public_offer_day=public_offer_day,
-                    extra_variants={"aces_all_levels": ace_shadow_rows or []})
+                    extra_variants={"aces_all_levels": ace_shadow_rows or [],
+                                    "aces_line_first": line_first_shadow_rows or []})
                 if offer_shadow is not None:
                     candidate_snapshot["offer_shadow"] = offer_shadow
                     print(json.dumps({"offer_shadow_capture": {
@@ -1442,6 +1443,7 @@ def main():
     propline_aces_shadow_result = {"status": "NOT_ENABLED"}
     ace_winner_picks = []
     ace_shadow_rows = None
+    line_first_shadow_rows = None
     ace_winner_report = None
     sg_picks = []
     sg_report = None
@@ -2010,6 +2012,30 @@ def main():
             ),
         )
         projection_odds_report["discovery"] = projection_discovery_report
+        # Aces line-first candidate (PR #1798): virtual Shadow-testing rows only.
+        # Reuses already captured Prop-Line offers and the RapidAPI cache
+        # (0 new provider requests); never feeds the champion or TOP/Value.
+        if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
+            try:
+                from aces_line_first import project_candidates, select_candidate
+                from stage_aces_offer_cdb import load_cdb_report
+                candidate_now = datetime.now(timezone.utc)
+                candidate_day = selection_now.astimezone(PROPLINE_TZ).date().isoformat()
+                candidate_archive, _ = load_cdb_report(day=candidate_day, now=candidate_now)
+                if candidate_archive is None:
+                    candidate_archive, _ = load_propline_evening_report(
+                        betting_day=candidate_day, now=candidate_now)
+                candidate_result = select_candidate(
+                    project_candidates(matches, predictions, now=candidate_now),
+                    candidate_archive, now=candidate_now,
+                    betting_day=candidate_day, rapid_payloads=projection_market_cache)
+                from tbt.services.offer_shadow import line_first_rows
+                line_first_shadow_rows = line_first_rows(candidate_result["picks"], predictions)
+            except Exception as exc:
+                projection_odds_report["line_first_candidate"] = {
+                    "status": "blocked", "error_type": type(exc).__name__,
+                    "detail": str(exc)[:200], "incremental_provider_requests": 0,
+                }
         if (projection_odds_cap or prop_market_payloads) and (ace_picks or sg_picks):
             ace_picks, sg_picks, attachment_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks,
@@ -2228,6 +2254,7 @@ def main():
         settlement_matches=settlement_history,
         comparator_artifact=comparator_artifact,
         ace_shadow_rows=ace_shadow_rows,
+        line_first_shadow_rows=line_first_shadow_rows,
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
         champion_sha256=(

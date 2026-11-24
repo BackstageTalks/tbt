@@ -172,6 +172,7 @@ jobs:
       TBT_SETS_SUSPENDED: ${{ vars.TBT_SETS_SUSPENDED_OWNER_APPROVED == 'true' && vars.TBT_SETS_SUSPENDED == 'true' && 'true' || 'false' }}
       TBT_ACES_MIN_GAP: ${{ vars.TBT_ACES_MIN_GAP_OWNER_APPROVED == 'true' && vars.TBT_ACES_MIN_GAP || '' }}
       TBT_ACES_REAL_LINE_STRICT: ${{ vars.TBT_ACES_REAL_LINE_STRICT_OWNER_APPROVED == 'true' && vars.TBT_ACES_REAL_LINE_STRICT == 'true' && 'true' || 'false' }}
+      TBT_ACES_LINE_FIRST_CANDIDATE: ${{ vars.TBT_ACES_LINE_FIRST_CANDIDATE_OWNER_APPROVED == 'true' && vars.TBT_ACES_LINE_FIRST_CANDIDATE == 'true' && 'true' || 'false' }}
       TBT_ACES_CUSHION_RULE: ${{ vars.TBT_ACES_CUSHION_RULE_OWNER_APPROVED == 'true' && vars.TBT_ACES_CUSHION_RULE == 'true' && 'true' || 'false' }}
       TBT_VALUE_SERVE_RETURN: ${{ vars.TBT_VALUE_SERVE_RETURN == 'false' && 'false' || 'true' }}
       TBT_VALUE_LEVELS: ${{ vars.TBT_VALUE_LEVELS || 'ATP,ITF-M' }}

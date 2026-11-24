@@ -83,3 +83,34 @@ def test_calibrated_probability_slopes():
     assert osh.calibrated_probability(0.7, "ITF-M") == 0.7 or abs(osh.calibrated_probability(0.7, "ITF-M") - 0.7) < 1e-12
     assert osh.calibrated_probability(0.7, "Challenger") < 0.7
     assert osh.calibrated_probability(None, "UTR") is None
+
+
+def test_line_first_rows_and_ou_settlement():
+    preds = [{"event_id": "1", "id": "1", "tour": "ATP", "competition": "ATP",
+              "scheduled_at": "2026-11-24T10:00:00+00:00",
+              "player1": {"id": "a"}, "player2": {"id": "b"}},
+             {"event_id": "2", "id": "2", "tour": "ATP", "competition": "ATP",
+              "scheduled_at": "2026-11-24T10:00:00+00:00",
+              "player1": {"id": "a"}, "player2": {"id": "b"}}]
+    picks = [{"candidate_only": True, "event_id": "1", "selection_id": "a", "ou_side": "over",
+              "market_line": 3.5, "odds": 1.8, "probability": 0.7, "projection": 5},
+             {"candidate_only": True, "event_id": "2", "selection_id": "b", "ou_side": "under",
+              "market_line": 12.5, "odds": 1.9, "probability": 0.6, "projection": 10.5},
+             {"candidate_only": True, "event_id": "2", "selection_id": "b", "ou_side": "under",
+              "market_line": None}]
+    rows = osh.line_first_rows(picks, preds)
+    assert [r["section"] for r in rows] == ["aces_over", "aces_under"]
+    ms = [SimpleNamespace(**vars(_m("1", "a")), stats={"p1_aces": 6, "p2_aces": 1}),
+          SimpleNamespace(**vars(_m("2", "a")), stats={"p1_aces": 9, "p2_aces": 14})]
+    rep = osh.settle_month(_ace_hist_variant("aces_line_first", rows), ms,
+                           asof=datetime(2026, 11, 25, tzinfo=timezone.utc))
+    v = rep["variants"]["aces_line_first"]
+    assert v["Esá over · ATP"]["correct"] == 1
+    assert v["Esá under · ATP"]["settled"] == 1 and v["Esá under · ATP"]["correct"] == 0
+
+
+def _ace_hist_variant(name, rows):
+    cap = {"schema": 1, "public_offer_day": "2026-11-24",
+           "captured_at": "2026-11-24T05:00:00+00:00", "variants": {name: rows}}
+    cap["sha256"] = osh._digest(cap)
+    return {"snapshots": [{"offer_shadow": cap}]}

@@ -34,8 +34,9 @@ VARIANTS: dict[str, dict[str, str]] = {
     # audit, 11,640 settled: ITF-W shown 63 % vs 70 % won; raw model 69.5 %).
     "calibrated_model": {},
 }
-MULTI_SECTION = {"calibrated_model", "aces_all_levels"}
+MULTI_SECTION = {"calibrated_model", "aces_all_levels", "aces_line_first"}
 SECTION_LABELS = {"top": "TOP", "value": "Value", "most_aces": "Viac es",
+                  "aces_over": "Esá over", "aces_under": "Esá under",
                   "double_faults": "Dvojchyby", "aces": "Esá"}
 # Logit slope per competition on the raw model probability (24.11 audit,
 # 10.10-22.11). 1.0 = raw model already calibrated.
@@ -46,6 +47,7 @@ VARIANT_LABELS = {
     "top_low_odds": "TOP · kurz od 1,40",
     "calibrated_model": "TOP + Value · kalibrovaný model",
     "aces_all_levels": "Viac es / Dvojchyby · všetky súťaže",
+    "aces_line_first": "Esá · line-first (Prop-Line)",
 }
 
 
@@ -96,6 +98,40 @@ def _calibrated_rows(rows):
                 copied["blinq_probability"] = p
         out.append(copied)
     return out
+
+
+def line_first_rows(picks, predictions) -> list[dict]:
+    """Virtual Aces O/U tips from the Prop-Line line-first candidate (PR #1798).
+
+    Only real offered lines; under only with a real over/under pair (enforced
+    by the candidate). Graded against the selected player's CDB ace count.
+    """
+    by_event = {str(r.get("event_id")): r for r in predictions or [] if isinstance(r, dict)}
+    rows = []
+    for pick in picks or []:
+        if not isinstance(pick, dict) or not pick.get("candidate_only"):
+            continue
+        event = str(pick.get("event_id") or "")
+        source = by_event.get(event)
+        side = str(pick.get("ou_side") or "").lower()
+        line = _num(pick.get("market_line"))
+        if source is None or side not in ("over", "under") or line is None:
+            continue
+        p1 = str((source.get("player1") or {}).get("id") or "")
+        p2 = str((source.get("player2") or {}).get("id") or "")
+        sel = str(pick.get("selection_id") or "")
+        if not (p1 and p2 and sel in (p1, p2)):
+            continue
+        rows.append({
+            "section": "aces_" + side, "category": category(source), "event_id": event,
+            "match_id": str(source.get("id") or ""), "selected_player_id": sel,
+            "player1_id": p1, "player2_id": p2,
+            "scheduled_at": str(source.get("scheduled_at")),
+            "odds": _num(pick.get("odds")), "probability": _num(pick.get("probability")),
+            "projection": _num(pick.get("projection")), "market_line": line,
+            "ou_side": side, "tier": pick.get("selection_rule"), "published": False,
+        })
+    return rows
 
 
 def build_ace_shadow(history, predictions, *, now, live_picks) -> list[dict]:
@@ -231,11 +267,16 @@ def _row_won(row, match):
     section = row.get("section")
     if section in ("top", "value", "prime"):
         return str(match.winner_id) == row["selected_player_id"]
+    stats = getattr(match, "stats", None) or {}
+    mine = "p1" if str(match.player1_id) == row["selected_player_id"] else "p2"
+    if section in ("aces_over", "aces_under"):
+        count, line = _num(stats.get(f"{mine}_aces")), _num(row.get("market_line"))
+        if count is None or line is None or count < 0 or count == line:
+            return None
+        return count > line if section == "aces_over" else count < line
     stat = {"most_aces": "aces", "aces": "aces", "double_faults": "double_faults"}.get(section)
     if not stat:
         return None
-    stats = getattr(match, "stats", None) or {}
-    mine = "p1" if str(match.player1_id) == row["selected_player_id"] else "p2"
     other = "p2" if mine == "p1" else "p1"
     a, b = _num(stats.get(f"{mine}_{stat}")), _num(stats.get(f"{other}_{stat}"))
     if a is None or b is None or a == b:

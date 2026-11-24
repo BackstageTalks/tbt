@@ -1,5 +1,21 @@
 # Claude – poznámky k úpravám BlinQ
 
+## 2026-11-23 – Esá line-first kandidát (PR, champion nezmenený)
+
+- `scripts/aces_line_first.py`: samostatný kandidát z overeného existujúceho Prop-Line archívu. Model počíta oba hráčske počty, aj keď sa ich projekcie zhodujú; nepoužíva shortlist ani superiority gap trhu Viac es. Zachované sú turnajové/rankingové brány a minimum histórie existujúceho count modelu. Žiadny tréning.
+- Hranica musí byť skutočne ponúknutá v Prop-Line. Prednosť má over s rezervou ≥1,5, potom under; vyberá sa najbližšia vyhovujúca ponúknutá hranica. Príklady: 5 → over 3,5; 10,5 → under 12,5, ak je to vhodná ponuka. Celé hranice s možným pushom a DFS multiplikátory sú v kandidátovi vylúčené. N+ je explicitne ekvivalent over N−0,5.
+- Kurz pre presný kontrakt hráč/hranica/smer: existujúca RapidAPI cache → Prop-Line → nezmenený `working_ace_odds` (1,60–1,80). Aj reálny kurz 2,00 je prípustný v kandidátovi. Lokálny kurz nesmie vytvoriť hranicu. Chýbajúca alebo nevyhovujúca ponuka = diagnostika `bez ponuky`, bez tipu.
+- `scripts/pipeline.py` ukladá výsledok len do `odds_attachment.line_first_candidate`; nijaký kandidát nenahrádza publikované tipy. TOP, Value, ostatné trhy, KPI, KURZ, grafika a push zostávajú bez zmeny. Neprázdnosť oficiálneho denného výstupu ostáva na existujúcich trhoch; Esá bez ponuky nemajú umelé dopĺňanie.
+- Zapnutie výpočtu kandidáta: obe Actions Variables `TBT_ACES_LINE_FIRST_CANDIDATE_OWNER_APPROVED=true` a `TBT_ACES_LINE_FIRST_CANDIDATE=true`. Predvolene OFF. Návrat: zrušiť ktorýkoľvek prepínač alebo revert PR. Tento prepínač nikdy neaktivuje produkčný výber.
+- `scripts/propline_evening_odds.py` deduplikuje provider event ID pred detailovým volaním; konfliktné identity preskočí. Kandidát aj opakovaný výpočet čítajú uložený archív, takže nepridávajú žiadne RapidAPI ani Prop-Line volanie. Existujúci večerný zber zostáva 1 bulk + najviac 1 detail na unikátny zápas v behu, s existujúcou rezervou poskytovateľa. Globálnu deduplikáciu nezávislých existujúcich live/večerných zberov tento PR nezavádza.
+- CDB: `scripts/stage_aces_offer_cdb.py --day YYYY-MM-DD --out work/aces-offers` pripraví lokálny dátovaný sidecar `aces-offers-YYYY-MM-DD.json`, nie štatistiky do tréningového Parquetu. `--report` znovu použije už zachytený zdroj. Explicitný `--apply` používa globálny writer lock (max. 15 min čakania) a release `tbt-data-v1`, overuje nezmeniteľnosť existujúceho súboru a nezávislé stiahnutie po zápise. Ranný kandidát najprv číta sidecar s kontrolou SHA256/veľkosti proti CDB manifestu, potom pôvodný archív. Pozorovania sa uchovajú aj po začiatku zápasu; predikčný čitateľ vyberá len ešte nezačaté zápasy.
+- Dokončenie majiteľ povolil následným „dokonci“. Workflow `propline-evening-odds.yml` má manuálny vstup `candidate_cdb=true`: presne 1 bulk dotaz, **0 detailových dotazov na zápasy**, zápis ponúk a read-back, bez tréningu či publikovania tipov. Pri opakovaní zápisu zadať `source_capture_run=ID` – obnoví uložený artefakt bez ďalšieho volania Prop-Line. Neopakovať nový zber len kvôli obsadenému CDB zámku. Automatický večerný režim a ranný plán zostávajú nezmenené.
+- Dnešný nový zdroj: beh `45247747261`, captured_at `2026-11-23T19:19:49.603042+00:00`, **7 cieľových zápasov / 165 reálnych N+ kontraktov**, 1 bulk, 0 detailov, RapidAPI 0, Prop-Line remaining 531. Natívne identity/hash a presná reprodukcia stagingu overené lokálne. Prvý zápis správne odmietol obsadený CDB zámok; beh `45247946568` obnovuje rovnaký artefakt bez nového zberu. Výsledok zápisu a nezávislého read-back je zaznamenaný v PR #1798. Pôvodný nočný archív s nulou ponúk už nepopisuje večernú dostupnosť.
+- Kontrola existujúceho feedu `2026-11-23T07:38:14.354709+00:00`: 2 TOP a 1 Value tip. Zo zdrojových ponúk sa 6 zápasov jednoznačne páruje; všetkých 6 vylučuje existujúca brána `excluded_atp_below_250`. Táto brána sa nemení a uloženie ponuky neznamená jej publikáciu ako tipu.
+- Riziká/manuálne overenie: pokrytie reálnych sportsbook ponúk, zhodnosť hráča/začiatku a settlementu N+, kalibrácia pravdepodobnosti (existujúca provizórna count distribúcia), frekvencia under, čas výpočtu pri rannom behu. Živý kandidátsky ranný beh ani presnosť na novom holdoute sa netvrdia. Produkčná aktivácia vyžaduje samostatné rozhodnutie. Rollback nemaže už zachytené zdrojové ponuky.
+- Testy `tests/test_aces_line_first.py`: oba príklady, bez ponuky, zachovanie TOP/Value a vstupov, oba hráči, rovnaké projekcie, presná priorita kurzu, lokálny kurz na reálnej hranici, neplatné hranice, duplicity/konflikty, nulové volania pri opakovaní, staging a mock writer/read-back/idempotencia.
+- Lokálne overenie dokončenia: 185 regresných testov prešlo; nové testy overujú aj CDB manifest, odmietnutie nesprávneho hashu a identický staging pred/po začiatku zápasu. Žiadne nové projektové závislosti.
+
 ## Pravidlá spolupráce (dohodnuté 23.11.2026)
 - Claude zlučuje PR do main len po „OK“ majiteľa v chate a po zelenom CI.
 - Pred zlúčením: zhrnutie zmeny, riziká (najprv), spôsob návratu.
@@ -118,3 +134,12 @@ Rollback: obnov partície z releasu `blinq-cdb-*-prewrite-<run_id>-1` v tbt-data
 | #1801 | konsenzus kurzov HF minmaxxxer → `_tbt_market_consensus` | 9 643 | 45253782831 |
 ITF zber: #1783 (budget fix), #1784 (CDB-ready staging), #1786 (skip duplicít), #1792 (večerný owner cap).
 Zistenie: ledger vs provider rozdiel ~1 000/deň; ochrana = provider reserve 500 v klientovi.
+
+### Večerný zber a admin Shadow testing
+Večerný workflow najprv skontroluje denný súbor v CDB. Ak existuje, skončí bez zápisu a bez volania poskytovateľa. Existujúci research archív použije pred novým zberom. Pred jediným súhrnným dotazom rezervuje deň v súkromnom research adresári. Pri páde po rezervácii skontrolovať pôvodný artefakt, aby sa platený dotaz neopakoval. Ponuky ukladá pod globálnym CDB zámkom. Drive sa nepoužíva.
+Variant `aces_line_first` je predvolene vypnutý a jeho virtuálne tipy sa ukladajú do admin Shadow testing. Under vyžaduje overený pár. Vyrovnanie používa počet es vybraného hráča podľa identity v CDB. Chýbajúci počet ostáva nevyhodnotený. Vypnutie ktoréhokoľvek existujúceho prepínača kandidáta zastaví nové virtuálne tipy. Návrat večerného workflowu: revert tejto zmeny verzus main.
+
+### 24.11 – Esá line-first napojené na Shadow testing (Claude, merge s #1815)
+- Shadow záznamy `aces_line_first` vznikajú vždy (nepublikujú sa), nezávisle od `TBT_ACES_LINE_FIRST_CANDIDATE`; ten prepínač ostáva len pre prípadné budúce zverejnenie.
+- Vyhodnotenie: počet es vybraného hráča v CDB vs. ponúknutá hranica; presná zhoda = neplatné.
+- Vypnutie: `TBT_OFFER_SHADOW_DISABLED=true`. Revert: revert merge commitu.
