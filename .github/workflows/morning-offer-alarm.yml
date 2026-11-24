@@ -1,4 +1,4 @@
-name: Morning published offer alarm
+name: "ALARM BlinQ – chýba ranná ponuka"
 on:
   schedule:
     - cron: '30 6 * * *'
