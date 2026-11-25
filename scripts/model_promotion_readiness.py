@@ -122,7 +122,9 @@ def build_readiness(
 
 
 def _load_history(repository: str):
-    history_dir = ROOT / ".cache" / "tbt" / "history"
+    # The frozen-candidate workflow keeps its frozen CDB in .cache/tbt/history
+    # and later re-verifies it byte-for-byte; a fresh scan must not overwrite it.
+    history_dir = ROOT / os.environ.get("TBT_READINESS_HISTORY_DIR", ".cache/tbt/history")
     store = ReleaseStore(repository, "tbt-data-v1", history_dir)
     store.download()
     matches = load_partitions(history_dir)
