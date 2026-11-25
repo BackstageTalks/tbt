@@ -6,7 +6,25 @@ is unavailable, while published admin rules may explicitly set 0..10 rows.
 """
 from __future__ import annotations
 
-from copy import deepcopy
+from copy import deepcopy as _std_deepcopy
+
+_ATOMS = (str, int, float, bool, type(None))
+
+
+def deepcopy(value):
+    """Fast exact copy for JSON-shaped feed data (dict/list/str/number/None).
+
+    Feed rows are plain JSON trees; copy.deepcopy's generic memo/dispatch was
+    ~85 % of access_filter time (Codex report 12). Any other type falls back
+    to copy.deepcopy, so results stay identical and detached.
+    """
+    if isinstance(value, _ATOMS):
+        return value
+    if type(value) is dict:
+        return {k: (v if isinstance(v, _ATOMS) else deepcopy(v)) for k, v in value.items()}
+    if type(value) is list:
+        return [v if isinstance(v, _ATOMS) else deepcopy(v) for v in value]
+    return _std_deepcopy(value)
 import json
 from functools import lru_cache
 from pathlib import Path

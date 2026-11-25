@@ -1,0 +1,1 @@
+- 2026-11-25: Feed access_filter: rýchla presná kópia JSON dát namiesto copy.deepcopy v entitlements (3,3× rýchlejšie, výstup identický, iné typy fallback). Podklad: Codex report 12.
