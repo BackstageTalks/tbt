@@ -86,6 +86,23 @@ jobs:
             -f reason=hourly
 
 
+      - name: Dispatch morning offer alarm at 06:30 Bratislava
+        # Native cron is disabled; reuse the external 15-minute clock.
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          now="$(TZ=Europe/Bratislava date +%H%M)"
+          if (( 10#$now < 630 || 10#$now >= 645 )); then
+            echo "Morning offer alarm not due ($now Bratislava)."
+            exit 0
+          fi
+          gh workflow run morning-offer-alarm.yml -R "$GITHUB_REPOSITORY" --ref main
+          echo "Dispatched morning offer alarm."
+
       - name: Dispatch private calibration monitor every six hours
         # External scheduler already drives Match Status. Reuse its cadence
         # instead of adding a forbidden GitHub cron schedule.
