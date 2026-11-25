@@ -89,3 +89,11 @@ body#blinqPremium .admin-save-bar-note{font-size:13px!important;opacity:.85!impo
 body#blinqPremium .admin-save-bar-actions{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important}
 body#blinqPremium .admin-save-bar .admin-publish-hint{display:none!important}
 @media(max-width:900px){body#blinqPremium .admin-save-bar{bottom:calc(72px + env(safe-area-inset-bottom))!important}body#blinqPremium .admin-save-bar-note{width:100%!important}body#blinqPremium .admin-save-bar-actions{width:100%!important}body#blinqPremium .admin-save-bar-actions .btn{flex:1!important}}
+/* 2026-11-25 Admin Členstvá: same rhythm as Ponuka (title size, field spacing, labels). */
+body#blinqPremium .admin-membership-card>summary strong{font-size:16px!important}
+body#blinqPremium .admin-membership-fields{gap:14px 14px!important}
+body#blinqPremium .admin-membership-fields label>span:first-child,body#blinqPremium .admin-membership-fields label{font-size:13px!important}
+body#blinqPremium .admin-membership-fields :is(input,select,textarea){min-height:44px!important;font-size:14px!important;border-radius:10px!important}
+body#blinqPremium .admin-membership-switches{gap:10px!important}
+body#blinqPremium .admin-membership-switches label strong{font-size:14px!important}
+body#blinqPremium .admin-membership-link-row .btn{min-height:44px!important;font-size:13px!important;padding:0 14px!important}

@@ -1,0 +1,1 @@
+- 2026-11-25: Admin Členstvá: väčšie polia (44 px), jednotné medzery a popisy ako v Ponuke; texty „klikni hore na Publikovať“ opravené na lištu dole.
