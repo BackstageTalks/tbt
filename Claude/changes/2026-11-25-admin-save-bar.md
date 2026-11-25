@@ -1,0 +1,1 @@
+- 2026-11-25: Admin: jedna spodná lišta Koncept/Publikovať v sekciách, ktoré publikujú (prilepená pri scrollovaní); Telegram skupiny bez duplicitného tlačidla (lišta volá ich bezpečné publikovanie).
