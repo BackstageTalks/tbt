@@ -709,6 +709,7 @@
   async function insights() {
     return apiWithSession('/api/v1/insights');
   }
+  async function tournamentBrackets() { return apiWithSession('/api/v1/brackets'); }
   async function liveRadar() { return apiWithSession('/api/v1/live-radar'); }
   async function adminLiveRadar(force = false, publish = false) {
     return apiWithSession(`/api/v1/admin/live-radar${force?'?force=1':''}`, {method: publish ? 'POST' : 'GET'});
@@ -971,7 +972,7 @@
   }
 
   window.BlinqAuth = {
-    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, feedDiagnostics, resultsPage, matchIntelligence,
+    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, feedDiagnostics, resultsPage, matchIntelligence, tournamentBrackets,
     projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, adminHistoryRetention, adminCleanupHistory, markInsightRead,
     adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
     adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult, adminInfoResultRetention, adminDeleteAllInfoResults,

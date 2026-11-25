@@ -1884,6 +1884,9 @@ def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
 
 @app.route(route="v1/brackets", methods=["GET"])
 def tournament_brackets(req):
+    user = _verified_user(req)
+    if user is None:
+        return response({"error": "unauthorized"}, 401)
     try:
         return response(public_brackets(load_bracket_snapshot(), datetime.now(BRATISLAVA).date()))
     except Exception:

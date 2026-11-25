@@ -278,9 +278,7 @@
     const view = { root, predictions, openDetail };
     activeView = view;
     try {
-      const response = await fetch('/api/v1/brackets', { cache: 'no-store' });
-      if (!response.ok) throw new Error('Bracket feed unavailable');
-      const data = await response.json();
+      const data = await window.BlinqAuth.tournamentBrackets();
       if (activeView !== view || !root.isConnected) return;
       if (data.schema !== 1 || !Array.isArray(data.tournaments)) throw new Error('Invalid bracket feed');
       const tournaments = data.tournaments.slice().sort((a, b) =>

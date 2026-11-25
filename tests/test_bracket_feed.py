@@ -109,3 +109,37 @@ def test_match_connections_follow_the_provider_tree():
     assert {match["parent_id"] for match in semis["matches"]} == {final_match["id"]}
     assert len({match["id"] for match in semis["matches"]}) == 2
     assert not final_match["parent_id"]
+
+def test_brackets_endpoint_requires_auth_and_only_reads_snapshot(monkeypatch):
+    import json
+    import azure.functions as func
+    import function_app as app
+
+    reads = []
+
+    def read_snapshot():
+        reads.append(True)
+        today = app.datetime.now(app.BRATISLAVA).date().isoformat()
+        return {"tournaments": [{
+            "id": "12:34", "name": "Example Open", "last_seen": today,
+            "draws": normalize_draws(CUP), "predictions": ["private"],
+        }]}
+
+    def provider_call(*args, **kwargs):
+        raise AssertionError("The brackets endpoint cannot call TennisAPI")
+
+    monkeypatch.setattr(app, "load_bracket_snapshot", read_snapshot)
+    monkeypatch.setattr(app, "RapidTennisClient", provider_call)
+    request = func.HttpRequest(method="GET", url="http://localhost/api/v1/brackets", body=b"")
+    endpoint = app.tournament_brackets.build().get_user_function()
+    monkeypatch.setattr(app, "_verified_user", lambda req: None)
+    assert endpoint(request).status_code == 401
+    assert not reads
+
+    monkeypatch.setattr(app, "_verified_user", lambda req: {"id": "account"})
+    result = endpoint(request)
+    assert result.status_code == 200
+    assert reads == [True]
+    assert json.loads(result.get_body())["tournaments"] == [
+        {"id": "12:34", "name": "Example Open", "draws": normalize_draws(CUP)},
+    ]
