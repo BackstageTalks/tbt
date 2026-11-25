@@ -1289,3 +1289,10 @@ body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
 /* 2026-11-25: owner wants the footer (status, update time, language) on mobile too.
    Keep it above the fixed bottom tab bar. */
 @media (max-width:900px){html body#blinqPremium.bqm-enabled:not(.blinq-admin) .site-footer{display:block!important;margin-bottom:calc(64px + env(safe-area-inset-bottom))!important}}
+/* 2026-11-25 Codex report 09: the fixed bottom tab bar covered Porovnať, Odhlásiť sa and result filters.
+   Reserve its height (64 px + safe area) at the end of every member page and when focusing/scrolling to controls. */
+@media (max-width:900px){
+ html:has(body#blinqPremium.bqm-enabled:not(.blinq-admin)){scroll-padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+ html body#blinqPremium.bqm-enabled:not(.blinq-admin) .site-main{padding-bottom:calc(88px + env(safe-area-inset-bottom))!important}
+ html body#blinqPremium.bqm-enabled:not(.blinq-admin) :is(dialog,.account-panel,.compare-panel) {scroll-padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+}
