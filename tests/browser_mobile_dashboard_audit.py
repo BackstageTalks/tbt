@@ -184,7 +184,9 @@ def main():
                       footer:document.querySelector('.site-footer-minimal').getBoundingClientRect().bottom,
                       nav:document.querySelector('#mobileTabs').getBoundingClientRect().top
                     })""")
-                    assert page.locator('.site-footer-minimal').is_hidden(), (label, bottom)
+                    # 2026-11-25 owner: footer is shown on mobile, never under the tab bar.
+                    assert page.locator('.site-footer-minimal').is_visible(), (label, bottom)
+                    assert bottom['footer'] <= bottom['nav'] + 1, (label, bottom)
                 page.evaluate("""() => {
                   const dialog=document.querySelector('#projectGroupsDialog');
                   const list=document.querySelector('#projectGroupsDialogList');
