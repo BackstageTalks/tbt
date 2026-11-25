@@ -1,0 +1,1 @@
+- 2026-11-25: Mobil: spodná lišta už neprekrýva Porovnať, Odhlásiť sa ani filtre Výsledkov (rezerva 88 px + safe area, scroll-padding). Podklad: Codex report 09.
