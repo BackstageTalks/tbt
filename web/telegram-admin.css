@@ -34,3 +34,8 @@ body#blinqPremium span.admin-offer-multi{display:flex!important;flex-wrap:wrap!i
 body#blinqPremium .admin-offer-chip{display:inline-flex!important;align-items:center!important;gap:8px!important;padding:8px 12px!important;border:1px solid rgba(120,220,180,.22)!important;border-radius:10px!important;cursor:pointer!important;margin:0!important}
 body#blinqPremium .admin-offer-chip input{width:18px!important;height:18px!important;margin:0!important}
 @media(max-width:600px){body#blinqPremium .admin-offer-type-number{grid-template-columns:1fr!important}body#blinqPremium .admin-offer-type-number .admin-offer-control{justify-content:flex-start!important}body#blinqPremium .admin-offer-type-number .admin-offer-control input{width:100%!important}}
+/* 2026-11-25 Admin Shadow testing: table scrolls inside its card on phones, heading wraps. */
+body#blinqPremium .admin-shadow-section{min-width:0!important;overflow:visible!important}
+body#blinqPremium .admin-shadow-section .admin-shadow-scroll{overflow-x:auto!important;-webkit-overflow-scrolling:touch;max-width:100%!important}
+body#blinqPremium .admin-shadow-section .admin-shadow-scroll table{min-width:640px!important}
+@media(max-width:760px){body#blinqPremium .admin-shadow-section .admin-ux-heading{flex-wrap:wrap!important;gap:10px!important}body#blinqPremium .admin-shadow-section .admin-system-actions{width:100%!important}}
