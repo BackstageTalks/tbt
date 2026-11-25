@@ -105,7 +105,8 @@ def main():
                     # and replaces the legacy footer/navigation with the mobile shell.
                     assert abs(telegram_box['x'] - (boxes[0]['x'] + 12)) <= 1, (width, boxes[0], telegram_box)
                     assert abs(telegram_box['width'] - (boxes[0]['width'] - 24)) <= 1, (width, boxes[0], telegram_box)
-                    assert page.locator('.site-footer').bounding_box() is None, width
+                    # 2026-11-25 owner: footer is visible on mobile too.
+                    assert page.locator('.site-footer').bounding_box(), width
                 else:
                     footer_box = page.locator('.site-footer').bounding_box()
                     assert footer_box, width

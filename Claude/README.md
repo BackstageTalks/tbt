@@ -163,4 +163,5 @@ Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overi
 - 2026-11-25: Frozen-candidate: readiness po fite sťahuje aktuálnu CDB do `.cache/tbt/readiness-history`, nie do zmrazenej `.cache/tbt/history` (inak shadow gate padol na „input changed“).
 - 2026-11-25: tools/visual_baseline.py – pixelovo presné fotky (home/admin, desktop/mobil) pred a po úprave webu; každý refaktor CSS/JS musí dať „same“.
 - 2026-11-25: AUD-15: tests/test_api_auth_matrix.py – všetkých 87 API rout klasifikovaných (public/user/admin/internal), guard musí bežať pred inou prácou; nová neklasifikovaná routa zhodí CI.
+- 2026-11-25: Pätička viditeľná aj na mobile (nad spodnou lištou), len pre ne-admin; desktop pixelovo bez zmeny.
 - 2026-11-25: Ranný alarm sa nespustil (natívny cron je vypnutý). Teraz ho spúšťa 15-min match-status o 06:30–06:44 Bratislava.

@@ -1286,3 +1286,6 @@ body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
     font-size:17px!important;
   }
 }
+/* 2026-11-25: owner wants the footer (status, update time, language) on mobile too.
+   Keep it above the fixed bottom tab bar. */
+@media (max-width:900px){html body#blinqPremium.bqm-enabled:not(.blinq-admin) .site-footer{display:block!important;margin-bottom:calc(64px + env(safe-area-inset-bottom))!important}}
