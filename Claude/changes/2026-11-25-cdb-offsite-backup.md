@@ -1,0 +1,1 @@
+- 2026-11-25: Nový workflow cdb-offsite-backup.yml: šifrovaná (7z AES-256) overená záloha CDB ako samostatný release cdb-offsite-backup-YYYYMMDD v tbt-data; tbt-data-v1 len číta. Heslo iba v GitHub Secrets + správca hesiel vlastníka.

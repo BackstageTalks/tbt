@@ -1,0 +1,77 @@
+name: CDB offsite encrypted backup
+# Read-only on canonical CDB: downloads the tbt-data-v1 bundle, verifies every
+# file against the bundle manifest, encrypts it (7z AES-256 + encrypted file
+# names) with CDB_OFFSITE_ZIP_PASSWORD, proves the archive decrypts back to
+# identical bytes, then publishes it as a separate dated private release.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: blinq-cdb-offsite-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PW: ${{ secrets.CDB_OFFSITE_ZIP_PASSWORD }}
+      DATA_REPO: BackstageTalks/tbt-data
+    steps:
+      - name: Require secrets
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test "${#PW}" -ge 20 || { echo "::error::CDB_OFFSITE_ZIP_PASSWORD missing or shorter than 20 chars"; exit 1; }
+      - name: Download canonical CDB bundle (read-only)
+        run: |
+          set -euo pipefail
+          mkdir -p cdb
+          gh release download tbt-data-v1 -R "$DATA_REPO" -D cdb --clobber
+          ls cdb | wc -l
+      - name: Verify every file against the bundle manifest
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys
+          d = pathlib.Path("cdb")
+          m = json.loads((d / "_tbt_bundle_manifest.json").read_text())
+          files = m["files"]
+          items = files.items() if isinstance(files, dict) else [(f["name"], f) for f in files]
+          bad = 0; n = 0
+          for name, meta in items:
+              p = d / name; n += 1
+              if not p.is_file():
+                  print("MISSING", name); bad += 1; continue
+              exp = meta.get("sha256")
+              if exp and hashlib.sha256(p.read_bytes()).hexdigest() != exp:
+                  print("SHA MISMATCH", name); bad += 1
+          print(f"verified {n} files, problems {bad}")
+          sys.exit(1 if bad or not n else 0)
+          PY
+      - name: Encrypt (7z AES-256, encrypted headers)
+        run: |
+          set -euo pipefail
+          day="$(date -u +%Y%m%d)"
+          echo "DAY=$day" >> "$GITHUB_ENV"
+          (cd cdb && sha256sum * > ../SHA256SUMS.txt)
+          7z a -t7z -mhe=on -mx=5 -p"$PW" "blinq-cdb-$day.7z" ./cdb/* ./SHA256SUMS.txt > /dev/null
+          sha256sum "blinq-cdb-$day.7z" > "blinq-cdb-$day.7z.sha256"
+          ls -la "blinq-cdb-$day.7z"
+      - name: Prove the archive restores identical bytes
+        run: |
+          set -euo pipefail
+          mkdir restore
+          7z x -p"$PW" -orestore "blinq-cdb-$DAY.7z" > /dev/null
+          (cd restore/cdb && sha256sum -c ../SHA256SUMS.txt --quiet)
+          diff <(cd cdb && sha256sum * ) <(cd restore/cdb && sha256sum *)
+          echo "Restore verified: all files identical"
+      - name: Publish as separate private release (never touches tbt-data-v1)
+        run: |
+          set -euo pipefail
+          tag="cdb-offsite-backup-$DAY"
+          gh release view "$tag" -R "$DATA_REPO" >/dev/null 2>&1 && { echo "::error::$tag already exists"; exit 1; }
+          gh release create "$tag" -R "$DATA_REPO" --title "CDB offsite backup $DAY" \
+            --notes "Encrypted (7z AES-256, encrypted names) copy of tbt-data-v1 verified against its bundle manifest and test-restored byte-identical. Password: CDB_OFFSITE_ZIP_PASSWORD (owner's password manager). Never stored in Git." \
+            "blinq-cdb-$DAY.7z" "blinq-cdb-$DAY.7z.sha256"
+          echo "Published $tag"
