@@ -63,3 +63,13 @@ html body#blinqPremium #telegramGroupsPanel#telegramGroupsPanel.tg-compact .tg-g
 html body#blinqPremium #telegramGroupsPanel#telegramGroupsPanel.tg-compact .tg-group-copy strong{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
 @media(max-width:899px){html body#blinqPremium #telegramGroupsPanel#telegramGroupsPanel.tg-compact .tg-group-card{margin:0 12px 8px!important;padding:10px 12px!important;min-height:0!important}html body#blinqPremium #telegramGroupsPanel#telegramGroupsPanel.tg-compact .tg-group-cta{font-size:12px!important;padding:7px 10px!important}}
 @media(max-width:899px){body#blinqPremium#blinqPremium#blinqPremium#blinqPremium#blinqPremium #telegramGroupsPanel.tg-compact .tg-group-card{min-height:0!important;padding:9px 12px!important;margin:0 12px 8px!important}}
+/* 2026-11-25 Admin Bannery: restore/history panel had the red runtime-note grid layout. */
+body#blinqPremium .admin-restore-panel{display:block!important;margin:12px 0!important;padding:14px 16px!important;border:1px solid rgba(120,220,180,.16)!important;border-radius:14px!important;background:rgba(6,26,22,.55)!important}
+body#blinqPremium .admin-restore-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px 16px!important;flex-wrap:wrap!important}
+body#blinqPremium .admin-restore-head>strong{font-size:14px!important}
+body#blinqPremium .admin-restore-actions{display:flex!important;flex-wrap:wrap!important;gap:8px!important}
+body#blinqPremium .admin-restore-panel .admin-restore-help{display:block!important;margin-top:8px!important;font-size:12px!important;opacity:.75!important;line-height:1.4!important}
+body#blinqPremium .admin-restore-panel>p{margin:8px 0 0!important;font-size:12px!important;opacity:.75!important}
+/* 2026-11-25 Admin min 12 px – remaining Zobrazenie/Bannery texts (preview miniatures excluded). */
+html body#blinqPremium.blinq-admin :is(.admin-daily-matrix-head span,.admin-row-advanced-body strong,.admin-row-advanced-body small,.admin-display-access-history small,.admin-display-global-detail p,.admin-banner-device-tag,.admin-daily-matrix small,.admin-daily-matrix span,.admin-ux-section small){font-size:12px!important;line-height:1.35!important}
+html body#blinqPremium.blinq-admin .admin-daily-matrix-head span{letter-spacing:.06em!important}
