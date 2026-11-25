@@ -1739,6 +1739,8 @@ def scan_match_statuses(
                 for event in live_events
                 if isinstance(event, dict) and _provider_event_id(event)
             }
+            if bracket_events is not None:
+                bracket_events.update(live_by_id)
         except Exception as exc:
             code = _provider_error_code(exc)
             provider_errors[code] = provider_errors.get(code, 0) + 1

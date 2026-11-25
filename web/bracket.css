@@ -92,7 +92,8 @@ body#blinqPremium[data-current-route="bracket"] .reference-topbar .reference-nav
 .bracket-link::after { right: 0; border-bottom: 1px solid; }
 .bracket-link-up::before { border-top: 0; border-bottom: 1px solid; }
 .bracket-link-up::after { border-bottom: 0; border-top: 1px solid; }
-.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--bracket-winner); }
+.bracket-match-pending { border-style: dashed; cursor: default; }
+button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--bracket-winner); }
 .bracket-player { display: flex; justify-content: space-between; gap: .75rem; min-width: 0; }
 .bracket-player > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .bracket-winner { color: var(--bracket-winner); font-weight: 700; }

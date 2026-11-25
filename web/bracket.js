@@ -225,6 +225,14 @@
       return;
     }
     selectedDraw = draw.id;
+    if (draw.partial) {
+      panel.append(element('p', copy(
+        'Dostupné zápasy podľa kôl. Ďalšie kolá sa zobrazia po zverejnení.',
+        'Available matches by round. Later rounds appear when published.',
+        'Dostupné zápasy podle kol. Další kola se zobrazí po zveřejnění.',
+      ), 'bracket-status bracket-partial'));
+    }
+
     if (current.draws.length > 1) {
       const draws = current.draws.map((item, index) => ({
         ...item, name: item.name || copy('Žreb ', 'Draw ', 'Los ') + (index + 1),
@@ -245,13 +253,17 @@
     const matchCards = new Map();
     for (const round of draw.rounds) {
       const column = element('section', '', 'bracket-round');
-      column.append(element('h2', round.name || copy('Kolo', 'Round')));
+      column.append(element('h2', (round.name === 'Final' ? copy('Finále', 'Final') : round.name) || copy('Kolo', 'Round')));
       const cards = element('div', '', 'bracket-round-matches');
       for (const match of round.matches) {
-        const card = element('button', '', 'bracket-match');
-        card.type = 'button';
+        const card = element(match.pending_slot ? 'div' : 'button', '', 'bracket-match');
+        if (match.pending_slot) {
+          card.classList.add('bracket-match-pending');
+        } else {
+          card.type = 'button';
+          card.addEventListener('click', () => matchPanel(card, match, view.predictions, view.openDetail));
+        }
         matchLines(card, match);
-        card.addEventListener('click', () => matchPanel(card, match, view.predictions, view.openDetail));
         cards.append(card);
         if (match.id) matchCards.set(match.id, { card, parentId: match.parent_id });
       }

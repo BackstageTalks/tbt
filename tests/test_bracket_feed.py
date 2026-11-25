@@ -143,3 +143,36 @@ def test_brackets_endpoint_requires_auth_and_only_reads_snapshot(monkeypatch):
     assert json.loads(result.get_body())["tournaments"] == [
         {"id": "12:34", "name": "Example Open", "draws": normalize_draws(CUP)},
     ]
+
+def test_empty_cup_tree_displays_observed_players_and_progression():
+    def fixture(event_id, players, round_name, winner=0, tournament_id=200):
+        return {
+            **EVENT, "id": event_id, "roundInfo": {"name": round_name},
+            "tournament": {**EVENT["tournament"], "id": tournament_id, "name": "Example Singles"},
+            "homeTeam": {"id": players[0], "name": f"Player {players[0]}"},
+            "awayTeam": {"id": players[1], "name": f"Player {players[1]}"},
+            "status": {"type": "finished" if winner else "notstarted"},
+            "winnerCode": winner,
+        }
+
+    first = fixture(100, (10, 20), "Semifinals", 2)
+    second = fixture(101, (30, 40), "Semifinal", 2)
+    different_draw = fixture(102, (50, 60), "Final", tournament_id=202)
+    snapshot, _ = build_feed(OFFER, {"events": [first, second, different_draw]}, {}, DAY, lambda *_: {}, 1)
+    singles, other = public_brackets(snapshot, DAY)["tournaments"][0]["draws"]
+    assert singles["partial"]
+    semi, final = singles["rounds"]
+    assert {match["parent_id"] for match in semi["matches"]} == {"final-slot"}
+    assert semi["matches"][0]["players"][1]["score"] == "6 7"
+    pending, = final["matches"]
+    assert pending["pending_slot"] and not pending["event_id"]
+    assert [player["id"] for player in pending["players"]] == ["20", "40"]
+    assert other["rounds"][0]["matches"][0]["event_id"] == "102"
+
+    published = fixture(103, (20, 40), "Final")
+    snapshot, _ = build_feed(OFFER, {"events": [published]}, snapshot, DAY, lambda *_: {}, 0)
+    singles = public_brackets(snapshot, DAY)["tournaments"][0]["draws"][0]
+    semi, final = singles["rounds"]
+    assert {match["parent_id"] for match in semi["matches"]} == {"103"}
+    assert final["matches"][0]["event_id"] == "103"
+    assert "pending_slot" not in final["matches"][0]
