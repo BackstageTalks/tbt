@@ -1,0 +1,1 @@
+- 2026-11-25: Admin písmo: 127 pravidiel s veľkosťou pod 11 px (6–10 px) zdvihnutých na 12 px priamo v pravidle, bez nových prepisov. Verejné stránky pixelovo bez zmeny. Podklad: Codex report 05.
