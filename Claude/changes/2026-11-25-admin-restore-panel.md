@@ -1,0 +1,1 @@
+- 2026-11-25: Admin Bannery: panel „Obnova publikovaného vzhľadu“ s vlastným rozložením (predtým červený grid hlásenia). Zobrazenie/Bannery: zvyšné texty 7–10 px na 12 px.

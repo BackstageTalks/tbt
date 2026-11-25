@@ -6600,12 +6600,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       '<small style="display:block">Predchádzajúca publikácia · '+escapeHtml(item.previous_updated_by||'admin')+'</small></span>'+
       '<button class="btn btn-ghost" type="button" data-admin-action="preview-ui-snapshot" data-ui-snapshot-id="'+escapeHtml(item.id)+'">Načítať vzhľad do náhľadu</button></div>'
     ).join(''):(items?'<p>Zatiaľ žiadne historické verzie. Začnú sa ukladať pred ďalším publikovaním.</p>':'<p>Staršie publikované verzie Azure konfigurácie, ak sú dostupné.</p>');
-    return '<section class="admin-runtime-note" style="display:block" aria-label="História vzhľadu">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>Obnova publikovaného vzhľadu</strong>'+
-      '<div><button class="btn btn-ghost" type="button" data-admin-action="load-ui-snapshots" '+(state.adminUiSnapshotsLoading?'disabled':'')+'>'+
+    return '<section class="admin-restore-panel" aria-label="História vzhľadu">'+
+      '<div class="admin-restore-head"><strong>Obnova publikovaného vzhľadu</strong>'+
+      '<div class="admin-restore-actions"><button class="btn btn-ghost" type="button" data-admin-action="load-ui-snapshots" '+(state.adminUiSnapshotsLoading?'disabled':'')+'>'+
       (state.adminUiSnapshotsLoading?'Načítavam…':'História konfigurácie')+'</button>'+'<button class="btn btn-ghost" type="button" data-admin-action="preview-local-ui-draft">Bannery zo starého konceptu</button>'+
       (state.adminPreRestorePreview?'<button class="btn btn-ghost" type="button" data-admin-action="undo-ui-preview">Vrátiť predchádzajúci náhľad</button>':'')+
-      '</div></div><small>Obnova je najprv iba v editore. Živú stránku zmení až samostatné Publikovať. Aktuálne prístupy a nové KPI zostanú zachované.</small>'+
+      '</div></div><small class="admin-restore-help">Obnova je najprv iba v editore. Živú stránku zmení až samostatné Publikovať. Aktuálne prístupy a nové KPI zostanú zachované.</small>'+
       (state.adminUiSnapshotsError?'<div role="alert">'+escapeHtml(state.adminUiSnapshotsError)+'</div>':'')+
       rows+'</section>';
   }
