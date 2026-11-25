@@ -862,7 +862,7 @@
     const referenceNav=document.querySelector('.reference-navigation');
     const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
-    const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':state.route==='compare'?'compare':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
+    const referenceRoute=predictionRoutes.has(state.route)?'predictions':['results','bracket','compare'].includes(state.route)?state.route:modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
     const resultsLocked=!resultsAccessAllowed();
     const resultsMismatch=resultsServerAccessMismatch();
     const resultsPlan=resultsLocked&&!resultsMismatch?firstResultsUnlockPlan():'';
@@ -3590,6 +3590,14 @@
     predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],prime:['ACCA','ACCA','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa','Nejlepší predikce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší predikce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],compare:['POROVNÁVAČ','Porovnat hráče','Vyber dva hráče, povrch a maximální počet setů. BlinQ porovná jejich aktuální modelový profil.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.']
   };
   const routeMeta=locale==='sk'?{...routeMetaEn,...routeMetaSk}:locale==='cz'?{...routeMetaEn,...routeMetaCz}:routeMetaEn;
+  routeMeta.bracket=['',lcopy('Tournament draw','Pavúk turnaja','Pavouk turnaje'),''];
+  document.querySelector('.reference-navigation [data-route="results"]')?.insertAdjacentHTML('afterend',`
+    <a href="#bracket" data-route="bracket" class="nav-icon-link nav-icon-bracket" data-nav-tooltip="${routeMeta.bracket[1]}" aria-label="${routeMeta.bracket[1]}">
+      <svg class="nav-icon-svg" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+        <path d="M12 5h8v3a4 4 0 0 1-8 0V5Zm0 1.5H9v1a3.5 3.5 0 0 0 3.5 3.5M20 6.5h3v1a3.5 3.5 0 0 1-3.5 3.5M16 12v5m-7 5v-5h14v5M5 27v-5h8v5m6 0v-5h8v5"></path>
+      </svg>
+    </a>`);
+
 
   function wireDashboardSearch(){
     const input=$('dashboardSearch');if(!input||input.dataset.wired==='1')return;input.dataset.wired='1';
@@ -9412,6 +9420,15 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       // hydrate. The results CSV itself is fail-closed until completion.
       if(state.feed?.results_boot_partial&&!fullResultsError)loadCompleteResults();
       host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts'){loadAdminUsers();loadAdminAccountActivity();loadAdminTelemetry();}if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='calibration')loadAdminCalibration();return;}
+    if(route==='bracket'){
+      window.BlinqBracket.open(host,
+        ['daily','prime','value','ace','ace_winner','double_faults','sets','games'].flatMap(tab=>{
+          const ent=dailyHubEntitlement(tab);
+          return ent?.enabled!==false&&String(ent?.display_state||'active')==='active'?dailyHubRows(tab):[];
+        }),
+        row=>openMatch(normalize(row),'daily',row));
+      return;
+    }
     if(route==='compare'){
       if(comparatorPlanAllowed()){host.innerHTML=renderComparatorRoute();wireComparator();}
       else{

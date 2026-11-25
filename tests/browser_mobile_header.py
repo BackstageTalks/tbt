@@ -500,7 +500,10 @@ def main():
                                 border:getComputedStyle(n).borderTopWidth
                             }));
                     }''')
-                    assert len(styles)==5,(width,styles)
+                    assert [item['id'] for item in styles]==[
+                        'predictions','results','bracket','compare','bqm-projects','insightBell',
+                    ],(width,styles)
+                    assert next(item for item in styles if item['id']=='bracket')['width']>0,(width,styles)
                     assert all(x['width']<=42 and x['height']<=42 and x['border']=='0px' for x in styles),(width,styles)
                     desktop_seam=page.evaluate("""() => {
                         const chart=document.querySelector('.header-top [data-route="compare"]').getBoundingClientRect();
@@ -597,7 +600,8 @@ def main():
                                 visible:cs.display!=='none'&&cs.visibility!=='hidden'&&!n.hidden&&r.width>0&&r.height>0};
                     };
                     const header=view(document.querySelector('.site-header .header-top'));
-                    const nav=[...document.querySelectorAll('.header-top .reference-navigation .nav-icon-link')].map(view);
+                    const nav=[...document.querySelectorAll('.header-top .reference-navigation .nav-icon-link')]
+                        .map(n=>({route:n.dataset.route,...view(n)}));
                     const actions=['#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell','#profileButton']
                         .map(s=>({selector:s,...view(document.querySelector(s))}));
                     const all=[...nav,...actions].filter(n=>n.visible).sort((a,b)=>a.left-b.left);
@@ -605,7 +609,9 @@ def main():
                     const outside=all.some(r=>r.left<-1||r.right>innerWidth+1);
                     return {header,nav,actions,overlap,outside,viewport:innerWidth};
                 }""")
-                assert len(admin_layout['nav'])==3 and all(n['visible'] for n in admin_layout['nav']),(width,'admin missing public navigation',admin_layout)
+                assert [item['route'] for item in admin_layout['nav'] if item['visible']]==[
+                    'predictions','results','compare',
+                ],(width,'admin navigation differs from the required routes',admin_layout)
                 # Entitlement / group availability is authoritative; any control
                 # that is not hidden must keep its public-header presence.
                 for sel in ('#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell','#profileButton'):
@@ -637,6 +643,9 @@ def main():
                 assert 'url(' in background and 'gradient' in background,(width,'missing home-page artwork',background)
                 root_text=page.locator('#bqm-dialog nav').inner_text()
                 assert 'Výsledky' in root_text,(width,root_text)
+                assert page.locator('#bqm-navigation-panel').get_by_role(
+                    'button',name='Pavúk turnaja',exact=True
+                ).is_visible(),(width,root_text)
                 # Locked LIVE must show the same padlock as its header button.
                 page.get_by_role('button',name='Zavrieť menu').click()
                 page.wait_for_function("!document.getElementById('bqm-dialog').open")
