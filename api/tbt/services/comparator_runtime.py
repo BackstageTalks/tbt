@@ -7,7 +7,7 @@ from typing import Mapping
 
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES, ATPLeaderboardPriors
 from ..data.atp_rank_history import ATP_RANK_HISTORY_FEATURE_NAMES, ATPRankHistory
-from ..data.player_identity import normalize_player_name
+from ..data.player_identity import comparator_name_key
 from ..data.wta_rank_history import WTA_RANK_HISTORY_FEATURE_NAMES, WTARankHistory
 from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES, WTASeasonPriors
 from ..models.feature_builder import FeatureBuilder, stats_surface_key
@@ -50,9 +50,19 @@ def _players(artifact: Mapping) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _initial_query(query: str) -> tuple[str, str] | None:
+    tokens = query.split()
+    if len(tokens) > 1:
+        if len(tokens[0]) == 1:
+            return tokens[0], " ".join(tokens[1:])
+        if len(tokens[-1]) == 1:
+            return tokens[-1], " ".join(tokens[:-1])
+    return None
+
+
 def _abbreviated_name_key(value: object) -> tuple[str, str] | None:
     """Recognize 'Surname F.' and 'F. Surname', never infer a whole identity."""
-    tokens = normalize_player_name(value).split()
+    tokens = comparator_name_key(value).split()
     if len(tokens) != 2:
         return None
     if len(tokens[0]) == 1 and len(tokens[1]) > 1:
@@ -63,7 +73,7 @@ def _abbreviated_name_key(value: object) -> tuple[str, str] | None:
 
 
 def _full_name_key(value: object) -> tuple[str, str] | None:
-    tokens = normalize_player_name(value).split()
+    tokens = comparator_name_key(value).split()
     if len(tokens) < 2 or len(tokens[0]) <= 1 or len(tokens[-1]) <= 1:
         return None
     return tokens[0][0], tokens[-1]
@@ -80,7 +90,7 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
     # evidence that the canonical identities/match histories can be merged.
     # If even two different complete names share the initial/surname, do not
     # guess which one the abbreviated row represents (e.g. B. Perez).
-    normalized = {normalize_player_name(row.get("name")) for row in distinct.values()}
+    normalized = {comparator_name_key(row.get("name")) for row in distinct.values()}
     if len(normalized) != 1:
         return None
     canonical = [
@@ -100,7 +110,7 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
         return None
     full_name = next(iter(normalized))
     short_aliases = {
-        normalize_player_name(alias) for alias in (short.get("aliases") or [])
+        comparator_name_key(alias) for alias in (short.get("aliases") or [])
     }
     alias_evidence = full_name in short_aliases
     try:
@@ -123,9 +133,11 @@ def _safe_abbreviation_target(short: Mapping, full_candidates: list[dict]) -> di
 
 def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12) -> list[dict]:
     tour = str(tour or "").strip().lower()
-    key = normalize_player_name(query)
+    key = comparator_name_key(query)
     if tour not in ALLOWED_TOURS or len(key) < 2:
         return []
+
+    initials = _initial_query(key)
 
     # Build the possible full-name matches from the *entire* directory, not
     # the truncated search page. An abbreviated row may otherwise push out its
@@ -140,7 +152,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
             continue
-        display_key = normalize_player_name(player.get("name"))
+        display_key = comparator_name_key(player.get("name"))
         player_id = str(player.get("player_id") or "")
         if display_key and player_id:
             buckets = display_ids.setdefault(display_key, {"provider": set(), "history": set()})
@@ -151,12 +163,15 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
             # Only replace historical *display* records with a unique
             # canonical full spelling, never between different provider IDs.
             if not str(player.get("player_id") or "").startswith("hist-js:"):
-                provider_names.setdefault(normalize_player_name(player.get("name")), []).append(player)
+                provider_names.setdefault(comparator_name_key(player.get("name")), []).append(player)
         names = [str(player.get("name") or "")] + [
             str(value) for value in (player.get("aliases") or []) if value
         ]
-        normalized = [normalize_player_name(value) for value in names]
-        if not any(key in value for value in normalized):
+        normalized = [comparator_name_key(value) for value in names]
+        if not any(key in value or (
+            initials is not None and value.startswith(initials[0])
+            and len(value.split(" ", 1)[0]) > 1 and value.endswith(f" {initials[1]}")
+        ) for value in normalized):
             continue
         exact = any(value == key for value in normalized)
         prefix = any(value.startswith(key) for value in normalized)
@@ -174,7 +189,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
     for candidate in ranked:
         player = candidate[-1]
         if str(player.get("player_id") or "").startswith("hist-js:") and _full_name_key(player.get("name")):
-            preferred = provider_names.get(normalize_player_name(player.get("name")), [])
+            preferred = provider_names.get(comparator_name_key(player.get("name")), [])
             if len(preferred) == 1:
                 player = preferred[0]
         short_key = _abbreviated_name_key(player.get("name"))
@@ -183,7 +198,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
             if full is not None:
                 player = full
         player_id = str(player.get("player_id") or "")
-        display_key = normalize_player_name(player.get("name"))
+        display_key = comparator_name_key(player.get("name"))
         if not player_id or player_id in seen_ids or display_key in seen_names:
             continue
         seen_ids.add(player_id)
@@ -212,7 +227,7 @@ def search_players(artifact: Mapping, query: str, *, tour: str, limit: int = 12)
 
 def _resolve(artifact: Mapping, value: str, *, tour: str) -> dict:
     raw = str(value or "").strip()
-    key = normalize_player_name(raw)
+    key = comparator_name_key(raw)
     matches = []
     for player in _players(artifact):
         if str(player.get("tour") or "").lower() != tour:
@@ -224,7 +239,7 @@ def _resolve(artifact: Mapping, value: str, *, tour: str) -> dict:
         names = [str(player.get("name") or "")] + [
             str(alias) for alias in (player.get("aliases") or []) if alias
         ]
-        if any(normalize_player_name(name) == key for name in names):
+        if key and any(comparator_name_key(name) == key for name in names):
             matches.append(player)
     unique = {str(row.get("player_id") or ""): row for row in matches}
     unique.pop("", None)
@@ -398,7 +413,7 @@ def compare_from_artifact(
     left_id = str(left.get("player_id") or "")
     right_id = str(right.get("player_id") or "")
     if (left_id == right_id or
-            normalize_player_name(left.get("name")) == normalize_player_name(right.get("name"))):
+            comparator_name_key(left.get("name")) == comparator_name_key(right.get("name"))):
         # Two source IDs with an identical display name are not verified
         # different people. Reject this synthetic self-match before prediction.
         raise RuntimeComparatorError("players must be different")

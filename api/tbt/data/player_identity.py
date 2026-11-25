@@ -18,6 +18,21 @@ def normalize_player_name(value: object) -> str:
     return re.sub(r"\s+", " ", text)
 
 
+_COMPARATOR_LETTERS = str.maketrans({
+    "ł": "l", "ø": "o", "đ": "d", "ð": "d", "þ": "th", "æ": "ae", "œ": "oe", "ß": "ss",
+})
+
+
+def comparator_name_key(value: object) -> str:
+    """Normalize comparator queries, including an explicit surname-first comma."""
+    text = str(value or "").strip().lower().translate(_COMPARATOR_LETTERS)
+    if text.count(",") == 1:
+        surname, given = text.split(",")
+        if normalize_player_name(surname) and normalize_player_name(given):
+            return normalize_player_name(f"{given} {surname}")
+    return normalize_player_name(text)
+
+
 def initial_surname_key(value: object) -> str:
     parts = normalize_player_name(value).split()
     if len(parts) < 2:

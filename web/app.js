@@ -3692,7 +3692,10 @@
     return String(publication?.section||'')===category;
   }
   function normalizeResultPlayerName(value){
-    return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+    const text=String(value||'').trim();
+    const parts=text.split(',');
+    const name=parts.length===2&&parts.every(part=>part.trim())?parts.reverse().join(' '):text;
+    return name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
   }
   function resultPickIdentity(publication,row){
     const p1=row?.player1||{},p2=row?.player2||{};
@@ -9063,6 +9066,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     };
     const exact=rows.filter(player=>normalizeComparatorPlayerName(player?.name)===normalized);
     if(exact.length===1)return unique(exact[0]);
+    const tokens=normalized.split(' ');
+    if(tokens.length>1&&(tokens[0].length===1||tokens.at(-1).length===1))return null;
     const surname=rows.filter(player=>{
       const parts=normalizeComparatorPlayerName(player?.name).split(' ').filter(Boolean);
       return parts.length&&parts[parts.length-1]===normalized;
@@ -9302,9 +9307,13 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         surface:['hard','clay','grass','indoor_hard'].includes(surface)?surface:'',
         bestOf:bestOf===3||bestOf===5?bestOf:null};
     },
-    load(player1,player2,tour,surface,best_of){
-      // The comparator resolves exact canonical names and aliases within the tour.
-      return BlinqAuth.comparatorCompare({player1,player2,tour,surface,best_of});
+    search(name,tour){return BlinqAuth.comparatorPlayers(name,tour);},
+    load(left,right,tour,surface,best_of){
+      const pair={tour,surface,best_of};
+      for(const [index,player] of [left,right].entries()){
+        pair[`player${index+1}${player.player_id?'_id':''}`]=player.player_id||player.name;
+      }
+      return BlinqAuth.comparatorCompare(pair);
     },
     render(host,result){host.innerHTML=comparatorResultHtml(result);},
   };

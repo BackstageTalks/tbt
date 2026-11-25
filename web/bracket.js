@@ -194,6 +194,56 @@
     dialog.showModal();
   }
 
+  function playerLookup(player, tour, comparison) {
+    const field = element('div', '', 'bracket-player-lookup');
+    const label = element('label', player.name);
+    const input = element('input');
+    input.type = 'search';
+    input.value = player.name;
+    label.append(input);
+    const search = element('button', copy('Vyhľadať', 'Search', 'Vyhledat'), 'bracket-analysis-action');
+    search.type = 'button';
+    const select = element('select');
+    select.setAttribute('aria-label', copy('Potvrdiť hráča', 'Confirm player', 'Potvrdit hráče') + ' · ' + player.name);
+    const hint = element('small');
+    hint.setAttribute('role', 'status');
+    field.append(label, search, select, hint);
+    const reset = () => {
+      const placeholder = element('option', copy('Vyberte hráča…', 'Select player…', 'Vyberte hráče…'));
+      placeholder.value = '';
+      select.replaceChildren(placeholder);
+    };
+    reset();
+    input.addEventListener('input', reset);
+    search.addEventListener('click', async () => {
+      const query = input.value.trim();
+      if (query.length < 2) return;
+      reset();
+      search.disabled = true;
+      hint.textContent = copy('Vyhľadávam…', 'Searching…', 'Vyhledávám…');
+      try {
+        const result = await comparison.search(query, tour);
+        if (!field.isConnected || input.value.trim() !== query) return;
+        for (const candidate of (result?.players || [])) {
+          if (!candidate.player_id || !candidate.name || candidate.ambiguous_identity) continue;
+          const choice = element('option', candidate.name);
+          choice.value = candidate.player_id;
+          select.append(choice);
+        }
+        hint.textContent = select.options.length > 1 ? '' : copy(
+          'Bez jednoznačnej zhody. Skúste doplniť celé meno.',
+          'No unambiguous match. Try entering the full name.',
+          'Bez jednoznačné shody. Zkuste doplnit celé jméno.',
+        );
+      } catch {
+        if (field.isConnected) hint.textContent = copy('Vyhľadávanie zlyhalo.', 'Search failed.', 'Vyhledávání selhalo.');
+      } finally {
+        search.disabled = false;
+      }
+    });
+    return { field, select };
+  }
+
   function analysisPanel(button, match, comparison) {
     const dialog = element('dialog', '', 'bracket-match-panel bracket-analysis-panel');
     const heading = copy('Analýza zápasu', 'Match analysis', 'Analýza zápasu');
@@ -215,6 +265,8 @@
       const context = comparison.context(match);
       const form = element('form', '', 'bracket-analysis-form');
       const fields = element('div', '', 'bracket-analysis-fields');
+      const identities = element('div', '', 'bracket-analysis-fields bracket-identity-fields');
+      let selected = null;
       const option = (id, name = id) => ({ id, name });
       const unknown = option('', copy('Vyberte…', 'Select…', 'Vyberte…'));
       const tour = choice(copy('Okruh', 'Tour'), [unknown, option('atp', 'ATP'), option('wta', 'WTA')], context.tour, updateFormat);
@@ -229,6 +281,8 @@
       const formatSelect = format.querySelector('select');
       for (const select of [tourSelect, surfaceSelect, formatSelect]) select.required = true;
       function updateFormat() {
+        identities.replaceChildren();
+        selected = null;
         formatSelect.options[2].disabled = tourSelect.value !== 'atp';
         if (tourSelect.value === 'wta') formatSelect.value = '3';
       }
@@ -236,7 +290,7 @@
       fields.append(tour, surface, format);
       const submit = element('button', copy('Porovnať', 'Compare', 'Porovnat'), 'bracket-analysis-action');
       submit.type = 'submit';
-      form.append(fields, submit);
+      form.append(fields, identities, submit);
       if (match.winner_id || match.players.some(player => player.score)) {
         dialog.append(element('p', copy(
           'Porovnanie používa aktuálny snapshot Porovnávača.',
@@ -247,17 +301,29 @@
       dialog.append(form, status, output);
       form.addEventListener('submit', async event => {
         event.preventDefault();
+        if (selected && selected.some(lookup => !lookup.select.value)) {
+          status.textContent = copy('Potvrďte oboch hráčov.', 'Confirm both players.', 'Potvrďte oba hráče.');
+          return;
+        }
         submit.disabled = true;
+        identities.inert = true;
         fields.inert = true;
         output.replaceChildren();
         status.textContent = copy('Načítavam porovnanie…', 'Loading comparison…', 'Načítám porovnání…');
         try {
-          const result = await comparison.load(p1.name, p2.name, tourSelect.value, surfaceSelect.value, Number(formatSelect.value));
+          const [left, right] = [p1, p2].map((player, index) => ({
+            name: player.name, player_id: selected?.[index].select.value,
+          }));
+          const result = await comparison.load(left, right, tourSelect.value, surfaceSelect.value, Number(formatSelect.value));
           if (!dialog.open) return;
           comparison.render(output, result);
           status.textContent = '';
         } catch (error) {
           if (!dialog.open) return;
+          if ([404, 409].includes(error?.status) && comparison.search && !selected) {
+            selected = [p1, p2].map(player => playerLookup(player, tourSelect.value, comparison));
+            identities.append(...selected.map(lookup => lookup.field));
+          }
           status.textContent = [400, 404, 409].includes(error?.status)
             ? copy('Pre túto dvojicu a okruh sa nepodarilo nájsť jednoznačné údaje.',
               'No unambiguous data were found for this pair and tour.',
@@ -269,6 +335,7 @@
         } finally {
           submit.disabled = false;
           fields.inert = false;
+          identities.inert = false;
         }
       });
     }

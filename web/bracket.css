@@ -156,3 +156,8 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
   .bracket-analysis-action { min-height: 36px; }
   .bracket-analysis-panel .comparator-analytics-body { padding: 10px; }
 }
+
+.bracket-identity-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.bracket-identity-fields:empty { display: none; }
+.bracket-player-lookup { display: grid; gap: .35rem; min-width: 0; }
+.bracket-player-lookup input, .bracket-player-lookup select { width: 100%; min-width: 0; }

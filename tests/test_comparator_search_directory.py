@@ -74,7 +74,7 @@ def test_search_compacts_reversed_initial_and_accents_without_merging_ids():
     ]}
     found = search_players(directory, "svrc", tour="atp")
     assert [p["player_id"] for p in found] == ["provider-d"]
-    assert [p["player_id"] for p in search_players(directory, "D. Svrcina", tour="atp")] == []
+    assert [p["player_id"] for p in search_players(directory, "D. Svrcina", tour="atp")] == ["provider-d"]
     assert [p["player_id"] for p in search_players(directory, "Svrcina D", tour="atp")] == ["provider-d"]
 
 
@@ -213,3 +213,29 @@ def test_search_limit_counts_unique_visible_names_not_duplicate_ids():
     assert len(found) == 12
     assert len({row["name"] for row in found}) == len(found)
     assert sum(row["name"] == "Alex Example" for row in found) == 1
+
+
+def test_surname_first_and_compound_initials_keep_canonical_id_boundaries():
+    import pytest
+
+    from tbt.services.comparator_index import ComparatorIndexError, _canonical_lookup
+    from tbt.services.comparator_runtime import RuntimePlayerNotFound, _resolve
+
+    directory = {"players": [
+        {"player_id": "b", "name": "Botic van de Zandschulp", "tour": "atp"},
+        {"player_id": "other", "name": "Benoit van de Zandschulp", "tour": "atp"},
+        {"player_id": "l", "name": "Łukasz Kubot", "tour": "atp"},
+    ]}
+    query = "van de Zandschulp, Bótic"
+    assert search_players(directory, query, tour="atp")[0]["player_id"] == "b"
+    assert _canonical_lookup(directory, query, "atp")["player_id"] == "b"
+    assert _resolve(directory, query, tour="atp")["player_id"] == "b"
+    for short in ("B. van de Zandschulp", "van de Zandschulp B."):
+        assert {row["player_id"] for row in search_players(directory, short, tour="atp")} == {"b", "other"}
+        with pytest.raises(ComparatorIndexError, match="player_not_found"):
+            _canonical_lookup(directory, short, "atp")
+        with pytest.raises(RuntimePlayerNotFound):
+            _resolve(directory, short, tour="atp")
+    assert _canonical_lookup(directory, "Lukasz Kubot", "atp")["player_id"] == "l"
+    assert search_players(directory, "Lukasz", tour="atp")[0]["player_id"] == "l"
+    assert not search_players(directory, query, tour="wta")
