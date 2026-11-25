@@ -504,7 +504,7 @@
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
       getJSON('/ui-config.json?v=7360&p=61&dashboard-setting=1&acca-stats=1',{timeoutMs:3000}),
       getJSON('/config/telegram-groups.json?v=7360&p=61',{timeoutMs:3000}),
-      getJSON('/api/v1/ui-config',{timeoutMs:3500}),
+      getJSON('/api/v1/ui-config',{timeoutMs:9000}).catch(()=>getJSON('/api/v1/ui-config',{timeoutMs:9000})),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
     state.uiSource=uiResult.status==='fulfilled'&&uiResult.value&&typeof uiResult.value==='object'?uiResult.value:fallbackUi;

@@ -1,0 +1,1 @@
+- 2026-11-25: Falošné „Publikovanie konfigurácie je pozastavené“: server opakuje čítanie ui-config 3× pri prechodnej chybe Azure, web čaká 9 s namiesto 3,5 s a raz zopakuje. Systém hlási úložisko OK.

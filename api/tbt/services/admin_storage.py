@@ -13,6 +13,7 @@ import gzip
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
+import time
 import math
 import os
 import re
@@ -623,12 +624,19 @@ def _load_runtime_ui_config_and_revision() -> tuple[dict | None, str]:
     Azure/Firestore ETag remains the actual conditional-write guard.
     """
     client = _table(UI_TABLE)
-    try:
-        entity = client.get_entity(partition_key="runtime", row_key="ui-config")
-    except Exception as exc:
-        if _storage_not_found(exc):
-            return None, ui_config_revision({})
-        raise AdminStorageUnavailable("Unable to load runtime UI configuration") from exc
+    entity = None
+    for attempt in range(3):
+        try:
+            entity = client.get_entity(partition_key="runtime", row_key="ui-config")
+            break
+        except Exception as exc:
+            if _storage_not_found(exc):
+                return None, ui_config_revision({})
+            # 25.11.2026: transient Azure Table read errors showed the
+            # "publishing paused" banner although storage was healthy.
+            if attempt == 2:
+                raise AdminStorageUnavailable("Unable to load runtime UI configuration") from exc
+            time.sleep(0.4 * (attempt + 1))
     decoded = _decode_runtime_ui_payload(entity.get("payload"))
     revision = ui_config_revision(decoded if decoded is not None else {})
     normalized = _normalize_membership_invariants(decoded) if decoded is not None else None
