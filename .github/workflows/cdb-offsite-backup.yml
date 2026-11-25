@@ -63,8 +63,9 @@ jobs:
           set -euo pipefail
           mkdir restore
           7z x -p"$PW" -orestore "blinq-cdb-$DAY.7z" > /dev/null
-          (cd restore/cdb && sha256sum -c ../SHA256SUMS.txt --quiet)
-          diff <(cd cdb && sha256sum * ) <(cd restore/cdb && sha256sum *)
+          # 7z stores ./cdb/* entries by file name, next to SHA256SUMS.txt.
+          (cd restore && sha256sum -c SHA256SUMS.txt --quiet)
+          diff <(cd cdb && sha256sum * ) <(cd restore && sha256sum $(cd ../cdb && ls))
           echo "Restore verified: all files identical"
       - name: Publish as separate private release (never touches tbt-data-v1)
         run: |
