@@ -55,6 +55,7 @@ def load_targets(history_dir: str, start: date, end: date) -> dict[date, list[di
 
 
 def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
+    from tbt.providers.budget import RequestBudgetExceeded
     from tbt.providers.statistics import parse_statistics
     client.request_limit = max_requests
     out.mkdir(parents=True, exist_ok=True)
@@ -68,7 +69,8 @@ def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
                 break
             rep["weeks"] += 1
             rep["targets"] += len(targets)
-            week_started = start
+            completed_rows: list[str] = []
+            completed_stats = completed_serve_return = 0
             index: dict[frozenset, list] = defaultdict(list)
             for k in range(7):
                 day = start + timedelta(days=k)
@@ -96,14 +98,16 @@ def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
                 try:
                     payload = client.event_statistics(eid)
                     stats = parse_statistics(payload, home_is_player1=(home_last == norm_last(t["p1"])))
+                except RequestBudgetExceeded:
+                    raise
                 except Exception as exc:
                     stats, payload = {}, {"error": type(exc).__name__}
-                rep["stats_rows"] += int(bool(stats))
-                rep["stats_with_serve_return"] += int("p1_service_points_won" in stats)
+                completed_stats += int(bool(stats))
+                completed_serve_return += int("p1_service_points_won" in stats)
                 # CDB-ready row: canonical parsed stats + the raw provider
                 # payload + the same identity/marker keys the CDB writer
                 # uses, so import is a pure merge (no second API call ever).
-                fp.write(json.dumps({"match_id": t["match_id"], "provider_event_id": eid,
+                completed_rows.append(json.dumps({"match_id": t["match_id"], "provider_event_id": eid,
                                      "week": start.isoformat(), "stats": stats,
                                      "home_is_player1": home_last == norm_last(t["p1"]),
                                      "raw_statistics": payload,
@@ -115,9 +119,15 @@ def run(client, weeks: dict, out: Path, max_requests: int) -> dict:
                                              "status": "ok" if stats else "unavailable",
                                              "origin": "itf_week_gapfill_stage"}}}) + "\n")
             else:
+                fp.writelines(completed_rows)
+                rep["stats_rows"] += completed_stats
+                rep["stats_with_serve_return"] += completed_serve_return
                 rep["last_complete_week"] = start.isoformat()
                 continue
             break
+    except RequestBudgetExceeded as exc:
+        rep["stopped"] = "budget"
+        rep["budget_stop_reason"] = str(exc)
     finally:
         fp.close()
     rep["requests"] = client.request_count

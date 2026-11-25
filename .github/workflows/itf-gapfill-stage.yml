@@ -13,7 +13,7 @@ on:
         default: ''
       max_requests:
         description: Max paid requests (<= 5000)
-        required: true
+        required: false
         default: '5000'
       owner_evening_cap:
         description: Owner-approved one-off global cap for 18-23h Bratislava (0 = off, max 10000; per run still <= 5000)
@@ -93,7 +93,9 @@ jobs:
           MAX: ${{ inputs.max_requests || '5000' }}
         run: |
           set -euo pipefail
-          [[ "$MAX" =~ ^[0-9]+$ ]] && (( 10#$MAX >= 1 && 10#$MAX <= 5000 ))
+          if ! [[ "$MAX" =~ ^[0-9]{1,4}$ ]] || ! (( 10#$MAX >= 1 && 10#$MAX <= 5000 )); then
+            echo "::error::max_requests must be an integer between 1 and 5000"; exit 1
+          fi
           (( 10#$MAX <= 10#${QUOTA_ALLOWED:-0} )) || MAX="${QUOTA_ALLOWED:-0}"
           START="$IN_START"; END="$IN_END"; PREFIX=itf
           [[ -n "$START" ]] || PREFIX=itf-auto
