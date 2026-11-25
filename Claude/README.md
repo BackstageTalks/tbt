@@ -159,3 +159,5 @@ Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overi
 - `release_store`: poistky počtu riadkov a identít povolia odstrániť **presne** schválený zoznam ID (inak blokujú ako doteraz).
 - Zápis až po `approved_by_operator: true` v `.github/cdb-dedupe-request.json`.
 - Návrat: obnova z release `blinq-cdb-dedupe-prewrite-<run_id>-1`.
+
+- 2026-11-25: Frozen-candidate: readiness po fite sťahuje aktuálnu CDB do `.cache/tbt/readiness-history`, nie do zmrazenej `.cache/tbt/history` (inak shadow gate padol na „input changed“).

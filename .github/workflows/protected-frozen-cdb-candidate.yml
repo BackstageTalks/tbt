@@ -170,6 +170,8 @@ jobs:
       # and cannot promote either model.
       - name: Independently refresh current production readiness after fit
         if: ${{ success() && steps.comparison.outputs.evaluated == 'true' }}
+        env:
+          TBT_READINESS_HISTORY_DIR: .cache/tbt/readiness-history
         run: |
           set -euo pipefail
           python scripts/model_promotion_readiness.py \
