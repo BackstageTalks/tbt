@@ -136,7 +136,7 @@
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi small{
     color:#a8c4b7!important;letter-spacing:.055em!important;
-    font-weight:570!important;font-size:10px!important;line-height:1.4!important;
+    font-weight:570!important;font-size:11px!important;line-height:1.4!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi strong{
     font-variant-numeric:tabular-nums!important;
@@ -348,7 +348,7 @@
     padding:12px 10px!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi p{
-    font-size:10px!important;line-height:1.35!important;margin:3px 0 0!important;
+    font-size:11px!important;line-height:1.35!important;margin:3px 0 0!important;
     white-space:normal!important;overflow:visible!important;
   }
 }

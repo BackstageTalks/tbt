@@ -142,7 +142,7 @@
   body#blinqPremium#blinqPremium:not(.blinq-admin)
   #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) .hub-pick-stack small {
     display:block!important;
-    font-size:10px!important;
+    font-size:11px!important;
     line-height:1.4!important;
   }
   body#blinqPremium#blinqPremium:not(.blinq-admin)
@@ -159,7 +159,7 @@
   }
   body#blinqPremium#blinqPremium:not(.blinq-admin)
   #dailyHub .daily-hub-table .hub-number-stack small {
-    font-size:10px!important;
+    font-size:11px!important;
     line-height:1.3!important;
   }
 }
