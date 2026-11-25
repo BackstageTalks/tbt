@@ -1,0 +1,1 @@
+- 2026-11-25: Telegram skupiny na hlavnej stránke: kompaktný zoznam (desktop 1 riadok s 3 stĺpcami, mobil ~40 % nižšie), rovnaké lietadielko v modernizovanej dlaždici.
