@@ -11,7 +11,7 @@ def test_gh_retries_transient_http_500(monkeypatch):
         subprocess.CompletedProcess(["gh"], 0, "ok\n", ""),
     ]
 
-    def run(command, capture_output, text):
+    def run(command, capture_output, text, **_kw):
         calls.append(command)
         return results.pop(0)
 
@@ -26,7 +26,7 @@ def test_gh_retries_transient_http_500(monkeypatch):
 def test_gh_does_not_retry_nontransient_failure(monkeypatch):
     calls = []
 
-    def run(command, capture_output, text):
+    def run(command, capture_output, text, **_kw):
         calls.append(command)
         return subprocess.CompletedProcess(command, 1, "", "HTTP 404: Not Found")
 
