@@ -168,3 +168,4 @@ Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overi
 - 2026-11-25: Zaseknutý CDB zámok po strate runnera: data.yml job `orphan_lock_release` zmaže LEN zámok vlastného behu a LEN ak všetky súbory CDB sedia s manifestom; inak zámok nechá (fail closed).
 - 2026-11-25: Admin Ponuka: názov/popis/stav pod sebou, ovládací prvok vpravo v tom istom riadku, súťaže ako čipy; ostatné stránky pixelovo bez zmeny.
 - 2026-11-25: TOP audit (149 tipov): model 73 % vs trh 56 % vs reál 50 %. Nový voliteľný strop TBT_TOP_MAX_MARKET_GAP (admin Ponuka, default vypnuté) + shadow variant top_market_guard (favorit trhu + rozdiel ≤ 0,15).
+- 2026-11-25: Pamäť ranného behu: ace shadow počíta len dnešnú ponuku; gc + log RSS/peak (memory_checkpoint) na hraniciach fáz; uvoľnenie line-first archívu. Live výstupy bez zmeny.
