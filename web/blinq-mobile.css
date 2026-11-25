@@ -18,9 +18,9 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #dashboardHero
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #dashboardKpis{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;padding:16px 12px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi{padding:12px 7px!important;min-width:0!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi>span{display:none!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi small{font-size:10px!important;white-space:normal!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi small{font-size:11px!important;white-space:normal!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi strong{font-size:23px!important;line-height:1.25!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi p{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi p{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #dailyHub{background:transparent!important;border:0!important;padding:0 12px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-panel-head{padding:16px 0!important;display:flex!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-panel-head h2{font-size:17px!important}
@@ -28,14 +28,14 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-title-g
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-tabs-row{padding:0 0 12px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #dailyHubTabs{display:flex!important;overflow-x:auto!important;gap:6px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-tab{min-height:44px!important;flex:0 0 auto!important;font-size:11px!important;padding:0 12px!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-tab b,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-tab em{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-tab b,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-tab em{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .table-scroller{overflow:visible!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table{width:100%!important;min-width:0!important;display:block!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table thead{display:none!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table tbody{display:grid!important;gap:12px!important;padding:0!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table tbody tr:not(.hub-row-locked){display:grid!important;grid-template-columns:minmax(0,1fr) 68px!important;grid-template-areas:"tournament time" "match match" "pick number" "confidence action" "projection projection" "edge edge"!important;padding:16px 14px!important;gap:14px 10px!important;border:1px solid #244031!important;border-radius:12px!important;background:#091c15!important;min-width:0!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table td{font-size:12px!important;min-width:0!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table td:before{font-size:10px!important;line-height:1.4!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table td:before{font-size:11px!important;line-height:1.4!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-rank{display:none!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .hub-tournament-cell{grid-area:tournament!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .hub-time{grid-area:time!important;text-align:right!important;font-size:12px!important}
@@ -49,15 +49,15 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .hub-edge-cell
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:12px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-player{gap:9px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-player-copy>b{font-size:13px!important;line-height:1.35!important;white-space:normal!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-player-meta{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-player-meta{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-tournament-copy b{font-size:11px!important;white-space:normal!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-tournament-copy small,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-tournament-location{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-tournament-copy small,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-tournament-location{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-pick-stack strong{font-size:13px!important;white-space:normal!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-pick-stack small,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-number-stack small{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-pick-stack small,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-number-stack small{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-number-stack strong{font-size:17px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-confidence{justify-items:start!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-confidence strong{font-size:15px!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-data-depth{font-size:10px!important;max-width:none!important;white-space:normal!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-data-depth{font-size:11px!important;max-width:none!important;white-space:normal!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .hub-detail{min-height:44px!important;min-width:58px!important;font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #telegramGroupsPanel{margin:22px 12px 0!important;padding:20px 16px!important;border-radius:12px!important;background:linear-gradient(130deg,#163b2a,#0a2017)!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .tg-panel-head h2{font-size:23px!important}
@@ -104,15 +104,15 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #profileProjec
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-player{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;width:100%!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-player-main{display:flex!important;align-items:center!important;gap:8px!important;min-width:0!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-player-main b{font-size:13px!important;line-height:1.35!important;white-space:normal!important;overflow-wrap:anywhere!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-player>small{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-player>small{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-divider{display:none!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table tbody tr:not(.hub-row-locked):not(:has(.hub-seeall-model-cell,.hub-edge-cell)){grid-template-areas:"tournament time" "match match" "pick number" "confidence action"!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .metric-card{padding:14px!important;min-height:86px!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .metric-card small{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .metric-card small{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .metric-card strong{font-size:22px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row{padding:16px 14px!important;gap:12px!important;border-radius:12px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row td{font-size:12px!important;line-height:1.4!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row td:before{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row td:before{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row .result-prediction strong{font-size:14px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-match-main,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-match-sub{font-size:13px!important;line-height:1.4!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row .result-units{font-size:14px!important}
@@ -123,7 +123,7 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:no
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .results-match-player,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .results-opponent{display:flex!important;gap:8px!important;width:100%!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .results-match-player strong,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .results-opponent strong{font-size:13px!important;white-space:normal!important;overflow-wrap:anywhere!important;flex:1!important;min-width:0!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-prediction strong{font-size:14px!important;line-height:1.4!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-prediction::before,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-confidence::before,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-odds::before{font-size:10px!important;line-height:1.4!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-prediction::before,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-confidence::before,body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-odds::before{font-size:11px!important;line-height:1.4!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-units{font-size:14px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #bqm-projects{padding:0!important;letter-spacing:normal!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #bqm-projects img{display:block!important;width:24px!important;height:24px!important;object-fit:contain!important}
@@ -143,7 +143,7 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:no
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-prediction::before,
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-confidence::before,
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-odds::before{font-size:11px!important;color:#aec8bb!important;letter-spacing:.03em!important}
-body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .result-tag{font-size:10px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .result-tag{font-size:11px!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-status b{font-size:11px!important}
 }
 
@@ -397,7 +397,7 @@ body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence{display:flex!
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence strong{font-size:18px!important;line-height:1.2!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence>i{display:block!important;width:110px!important;height:3px!important;background:#234235!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence>i>b{display:block!important;height:100%!important;background:#38e8a4!important}
-body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-data-depth{font-size:10px!important;line-height:1.4!important;white-space:nowrap!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important;color:#95b2a4!important}
+body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-data-depth{font-size:11px!important;line-height:1.4!important;white-space:nowrap!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important;color:#95b2a4!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-action-cell{justify-self:end!important;align-self:center!important;padding:0!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-tournament-copy b{font-size:13px!important;line-height:1.35!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .daily-tabs-row{background:rgba(5,24,18,.8)!important;border-radius:12px 12px 0 0!important;padding:4px!important;margin-bottom:12px!important}
@@ -413,7 +413,7 @@ body#blinqPremium .results-member-note{font-size:11px;line-height:1.5;color:#9cb
 
 body#blinqPremium .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(4,minmax(100px,1fr)) minmax(140px,1fr) minmax(115px,.8fr) minmax(210px,1.4fr)!important}
 body#blinqPremium .results-filter-bar .results-member-levels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 10px;margin:0;padding:0;min-width:0;align-self:center}
-body#blinqPremium .results-filter-bar .results-member-levels legend{font-size:10px;margin-bottom:7px}
+body#blinqPremium .results-filter-bar .results-member-levels legend{font-size:11px;margin-bottom:7px}
 body#blinqPremium .results-filter-bar .results-member-levels label{font-size:11px;gap:5px;white-space:nowrap}
 @media(max-width:1100px){body#blinqPremium .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:700px){body#blinqPremium .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(2,minmax(0,1fr))!important}body#blinqPremium .results-filter-bar .results-member-levels{grid-column:1/-1;padding:6px 0;grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -421,8 +421,8 @@ body#blinqPremium .results-filter-bar .results-member-levels label{font-size:11p
 /* Compact betting-day checkbox inside the existing Results filter bar. */
 body#blinqPremium.blinq-route .results-betting-day-toggle{width:max-content!important;max-width:100%!important;height:42px!important;padding:0!important;gap:6px!important;border:0!important;background:transparent!important;border-radius:0!important;justify-self:start!important;grid-column:auto!important}
 body#blinqPremium.blinq-route .results-betting-day-toggle input{width:14px!important;height:14px!important;min-width:14px!important}
-body#blinqPremium.blinq-route .results-betting-day-toggle strong{font-size:10px!important}
-body#blinqPremium.blinq-route .results-betting-day-toggle small{font-size:8px!important}
+body#blinqPremium.blinq-route .results-betting-day-toggle strong{font-size:11px!important}
+body#blinqPremium.blinq-route .results-betting-day-toggle small{font-size:11px!important}
 @media(min-width:1101px){body#blinqPremium.blinq-route .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(4,minmax(100px,1fr)) minmax(140px,1fr) 95px minmax(210px,1.4fr)!important}body#blinqPremium.blinq-route .results-filter-bar-v683:not(:has(.results-member-levels)){grid-template-columns:repeat(4,minmax(0,1fr)) minmax(140px,1.2fr) 95px!important}}
 @media(max-width:900px){body#blinqPremium.blinq-route:not(.blinq-admin) .results-betting-day-toggle{grid-column:auto!important;height:38px!important;justify-self:start!important}}
 
@@ -873,7 +873,7 @@ body#blinqPremium.bqm-unified-menu .site-header .header-top > .brand.brand-menu-
 }
 body#blinqPremium.bqm-unified-menu #profileMenu{display:none!important}
 #bqm-dialog .bqm-section-label{
-  margin:12px 10px 8px;color:#94b3a6;font-size:10px;font-weight:800;
+  margin:12px 10px 8px;color:#94b3a6;font-size:11px;font-weight:800;
   line-height:1.4;letter-spacing:.12em;
 }
 #bqm-dialog .bqm-menu-divider{
@@ -1296,3 +1296,5 @@ body#blinqPremium .mobile-icon-nav a.comparator-nav-locked::after{
  html body#blinqPremium.bqm-enabled:not(.blinq-admin) .site-main{padding-bottom:calc(88px + env(safe-area-inset-bottom))!important}
  html body#blinqPremium.bqm-enabled:not(.blinq-admin) :is(dialog,.account-panel,.compare-panel) {scroll-padding-bottom:calc(84px + env(safe-area-inset-bottom))}
 }
+/* 2026-11-25 Codex 09: "Zobraziť celú ponuku" toggle was 32×32 px – make it a comfortable 44 px tap target. */
+@media(max-width:900px){html body#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHubExpand{min-width:44px!important;min-height:44px!important}}

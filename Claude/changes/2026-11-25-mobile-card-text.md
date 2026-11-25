@@ -1,0 +1,31 @@
+- 2026-11-25: Mobil (členovia): 30 pravidiel s písmom pod 11 px zdvihnutých na 11 px; tlačidlo Zobraziť celú ponuku 44 px. Pôvodné hodnoty (na návrat):
+  - web/blinq-mobile-unified-cards.css · `bled:not(.blinq-admin)   #dailyHub:not([data-tab="see_all"]) .hub-mobile-started` · 8px
+  - web/blinq-mobile-unified-cards.css · `dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence-cell::before` · 9px
+  - web/blinq-mobile-unified-cards.css · `bled:not(.blinq-admin)   #dailyHub:not([data-tab="see_all"]) .hub-mobile-started` · 7px
+  - web/blinq-mobile-unified-cards.css · `ium#blinqPremium.bqm-enabled:not(.blinq-admin)   #dailyHub .hub-pick-stack small` · 10px
+  - web/blinq-mobile-unified-cards.css · `bqm-enabled.blinq-route:not(.blinq-admin)   .results-card-row .result-date small` · 10px
+  - web/blinq-mobile-unified-cards.css · `remium.bqm-enabled.blinq-route:not(.blinq-admin)   .results-card-row .result-tag` · 10px
+  - web/blinq-mobile-unified-cards.css · `t(.blinq-admin)   .results-card-row :is(.result-confidence,.result-odds)::before` · 10px
+  - web/blinq-mobile-density.css · `emium#blinqPremium.bqm-enabled:not(.blinq-admin) #dailyHub .hub-pick-stack small` · 10px
+  - web/blinq-mobile.css · `linqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi small` · 10px
+  - web/blinq-mobile.css · `dy#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .dashboard-kpi p` · 10px
+  - web/blinq-mobile.css · `y#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-tab em` · 10px
+  - web/blinq-mobile.css · `emium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table td:before` · 10px
+  - web/blinq-mobile.css · `qm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-player-meta` · 10px
+  - web/blinq-mobile.css · `ed:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-tournament-location` · 10px
+  - web/blinq-mobile.css · `led:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-number-stack small` · 10px
+  - web/blinq-mobile.css · `bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-data-depth` · 10px
+  - web/blinq-mobile.css · `led:is(.blinq-admin,:not(.blinq-admin)) .daily-hub-table .hub-match-player>small` · 10px
+  - web/blinq-mobile.css · `#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .metric-card small` · 10px
+  - web/blinq-mobile.css · `mium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .results-card-row td:before` · 10px
+  - web/blinq-mobile.css · `inq-admin)).blinq-route:not(.blinq-admin) .results-card-row .result-odds::before` · 10px
+  - web/blinq-mobile.css · `ed:is(.blinq-admin,:not(.blinq-admin)).blinq-route:not(.blinq-admin) .result-tag` · 10px
+  - web/blinq-mobile.css · `body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-data-depth` · 10px
+  - web/blinq-mobile.css · `body#blinqPremium .results-filter-bar .results-member-levels legend` · 10px
+  - web/blinq-mobile.css · `body#blinqPremium.blinq-route .results-betting-day-toggle strong` · 10px
+  - web/blinq-mobile.css · `body#blinqPremium.blinq-route .results-betting-day-toggle small` · 8px
+  - web/blinq-mobile.css · `#bqm-dialog .bqm-section-label` · 10px
+  - web/blinq-daily-hub-mobile.css · `  #dailyHub .daily-hub-table tbody tr:not(.hub-row-locked) .hub-pick-stack small` · 10px
+  - web/blinq-daily-hub-mobile.css · `nqPremium:not(.blinq-admin)   #dailyHub .daily-hub-table .hub-number-stack small` · 10px
+  - web/blinq-mobile-visual.css · `m#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi small` · 10px
+  - web/blinq-mobile-visual.css · `emium#blinqPremium.bqm-enabled:not(.blinq-admin) #dashboardKpis .dashboard-kpi p` · 10px

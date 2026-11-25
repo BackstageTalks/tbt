@@ -55,7 +55,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
     padding:2px 5px!important;border:1px solid rgba(226,184,68,.42)!important;
     border-radius:100px!important;color:#ead078!important;
     background:rgba(206,169,59,.08)!important;
-    font-size:8px!important;line-height:1.2!important;font-weight:800!important;
+    font-size:11px!important;line-height:1.2!important;font-weight:800!important;
     white-space:nowrap!important;letter-spacing:0!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
@@ -103,7 +103,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #dailyHub:not([data-tab="see_all"]) .daily-hub-table .hub-confidence-cell::before {
     display:block!important;margin:0 0 3px!important;
-    font-size:9px!important;line-height:1.1!important;text-align:center!important;
+    font-size:11px!important;line-height:1.1!important;text-align:center!important;
     color:#a1c1b4!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
@@ -194,7 +194,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #dailyHub:not([data-tab="see_all"]) .hub-mobile-started {
-    font-size:7px!important;padding:2px 4px!important;
+    font-size:11px!important;padding:2px 4px!important;
   }
 }
 
@@ -229,7 +229,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #dailyHub .hub-pick-stack small {
     display:block!important;color:#8fb6a6!important;letter-spacing:.07em!important;
-    font-size:10px!important;font-weight:700!important;line-height:1.2!important;
+    font-size:11px!important;font-weight:700!important;line-height:1.2!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled:not(.blinq-admin)
   #dailyHub:is([data-tab="daily"],[data-tab="value"]) .hub-pick-stack small::before {
@@ -290,7 +290,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-date small {
     display:inline!important;margin:0!important;color:#8da99c!important;
-    font-size:10px!important;line-height:1.2!important;
+    font-size:11px!important;line-height:1.2!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-tournament {
@@ -303,7 +303,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row .result-tag {
-    border-radius:5px!important;font-size:10px!important;
+    border-radius:5px!important;font-size:11px!important;
     background:#0c2a22!important;border:1px solid rgba(97,169,140,.16)!important;
     color:#9dd9b9!important;
   }
@@ -329,7 +329,7 @@ body#blinqPremium #dailyHub .hub-mobile-only {display:none!important;}
   .results-card-row .result-prediction::before,
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
   .results-card-row :is(.result-confidence,.result-odds)::before {
-    font-size:10px!important;color:#9db9ad!important;
+    font-size:11px!important;color:#9db9ad!important;
     letter-spacing:.05em!important;line-height:1.3!important;
   }
   body#blinqPremium#blinqPremium#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin)
