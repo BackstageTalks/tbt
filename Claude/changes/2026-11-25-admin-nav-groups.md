@@ -1,0 +1,1 @@
+- 2026-11-25: Admin navigácia v 5 skupinách (Prevádzka, Ponuka a model, Obsah, Členovia, Reporty); na mobile jeden výber sekcie. Červené hlásenie o publikovaní len v sekciách, ktoré publikujú.
