@@ -14,7 +14,7 @@ import sqlite3
 import zlib
 from typing import Mapping
 
-from ..data.player_identity import normalize_player_name
+from ..data.player_identity import comparator_name_key
 
 
 INDEX_SCHEMA = 3
@@ -134,7 +134,7 @@ def build_comparator_index(artifact: Mapping, target: Path) -> dict:
 def _canonical_lookup(directory: Mapping, value: str, tour: str) -> dict:
     """Exact canonical ID or unambiguous exact name; never fuzzy link."""
     raw = str(value or "").strip()
-    normalized = normalize_player_name(raw)
+    normalized = comparator_name_key(raw)
     matches = []
     for row in directory.get("players") or ():
         if not isinstance(row, dict) or str(row.get("tour") or "").lower() != tour:
@@ -142,8 +142,8 @@ def _canonical_lookup(directory: Mapping, value: str, tour: str) -> dict:
         if str(row.get("player_id") or "") == raw and raw:
             return row
         if raw and normalized and normalized in (
-            normalize_player_name(row.get("name")),
-            *(normalize_player_name(alias) for alias in (row.get("aliases") or ())),
+            comparator_name_key(row.get("name")),
+            *(comparator_name_key(alias) for alias in (row.get("aliases") or ())),
         ):
             matches.append(row)
     unique = {str(row.get("player_id") or ""): row for row in matches}
@@ -165,7 +165,7 @@ def load_pair_artifact(path: Path, directory: Mapping, *, player1: str, player2:
     key1 = f'{tour}:{left["player_id"]}'
     key2 = f'{tour}:{right["player_id"]}'
     if (key1 == key2 or
-            normalize_player_name(left.get("name")) == normalize_player_name(right.get("name"))):
+            comparator_name_key(left.get("name")) == comparator_name_key(right.get("name"))):
         raise ComparatorIndexError("same_player")
     uri = f"file:{Path(path).resolve()}?mode=ro&immutable=1"
     with sqlite3.connect(uri, uri=True, timeout=5) as conn:

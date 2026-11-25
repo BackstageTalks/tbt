@@ -8942,7 +8942,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     return `<section class="content-page"><header class="content-page-hero"><span>${escapeHtml(page.eyebrow||'BLINQ')}</span><h2>${escapeHtml(page.title||'')}</h2><p>${escapeHtml(page.subtitle||'')}</p>${legalMeta}</header>${sections?`<div class="content-section-grid">${sections}</div>`:''}${faqs?`<div class="content-faq-list">${faqs}</div>`:''}${cookieSettings}</section>`;
   }
   function normalizeComparatorPlayerName(value){
-    return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+    const text=String(value||'').trim();
+    const parts=text.split(',');
+    const name=parts.length===2&&parts.every(part=>part.trim())?parts.reverse().join(' '):text;
+    const letters={'ł':'l','ø':'o','đ':'d','ð':'d','þ':'th','æ':'ae','œ':'oe','ß':'ss'};
+    return name.toLowerCase().replace(/[łøđðþæœß]/g,letter=>letters[letter]).normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
   }
   function comparatorGrandSlamContext(tour='atp',surface='hard',date=new Date()){
     if(String(tour||'').toLowerCase()!=='atp')return '';
@@ -9063,6 +9068,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     };
     const exact=rows.filter(player=>normalizeComparatorPlayerName(player?.name)===normalized);
     if(exact.length===1)return unique(exact[0]);
+    const tokens=normalized.split(' ');
+    if(tokens.length>1&&(tokens[0].length===1||tokens.at(-1).length===1))return null;
     const surname=rows.filter(player=>{
       const parts=normalizeComparatorPlayerName(player?.name).split(' ').filter(Boolean);
       return parts.length&&parts[parts.length-1]===normalized;
@@ -9283,6 +9290,35 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       <footer><span>${escapeHtml(lcopy('Model','Model','Model'))}: ${escapeHtml(shortModelVersion(result.model_version)||'—')}</span><span>${escapeHtml(lcopy('Snapshot','Snapshot','Snapshot'))}: ${escapeHtml(String(fresh.generated_at||'—').replace('T',' ').slice(0,16))} UTC</span></footer>
     </section>`;
   }
+  const bracketComparison = {
+    allowed: comparatorPlanAllowed,
+    accessMessage(){
+      return lcopy('Your plan does not include the Comparator.',
+        'Porovnávač je dostupný vo vyššom programe.',
+        'Porovnávač je dostupný ve vyšším programu.');
+    },
+    context(match){
+      const pools=[state.feed?.upcoming,state.feed?.board_upcoming,state.feed?.daily_picks];
+      const row=match.event_id && pools.flatMap(rows=>Array.isArray(rows)?rows:[])
+        .find(row=>String(row.event_id||row.id||'')===String(match.event_id));
+      const fixture=row?.fixture||row;
+      const tour=String(fixture?.tour||row?.tour||'').toLowerCase();
+      const surface=String(fixture?.surface||row?.surface||'').trim().toLowerCase().replace(/[ -]+/g,'_');
+      const bestOf=Number(fixture?.best_of||row?.best_of);
+      return {tour:['atp','wta'].includes(tour)?tour:'',
+        surface:['hard','clay','grass','indoor_hard'].includes(surface)?surface:'',
+        bestOf:bestOf===3||bestOf===5?bestOf:null};
+    },
+    search(name,tour){return BlinqAuth.comparatorPlayers(name,tour);},
+    load(left,right,tour,surface,best_of){
+      const pair={tour,surface,best_of};
+      for(const [index,player] of [left,right].entries()){
+        pair[`player${index+1}${player.player_id?'_id':''}`]=player.player_id||player.name;
+      }
+      return BlinqAuth.comparatorCompare(pair);
+    },
+    render(host,result){host.innerHTML=comparatorResultHtml(result);},
+  };
   function renderComparatorRoute(){
     const s=comparatorState(),p1=s.players[0],p2=s.players[1],major=comparatorGrandSlamContext(s.tour,s.surface);
     return `<section class="comparator-shell">
@@ -9426,7 +9462,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           const ent=dailyHubEntitlement(tab);
           return ent?.enabled!==false&&String(ent?.display_state||'active')==='active'?dailyHubRows(tab):[];
         }),
-        row=>openMatch(normalize(row),'daily',row));
+        row=>openMatch(normalize(row),'daily',row), bracketComparison);
       return;
     }
     if(route==='compare'){

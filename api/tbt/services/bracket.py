@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta
 import json
 import re
@@ -37,6 +38,98 @@ def matches_on_day(feed, day):
                 continue
             if moment.tzinfo and moment.astimezone(BRATISLAVA).date() == day:
                 yield event_id, fixture
+
+
+# Keep qualifying and doubles separate from the singles knockout.
+KNOCKOUT_ROUNDS = {
+    "roundof128": 0, "roundof64": 1, "roundof32": 2, "roundof16": 3,
+    "quarterfinal": 4, "quarterfinals": 4,
+    "semifinal": 5, "semifinals": 5,
+    "final": 6,
+}
+
+
+def tournament_key(event):
+    tournament = event.get("tournament") or {}
+    unique = tournament.get("uniqueTournament") or {}
+    tid = native_id(unique.get("id"))
+    sid = native_id((event.get("season") or {}).get("id"))
+    return f"{tid}:{sid}" if tid and sid else ""
+
+
+def observed_match(event):
+    event_id = native_id(event.get("id"))
+    teams = [event.get(side) or {} for side in ("homeTeam", "awayTeam")]
+    if not event_id or any(not native_id(team.get("id")) or not team.get("name") for team in teams):
+        return None
+    players = [{"id": native_id(team["id"]), "name": str(team["name"])[:120], "score": ""} for team in teams]
+    if players[0]["id"] == players[1]["id"]:
+        return None
+    match = {"id": event_id, "parent_id": "", "event_id": event_id, "players": players, "winner_id": ""}
+    winner_code = event.get("winnerCode")
+    if (event.get("status") or {}).get("type") == "finished" and type(winner_code) is int and winner_code in (1, 2):
+        winner = players[winner_code - 1]["id"]
+        apply_settlement(match, {
+            "status": "win", "winner_id": winner,
+            "provider_home_id": players[0]["id"], "provider_away_id": players[1]["id"],
+        }, event)
+    tournament = event.get("tournament") or {}
+    name = str(tournament.get("name") or "")[:160]
+    group_id = native_id(tournament.get("id")) or name.casefold()
+    if not group_id:
+        return None
+    round_name = str((event.get("roundInfo") or {}).get("name") or "")[:80]
+    return group_id, name, round_name, match
+
+
+def observed_draws(matches):
+    groups = {}
+    for group_id, name, round_name, source in matches.values():
+        group_name, rounds = groups.setdefault(group_id, (name, {}))
+        key = round_key(round_name)
+        stage = KNOCKOUT_ROUNDS.get(key)
+        rounds.setdefault((stage, "" if stage is not None else key), {
+            "name": round_name, "matches": [],
+        })["matches"].append({**source, "parent_id": ""})
+
+    draws = []
+    for key, (name, rounds) in groups.items():
+        semifinals = rounds.get((5, ""), {}).get("matches", [])
+        semifinal_players = {player["id"] for match in semifinals for player in match["players"]}
+        if len(semifinals) == 2 and len(semifinal_players) == 4 and (6, "") not in rounds:
+            # The two semifinals determine the final even before its fixture ID exists.
+            finalists = [
+                next((player for player in match["players"] if player["id"] == match["winner_id"]), {})
+                for match in semifinals
+            ]
+            rounds[6, ""] = {"name": "Final", "matches": [{
+                "id": "final-slot", "event_id": "", "parent_id": "",
+                "players": [{**player, "score": ""} for player in finalists],
+                "winner_id": "", "pending_slot": True,
+            }]}
+            for match in semifinals:
+                match["parent_id"] = "final-slot"
+
+        ordered = sorted(rounds, key=lambda slot: (slot[0] is not None, slot[0] or 0, slot[1]))
+        for stage, label in ordered:
+            if stage is None:
+                continue
+            following = rounds.get((stage + 1, ""))
+            if not following:
+                continue
+            for match in rounds[stage, label]["matches"]:
+                winner = match["winner_id"]
+                if not winner:
+                    continue
+                parents = [parent for parent in following["matches"]
+                           if winner in {player["id"] for player in parent["players"]}]
+                if len(parents) == 1:
+                    match["parent_id"] = parents[0]["id"]
+        draws.append({
+            "id": f"observed:{key}", "name": name, "partial": True,
+            "rounds": [rounds[slot] for slot in ordered],
+        })
+    return draws
 
 
 def normalize_draws(payload):
@@ -161,12 +254,11 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
             continue
         tournament = event.get("tournament") or {}
         unique = tournament.get("uniqueTournament") or {}
-        tid = native_id(unique.get("id"))
-        sid = native_id((event.get("season") or {}).get("id"))
-        if not tid or not sid:
+        events.setdefault(event_id, event)
+        key = tournament_key(event)
+        if not key:
             unresolved += 1
             continue
-        key = f"{tid}:{sid}"
         name = str(unique.get("name") or tournament.get("name") or fixture.get("tournament") or "")[:160]
         _, rounds = by_tournament.setdefault(key, (name, set()))
         key_round = round_key((event.get("roundInfo") or {}).get("name") or fixture.get("round_name"))
@@ -181,6 +273,27 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
         pending = entry.get("pending_rounds", []) if entry.get("last_seen") == today else []
         entry["last_seen"] = today
         entry["pending_rounds"] = sorted(set(pending) | rounds)
+
+    for event_id, event in events.items():
+        entry = entries.get(tournament_key(event))
+        if not entry or entry["last_seen"] != today:
+            continue
+        candidate = observed_match(event)
+        if not candidate:
+            continue
+        observed = entry.setdefault("observed_matches", {})
+        prior = observed.get(event_id)
+        if prior:
+            previous_match = prior[3]
+            new_match = candidate[3]
+            previous_players = {player["id"]: player for player in previous_match["players"]}
+            if previous_players.keys() == {player["id"] for player in new_match["players"]}:
+                if previous_match["winner_id"] and not new_match["winner_id"]:
+                    continue
+                if previous_match["winner_id"] == new_match["winner_id"]:
+                    for player in new_match["players"]:
+                        player["score"] = player["score"] or previous_players[player["id"]]["score"]
+        observed[event_id] = candidate
 
     requests = failures = 0
     active = sorted(
@@ -220,7 +333,9 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
 
 def settle_draws(snapshot, statuses, events):
     for entry in snapshot["tournaments"]:
-        for match in draw_matches(entry["draws"]):
+        matches = [item[3] for item in entry.get("observed_matches", {}).values()]
+        matches.extend(draw_matches(entry["draws"]))
+        for match in matches:
             event_id = match["event_id"]
             if event_id in statuses:
                 apply_settlement(match, statuses[event_id], events.get(event_id, {}))
@@ -244,10 +359,31 @@ def save_bracket_snapshot(snapshot):
         )
 
 
+def display_draws(entry):
+    observed = entry.get("observed_matches", {})
+    if not entry["draws"]:
+        return observed_draws(observed)
+    draws = deepcopy(entry["draws"])
+    for match in draw_matches(draws):
+        candidate = observed.get(match["event_id"])
+        if not candidate:
+            continue
+        fixture = candidate[3]
+        known = {player["id"]: player for player in fixture["players"]}
+        if known.keys() != {player["id"] for player in match["players"]}:
+            continue
+        for player in match["players"]:
+            source = known[player["id"]]
+            player["name"] = player["name"] or source["name"]
+            player["score"] = player["score"] or source["score"]
+        match["winner_id"] = match["winner_id"] or fixture["winner_id"]
+    return draws
+
+
 def public_brackets(snapshot, day):
     today = day.isoformat()
     tournaments = [
-        {"id": entry["id"], "name": entry["name"], "draws": entry["draws"]}
+        {"id": entry["id"], "name": entry["name"], "draws": display_draws(entry)}
         for entry in snapshot.get("tournaments", [])
         if entry["last_seen"] == today
     ]
