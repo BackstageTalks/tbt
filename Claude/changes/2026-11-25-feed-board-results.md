@@ -1,0 +1,1 @@
+- 2026-11-25: Feed pri štarte (bootstrap) neposiela board_results (~9 MB histórie, v UI len záložný zdroj pri kliku). Feed ~9,5 MB → ~0,6 MB.
