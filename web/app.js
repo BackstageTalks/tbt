@@ -7407,7 +7407,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function renderAdminOffer(){
     const d=state.adminOffer;
     if(!d&&!state.adminOfferLoading){state.adminOfferLoading=true;BlinqAuth.adminOfferFlags().then(r=>{state.adminOffer=r;state.adminOfferError='';}).catch(e=>{state.adminOfferError=e?.message||'Nepodarilo sa načítať Ponuku.';}).finally(()=>{state.adminOfferLoading=false;setTimeout(rerenderAdmin,0);});}
-    if(state.adminOfferError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminOfferError)+'</p></section>';
+    if(state.adminOfferError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminOfferError)+'</p><button class="btn" type="button" data-admin-action="offer-reload">Skúsiť znova</button></section>';
     if(!d)return '<section class="admin-ux-section"><p role="status">Načítava sa…</p></section>';
     const groups={};(d.items||[]).forEach(it=>{(groups[it.group]=groups[it.group]||[]).push(it);});
     const field=it=>{const id='offer-'+it.key;let input='';
@@ -7422,14 +7422,14 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
   function renderAdminShadow(){
     const d=state.adminShadow;
     if(!d&&!state.adminShadowLoading){state.adminShadowLoading=true;BlinqAuth.adminOfferShadow().then(r=>{state.adminShadow=r;state.adminShadowError='';}).catch(e=>{state.adminShadowError=e?.message||'Shadow testing sa nepodarilo načítať.';}).finally(()=>{state.adminShadowLoading=false;setTimeout(rerenderAdmin,0);});}
-    if(state.adminShadowError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminShadowError)+'</p></section>';
+    if(state.adminShadowError)return '<section class="admin-ux-section"><p role="alert">'+escapeHtml(state.adminShadowError)+'</p><button class="btn" type="button" data-admin-action="shadow-reload">Skúsiť znova</button></section>';
     if(!d)return '<section class="admin-ux-section"><p role="status">Načítava sa…</p></section>';
     const pct=v=>v==null?'—':(v*100).toFixed(1).replace('.',',')+' %';
     const num=v=>v==null?'—':v.toFixed(2).replace('.',',');
     const rows=(d.rows||[]).map(r=>{const cls=r.roi==null?'':(r.roi>=0?' style="color:var(--success,#1a7f37)"':' style="color:var(--danger,#c62828)"');
       return '<tr><td>'+escapeHtml(r.label)+'</td><td>'+escapeHtml(r.category)+'</td><td>'+r.issued+'</td><td>'+r.settled+'</td><td>'+pct(r.hit_rate)+'</td><td>'+num(r.avg_odds)+'</td><td'+cls+'>'+pct(r.roi)+'</td><td'+cls+'>'+num(r.profit_units)+'</td></tr>';}).join('');
-    const table=rows?'<div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Test</th><th>Kategória</th><th>Vydané</th><th>Vyhodnotené</th><th>Úspešnosť</th><th>Ø kurz</th><th>ROI</th><th>Zisk (j.)</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p role="status">Zatiaľ bez záznamov. Prvé virtuálne predikcie pribudnú pri najbližšom behu.</p>';
-    return '<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SHADOW TESTING</small><h2>Nepublikované predikcie</h2><p>Virtuálne predikcie v kategóriách, ktoré Ponuka vylučuje. Nepublikujú sa, len sa vyhodnocujú, aby bolo vidno, kedy sa oplatí kategóriu zapnúť. Dni: '+(d.days||0)+' · mesiace: '+escapeHtml((d.months||[]).join(', ')||'—')+'.</p></div><div class="admin-system-actions"><button class="btn" type="button" data-admin-action="shadow-reload">Obnoviť</button></div></div>'+table+'<p class="admin-detail-help">Rovný vklad 1 jednotka. Zarátané len predikcie, ktoré naživo publikované neboli. Odporúčanie: kategóriu zapnúť až pri aspoň 200 vyhodnotených a kladnom ROI.</p></section>';
+    const table=rows?'<div class="admin-table-wrap admin-shadow-scroll" tabindex="0" role="region" aria-label="Shadow testing tabuľka"><table class="admin-table"><thead><tr><th>Test</th><th>Kategória</th><th>Vydané</th><th>Vyhodnotené</th><th>Úspešnosť</th><th>Ø kurz</th><th>ROI</th><th>Zisk (j.)</th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<p role="status">Zatiaľ bez záznamov. Prvé virtuálne predikcie pribudnú pri najbližšom behu.</p>';
+    return '<section class="admin-ux-section admin-shadow-section"><div class="admin-ux-heading"><div><small>SHADOW TESTING</small><h2>Nepublikované predikcie</h2><p>Virtuálne predikcie v kategóriách, ktoré Ponuka vylučuje. Nepublikujú sa, len sa vyhodnocujú, aby bolo vidno, kedy sa oplatí kategóriu zapnúť. Dni: '+(d.days||0)+' · mesiace: '+escapeHtml((d.months||[]).join(', ')||'—')+'.</p></div><div class="admin-system-actions"><button class="btn" type="button" data-admin-action="shadow-reload">Obnoviť</button></div></div>'+table+'<p class="admin-detail-help">Rovný vklad 1 jednotka. Zarátané len predikcie, ktoré naživo publikované neboli. Odporúčanie: kategóriu zapnúť až pri aspoň 200 vyhodnotených a kladnom ROI.</p></section>';
   }
   async function saveAdminOffer(){
     const updates={};
@@ -8244,7 +8244,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         loadAdminTraining(true,profile);return;
       }
       if(action==='offer-save'){saveAdminOffer();return;}
-      if(action==='shadow-reload'){state.adminShadow=null;rerenderAdmin();return;}
+      if(action==='shadow-reload'){state.adminShadow=null;state.adminShadowError='';rerenderAdmin();return;}
+      if(action==='offer-reload'){state.adminOffer=null;state.adminOfferError='';rerenderAdmin();return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
