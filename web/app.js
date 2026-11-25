@@ -3692,10 +3692,7 @@
     return String(publication?.section||'')===category;
   }
   function normalizeResultPlayerName(value){
-    const text=String(value||'').trim();
-    const parts=text.split(',');
-    const name=parts.length===2&&parts.every(part=>part.trim())?parts.reverse().join(' '):text;
-    return name.normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+    return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
   }
   function resultPickIdentity(publication,row){
     const p1=row?.player1||{},p2=row?.player2||{};
@@ -8945,7 +8942,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     return `<section class="content-page"><header class="content-page-hero"><span>${escapeHtml(page.eyebrow||'BLINQ')}</span><h2>${escapeHtml(page.title||'')}</h2><p>${escapeHtml(page.subtitle||'')}</p>${legalMeta}</header>${sections?`<div class="content-section-grid">${sections}</div>`:''}${faqs?`<div class="content-faq-list">${faqs}</div>`:''}${cookieSettings}</section>`;
   }
   function normalizeComparatorPlayerName(value){
-    return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+    const text=String(value||'').trim();
+    const parts=text.split(',');
+    const name=parts.length===2&&parts.every(part=>part.trim())?parts.reverse().join(' '):text;
+    const letters={'ł':'l','ø':'o','đ':'d','ð':'d','þ':'th','æ':'ae','œ':'oe','ß':'ss'};
+    return name.toLowerCase().replace(/[łøđðþæœß]/g,letter=>letters[letter]).normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
   }
   function comparatorGrandSlamContext(tour='atp',surface='hard',date=new Date()){
     if(String(tour||'').toLowerCase()!=='atp')return '';
