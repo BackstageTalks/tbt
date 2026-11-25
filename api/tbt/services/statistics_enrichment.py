@@ -240,7 +240,7 @@ class StatisticsEnricher:
         raw = {**raw, "_tbt_event_identity": {
             "event_id": str(event_id), "home": home, "away": away, "status": "finished",
         }}
-        payload = self._get(f"/api/tennis/event/{event_id}/statistics", max_age=30 * 86400)
+        payload = self._get(f"/api/tennis/event/{event_id}/statistics", max_age=180 * 86400)
         self._observe_statistics_keys(payload)
         try:
             stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
