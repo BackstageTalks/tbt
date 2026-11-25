@@ -4607,10 +4607,26 @@ def admin_ui_config(req):
             return response({"error": "ui_config_revision_required"}, 409)
         if not re.fullmatch(r"[a-f0-9]{64}", expected):
             return response({"error": "invalid_ui_config_revision"}, 400)
+        try:
+            previous_config = load_effective_ui_config()[0]
+        except Exception:
+            previous_config = None
         saved = save_runtime_ui_config(
             payload, actor_id=str(actor.get("id") or ""),
             expected_revision=expected,
         )
+        # Owner rule: a changed level duration shifts active accounts by the
+        # difference (original switch date + new duration). Never blocks save.
+        try:
+            from tbt.services.plan_terms import apply_term_deltas, term_deltas
+            deltas = term_deltas(previous_config, load_effective_ui_config()[0]) if previous_config else {}
+            if deltas:
+                report = apply_term_deltas(settings, deltas, actor_id=str(actor.get("id") or ""))
+                logging.info("Plan term deltas applied: %s", report)
+                if isinstance(saved, dict):
+                    saved = {**saved, "plan_term_update": report}
+        except Exception:
+            logging.exception("Plan term delta update failed")
         return response(saved)
     except UIConfigVersionConflict as exc:
         return response({"error": str(exc)}, 409)

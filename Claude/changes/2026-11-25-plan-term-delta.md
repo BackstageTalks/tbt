@@ -1,0 +1,1 @@
+- 2026-11-25: Zmena „Predvolená platnosť (dni)“ pri PRO/ELITE/LEGEND/GOAT po publikovaní posunie expiráciu všetkých aktívnych účtov levelu o rozdiel (= pôvodný dátum prechodu + nová dĺžka). Skrátenie nikdy nie pod zajtrajšok. api/tbt/services/plan_terms.py.
