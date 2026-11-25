@@ -20,7 +20,7 @@ def test_match_status_never_dispatches_deleted_or_nonmanual_workflow():
         "the-odds-clv.yml", "model-calibration-monitor.yml",
         "frozen-721-settlement.yml", "cdb-drive-inbox.yml",
         "blinq-ui-production-watchdog.yml", "data-hourly-quota-gapfill.yml",
-        "api-budget-underuse-notify.yml",
+        "api-budget-underuse-notify.yml", "morning-offer-alarm.yml",
     }
     assert set(destinations) == expected, "Unexpected Match Status dispatch drift"
     assert "model-711-forward-blind.yml" not in source, "Retired 7.1.1 dispatch returned HTTP 422"
