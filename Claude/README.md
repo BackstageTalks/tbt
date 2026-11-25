@@ -161,3 +161,4 @@ Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overi
 - Návrat: obnova z release `blinq-cdb-dedupe-prewrite-<run_id>-1`.
 
 - 2026-11-25: Frozen-candidate: readiness po fite sťahuje aktuálnu CDB do `.cache/tbt/readiness-history`, nie do zmrazenej `.cache/tbt/history` (inak shadow gate padol na „input changed“).
+- 2026-11-25: tools/visual_baseline.py – pixelovo presné fotky (home/admin, desktop/mobil) pred a po úprave webu; každý refaktor CSS/JS musí dať „same“.
