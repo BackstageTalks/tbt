@@ -9283,6 +9283,31 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       <footer><span>${escapeHtml(lcopy('Model','Model','Model'))}: ${escapeHtml(shortModelVersion(result.model_version)||'—')}</span><span>${escapeHtml(lcopy('Snapshot','Snapshot','Snapshot'))}: ${escapeHtml(String(fresh.generated_at||'—').replace('T',' ').slice(0,16))} UTC</span></footer>
     </section>`;
   }
+  const bracketComparison = {
+    allowed: comparatorPlanAllowed,
+    accessMessage(){
+      return lcopy('Your plan does not include the Comparator.',
+        'Porovnávač je dostupný vo vyššom programe.',
+        'Porovnávač je dostupný ve vyšším programu.');
+    },
+    context(match){
+      const pools=[state.feed?.upcoming,state.feed?.board_upcoming,state.feed?.daily_picks];
+      const row=match.event_id && pools.flatMap(rows=>Array.isArray(rows)?rows:[])
+        .find(row=>String(row.event_id||row.id||'')===String(match.event_id));
+      const fixture=row?.fixture||row;
+      const tour=String(fixture?.tour||row?.tour||'').toLowerCase();
+      const surface=String(fixture?.surface||row?.surface||'').trim().toLowerCase().replace(/[ -]+/g,'_');
+      const bestOf=Number(fixture?.best_of||row?.best_of);
+      return {tour:['atp','wta'].includes(tour)?tour:'',
+        surface:['hard','clay','grass','indoor_hard'].includes(surface)?surface:'',
+        bestOf:bestOf===3||bestOf===5?bestOf:null};
+    },
+    load(player1,player2,tour,surface,best_of){
+      // The comparator resolves exact canonical names and aliases within the tour.
+      return BlinqAuth.comparatorCompare({player1,player2,tour,surface,best_of});
+    },
+    render(host,result){host.innerHTML=comparatorResultHtml(result);},
+  };
   function renderComparatorRoute(){
     const s=comparatorState(),p1=s.players[0],p2=s.players[1],major=comparatorGrandSlamContext(s.tour,s.surface);
     return `<section class="comparator-shell">
@@ -9426,7 +9451,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           const ent=dailyHubEntitlement(tab);
           return ent?.enabled!==false&&String(ent?.display_state||'active')==='active'?dailyHubRows(tab):[];
         }),
-        row=>openMatch(normalize(row),'daily',row));
+        row=>openMatch(normalize(row),'daily',row), bracketComparison);
       return;
     }
     if(route==='compare'){

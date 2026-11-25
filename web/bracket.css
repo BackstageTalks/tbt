@@ -128,3 +128,31 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
     border-radius: 18px 18px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom));
   }
 }
+
+.bracket-match-slot { display: grid; min-width: 0; }
+.bracket-analysis-action {
+  width: max-content; justify-self: end; margin: .3rem 0 0;
+  border: 1px solid #4bc5e9; border-radius: 999px;
+  background: #70d7f4; color: #062731;
+  padding: .27rem .75rem; min-height: 30px;
+  font: inherit; font-size: .75rem; font-weight: 750; cursor: pointer;
+}
+.bracket-analysis-action:hover { background: #b1eeff; }
+.bracket-analysis-action:focus-visible { outline: 2px solid #b1eeff; outline-offset: 2px; }
+.bracket-analysis-action:disabled { opacity: .6; cursor: wait; }
+.bracket-analysis-panel {
+  box-sizing: border-box; inset: 0; margin: auto;
+  width: min(58rem, calc(100% - 2rem)); max-height: 88dvh;
+}
+.bracket-analysis-panel > .bracket-player { max-width: 32rem; margin-inline: auto; }
+.bracket-analysis-form { display: grid; gap: .65rem; margin-top: .85rem; }
+.bracket-analysis-form .bracket-analysis-action { min-height: 38px; }
+.bracket-analysis-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
+.bracket-analysis-fields select { width: 100%; min-width: 0; padding-inline: .35rem; }
+.bracket-analysis-panel .bracket-status:empty { display: none; }
+
+@media (max-width: 600px) {
+  .bracket-analysis-panel { inset: auto 0 0; margin: 0; width: 100%; max-height: 90dvh; }
+  .bracket-analysis-action { min-height: 36px; }
+  .bracket-analysis-panel .comparator-analytics-body { padding: 10px; }
+}
