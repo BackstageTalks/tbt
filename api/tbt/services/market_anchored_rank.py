@@ -193,13 +193,39 @@ def top_require_market_side_enabled(env: dict[str, str] | None = None) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+ENV_TOP_MAX_GAP = "TBT_TOP_MAX_MARKET_GAP"
+
+
+def top_max_market_gap(env: dict[str, str] | None = None) -> float | None:
+    """Optional cap on model-minus-fair probability for TOP, default OFF.
+
+    25.11.2026 audit (149 settled TOP): gap >0.15 won 43 % vs 57 % below it.
+    """
+    raw = str((os.environ if env is None else env).get(ENV_TOP_MAX_GAP, "")).strip()
+    try:
+        value = float(raw.replace(",", "."))
+    except ValueError:
+        return None
+    return value if 0.0 < value < 1.0 else None
+
+
 def top_market_side_violation(card: dict[str, Any]) -> bool:
     """Veto only a TOP underdog supported by genuine pre-start fair.
 
     Missing/invalid quote cannot prove disagreement and never vetoes. This
     optional rule changes TOP eligibility; it is not part of rank ordering.
     """
-    if not top_require_market_side_enabled():
-        return False
     fair = valid_prestart_fair(card)
-    return fair is not None and fair < 0.5
+    if fair is None:
+        return False
+    if top_require_market_side_enabled() and fair < 0.5:
+        return True
+    gap = top_max_market_gap()
+    if gap is not None:
+        try:
+            model = float(card.get("probability"))
+        except (TypeError, ValueError):
+            return False
+        if model - fair > gap + 1e-12:
+            return True
+    return False
