@@ -24,8 +24,8 @@ class RawCacheUnavailable(RuntimeError):
 # market is never served from disk. Caller supplies a stricter max_age when
 # the event is not yet independently confirmed finished.
 MAX_AGE = {
-    "finished_statistics": 30 * 86400,
-    "finished_detail": 86400,
+    "finished_statistics": 45 * 86400,
+    "finished_detail": 30 * 86400,
     "historical_calendar": 86400,
     "live_odds": 0,
 }
