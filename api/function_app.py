@@ -4,6 +4,7 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from threading import Lock
 from concurrent.futures import ThreadPoolExecutor
+import copy
 import gzip
 import hashlib
 import ipaddress
@@ -1498,6 +1499,31 @@ def banner_events(req):
         return response({"error": "analytics_storage_unavailable"}, 503)
 
 
+_MEMBER_RULES_CACHE: dict[str, dict] = {}
+
+
+def _member_result_rules_cached(runtime_ui):
+    """Admin-only per-plan rules depend solely on the UI config; cache by its hash.
+
+    Was ~1 s of every admin feed request (5 full entitlement manifests).
+    """
+    try:
+        key = hashlib.sha256(json.dumps(runtime_ui, sort_keys=True, default=str).encode()).hexdigest()
+    except (TypeError, ValueError):
+        key = ""
+    cached = _MEMBER_RULES_CACHE.get(key) if key else None
+    if cached is None:
+        cached = {
+            plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
+            for plan in ("rookie", "pro", "elite", "legend", "goat")
+        }
+        if key:
+            if len(_MEMBER_RULES_CACHE) > 16:
+                _MEMBER_RULES_CACHE.clear()
+            _MEMBER_RULES_CACHE[key] = cached
+    return copy.deepcopy(cached)
+
+
 def _feed_support_reads_parallel():
     """Read independent member-feed overlays concurrently, without writes or caching.
 
@@ -1701,10 +1727,7 @@ def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
             # returns new Results rows rather than mutating authorized rows.
             fallback_kpi_source = dict(data)
             if not results_only and is_admin(user, settings):
-                data["member_result_rules"] = {
-                    plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
-                    for plan in ("rookie", "pro", "elite", "legend", "goat")
-                }
+                data["member_result_rules"] = _member_result_rules_cached(runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         trace_stage("access_filter")
