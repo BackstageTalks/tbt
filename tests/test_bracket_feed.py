@@ -2,6 +2,7 @@ from datetime import date
 from pathlib import Path
 
 from build_bracket_feed import apply_settlement, build_feed, normalize_draws, write_atomic
+from tbt.services.bracket import public_brackets
 
 
 DAY = date(2026, 11, 25)
@@ -81,3 +82,64 @@ def test_atomic_output_creates_static_sidecar(tmp_path: Path):
     write_atomic(output, {"schema": 2})
     assert output.read_text() == '{"schema":2}'
     assert list(output.parent.iterdir()) == [output]
+
+
+def test_deferred_tournament_is_loaded_on_a_later_tick_without_new_evidence():
+    snapshot, report = build_feed(OFFER, {"events": [EVENT]}, {}, DAY, lambda *_: CUP, 0)
+    assert report["cup_tree_attempts"] == 0
+    assert public_brackets(snapshot, DAY)["tournaments"] == [
+        {"id": "12:34", "name": "Example Open", "draws": []}
+    ]
+
+    snapshot, report = build_feed(OFFER, {}, snapshot, DAY, lambda *_: CUP, 1)
+    assert report["cup_tree_attempts"] == 1
+    assert public_brackets(snapshot, DAY)["tournaments"][0]["draws"]
+    assert not public_brackets(snapshot, date(2026, 11, 26))["tournaments"]
+
+
+def test_match_connections_follow_the_provider_tree():
+    final = {
+        "round": {"description": "Final"},
+        "left": {"round": {"description": "Semifinal"}, "eventIds": [100]},
+        "right": {"round": {"description": "Semifinal"}, "eventIds": [200]},
+    }
+    draw, = normalize_draws({"cupTrees": [{"id": 9, "views": [[final]]}]})
+    semis, finals = draw["rounds"]
+    final_match, = finals["matches"]
+    assert {match["parent_id"] for match in semis["matches"]} == {final_match["id"]}
+    assert len({match["id"] for match in semis["matches"]}) == 2
+    assert not final_match["parent_id"]
+
+def test_brackets_endpoint_requires_auth_and_only_reads_snapshot(monkeypatch):
+    import json
+    import azure.functions as func
+    import function_app as app
+
+    reads = []
+
+    def read_snapshot():
+        reads.append(True)
+        today = app.datetime.now(app.BRATISLAVA).date().isoformat()
+        return {"tournaments": [{
+            "id": "12:34", "name": "Example Open", "last_seen": today,
+            "draws": normalize_draws(CUP), "predictions": ["private"],
+        }]}
+
+    def provider_call(*args, **kwargs):
+        raise AssertionError("The brackets endpoint cannot call TennisAPI")
+
+    monkeypatch.setattr(app, "load_bracket_snapshot", read_snapshot)
+    monkeypatch.setattr(app, "RapidTennisClient", provider_call)
+    request = func.HttpRequest(method="GET", url="http://localhost/api/v1/brackets", body=b"")
+    endpoint = app.tournament_brackets.build().get_user_function()
+    monkeypatch.setattr(app, "_verified_user", lambda req: None)
+    assert endpoint(request).status_code == 401
+    assert not reads
+
+    monkeypatch.setattr(app, "_verified_user", lambda req: {"id": "account"})
+    result = endpoint(request)
+    assert result.status_code == 200
+    assert reads == [True]
+    assert json.loads(result.get_body())["tournaments"] == [
+        {"id": "12:34", "name": "Example Open", "draws": normalize_draws(CUP)},
+    ]

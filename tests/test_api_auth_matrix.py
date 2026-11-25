@@ -24,6 +24,7 @@ OTHER = {
     "v1/account/reactivate-free": "auth_reactivate_free",
     "v1/feed": "_authorized_feed_payload",
     "v1/results": "_authorized_results_payload",
+    "v1/brackets": "_verified_user",
     "v1/comparator/players": "_comparator_user",
     "v1/comparator/compare": "_comparator_user",
     "v1/insights/media/{media_id}": "_admin_user|_verified_user",

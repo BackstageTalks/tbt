@@ -1557,6 +1557,7 @@ def scan_match_statuses(
     max_near_checks: int = 30,
     max_wall_seconds: float | None = None,
     issued_rollover_rows: list[dict[str, Any]] | None = None,
+    bracket_events: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -1628,6 +1629,8 @@ def scan_match_statuses(
     schedule_verified_this_run = 0
     def observe(eid: str, row: dict[str, Any], event: dict[str, Any]) -> None:
         nonlocal schedule_verified_this_run
+        if bracket_events is not None and _provider_event_id(event) == eid:
+            bracket_events[eid] = event
         observed = verified_schedule_observation(row, event, now)
         if observed is not None:
             schedule_updates[eid] = observed
@@ -1862,6 +1865,12 @@ def scan_match_statuses(
                         # Compatibility with older/fake providers and the
                         # pre-match odds fallback while deployments roll.
                         daily_cache[day_key] = daily_method(scheduled.date())
+                    if bracket_events is not None:
+                        bracket_events.update(
+                            (event_id, candidate)
+                            for candidate in _provider_rows(daily_cache[day_key])
+                            if (event_id := _provider_event_id(candidate))
+                        )
                 daily_payload = daily_cache.get(day_key)
                 event = next(
                     (candidate for candidate in _provider_rows(daily_payload)

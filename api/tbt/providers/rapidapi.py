@@ -765,6 +765,12 @@ class RapidTennisClient:
                 break
         return {"events": found}
 
+    def tournament_cup_trees(self, tournament_id: str, season_id: str) -> Any:
+        return self._get(
+            f"/api/tennis/tournament/{tournament_id}/season/{season_id}/cup-trees",
+            optional_not_found=True,
+        )
+
     def event_statistics(self, event_id: str | int) -> Any:
         """Post-match event statistics; coverage is provider/event dependent."""
         return self._get(
