@@ -73,3 +73,13 @@ body#blinqPremium .admin-restore-panel>p{margin:8px 0 0!important;font-size:12px
 /* 2026-11-25 Admin min 12 px – remaining Zobrazenie/Bannery texts (preview miniatures excluded). */
 html body#blinqPremium.blinq-admin :is(.admin-daily-matrix-head span,.admin-row-advanced-body strong,.admin-row-advanced-body small,.admin-display-access-history small,.admin-display-global-detail p,.admin-banner-device-tag,.admin-daily-matrix small,.admin-daily-matrix span,.admin-ux-section small){font-size:12px!important;line-height:1.35!important}
 html body#blinqPremium.blinq-admin .admin-daily-matrix-head span{letter-spacing:.06em!important}
+/* 2026-11-25 Admin navigation: 5 groups on desktop, one section picker on phones. */
+body#blinqPremium .admin-side-nav .admin-nav-groupname{margin:14px 10px 4px!important;font-size:11px!important;letter-spacing:.16em!important;text-transform:uppercase!important;color:#7fb8a3!important;font-weight:700!important}
+body#blinqPremium .admin-mobile-section{display:none}
+@media(max-width:900px){
+ html body#blinqPremium .admin-side-nav .admin-mobile-section{display:flex!important;align-items:center!important;gap:10px!important;margin:0 0 8px!important}
+ html body#blinqPremium .admin-mobile-section>span{font-size:12px!important;letter-spacing:.12em!important;text-transform:uppercase!important;opacity:.7!important}
+ html body#blinqPremium .admin-mobile-section select{flex:1!important;min-height:44px!important;font-size:15px!important;border-radius:12px!important;padding:0 12px!important;background:rgba(2,12,9,.6)!important;color:#e7f3ee!important;border:1px solid rgba(120,220,180,.3)!important}
+ body#blinqPremium#blinqPremium#blinqPremium .admin-side-nav :is(.admin-nav-toolbar>strong,[data-admin-nav-expand],[data-admin-nav-edit],.admin-nav-entry,.admin-nav-groupname,.admin-nav-group>span,.admin-side-brand){display:none!important}
+}
+body#blinqPremium .admin-side-nav .admin-nav-group>span{display:none!important}
