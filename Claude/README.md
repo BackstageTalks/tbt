@@ -166,3 +166,4 @@ Návrat: revert PR; samostatný alarm sa dá vypnúť v Actions. Manuálne overi
 - 2026-11-25: Pätička viditeľná aj na mobile (nad spodnou lištou), len pre ne-admin; desktop pixelovo bez zmeny.
 - 2026-11-25: Ranný alarm sa nespustil (natívny cron je vypnutý). Teraz ho spúšťa 15-min match-status o 06:30–06:44 Bratislava.
 - 2026-11-25: Zaseknutý CDB zámok po strate runnera: data.yml job `orphan_lock_release` zmaže LEN zámok vlastného behu a LEN ak všetky súbory CDB sedia s manifestom; inak zámok nechá (fail closed).
+- 2026-11-25: Admin Ponuka: názov/popis/stav pod sebou, ovládací prvok vpravo v tom istom riadku, súťaže ako čipy; ostatné stránky pixelovo bez zmeny.
