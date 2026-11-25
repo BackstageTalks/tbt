@@ -37,12 +37,71 @@
   let selectedDraw = '';
   let activeView = null;
 
-  function localDate() {
-    const parts = new Intl.DateTimeFormat('en-GB', {
-      timeZone: 'Europe/Bratislava', year: 'numeric', month: '2-digit', day: '2-digit',
-    }).formatToParts(new Date());
-    const value = type => parts.find(part => part.type === type).value;
-    return [value('year'), value('month'), value('day')].join('-');
+  function bracketTabs(view, tournaments, current, panel) {
+    const tabs = element('div', '', 'bracket-tournaments');
+    tabs.setAttribute('role', 'tablist');
+    tabs.setAttribute('aria-label', copy('Aktuálne turnaje', 'Current tournaments', 'Aktuální turnaje'));
+    const select = index => {
+      selectedTournament = tournaments[index].id;
+      selectedDraw = '';
+      render(view, tournaments);
+      view.root.querySelector('[aria-selected="true"]')?.focus();
+    };
+    tournaments.forEach((item, index) => {
+      const tab = element('button', item.name || copy('Turnaj', 'Tournament'), 'bracket-tournament');
+      tab.type = 'button';
+      tab.id = 'bracket-tab-' + index;
+      tab.setAttribute('role', 'tab');
+      tab.setAttribute('aria-controls', panel.id);
+      tab.setAttribute('aria-selected', String(item === current));
+      tab.tabIndex = item === current ? 0 : -1;
+      if (item === current) panel.setAttribute('aria-labelledby', tab.id);
+      tab.addEventListener('click', () => select(index));
+      tab.addEventListener('keydown', event => {
+        const targets = {
+          ArrowLeft: (index - 1 + tournaments.length) % tournaments.length,
+          ArrowRight: (index + 1) % tournaments.length,
+          Home: 0,
+          End: tournaments.length - 1,
+        };
+        if (!Object.hasOwn(targets, event.key)) return;
+        event.preventDefault();
+        select(targets[event.key]);
+      });
+      tabs.append(tab);
+    });
+    return tabs;
+  }
+
+  function connectMatches(board, cards) {
+    const links = [];
+    for (const { card, parentId } of cards.values()) {
+      const parent = cards.get(parentId)?.card;
+      if (!parent) continue;
+      const line = element('span', '', 'bracket-link');
+      line.setAttribute('aria-hidden', 'true');
+      board.append(line);
+      links.push({ card, parent, line });
+    }
+    if (!links.length) return;
+    const layout = () => {
+      const frame = board.getBoundingClientRect();
+      for (const { card, parent, line } of links) {
+        const from = card.getBoundingClientRect();
+        const to = parent.getBoundingClientRect();
+        const y1 = from.top + from.height / 2;
+        const y2 = to.top + to.height / 2;
+        line.style.left = (from.right - frame.left) + 'px';
+        line.style.top = (Math.min(y1, y2) - frame.top) + 'px';
+        line.style.width = Math.max(0, to.left - from.right) + 'px';
+        line.style.height = Math.abs(y1 - y2) + 'px';
+        line.classList.toggle('bracket-link-up', y2 < y1);
+      }
+    };
+    const observer = new ResizeObserver(layout);
+    observer.observe(board);
+    for (const { card } of cards.values()) observer.observe(card);
+    return observer;
   }
 
   function choice(label, items, selected, onChange) {
@@ -143,6 +202,7 @@
   }
 
   function render(view, tournaments) {
+    view.lines?.disconnect();
     view.root.replaceChildren();
     const current = tournaments.find(item => item.id === selectedTournament) || tournaments[0];
     if (!current) {
@@ -151,25 +211,38 @@
     }
     selectedTournament = current.id;
     const draw = current.draws.find(item => item.id === selectedDraw) || current.draws[0];
+    const panel = element('div', '', 'bracket-panel');
+    panel.id = 'bracket-active-tournament';
+    panel.setAttribute('role', 'tabpanel');
+    panel.tabIndex = 0;
+    view.root.append(bracketTabs(view, tournaments, current, panel), panel);
+    if (!draw) {
+      panel.append(element('p', copy(
+        'Žreb zatiaľ nie je dostupný.',
+        'The draw is not available yet.',
+        'Los zatím není dostupný.',
+      ), 'bracket-status'));
+      return;
+    }
     selectedDraw = draw.id;
-    const controls = element('div', '', 'bracket-controls');
-    controls.append(choice(copy('Turnaj', 'Tournament'), tournaments, current.id, id => {
-      selectedTournament = id;
-      selectedDraw = '';
-      render(view, tournaments);
-      view.root.querySelector('select')?.focus();
-    }));
     if (current.draws.length > 1) {
-      controls.append(choice(copy('Pavúk', 'Draw', 'Pavouk'), current.draws, draw.id, id => {
+      const draws = current.draws.map((item, index) => ({
+        ...item, name: item.name || copy('Žreb ', 'Draw ', 'Los ') + (index + 1),
+      }));
+      const controls = element('div', '', 'bracket-controls');
+      controls.append(choice(copy('Žreb', 'Draw', 'Los'), draws, draw.id, id => {
         selectedDraw = id;
         render(view, tournaments);
-        view.root.querySelectorAll('select')[1]?.focus();
+        view.root.querySelector('select')?.focus();
       }));
+      panel.append(controls);
     }
+    const viewport = element('div', '', 'bracket-viewport');
+    viewport.tabIndex = 0;
+    viewport.setAttribute('role', 'region');
+    viewport.setAttribute('aria-label', title());
     const columns = element('div', '', 'bracket-rounds');
-    columns.tabIndex = 0;
-    columns.setAttribute('role', 'region');
-    columns.setAttribute('aria-label', title());
+    const matchCards = new Map();
     for (const round of draw.rounds) {
       const column = element('section', '', 'bracket-round');
       column.append(element('h2', round.name || copy('Kolo', 'Round')));
@@ -180,11 +253,14 @@
         matchLines(card, match);
         card.addEventListener('click', () => matchPanel(card, match, view.predictions, view.openDetail));
         cards.append(card);
+        if (match.id) matchCards.set(match.id, { card, parentId: match.parent_id });
       }
       column.append(cards);
       columns.append(column);
     }
-    view.root.append(controls, columns);
+    viewport.append(columns);
+    panel.append(viewport);
+    view.lines = connectMatches(columns, matchCards);
   }
 
   async function open(host, predictions, openDetail) {
@@ -193,6 +269,7 @@
       activeView.openDetail = openDetail;
       return;
     }
+    activeView?.lines?.disconnect();
     const root = element('div', '', 'bracket-view');
     const status = element('p', copy('Načítavam pavúky…', 'Loading draws…', 'Načítám pavouky…'), 'bracket-status');
     status.setAttribute('role', 'status');
@@ -201,13 +278,14 @@
     const view = { root, predictions, openDetail };
     activeView = view;
     try {
-      const response = await fetch('/bracket.json', { cache: 'no-store' });
+      const response = await fetch('/api/v1/brackets', { cache: 'no-store' });
       if (!response.ok) throw new Error('Bracket feed unavailable');
       const data = await response.json();
       if (activeView !== view || !root.isConnected) return;
       if (data.schema !== 1 || !Array.isArray(data.tournaments)) throw new Error('Invalid bracket feed');
-      const today = localDate();
-      render(view, data.date === today ? data.tournaments.filter(item => item.last_seen === today && item.draws?.length) : []);
+      const tournaments = data.tournaments.slice().sort((a, b) =>
+        Number(Boolean(b.draws.length)) - Number(Boolean(a.draws.length)) || a.name.localeCompare(b.name));
+      render(view, tournaments);
     } catch {
       if (activeView === view && status.isConnected) {
         status.textContent = copy('Pavúky sú dočasne nedostupné.', 'Draws are temporarily unavailable.', 'Pavouci jsou dočasně nedostupní.');

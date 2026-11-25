@@ -19,7 +19,11 @@ import smtplib
 import azure.functions as func
 
 from tbt.config import settings
-from tbt.errors import ConfigurationError
+from tbt.services.bracket import (
+    BRATISLAVA, build_feed as build_bracket_feed, load_bracket_snapshot,
+    public_brackets, save_bracket_snapshot, settle_draws,
+)
+from tbt.errors import ConfigurationError, ProviderError
 from tbt.services.auth import (
     AuthUnavailable,
     auth_provider,
@@ -1878,6 +1882,15 @@ def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
         return response({"error": "feed_unavailable"}, 503)
 
 
+@app.route(route="v1/brackets", methods=["GET"])
+def tournament_brackets(req):
+    try:
+        return response(public_brackets(load_bracket_snapshot(), datetime.now(BRATISLAVA).date()))
+    except Exception:
+        logging.exception("Tournament bracket snapshot unavailable")
+        return response({"error": "brackets_unavailable"}, 503)
+
+
 @app.route(route="v1/results", methods=["GET"])
 def results_page(req):
     """Deterministically page the exact complete member-authorized Results view.
@@ -2721,6 +2734,9 @@ def internal_match_status_worker(req):
         client.retry_attempts = 1
         client.client.timeout = 4.0
         worker_started = time.monotonic()
+        bracket_events = {}
+        bracket_snapshot = None
+        bracket_report = None
         try:
             phase = "scan_match_statuses"
             snapshot = scan_match_statuses(
@@ -2737,6 +2753,7 @@ def internal_match_status_worker(req):
                 # below the hard client cap of 24.
                 max_near_checks=20,
                 max_wall_seconds=22.0,
+                bracket_events=bracket_events,
             )
             # Only issued Aces/DF offers qualify for post-match statistics.
             # Reuse the same client/quota; never start an unbounded enrichment.
@@ -2807,6 +2824,29 @@ def internal_match_status_worker(req):
             snapshot["projection_statistics_checked"] = checked_stats
             snapshot["projection_statistics_unavailable"] = unavailable_stats
             snapshot["projection_statistics_budget_paused"] = quota_paused
+
+            try:
+                day = datetime.now(BRATISLAVA).date()
+                previous_brackets = load_bracket_snapshot()
+
+                def fetch_draw(tournament, season):
+                    try:
+                        return client.tournament_cup_trees(tournament, season)
+                    except (ProviderError, SharedBudgetExhausted, SharedBudgetUnavailable) as exc:
+                        raise ValueError(type(exc).__name__) from exc
+
+                before_draw_requests = client.request_count
+                remaining = client.request_count < client.request_limit
+                bracket_snapshot, bracket_report = build_bracket_feed(
+                    feed_payload, {"events": list(bracket_events.values())},
+                    previous_brackets, day, fetch_draw,
+                    1 if remaining and not quota_paused and not snapshot.get("budget_paused")
+                    and time.monotonic() - worker_started < 17.0 else 0,
+                )
+            except Exception:
+                logging.exception("Tournament bracket refresh failed")
+            else:
+                snapshot["provider_requests"] += client.request_count - before_draw_requests
         finally:
             try:
                 client.close()
@@ -2871,6 +2911,13 @@ def internal_match_status_worker(req):
         saved["results_archive"]["category_readback"] = read_only_archive_category_counts(
             load_settled_results_archive()
         )
+        if bracket_snapshot is not None:
+            try:
+                settle_draws(bracket_snapshot, persisted.get("statuses") or {}, bracket_events)
+                save_bracket_snapshot(bracket_snapshot)
+                saved["brackets"] = bracket_report
+            except Exception:
+                logging.exception("Tournament bracket snapshot publication failed")
         live_results = {"saved": 0, "comeback": 0, "set2": 0}
         try:
             live_results = settle_radar_results(snapshot.get("settled_events") or [])
