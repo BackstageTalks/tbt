@@ -1,0 +1,1 @@
+- 2026-11-25: Pamäť ranného behu: ace shadow počíta len dnešnú ponuku; gc + log RSS/peak (memory_checkpoint) na hraniciach fáz; uvoľnenie line-first archívu. Live výstupy bez zmeny. (PR fix/morning-memory-v2)

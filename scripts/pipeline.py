@@ -82,6 +82,38 @@ from tbt.services.backtest_service import walk_forward_backtest
 from tbt.services.shadow_evaluation import update_shadow_ledger, build_shadow_report
 
 
+def _memory_checkpoint(phase: str) -> None:
+    """Free unreachable objects and log process memory at a phase boundary.
+
+    25.11.2026 the morning runner was lost after 69 min (suspected OOM); these
+    lines show where RSS peaks. Never affects outputs; failures are ignored.
+    """
+    import gc
+    gc.collect()
+    try:
+        status = Path("/proc/self/status").read_text(encoding="utf-8")
+        mem = {k: int(v.split()[0]) // 1024 for k, v in
+               (line.split(":", 1) for line in status.splitlines()
+                if line.startswith(("VmRSS", "VmHWM")))}
+        print(json.dumps({"memory_checkpoint": phase, "rss_mib": mem.get("VmRSS"),
+                          "peak_mib": mem.get("VmHWM")}), flush=True)
+    except (OSError, ValueError):
+        pass
+
+
+def _today_offer_predictions(predictions, now):
+    """Predictions that can enter today's offer shadow (Bratislava 06:00 day).
+
+    Shadow rows outside today's offer are discarded later (build_offer_shadow
+    keeps only today's events), so filtering first keeps outputs identical
+    while not scoring tomorrow's slate twice.
+    """
+    from tbt.services.market_selection import _belongs_to_public_offer_day
+    _, _, day = betting_day_bounds(now, start_hour=6)
+    return [row for row in predictions or []
+            if isinstance(row, dict) and _belongs_to_public_offer_day(row, day)]
+
+
 def clean(value):
     if isinstance(value, float) and not math.isfinite(value):
         return None
@@ -988,6 +1020,7 @@ def main():
         history_store.download()
     matches = load_partitions(history_dir)
     matches, history_safety = sanitize_history_identities(matches)
+    _memory_checkpoint("history_loaded")
     if history_safety.get("changed"):
         print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
 
@@ -1581,6 +1614,7 @@ def main():
         doubles_predictions, doubles_model_report = build_doubles_predictions(
             doubles_history, doubles_upcoming, now=now
         )
+        _memory_checkpoint("doubles_built")
         doubles_odds_report = {}
         if args.doubles_odds_max_events and doubles_predictions:
             doubles_predictions, doubles_odds_report = enrich_current_betting_day_odds(
@@ -1771,8 +1805,10 @@ def main():
         if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
             try:
                 from tbt.services.offer_shadow import build_ace_shadow
+                _memory_checkpoint("before_ace_shadow")
                 ace_shadow_rows = build_ace_shadow(
-                    matches, ace_predictions, now=selection_now,
+                    matches, _today_offer_predictions(ace_predictions, selection_now),
+                    now=selection_now,
                     live_picks=list(ace_picks) + list(ace_winner_picks))
             except Exception as exc:
                 print(json.dumps({"warning": "ace_shadow_failed",
@@ -2019,6 +2055,7 @@ def main():
         # (0 new provider requests); never feeds the champion or TOP/Value.
         if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
             try:
+                _memory_checkpoint("before_line_first_shadow")
                 from aces_line_first import project_candidates, select_candidate
                 from stage_aces_offer_cdb import load_cdb_report
                 candidate_now = datetime.now(timezone.utc)
@@ -2033,6 +2070,8 @@ def main():
                     betting_day=candidate_day, rapid_payloads=projection_market_cache)
                 from tbt.services.offer_shadow import line_first_rows
                 line_first_shadow_rows = line_first_rows(candidate_result["picks"], predictions)
+                del candidate_archive
+                _memory_checkpoint("after_line_first_shadow")
             except Exception as exc:
                 projection_odds_report["line_first_candidate"] = {
                     "status": "blocked", "error_type": type(exc).__name__,
