@@ -1,6 +1,6 @@
 """Orphaned-lock release: own run only, and only with a consistent CDB bundle."""
 import pytest
-import cdb_global_writer_lock as L
+import cdb_orphan_lock_release as L
 
 OWNER = "BackstageTalks/tbt/actions/runs/7/attempts/1"
 

@@ -1053,7 +1053,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Release orphaned own lock (fail closed)
-        run: python scripts/cdb_global_writer_lock.py release-orphan
+        run: python scripts/cdb_orphan_lock_release.py
 
   readiness:
     name: Update model promotion readiness
