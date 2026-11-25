@@ -1,0 +1,1 @@
+- 2026-11-25: Štart appky: boot trace ukázal feed 4,6 s (server 2,3 s: access_filter 1,1 s, kpi 0,6 s; feed JSON 9,5 MB). Admin pravidlá levelov (member_result_rules) sa cachujú podľa hash UI konfigurácie.
