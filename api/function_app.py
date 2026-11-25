@@ -1847,6 +1847,13 @@ def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
             trace_stage("clv_complete")
         if trace_started is not None:
             data["__blinq_feed_stage_ms"] = trace_marks
+            # Traced requests only: largest top-level feed keys (kB), no values.
+            try:
+                sizes = sorted(((k, len(json.dumps(v, default=str))) for k, v in data.items()
+                                if not str(k).startswith("__")), key=lambda kv: -kv[1])[:10]
+                data["__blinq_feed_size_kb"] = [[k, round(n / 1024)] for k, n in sizes]
+            except (TypeError, ValueError):
+                pass
         # Full authorized Results have already passed every entitlement,
         # settlement, exclusion and KPI gate above. Returning any historical
         # rows during dashboard boot wastes network time; the existing Results
