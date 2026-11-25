@@ -1863,6 +1863,11 @@ def _build_authorized_feed_payload(req, *, bootstrap=False, results_only=False):
             data["results_snapshot"] = _authorized_results_revision(data.get("results") or [])
             data["results_boot_partial"] = bool(data.get("results"))
             data["results"] = []
+            # board_results (~9 MB) is only a click-lookup fallback pool in
+            # the UI; today's board rows come from board_upcoming/daily data.
+            if data.get("board_results"):
+                data["board_results"] = []
+                data["board_results_boot_partial"] = True
         return data
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})

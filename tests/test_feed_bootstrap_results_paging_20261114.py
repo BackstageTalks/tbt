@@ -224,3 +224,9 @@ def test_results_only_preserves_existing_settlement_fallback_without_kpi(monkeyp
     # result-only path must not accidentally apply new exclusion semantics.
     assert page["results"] == [{"event_id": "settled"}]
     assert page["snapshot"] == api._authorized_results_revision(page["results"])
+
+
+def test_bootstrap_drops_board_results_history():
+    src = (api.__file__ and open(api.__file__, encoding="utf-8").read())
+    assert 'data["board_results"] = []' in src
+    assert 'data["board_results_boot_partial"] = True' in src
