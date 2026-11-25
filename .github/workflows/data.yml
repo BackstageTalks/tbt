@@ -1035,6 +1035,26 @@ jobs:
         shell: bash
         run: python scripts/cdb_global_writer_lock.py release --if-held
 
+  orphan_lock_release:
+    # A lost runner never reaches the in-job release step and would block every
+    # CDB writer. Fresh runner, same run/attempt identity: deletes ONLY this
+    # run's own lock and only if the published CDB bundle is self-consistent.
+    name: Release this run's orphaned CDB lock
+    needs: pipeline
+    if: ${{ always() && needs.pipeline.result != 'success' && needs.pipeline.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Release orphaned own lock (fail closed)
+        run: python scripts/cdb_orphan_lock_release.py
+
   readiness:
     name: Update model promotion readiness
     needs: pipeline

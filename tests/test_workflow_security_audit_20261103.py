@@ -117,7 +117,7 @@ def test_secondary_production_workflows_pin_external_actions():
 def test_release_critical_data_cdb_model_actions_pinned():
     """Pin previously audited official major versions in active writer/release workflows."""
     expected = {
-        "data.yml": {"actions/checkout": 4, "actions/setup-python": 4,
+        "data.yml": {"actions/checkout": 5, "actions/setup-python": 4,
                      "actions/upload-artifact": 17, "actions/download-artifact": 1},
         "data-hourly-quota-gapfill.yml": {"actions/checkout": 1},
         "cdb-drive-inbox.yml": {"actions/checkout": 2, "actions/setup-python": 2},
