@@ -83,3 +83,9 @@ body#blinqPremium .admin-mobile-section{display:none}
  body#blinqPremium#blinqPremium#blinqPremium .admin-side-nav :is(.admin-nav-toolbar>strong,[data-admin-nav-expand],[data-admin-nav-edit],.admin-nav-entry,.admin-nav-groupname,.admin-nav-group>span,.admin-side-brand){display:none!important}
 }
 body#blinqPremium .admin-side-nav .admin-nav-group>span{display:none!important}
+/* 2026-11-25 Admin: one sticky save bar for sections that publish UI config. */
+body#blinqPremium .admin-save-bar{position:sticky!important;bottom:12px!important;z-index:30!important;margin:16px 0 4px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px 16px!important;flex-wrap:wrap!important;padding:10px 12px 10px 16px!important;border:1px solid rgba(62,230,168,.35)!important;border-radius:14px!important;background:rgba(5,24,19,.94)!important;box-shadow:0 10px 30px rgba(0,0,0,.45)!important;backdrop-filter:blur(10px)!important}
+body#blinqPremium .admin-save-bar-note{font-size:13px!important;opacity:.85!important}
+body#blinqPremium .admin-save-bar-actions{display:flex!important;flex-wrap:wrap!important;align-items:center!important;gap:8px!important}
+body#blinqPremium .admin-save-bar .admin-publish-hint{display:none!important}
+@media(max-width:900px){body#blinqPremium .admin-save-bar{bottom:calc(72px + env(safe-area-inset-bottom))!important}body#blinqPremium .admin-save-bar-note{width:100%!important}body#blinqPremium .admin-save-bar-actions{width:100%!important}body#blinqPremium .admin-save-bar-actions .btn{flex:1!important}}
