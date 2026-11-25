@@ -29,6 +29,7 @@ VARIANTS: dict[str, dict[str, str]] = {
     "value_all_no_sr": {"TBT_VALUE_LEVELS": ALL_LEVELS, "TBT_VALUE_SERVE_RETURN": "false"},
     # TOP always topped up from 1.40 (live only fills when short).
     "top_low_odds": {"TBT_TOP_LOW_ODDS_FLOOR": "1.40", "TBT_TOP_MIN_PICKS": "10"},
+    "top_market_guard": {"TBT_TOP_REQUIRE_MARKET_SIDE": "true", "TBT_TOP_MAX_MARKET_GAP": "0.15"},
     # TOP + Value ranked by the calibrated raw model instead of the
     # depth-shrunk BlinQ %, which under-states ITF/UTR favourites (24.11
     # audit, 11,640 settled: ITF-W shown 63 % vs 70 % won; raw model 69.5 %).
@@ -45,6 +46,7 @@ VARIANT_LABELS = {
     "value_all_levels": "Value · všetky súťaže",
     "value_all_no_sr": "Value · bez podania+príjmu",
     "top_low_odds": "TOP · kurz od 1,40",
+    "top_market_guard": "TOP · favorit trhu + rozdiel model−trh ≤ 15 b.",
     "calibrated_model": "TOP + Value · kalibrovaný model",
     "aces_all_levels": "Viac es / Dvojchyby · všetky súťaže",
     "aces_line_first": "Esá · line-first (Prop-Line)",
