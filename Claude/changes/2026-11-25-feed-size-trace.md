@@ -1,0 +1,1 @@
+- 2026-11-25: Boot trace (?blinq_boot_trace=1) ukáže aj najväčšie časti feedu v kB, aby sa dalo cielene zmenšiť 9,5 MB.

@@ -9992,7 +9992,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     try{
       // Consume the one-shot boot prefetch; later refreshes request fresh data.
       const pendingFeed=bootPrefetchedFeed;bootPrefetchedFeed=null;
-      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);if(generation!==feedGeneration)return;
+      const feed=(await (pendingFeed||BlinqAuth.feed()))||{};markBootTiming('Feed prevzatý');bootTimingProbe?.addBackendStages(feed?.__blinq_feed_stage_ms);bootTimingProbe?.addSizes?.(feed?.__blinq_feed_size_kb);if(generation!==feedGeneration)return;
       const feedSignature=feedVisualSignature(feed),day=bratislavaBettingDayKey(Date.now(),6);
       // The background history pipeline must not restart for unchanged data.
       if(skipUnchanged&&lastFeedVisualSignature===feedSignature&&lastFeedBettingDay===day
@@ -10257,6 +10257,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const marks=[],backend=[];
     return {
       mark(label){marks.push([label,Math.round(performance.now())]);},
+      addSizes(rows){
+        if(!Array.isArray(rows))return;
+        this.sizes=rows.slice(0,10).filter(r=>Array.isArray(r)&&typeof r[0]==='string'&&/^[A-Za-z0-9_]{1,40}$/.test(r[0])&&Number.isFinite(r[1])).map(([k,v])=>k+': '+v+' kB');
+      },
       addBackendStages(stages){
         if(!Array.isArray(stages))return;
         stages.slice(0,16).forEach(item=>{
@@ -10270,6 +10274,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       report(){
         const navigation=performance.getEntriesByType('navigation')[0];
         const phases=marks.map(([label,ms])=>`${label}: ${ms} ms`);
+        if(Array.isArray(this.sizes)&&this.sizes.length)phases.push('Najväčšie časti feedu: '+this.sizes.join(', '));
         if(navigation)phases.unshift(`DOM pripravený: ${Math.round(navigation.domContentLoadedEventEnd)} ms`);
         // Resource Timing is same-origin, read-only, and omits tokens/account
         // data. It distinguishes gateway/TTFB, body transfer and JSON parse.
