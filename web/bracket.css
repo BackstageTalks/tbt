@@ -1,0 +1,69 @@
+body#blinqPremium.blinq-admin .reference-topbar .reference-navigation[data-icon-navigation] .nav-icon-bracket[data-route="bracket"] { display: none !important; }
+body#blinqPremium[data-current-route="bracket"] .reference-topbar .reference-navigation[data-icon-navigation] .nav-icon-bracket[data-route="bracket"] { color: #a9ffe1 !important; }
+
+.bracket-view {
+  --bracket-edge: rgba(108, 196, 164, .28);
+  --bracket-glass: rgba(11, 40, 34, .72);
+  --bracket-ink: #ebfff7;
+  --bracket-winner: #75e9b2;
+  color: var(--bracket-ink);
+  min-width: 0;
+  padding: 0 0 1rem;
+}
+.bracket-controls { display: flex; flex-wrap: wrap; gap: 1rem; margin-block: .5rem 1.25rem; }
+.bracket-choice { display: grid; gap: .35rem; font-size: .85rem; }
+.bracket-choice select {
+  background: #102b24; color: inherit; border: 1px solid var(--bracket-edge);
+  border-radius: 10px; padding: .55rem .8rem; max-width: calc(100vw - 3rem);
+}
+.bracket-rounds {
+  display: flex; align-items: stretch; gap: 1.35rem; overflow-x: auto;
+  padding: .25rem .3rem 1rem; overscroll-behavior-x: contain;
+}
+.bracket-round { min-width: 14rem; flex: 1 0 14rem; max-width: 20rem; display: flex; flex-direction: column; }
+.bracket-round h2 { margin: .15rem 0 .75rem; font-size: .9rem; }
+.bracket-round-matches { flex: 1; display: flex; flex-direction: column; justify-content: space-around; gap: .7rem; }
+.bracket-match {
+  position: relative; width: 100%; display: grid; text-align: start; gap: .35rem;
+  padding: .65rem .75rem; border: 1px solid var(--bracket-edge);
+  border-radius: 10px; background: var(--bracket-glass); color: inherit;
+  font: inherit; cursor: pointer;
+}
+.bracket-round:not(:last-child) .bracket-match::after {
+  content: ""; position: absolute; inset-inline-start: 100%; inset-block-start: 50%;
+  width: .7rem; border-top: 1px solid var(--bracket-edge); pointer-events: none;
+}
+.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--bracket-winner); }
+.bracket-player { display: flex; justify-content: space-between; gap: .75rem; min-width: 0; }
+.bracket-winner { color: var(--bracket-winner); font-weight: 700; }
+.bracket-score { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bracket-status { margin-block: 1rem; }
+.bracket-match-panel {
+  position: fixed; inset: 0 auto auto 0; margin: 0;
+  left: clamp(1rem, calc(var(--bracket-x) + .5rem), calc(100vw - min(23rem, 100vw - 2rem) - 1rem));
+  top: clamp(1rem, var(--bracket-y), calc(100dvh - 22rem));
+  width: min(23rem, calc(100vw - 2rem)); max-height: min(30rem, 85dvh); overflow: auto;
+  padding: 1rem; border: 1px solid var(--bracket-edge); border-radius: 14px;
+  color: var(--bracket-ink); background: rgba(9, 34, 28, .96);
+  box-shadow: 0 12px 45px rgba(0, 0, 0, .5); backdrop-filter: blur(14px);
+}
+.bracket-match-panel::backdrop { background: rgba(0, 15, 11, .2); }
+.bracket-match-panel h2 { margin: 0 2rem .7rem 0; font-size: 1.05rem; }
+.bracket-match-panel h3 { margin: .85rem 0 .4rem; font-size: .9rem; }
+.bracket-match-panel .bracket-player { margin-block: .3rem; }
+.bracket-close {
+  position: absolute; inset: .35rem .45rem auto auto; width: 2rem; height: 2rem;
+  border: 0; border-radius: 50%; color: inherit; background: transparent; cursor: pointer;
+  font: inherit; font-size: 1.4rem;
+}
+.bracket-predictions { display: grid; grid-template-columns: auto 1fr; gap: .25rem .85rem; margin: .3rem 0 .8rem; }
+.bracket-predictions dt, .bracket-predictions dd { margin: 0; }
+.bracket-comparison { border-top: 1px solid var(--bracket-edge); margin-top: .8rem; min-height: 2.5rem; }
+
+@media (max-width: 600px) {
+  body#blinqPremium .reference-topbar .reference-navigation[data-icon-navigation] .nav-icon-bracket[data-route="bracket"] { display: none !important; }
+  .bracket-match-panel {
+    inset: auto 0 0; width: 100%; max-width: none; max-height: 75dvh;
+    border-radius: 18px 18px 0 0; padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+  }
+}
