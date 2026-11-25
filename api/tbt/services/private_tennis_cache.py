@@ -91,7 +91,7 @@ def _unpack(row):
 
 def _read_snapshot(row, *, max_age, when):
     """Interpret exactly the entity snapshot whose ETag may be used for CAS."""
-    if not isinstance(max_age, (int, float)) or not 0 <= max_age <= 180 * 86400:
+    if not isinstance(max_age, (int, float)) or not 0 <= max_age <= 45 * 86400:
         raise ValueError("Invalid raw response max-age")
     if row is None:
         return {"status": "miss"}
