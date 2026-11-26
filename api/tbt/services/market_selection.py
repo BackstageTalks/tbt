@@ -1396,7 +1396,12 @@ def select_market_sections(
         raise ValueError("Value probability floor invariant failed")
     if any((_number(card.get("odds")) or 0.0) >= PRIME_MAX_ODDS_EXCLUSIVE for card in prime):
         raise ValueError("ACCA odds bucket invariant failed")
-    if any((_number(card.get("odds")) or 0.0) < TOP_FALLBACK_MIN_ODDS for card in top):
+    _fill_floor = _low_odds_fill_floor()
+    if any((_number(card.get("odds")) or 0.0) < TOP_FALLBACK_MIN_ODDS
+           and not (card.get("selection_tier") == "low_odds_fill" and _fill_floor is not None
+                    and (_number(card.get("odds")) or 0.0) + 1e-12 >= _fill_floor)
+           for card in top):
+        # Owner rule: 1.40-1.49 low-odds fill is allowed only via that tier.
         raise ValueError("Top odds floor invariant failed")
 
     value_diffs = [_market_odds_difference(card) for card in value]
