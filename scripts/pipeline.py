@@ -33,7 +33,7 @@ from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.statistics import NoSupportedStatisticsError, parse_statistics
-from tbt.services.engine import predict, reconcile_ledger, serving_feed
+from tbt.services.engine import event_id as ledger_event_id, predict, reconcile_ledger, serving_feed
 from tbt.services.comparator import build_serving_artifact
 from tbt.services.publication import (
     validate_market_publication_candidate,
@@ -501,17 +501,42 @@ def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
         return report
 
     before_requests = int(getattr(provider, "request_count", 0) or 0)
-    by_match_id = {
-        str(getattr(match, "match_id", "") or ""): match
-        for match in matches
-        if getattr(match, "match_id", None)
-    }
+    # The ledger is keyed by the provider event id (engine.event_id), the same
+    # key reconcile_ledger uses; internal match_id kept as a fallback. Several
+    # history rows for one key are ambiguous and never guessed.
+    by_key: dict[str, list] = {}
+    for match in matches:
+        keys = {str(getattr(match, "match_id", "") or "")}
+        try:
+            keys.add(str(ledger_event_id(match) or ""))
+        except Exception:
+            pass
+        for key in keys - {""}:
+            bucket = by_key.setdefault(key, [])
+            if match not in bucket:
+                bucket.append(match)
+    expected_players = {}
+    for row in ledger if isinstance(ledger, list) else []:
+        if isinstance(row, dict):
+            key = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
+            ids = {str((row.get(side) or {}).get("id") or "") for side in ("player1", "player2")}
+            if key and "" not in ids and len(ids) == 2:
+                expected_players[key] = ids
+    report["ambiguous_match"] = 0
 
     for event_id, markets in sorted(requirements.items()):
-        match = by_match_id.get(event_id)
-        if match is None:
+        candidates = by_key.get(event_id, [])
+        expected = expected_players.get(event_id)
+        if expected:
+            candidates = [m for m in candidates
+                          if {str(m.player1_id), str(m.player2_id)} == expected]
+        if not candidates:
             report["missing_match"] += 1
             continue
+        if len(candidates) > 1:
+            report["ambiguous_match"] += 1
+            continue
+        match = candidates[0]
         if not getattr(match, "is_completed", False):
             continue
         report["completed_candidates"] += 1
