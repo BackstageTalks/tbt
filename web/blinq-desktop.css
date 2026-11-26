@@ -1,0 +1,111 @@
+/* BlinQ desktop harmonization (2026-11-26).
+   One final layer for widths > 900px, outside admin: green-glass panels
+   and a readable type floor (min 11px) for the home KPIs, Daily Hub table
+   and results table. Loaded last; scoped by media attribute in index.html.
+   Revert: delete this file and its <link> in index.html (no other rule was
+   edited). Original values: Codex report 20 (outputs/20-desktop-css.md) and
+   Claude/changes/2026-11-26-desktop-harmonize.md. KPI math is untouched. */
+
+:root {
+  --bqd-glass: linear-gradient(145deg, rgba(1, 18, 14, .82), rgba(2, 23, 18, .73));
+  --bqd-glass-line: rgba(74, 159, 116, .25);
+  --bqd-row-line: rgba(119, 159, 146, .105);
+  --bqd-head-bg: rgba(8, 24, 21, .92);
+  --bqd-muted: #8fa9a0;
+}
+
+/* ---- Green glass: KPI cards share the panel language ---- */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .dashboard-kpi {
+  background: var(--bqd-glass) !important;
+  border: 1px solid var(--bqd-glass-line) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .18), inset 0 1px 0 rgba(157, 246, 199, .035) !important;
+  -webkit-backdrop-filter: blur(9px) !important;
+  backdrop-filter: blur(9px) !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .dashboard-kpi > span {
+  background: rgba(43, 224, 151, .10) !important;
+  border: 1px solid rgba(74, 159, 116, .22) !important;
+  border-radius: 10px !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .dashboard-kpi :is(small, p, .kpi-trend) {
+  font-size: 11px !important;
+  color: var(--bqd-muted) !important;
+}
+
+/* Daily Hub panel: same glass as Telegram and KPI cards */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) #dailyHub {
+  background: var(--bqd-glass) !important;
+  border: 1px solid var(--bqd-glass-line) !important;
+  -webkit-backdrop-filter: blur(9px) !important;
+  backdrop-filter: blur(9px) !important;
+}
+
+/* ---- Tables: one rhythm for Daily Hub and results ---- */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(.daily-hub-table, .results-table) thead {
+  background: var(--bqd-head-bg) !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(.daily-hub-table, .results-table) th {
+  font-size: 11px !important;
+  letter-spacing: .04em !important;
+  color: var(--bqd-muted) !important;
+  padding: 6px 11px !important;
+  border-bottom: 1px solid var(--bqd-row-line) !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(.daily-hub-table, .results-table) td {
+  font-size: 12px !important;
+  padding: 8px 11px !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid var(--bqd-row-line) !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(.daily-hub-table, .results-table) tbody tr:hover td {
+  background: rgba(67, 237, 160, .036) !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(.daily-hub-table, .results-table) :is(.hub-odds, .hub-confidence, .hub-number-stack) strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Type floor for small meta text (was 6.6-9.5px) */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(
+  .hub-tournament-copy small, .hub-pick small, .hub-number-stack small,
+  .hub-time small, .hub-data-depth, .hub-player-meta .hub-rank, .hub-match > i,
+  .results-table td small, .results-table .void-reason, .result-tag,
+  .daily-title-group small, .daily-promise) {
+  font-size: 11px !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(.daily-hub-tab, .hub-detail, .results-filter-bar label) {
+  font-size: 12px !important;
+}
+/* Time over date (was jammed into one truncated line) */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .hub-time {
+  white-space: nowrap !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .hub-time :is(strong, small) {
+  display: block !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .hub-time small {
+  color: var(--bqd-muted) !important;
+  margin-top: 2px !important;
+}
+/* Tournament meta stays one line */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .hub-tournament-copy small {
+  display: block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  max-width: 100% !important;
+}
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) .hub-data-depth {
+  white-space: normal !important;
+  letter-spacing: 0 !important;
+  color: var(--bqd-muted) !important;
+}
+
+/* Footer and header meta */
+html body#blinqPremium#blinqPremium#blinqPremium:not(.blinq-admin) :is(
+  .footer-left > span, .footer-left nav a, .languages span, .languages a,
+  .reference-topbar .profile-copy small, .membership-badge) {
+  font-size: 11px !important;
+}
