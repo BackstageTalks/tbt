@@ -23,6 +23,52 @@ CUP = {"cupTrees": [{"id": 9, "name": "Singles", "views": [[{
 SETTLED = {"status": "loss", "winner_id": "20", "provider_home_id": "10", "provider_away_id": "20"}
 
 
+def test_analysis_context_requires_exact_native_participants_and_explicit_format():
+    event = {
+        **EVENT, "startTimestamp": 1795604400, "bestOf": 3, "groundType": "Hard",
+        "tournament": {**EVENT["tournament"], "category": {"name": "ATP Challenger"}},
+    }
+    for raw, expected in (
+        (event, "atp"),
+        ({**event, "awayTeam": {"id": 99}}, None),
+        ({**event, "bestOf": None}, None),
+        ({**event, "tournament": {**event["tournament"], "category": {"name": "Challenger"}}}, None),
+    ):
+        snapshot, _ = build_feed(OFFER, {"events": [raw]}, {}, DAY, lambda *_: CUP, 1)
+        node = snapshot["tournaments"][0]["draws"][0]["rounds"][0]["matches"][0]
+        assert (node.get("analysis_context") or {}).get("tour") == expected
+        if expected:
+            assert node["analysis_context"]["best_of"] == 3
+            assert node["analysis_context"]["surface"] == "hard"
+            assert node["analysis_context"]["verified_at"]
+
+
+def test_verified_context_rejects_conflicting_observations_and_other_editions():
+    event = {
+        **EVENT, "startTimestamp": 1795604400000, "bestOf": 5, "groundType": "Grass",
+        "tournament": {**EVENT["tournament"], "category": {"name": "ATP"}},
+    }
+
+    def node(snapshot):
+        return snapshot["tournaments"][0]["draws"][0]["rounds"][0]["matches"][0]
+
+    first, _ = build_feed(OFFER, {"events": [event, event]}, {}, DAY, lambda *_: CUP, 1)
+    context = node(first)["analysis_context"]
+    assert context["best_of"] == 5
+    assert context["surface"] == "grass"
+    assert context["scheduled_at"].endswith("+00:00")
+    unchanged, _ = build_feed(OFFER, {}, first, DAY, lambda *_: CUP, 0)
+    assert node(unchanged)["analysis_context"] == context
+    changed, _ = build_feed(
+        OFFER, {"events": [event, {**event, "groundType": "Clay"}]}, first, DAY, lambda *_: CUP, 0,
+    )
+    assert "analysis_context" not in node(changed)
+    changed, _ = build_feed(
+        OFFER, {"events": [{**event, "season": {"id": 99}}]}, first, DAY, lambda *_: CUP, 0,
+    )
+    assert "analysis_context" not in node(changed)
+
+
 def test_initial_and_new_round_only_with_no_pay_for_settlement():
     calls = []
 
