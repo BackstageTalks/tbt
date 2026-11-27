@@ -113,3 +113,11 @@ def _run_now(ledger, matches, monkeypatch, now):
     monkeypatch.setattr(pipeline, "parse_statistics", lambda payload, home_is_player1, **kw: {"p1_aces": 5, "p2_aces": 3})
     prov = Provider()
     return pipeline._enrich_pending_ace_df_settlement_stats(prov, ledger, matches, now=now), prov
+
+
+def test_terminal_exclusions_are_not_pending():
+    ledger = _ledger("15000020")
+    ledger[0]["market_publications"][0]["excluded_reason"] = "unknown_price_contract"
+    assert pipeline._pending_ace_df_settlement_requirements(ledger) == {}
+    ledger[0]["market_publications"][0]["excluded_reason"] = "projection_result_unavailable"
+    assert pipeline._pending_ace_df_settlement_requirements(ledger) == {"15000020": {"aces"}}
