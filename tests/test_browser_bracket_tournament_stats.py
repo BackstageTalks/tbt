@@ -1,6 +1,8 @@
 """Offline Chromium regression for the tournament stats popup."""
 import pytest
-from playwright.sync_api import sync_playwright
+
+pytest.importorskip("playwright")  # backend CI has no browser stack
+from playwright.sync_api import sync_playwright  # noqa: E402
 
 from browser_runtime_r43 import ORIGIN, browser_path, static_route
 
