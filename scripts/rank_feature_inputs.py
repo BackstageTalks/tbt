@@ -139,12 +139,15 @@ def _safe_extract(archive: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:gz") as handle:
         for member in handle.getmembers():
-            if member.issym() or member.islnk():
-                raise ValueError(f"Refusing linked tar member: {member.name}")
+            if not (member.isfile() or member.isdir()):
+                raise ValueError(f"Refusing unsupported tar member: {member.name}")
             target = (destination / member.name).resolve()
             if target != destination and destination not in target.parents:
                 raise ValueError(f"Refusing path traversal in tar: {member.name}")
-        handle.extractall(destination)
+        if hasattr(tarfile, "data_filter"):
+            handle.extractall(destination, filter="data")
+        else:
+            handle.extractall(destination)
 
 
 def _exact_file(root: Path, name: str) -> Path:

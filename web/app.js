@@ -931,16 +931,17 @@
 
   function safeLink(value, fallback='#predictions'){
     const text=String(value||'').trim();
-    if(!text)return fallback;
-    if(text.startsWith('#'))return text;
+    if(!text||/[\\\x00-\x1f\x7f]/.test(text))return fallback;
+    if(text.startsWith('#')&&!text.startsWith('##'))return text;
     if(text.startsWith('/')&&!text.startsWith('//'))return text;
-    if(/^https:\/\//i.test(text)){try{const parsed=new URL(text);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}}
-    return fallback;
+    return safeExternalUrl(text)||fallback;
   }
   function isExternalLink(value){ return /^https:\/\//i.test(String(value||'')); }
   function safeExternalUrl(value){
     const text=String(value||'').trim();
-    if(!text||!/^https:\/\//i.test(text))return '';
+    if(!text||/[\\\x00-\x1f\x7f]/.test(text))return '';
+    const authority=/^https:\/\/([^/?#]+)/i.exec(text)?.[1];
+    if(!authority||authority.includes('@'))return '';
     try{const parsed=new URL(text);return parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password?parsed.href:'';}catch{return '';}
   }
   function shortModelVersion(value){
@@ -2063,7 +2064,7 @@
       return;
     }
     if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):channel==='project'?lcopy('No project messages yet.','V tejto projektovej skupine zatiaľ nie sú žiadne správy.','V této projektové skupině zatím nejsou žádné zprávy.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible ACCA candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného ACCA kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného ACCA kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
-    list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon ${isLiveInsight(item)?'':'is-blinq-info'} type-${escapeHtml(item.type||'insight')}">${isLiveInsight(item)?escapeHtml(insightTypeIcon(item.type)):'<img class="insight-feed-brand" src="/assets/blinq_favi.png" alt="" loading="lazy" decoding="async">'}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header>${item.title?`<h3>${escapeHtml(item.title)}</h3>`:''}${item.body?`<p>${escapeHtml(item.body)}</p>`:''}${window.BlinqInsightMedia.gallery(item.media_ids)}<footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
+    list.innerHTML=radarPanel+rows.map(item=>{const link=safeLink(item.link,'');return `<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon ${isLiveInsight(item)?'':'is-blinq-info'} type-${escapeHtml(item.type||'insight')}">${isLiveInsight(item)?escapeHtml(insightTypeIcon(item.type)):'<img class="insight-feed-brand" src="/assets/blinq_favi.png" alt="" loading="lazy" decoding="async">'}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header>${item.title?`<h3>${escapeHtml(item.title)}</h3>`:''}${item.body?`<p>${escapeHtml(item.body)}</p>`:''}${window.BlinqInsightMedia.gallery(item.media_ids)}<footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:link?`<a href="${escapeHtml(link)}" ${isExternalLink(link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`;}).join('');
     window.BlinqInsightMedia.loadImages(list);
   }
   async function loadInsights(force=false){
@@ -9999,16 +10000,16 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const version=resultsLoadVersion,generation=feedGeneration,nonce=++todayResultsNonce;
     const operation=(async()=>{
       for(let restart=0;restart<2;restart++){
-        const complete=[];let snapshot='',expectedTotal=null;
+        const complete=[];let snapshot='',scopeDay='',expectedTotal=null;
         try{
           for(let page=0;page<10000;page++){
             if(version!==resultsLoadVersion||generation!==feedGeneration||nonce!==todayResultsNonce)return;
-            const batch=await BlinqAuth.resultsPage(page,500,snapshot,1);
+            const batch=await BlinqAuth.resultsPage(page,500,snapshot,1,scopeDay);
             if(version!==resultsLoadVersion||generation!==feedGeneration||nonce!==todayResultsNonce)return;
             if(batch.scope_days!==1||batch.page!==page||batch.limit!==500)
               throw new Error('Invalid today Results page.');
-            if(expectedTotal===null){expectedTotal=batch.total;snapshot=batch.snapshot;}
-            if(batch.snapshot!==snapshot||batch.total!==expectedTotal)
+            if(expectedTotal===null){expectedTotal=batch.total;snapshot=batch.snapshot;scopeDay=batch.scope_day||'';}
+            if(batch.snapshot!==snapshot||batch.total!==expectedTotal||(batch.scope_day||'')!==scopeDay)
               throw new Error('Today Results snapshot changed.');
             complete.push(...batch.results);
             if(complete.length>expectedTotal)throw new Error('Today Results page has too many rows.');
@@ -10018,7 +10019,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               normalizeFeedAceOdds(state.feed);
               state.feed.results_today_ready=true;
               todayResultsSnapshot=snapshot;
-              todayResultsDay=bratislavaBettingDayKey(Date.now(),6);
+              todayResultsDay=scopeDay||bratislavaBettingDayKey(Date.now(),6);
               todayResultsError='';
               if(state.route==='results'&&resultsWindowNeedsTodayOnly())renderRoute('results');
               else if(state.route==='predictions')renderDashboardResultsPreview();
@@ -10052,16 +10053,16 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const version=resultsLoadVersion,generation=feedGeneration,nonce=++recentResultsNonce;
     const operation=(async()=>{
       for(let restart=0;restart<2;restart++){
-        const complete=[];let snapshot='',expectedTotal=null;
+        const complete=[];let snapshot='',scopeDay='',expectedTotal=null;
         try{
           for(let page=0;page<10000;page++){
             if(version!==resultsLoadVersion||generation!==feedGeneration||nonce!==recentResultsNonce)return;
-            const batch=await BlinqAuth.resultsPage(page,500,snapshot,30);
+            const batch=await BlinqAuth.resultsPage(page,500,snapshot,30,scopeDay);
             if(version!==resultsLoadVersion||generation!==feedGeneration||nonce!==recentResultsNonce)return;
             if(batch.scope_days!==30||batch.page!==page||batch.limit!==500)
               throw new Error('Invalid 30-day Results page.');
-            if(expectedTotal===null){expectedTotal=batch.total;snapshot=batch.snapshot;}
-            if(batch.snapshot!==snapshot||batch.total!==expectedTotal)
+            if(expectedTotal===null){expectedTotal=batch.total;snapshot=batch.snapshot;scopeDay=batch.scope_day||'';}
+            if(batch.snapshot!==snapshot||batch.total!==expectedTotal||(batch.scope_day||'')!==scopeDay)
               throw new Error('Recent Results snapshot changed.');
             complete.push(...batch.results);
             if(complete.length>expectedTotal)throw new Error('Recent Results page has too many rows.');
@@ -10073,7 +10074,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
               state.feed.results_today_ready=true;
               todayResultsSnapshot=snapshot;
               recentResultsSnapshot=snapshot;
-              todayResultsDay=recentResultsDay=bratislavaBettingDayKey(Date.now(),6);
+              todayResultsDay=recentResultsDay=scopeDay||bratislavaBettingDayKey(Date.now(),6);
               recentResultsError='';
               if(state.route==='results'&&!resultsWindowNeedsFullHistory())renderRoute('results');
               else if(state.route==='predictions')renderDashboardResultsPreview();

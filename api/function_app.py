@@ -817,7 +817,8 @@ def private_insight_media(req):
             plan = _insight_plan_for_user(user)
             if plan == "expired":
                 return response({"error": "forbidden"}, 403)
-            visible = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=250)
+            visible = list_insights(plan=plan, user_id=str(user.get("id") or ""),
+                                    limit=250, include_read_state=False)
             if not any(media_id in (item.get("media_ids") or []) for item in visible["items"]):
                 return response({"error": "forbidden"}, 403)
         data, content_type, etag = download_media(media_id)
@@ -1971,11 +1972,17 @@ def results_page(req):
     requested_revision = str(params.get("snapshot") or "")
     if requested_revision and requested_revision != revision:
         return response({"error": "results_snapshot_changed"}, 409)
+    start = page * size
+    scope_day = None
     if window_days in ("1", "30"):
         # Filter only AFTER the existing auth, settlement, exclusion and tier
         # gates. The unscoped endpoint still returns complete authorized rows.
         zone = ZoneInfo("Europe/Bratislava")
         betting_day = (datetime.now(zone) - timedelta(hours=6)).date()
+        scope_day = betting_day.isoformat()
+        expected_scope_day = str(params.get("scope_day") or "")
+        if expected_scope_day and expected_scope_day != scope_day:
+            return response({"error": "results_snapshot_changed"}, 409)
         first = betting_day - timedelta(days=29 if window_days == "30" else 0)
         lower = datetime.combine(first, datetime.min.time().replace(hour=6), tzinfo=zone).timestamp()
         upper = datetime.combine(betting_day + timedelta(days=1),
@@ -1993,16 +2000,24 @@ def results_page(req):
                 return lower <= when.timestamp() < upper
             except (TypeError, ValueError, OverflowError):
                 return False
-        rows = [row for row in rows if in_scope(row)]
-    start = page * size
+        page_rows = []
+        total = 0
+        for row in rows:
+            if in_scope(row):
+                if start <= total < start + size:
+                    page_rows.append(row)
+                total += 1
+    else:
+        page_rows = rows[start:start + size]
+        total = len(rows)
     return response({
-        "results": rows[start:start + size],
+        "results": page_rows,
         "page": page,
         "limit": size,
-        "total": len(rows),
-        "has_more": start + size < len(rows),
+        "total": total,
+        "has_more": start + size < total,
         "snapshot": revision,
-        **({"scope_days": int(window_days)} if window_days else {}),
+        **({"scope_days": int(window_days), "scope_day": scope_day} if scope_day else {}),
     })
 
 
@@ -3458,7 +3473,8 @@ def insights_mark_read(req):
         # Verify that the message is actually visible to the caller before
         # accepting a read marker.
         plan = _insight_plan_for_user(user)
-        visible = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=250)
+        visible = list_insights(plan=plan, user_id=str(user.get("id") or ""),
+                                    limit=250, include_read_state=False)
         if not any(str(item.get("id") or "") == insight_id for item in visible.get("items", [])):
             return response({"error": "insight_not_available"}, 404)
         return response(mark_insight_read(insight_id=insight_id, user_id=str(user.get("id") or "")))

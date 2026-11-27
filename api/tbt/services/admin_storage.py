@@ -50,14 +50,22 @@ def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
     text = str(value or "").strip()
     if not text:
         return True
+    if re.search(r"[\\\x00-\x1f\x7f]", text):
+        return False
     if allow_internal:
         if text.startswith("#") and not text.startswith("##"):
             return True
         # Never accept protocol-relative //host links as internal paths.
         if text.startswith("/") and not text.startswith("//"):
             return True
-    parsed = urlparse(text)
-    return parsed.scheme == "https" and bool(parsed.netloc) and not parsed.username and not parsed.password
+    try:
+        parsed = urlparse(text)
+        _ = parsed.port  # Validate malformed and out-of-range ports.
+        return (parsed.scheme == "https" and bool(parsed.hostname)
+                and not any(char.isspace() for char in parsed.hostname)
+                and parsed.username is None and parsed.password is None)
+    except ValueError:
+        return False
 
 
 def _connection_string_source() -> tuple[str, str]:
@@ -3301,7 +3309,8 @@ def delete_insight(insight_id: str, *, actor_id: str = "") -> dict:
     return {"deleted": True, "suppressed": is_auto_live}
 
 
-def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool = False, limit: int = 100) -> dict:
+def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool = False,
+                  limit: int = 100, include_read_state: bool = True) -> dict:
     plan = str(plan or "").strip().lower()
     now = datetime.now(timezone.utc)
     try:
@@ -3309,7 +3318,7 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to list insights") from exc
     read_ids: set[str] = set()
-    if user_id:
+    if user_id and include_read_state:
         try:
             reads = _table(INSIGHT_READS_TABLE).query_entities(query_filter=f"PartitionKey eq 'user:{str(user_id)[:256]}'")
             read_ids = {str(row.get("RowKey") or "") for row in reads}
@@ -3352,10 +3361,8 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
                 continue
         item["read"] = item["id"] in read_ids if user_id else False
         items.append(item)
-    items.sort(key=lambda row: (not bool(row.get("pinned")), str(row.get("created_at") or "")), reverse=False)
     # Pinned first; within each group newest first.
-    items = sorted(items, key=lambda row: str(row.get("created_at") or ""), reverse=True)
-    items = sorted(items, key=lambda row: not bool(row.get("pinned")))
+    items.sort(key=lambda row: (bool(row.get("pinned")), str(row.get("created_at") or "")), reverse=True)
     items = items[:max(1, min(250, int(limit or 100)))]
     return {"items": items, "unread": sum(1 for row in items if not row.get("read"))}
 
@@ -3382,14 +3389,28 @@ def mark_insight_read(*, insight_id: str, user_id: str) -> dict:
         status = getattr(exc, "status_code", None)
         name = exc.__class__.__name__.lower()
         # Already read is idempotent. Firestore and Azure use different conflict types.
-        if status != 409 and "alreadyexists" not in name and "resourceexists" not in name:
+        if (status != 409 and not isinstance(exc, _StorageWriteConflict)
+                and "alreadyexists" not in name and "resourceexists" not in name):
             raise AdminStorageUnavailable("Unable to save insight read state") from exc
         return {"read": True, "already_read": True}
-    entity["read_count"] = int(entity.get("read_count") or 0) + 1
-    entity["updated_at"] = entity.get("updated_at") or datetime.now(timezone.utc).isoformat()
-    try:
-        insights.upsert_entity(entity, mode="replace")
-    except Exception:
-        # Read state is authoritative; aggregate count is best effort.
-        pass
+    from azure.core import MatchConditions
+
+    # The receipt is authoritative. Update just the aggregate, and never
+    # recreate a deleted message or write over a concurrent admin edit.
+    for attempt in range(3):
+        try:
+            if attempt:
+                entity = insights.get_entity(partition_key="insights", row_key=insight_id)
+            etag = getattr(entity, "metadata", {}).get("etag")
+            if etag is None:
+                break
+            insights.update_entity(
+                {"PartitionKey": "insights", "RowKey": insight_id,
+                 "read_count": int(entity.get("read_count") or 0) + 1},
+                mode="merge", etag=etag, match_condition=MatchConditions.IfNotModified,
+            )
+            break
+        except Exception as exc:
+            if getattr(exc, "status_code", None) != 412:
+                break
     return {"read": True, "already_read": False}

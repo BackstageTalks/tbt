@@ -654,13 +654,16 @@
       if (pendingFeed?.promise === operation) pendingFeed = null;
     }
   }
-  async function resultsPage(page = 0, limit = 250, snapshot = '', windowDays = 0) {
+  async function resultsPage(page = 0, limit = 250, snapshot = '', windowDays = 0, scopeDay = '') {
     const s = await restore();
     if (!s?.access_token) throw new Error('Sign in again.');
     const sessionEpoch = epoch(), token = s.access_token;
     const params = new URLSearchParams({page:String(page),limit:String(limit)});
     if (snapshot) params.set('snapshot',snapshot);
-    if (windowDays === 1 || windowDays === 30) params.set('window_days',String(windowDays));
+    if (windowDays === 1 || windowDays === 30) {
+      params.set('window_days',String(windowDays));
+      if (scopeDay) params.set('scope_day',scopeDay);
+    }
     const result = await json('/api/v1/results?'+params.toString(), {
       timeoutMs:16000, headers:{'X-Blinq-Access-Token':token},
     });

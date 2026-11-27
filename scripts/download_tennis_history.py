@@ -1097,7 +1097,7 @@ def main():
                     "Tour/year diagnostic only; per-match API request deltas include detail "
                     "lookups and retries; local/cache gains are separate; no extra API calls."
                 )
-            if provider.http_metrics is not None:
+            if getattr(provider, "http_metrics", None) is not None:
                 write_json(directory / f"hourly_{hourly_phase}_collection.json", {
                     **provider.http_metrics.snapshot(),
                     "attempts": provider.request_count,

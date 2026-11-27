@@ -78,3 +78,50 @@ def test_tournament_popup(width):
         assert page.evaluate("window.calls") == 1
         assert errors == []
         browser.close()
+
+def test_match_dialog_fits_mobile_and_preserves_focus():
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True, executable_path=browser_path())
+        context = browser.new_context(viewport={"width": 390, "height": 560})
+
+        def route_request(route):
+            if route.request.url == ORIGIN + "/bracket-test":
+                return route.fulfill(content_type="text/html; charset=utf-8", body="""
+                    <!doctype html><html lang="sk"><meta charset="utf-8">
+                    <link rel="stylesheet" href="/bracket.css">
+                    <body id="blinqPremium"><main id="host"></main>
+                    <script src="/bracket.js"></script></body></html>
+                """)
+            return static_route(route)
+
+        context.route("**/*", route_request)
+        page = context.new_page()
+        page.goto(ORIGIN + "/bracket-test")
+        page.evaluate("""() => {
+            const players = [{id:'a', name:'Player A'}, {id:'b', name:'Player B'}];
+            const match = {id:'m', event_id:'m', players};
+            window.BlinqAuth = {tournamentBrackets: async () => ({
+                schema:1, analysis_allowed:true, tournaments:[{
+                    id:'fixture', name:'Fixture Open',
+                    draws:[{id:'main', rounds:[{name:'Final', matches:[match]}]}]
+                }]
+            })};
+            return window.BlinqBracket.open(document.querySelector('#host'),
+                [{event_id:'m', selection:'Player A'.repeat(40)}], null, {});
+        }""")
+        assert page.get_by_role("button", name="Analýza · Player A – Player B").bounding_box()["height"] >= 44
+        match = page.get_by_role("button", name="Player A Player B", exact=True)
+        match.click()
+        panel = page.get_by_role("dialog", name="Zápas")
+        close = panel.get_by_role("button", name="Zavrieť")
+        panel.wait_for(state="visible")
+        box = panel.bounding_box()
+        close_box = close.bounding_box()
+        assert box["x"] == 0 and box["width"] == 390
+        assert abs(box["y"] + box["height"] - 560) <= 1
+        assert close_box["width"] >= 44 and close_box["x"] + close_box["width"] <= 390
+        assert panel.evaluate("node => node.scrollWidth === node.clientWidth")
+        page.keyboard.press("Escape")
+        panel.wait_for(state="detached")
+        assert match.evaluate("node => document.activeElement === node")
+        browser.close()

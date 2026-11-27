@@ -226,6 +226,13 @@
         // route handler still enforces the account's results access.
         resultsSource?.click();
       }));
+      const bracketSource = document.querySelector('.reference-navigation [data-route="bracket"]');
+      if (bracketSource) {
+        nav.append(button(bracketSource.getAttribute('aria-label'), () => {
+          closeMenu();
+          bracketSource.click();
+        }));
+      }
       // Match the locked LIVE header control: the shortcut remains visible
       // to eligible users, but carries an upgrade requirement until unlocked.
       const liveSource = byId('insightShortcut');

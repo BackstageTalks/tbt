@@ -100,3 +100,15 @@ Retired six date-locked November 3/4–5/5/6/10 recovery/replay and November 6 a
 ## Retired expired 2026-11-04 CDB one-shot entrypoint
 
 The workflow `cdb-urgent-recover-20261104.yml` was tied to a hard UTC cutoff `2026-11-04T17:07:00Z`, and listened only to a push changing its own file, with no regular schedule or reusable workflow_dispatch handler. Its immutable old 2022/2026 partition digests and one-shot emergency dispatch are no longer an applicable current CDB repair procedure. Retire its Actions entrypoint; historical YAML and any CDB release evidence remain in Git history. Do not change `cdb-urgent-recover-20261106.yml`, protected recovery scripts, data, CDB writer or external schedules.
+
+## Retired Telegram trigger markers (2026-11-27)
+
+Removed the November 4–5 and November 6 recovery request manifests after their
+dedicated workflow definitions were retired in 864ee1cf. Removed the November
+17 morning parity deployment marker, whose commit activated the deployment by
+message. No path references remained on the audited tbt and tbt-data main
+branches. The three original manifests remain available in Git history.
+
+A second batch removes 20 markers whose dedicated workflow definitions had been
+retired in 53fb39fd and 925b6df7. Each marker was checked against the exact
+historical workflow and for current references on tbt and tbt-data main.
