@@ -38,3 +38,6 @@ jobs:
       - name: Synchronize Model Lab and dispatch at most one guarded operation
         if: ${{ !cancelled() }}
         run: python scripts/admin_model_lab_worker.py
+      - name: Synchronize and dispatch manual API collection
+        if: ${{ !cancelled() }}
+        run: python scripts/admin_api_collection_worker.py

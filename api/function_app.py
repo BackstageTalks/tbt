@@ -2377,6 +2377,47 @@ def admin_api_budget(req):
         return response({"error":"api_budget_unavailable"},503)
 
 
+@app.route(route="v1/admin/api-collection", methods=["GET", "POST"])
+def admin_api_collection(req):
+    from tbt.services import manual_collection
+
+    try:
+        admin, denied = _admin_user(req)
+        if denied is not None:
+            return denied
+        if req.method == "GET":
+            return response(manual_collection.status())
+        if len(req.get_body()) > 1024:
+            return response({"error": "payload_too_large"}, 413)
+        return response({"collection": manual_collection.start(req.get_json(), admin["id"])}, 202)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except manual_collection.CollectionConflict as exc:
+        return response({"error": str(exc)}, 409)
+    except (AuthUnavailable, AdminStorageUnavailable, SharedBudgetUnavailable):
+        return response({"error": "Ručný zber alebo register kvóty je dočasne nedostupný."}, 503)
+
+
+@app.route(route="v1/internal/api-collection-sync", methods=["GET", "POST"])
+def internal_api_collection_sync(req):
+    from tbt.services import manual_collection
+
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        if req.method == "GET":
+            return response({"collection": manual_collection.worker_status()})
+        if len(req.get_body()) > 4096:
+            return response({"error": "payload_too_large"}, 413)
+        return response(manual_collection.sync(req.get_json()))
+    except ValueError:
+        return response({"error": "invalid_collection_observation"}, 400)
+    except manual_collection.CollectionConflict:
+        return response({"error": "collection_conflict"}, 409)
+    except AdminStorageUnavailable:
+        return response({"error": "collection_storage_unavailable"}, 503)
+
+
 @app.route(route="v1/internal/telegram/settled-results", methods=["GET"])
 def internal_telegram_settled_results(req):
     """Read-only verified settlement archive for current/previous Telegram offer.
