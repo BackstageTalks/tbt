@@ -1762,6 +1762,19 @@
     const cfg=state.ui?.dashboard?.comparator||{};
     return mergeConfig(base,cfg);
   }
+  // Owner 27.11: separate per-level switch for Analysis inside the bracket.
+  // Older configs without it fall back to the Comparator rules.
+  function bracketAnalysisAccessConfig(){
+    const current=state.ui?.dashboard?.bracket_analysis?.plans;
+    const fallback=comparatorAccessConfig().plans||{};
+    const source=current&&typeof current==='object'?current:fallback;
+    return {plans:Object.fromEntries(membershipHierarchy.map(id=>[id,current?source?.[id]===true:source?.[id]!==false]))};
+  }
+  function bracketAnalysisAllowed(plan=accountPlan()){
+    if(String(plan||'').toLowerCase()==='admin')return true;
+    const normalized=String(plan||'').toLowerCase()==='trial'?'rookie':String(plan||'').toLowerCase();
+    return bracketAnalysisAccessConfig().plans?.[normalized]===true;
+  }
   function comparatorPlanAllowed(plan=accountPlan()){
     if(String(plan||'').toLowerCase()==='admin')return true;
     const normalized=String(plan||'').toLowerCase()==='trial'?'rookie':String(plan||'').toLowerCase();
@@ -6188,6 +6201,7 @@ function adminActivityRows(){
     const resultsEnabled=String(elements()?.SIDEBAR_RESULTS?.access?.[id]||'active').toLowerCase()==='active';
     const detailCfg=matchDetailAccessConfig(),detailEnabled=detailCfg.plans?.[id]!==false;
     const comparatorEnabled=comparatorAccessConfig().plans?.[id]!==false;
+    const bracketAnalysisEnabled=bracketAnalysisAccessConfig().plans?.[id]===true;
     const historyCfg=state.ui?.dashboard?.results_history_window||{};
     const historyValue=String(historyCfg[id]||(id==='rookie'?'24h':id==='pro'?'48h':'all')).toLowerCase();
     const historyChoices=[['24h','24H'],['48h','48H'],['3d','3D'],['7d','7D'],['14d','14D'],['30d','30D'],['all','ALL']];
@@ -6210,6 +6224,7 @@ function adminActivityRows(){
       ${editable?'':'<div class="admin-runtime-note">EXPIRED je uzamknutý stav, nie aktívny členský level. Pravidlá zobrazenia sú tu len na čítanie.</div>'}
       <div class="admin-display-access-grid">
         ${toggle('comparator','Porovnávač','Porovnanie hráčov a prístup k API.',comparatorEnabled)}
+        ${toggle('bracket_analysis','Analýza v pavúku','Analýza zápasu a kvalita dát v turnajovom pavúku.',bracketAnalysisEnabled)}
         ${toggle('results','Výsledky','Odomknutie sekcie a jej dát.',resultsEnabled)}
         ${toggle('detail','Detail zápasu','Otvorenie karty detailu zápasu.',detailEnabled)}
         <label class="admin-display-access-history"><span>História výsledkov</span>
@@ -8438,12 +8453,17 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(t.dataset.adminHubRowState){if(!membershipHierarchy.includes(state.adminPlan))return;const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminDisplayAccess!==undefined){
         const id=state.adminPlan,kind=String(t.dataset.adminDisplayAccess);
-        if(!membershipHierarchy.includes(id)||!['comparator','results','detail'].includes(kind))return;
+        if(!membershipHierarchy.includes(id)||!['comparator','results','detail','bracket_analysis'].includes(kind))return;
         if(kind==='results'){
           const item=elements()?.SIDEBAR_RESULTS;
           if(!item)return;
           item.access=item.access||{};item.access[id]=t.checked?'active':'locked';
           if(id==='rookie')item.access.trial=item.access[id];
+        }else if(kind==='bracket_analysis'){
+          const cfg=bracketAnalysisAccessConfig();
+          cfg.plans[id]=Boolean(t.checked);
+          state.ui.dashboard=state.ui.dashboard||{};
+          state.ui.dashboard.bracket_analysis=cfg;
         }else{
           state.ui.dashboard=state.ui.dashboard||{};
           const cfg=state.ui.dashboard[kind==='comparator'?'comparator':'match_detail']
@@ -9199,7 +9219,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const h2h=(record,label)=>`<div class="comparator-h2h-line"><span>${escapeHtml(label)}</span><strong>${Number(record?.matches)>0?escapeHtml(`${num(record.player1_wins)} : ${num(record.player2_wins)}`):'—'}</strong><small>${Number(record?.matches)>0?escapeHtml(`${num(record.matches)} ${lcopy('matches','zápasov','zápasů')}`):escapeHtml(lcopy('No recorded meetings','Bez evidovaných zápasov','Bez evidovaných zápasů'))}</small></div>`;
     const signals=(result.factors||[]).map(item=>`<span class="comparator-factor"><span>${escapeHtml(item.label||'')}</span><b>${escapeHtml(String(item.advantage_player_id)===String(p1.player_id)?p1.name:p2.name)}</b></span>`).join('');
     const band=String(result.confidence?.data_band||'low').toLowerCase();
-    const sample=band==='high'?lcopy('Good sample','Dobrá vzorka','Dobrá vzorka'):band==='medium'?lcopy('Partial sample','Čiastočná vzorka','Částečný vzorek'):lcopy('Limited sample','Obmedzená vzorka','Omezený vzorek');
+    const qBand=String(result.quality?.band||band).toLowerCase(),qs=result.quality||{};
+    const qName=qBand==='high'?lcopy('high','vysoká','vysoká'):qBand==='medium'?lcopy('medium','stredná','střední'):lcopy('low','nízka','nízká');
+    const qCounts=valid(qs.player1_matches)&&valid(qs.player2_matches)
+      ?` · ${num(qs.player1_matches)} / ${num(qs.player2_matches)} ${lcopy('matches','zápasov','zápasů')}`+(valid(qs.player1_surface_matches)&&valid(qs.player2_surface_matches)?` · ${lcopy('surface','povrch','povrch')} ${num(qs.player1_surface_matches)} / ${num(qs.player2_surface_matches)}`:''):'';
+    const sample=lcopy('Data quality','Kvalita dát','Kvalita dat')+': '+qName+qCounts;
     const left=valid(p1.probability)?Math.max(0,Math.min(100,Number(p1.probability)*100)):50;
     const special=(x,key)=>{
       const metric=x?.surface_special_rates?.[key];
@@ -9291,11 +9315,11 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     </section>`;
   }
   const bracketComparison = {
-    allowed: comparatorPlanAllowed,
+    allowed: bracketAnalysisAllowed,
     accessMessage(){
-      return lcopy('Your plan does not include the Comparator.',
-        'Porovnávač je dostupný vo vyššom programe.',
-        'Porovnávač je dostupný ve vyšším programu.');
+      return lcopy('Match analysis is available in a higher plan.',
+        'Analýza zápasu je dostupná vo vyššom programe.',
+        'Analýza zápasu je dostupná ve vyšším programu.');
     },
     context(match){
       const pools=[state.feed?.upcoming,state.feed?.board_upcoming,state.feed?.daily_picks];
@@ -9315,7 +9339,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       for(const [index,player] of [left,right].entries()){
         pair[`player${index+1}${player.player_id?'_id':''}`]=player.player_id||player.name;
       }
-      return BlinqAuth.comparatorCompare(pair);
+      return BlinqAuth.comparatorCompare(pair,'bracket');
     },
     render(host,result){host.innerHTML=comparatorResultHtml(result);},
   };
