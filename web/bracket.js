@@ -12,27 +12,6 @@
     return node;
   }
 
-  function wireMobileMenu() {
-    const observer = new MutationObserver(() => {
-      const panel = document.querySelector('#bqm-dialog[open] #bqm-navigation-panel');
-      if (!panel || panel.querySelector('.bracket-mobile-entry')) return;
-      const button = element('button', title(), 'bracket-mobile-entry');
-      button.type = 'button';
-      const results = [...panel.querySelectorAll('button')].find(node => node.textContent.trim().startsWith('Výsledky'));
-      if (results) {
-        button.className = results.className + ' bracket-mobile-entry';
-        results.after(button);
-      } else {
-        panel.append(button);
-      }
-      button.addEventListener('click', () => {
-        panel.closest('dialog').querySelector('.bqm-top button')?.click();
-        document.querySelector('.reference-navigation [data-route="bracket"]')?.click();
-      });
-    });
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] });
-  }
-
   let selectedTournament = '';
   let selectedDraw = '';
   let activeView = null;
@@ -86,9 +65,10 @@
     if (!links.length) return;
     const layout = () => {
       const frame = board.getBoundingClientRect();
+      const boxes = new Map([...cards.values()].map(({ card }) => [card, card.getBoundingClientRect()]));
       for (const { card, parent, line } of links) {
-        const from = card.getBoundingClientRect();
-        const to = parent.getBoundingClientRect();
+        const from = boxes.get(card);
+        const to = boxes.get(parent);
         const y1 = from.top + from.height / 2;
         const y2 = to.top + to.height / 2;
         line.style.left = (from.right - frame.left) + 'px';
@@ -511,5 +491,4 @@
   }
 
   window.BlinqBracket = { open };
-  wireMobileMenu();
 })();

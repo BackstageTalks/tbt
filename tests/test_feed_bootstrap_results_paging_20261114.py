@@ -230,3 +230,36 @@ def test_bootstrap_drops_board_results_history():
     src = (api.__file__ and open(api.__file__, encoding="utf-8").read())
     assert 'data["board_results"] = []' in src
     assert 'data["board_results_boot_partial"] = True' in src
+
+def test_scoped_pagination_rejects_betting_day_rollover_even_with_same_ledger(monkeypatch):
+    zone = ZoneInfo("Europe/Bratislava")
+
+    class Clock(datetime):
+        current = datetime(2026, 11, 27, 5, 59, tzinfo=zone)
+
+        @classmethod
+        def now(cls, tz=None):
+            return cls.current.astimezone(tz)
+
+    rows = [
+        {"event_id": str(i), "scheduled_at": scheduled_at}
+        for i, scheduled_at in enumerate([
+            "2026-11-26T07:00:00+01:00", "2026-11-26T08:00:00+01:00",
+            "2026-11-27T07:00:00+01:00", "2026-11-27T08:00:00+01:00",
+        ])
+    ]
+    monkeypatch.setattr(api, "response", lambda payload, status=200: {**payload, "http_status": status})
+    monkeypatch.setattr(api, "datetime", Clock)
+    monkeypatch.setattr(api, "_authorized_results_payload", lambda _: {"results": rows})
+    first = api.results_page(request(window_days="1", page="0", limit="1"))
+    assert first["has_more"] and first["scope_day"] == "2026-11-26"
+
+    Clock.current += timedelta(minutes=2)
+    stale = api.results_page(request(window_days="1", page="1", limit="1",
+                                     snapshot=first["snapshot"], scope_day=first["scope_day"]))
+    assert stale == {"error": "results_snapshot_changed", "http_status": 409}
+    restarted = api.results_page(request(window_days="1", page="0", limit="1"))
+    assert restarted["scope_day"] == "2026-11-27"
+    assert restarted["snapshot"] == first["snapshot"]
+    assert restarted["total"] == first["total"] == 2
+    assert restarted["results"][0]["event_id"] == "2"
