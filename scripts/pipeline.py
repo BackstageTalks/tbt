@@ -799,6 +799,7 @@ def _publish_predictions(
     settlement_matches=None, comparator_artifact=None,
     betting_day_start_hour=6, morning_refresh=False,
     champion_sha256=None, ace_shadow_rows=None, line_first_shadow_rows=None,
+    paired_candidate_predictions=(), paired_candidate_path=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -832,6 +833,10 @@ def _publish_predictions(
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         public_offer_day=public_offer_day,
     )
+    paired_shadow_enabled = os.getenv("TBT_PAIRED_MARKET_SHADOW_ENABLED", "").lower() == "true"
+    paired_sections = {
+        key: feed.get(key, []) for key in ("top_daily_picks", "prime_picks", "value_picks")
+    } if paired_shadow_enabled else {}
     # Audit only aggregate publication gates: real-provider prices may exist
     # without enough model confidence, history, or a valid close-odds VALUE
     # quote. Never expose names, full provider payloads or private evidence.
@@ -987,6 +992,27 @@ def _publish_predictions(
             print(json.dumps({"warning": "offer_shadow_capture_failed",
                               "error_type": type(exc).__name__,
                               "detail": str(exc)[:280]}), flush=True)
+    paired_capture = None
+    if paired_shadow_enabled:
+        try:
+            from paired_market_shadow import FIELD, build_capture
+            if paired_candidate_predictions:
+                paired_capture, counts = build_capture(
+                    candidate_history, predictions, paired_candidate_predictions, paired_sections,
+                    observed_at=now, public_offer_day=public_offer_day,
+                    champion_sha256=champion_sha256,
+                    candidate_sha256=sha256(paired_candidate_path.read_bytes()).hexdigest(),
+                )
+                if paired_capture is not None:
+                    candidate_snapshot[FIELD] = paired_capture
+                status = "PREPARED" if paired_capture else "NO_NEW_VERIFIED_PRICE_PAIRS"
+            else:
+                status, counts = "NO_ACTIVE_CANDIDATE_PREDICTIONS", {}
+            print(json.dumps({"paired_market_capture": {"status": status, "counts": counts}}),
+                  flush=True)
+        except Exception as exc:
+            print(json.dumps({"warning": "paired_market_capture_failed",
+                              "error_type": type(exc).__name__}), flush=True)
     candidate_history["snapshots"].append(candidate_snapshot)
     with gzip.open(candidate_month_path, "wt", encoding="utf-8", compresslevel=6) as handle:
         json.dump(clean(candidate_history), handle, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
@@ -1020,6 +1046,40 @@ def _publish_predictions(
         before_upload=_telegram_offer_before_upload,
         remove_names=("comparator.json.gz",) if not isinstance(comparator_artifact, dict) else (),
     )
+    if paired_shadow_enabled:
+        try:
+            from paired_market_shadow import compare, verified_captures
+            from tempfile import TemporaryDirectory
+
+            with TemporaryDirectory(prefix="blinq-paired-market-") as temp:
+                reader = ReleaseStore(store.repository, store.tag, Path(temp))
+                previous_month = now.replace(day=1) - timedelta(days=1)
+                previous_name = f"selection_candidates_{previous_month:%Y-%m}.json.gz"
+                names = [candidate_month_path.name]
+                if previous_name in reader._asset_names():
+                    names.insert(0, previous_name)
+                reader.download(extra_names=tuple(names), required_names=tuple(names),
+                                require_bundle_manifest=True)
+                histories = []
+                local_hash = sha256(candidate_month_path.read_bytes()).hexdigest()
+                remote = reader.directory / candidate_month_path.name
+                if sha256(remote.read_bytes()).hexdigest() != local_hash:
+                    raise RuntimeError("Paired market archive byte mismatch")
+                for name in names:
+                    with gzip.open(reader.directory / name, "rt", encoding="utf-8") as handle:
+                        histories.append(json.load(handle))
+                if paired_capture is not None:
+                    if paired_capture not in list(verified_captures(histories[-1])):
+                        raise RuntimeError("Paired market receipt missing from remote archive")
+                    print(json.dumps({"paired_market_readback": {
+                        "status": "PRIVATE_READBACK_VERIFIED", "asset_sha256": local_hash,
+                        "capture_sha256": paired_capture["sha256"],
+                    }}), flush=True)
+                comparison = compare(histories, matches, asof=datetime.now(timezone.utc))
+            print(json.dumps({"paired_market_comparison": comparison}, allow_nan=False), flush=True)
+        except Exception as exc:
+            print(json.dumps({"warning": "paired_market_readback_or_evaluation_failed",
+                              "error_type": type(exc).__name__}), flush=True)
     if os.getenv("TBT_OFFER_SHADOW_DISABLED", "").lower() != "true":
         try:
             _publish_offer_shadow(candidate_history, settlement_source, now)
@@ -1850,6 +1910,7 @@ def main():
         # Score the exact same pre-match fixtures with the private challenger.
         # Only the first snapshot for a model-pair/fixture is retained. Results
         # are settled later from canonical completed history.
+        challenger_predictions = []
         if shadow_store is not None:
             challenger_predictions = (
                 predict(
@@ -2500,11 +2561,15 @@ def main():
         comparator_artifact=comparator_artifact,
         ace_shadow_rows=ace_shadow_rows,
         line_first_shadow_rows=line_first_shadow_rows,
+        paired_candidate_predictions=challenger_predictions,
+        paired_candidate_path=candidate_dir / "model.joblib",
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
         champion_sha256=(
             sha256((model_dir / "model.joblib").read_bytes()).hexdigest()
-            if os.getenv("TBT_MARKET_RANK_SHADOW_ENABLED", "").lower() == "true"
+            if any(os.getenv(flag, "").lower() == "true" for flag in (
+                "TBT_MARKET_RANK_SHADOW_ENABLED", "TBT_PAIRED_MARKET_SHADOW_ENABLED"
+            ))
             else None
         ),
     )
