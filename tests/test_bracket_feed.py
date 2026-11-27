@@ -176,3 +176,19 @@ def test_empty_cup_tree_displays_observed_players_and_progression():
     assert {match["parent_id"] for match in semi["matches"]} == {"103"}
     assert final["matches"][0]["event_id"] == "103"
     assert "pending_slot" not in final["matches"][0]
+
+
+def test_bracket_match_outside_offer_inherits_tournament_analysis_context():
+    event = {**EVENT, "tournament": {"uniqueTournament": {"id": 12, "name": "Example Challenger"}}}
+    fixture = {"scheduled_at": "2026-11-25T11:00:00Z", "tour": "atp", "surface": "indoor_hard", "best_of": 3}
+    offer = {"daily_picks": [{"event_id": 100, "fixture": fixture}]}
+    semifinal = CUP["cupTrees"][0]["views"][0][0]
+    final = {**semifinal, "eventIds": [200], "round": {"description": "Final"}, "left": semifinal}
+    cup = {"cupTrees": [{"id": 9, "name": "Singles", "views": [[final]]}]}
+
+    snapshot, _ = build_feed(offer, {"events": [event]}, {}, DAY, lambda *_: cup, 1)
+    tournament, = public_brackets(snapshot, DAY)["tournaments"]
+    _, final_round = tournament["draws"][0]["rounds"]
+    final_match, = final_round["matches"]
+    assert final_match["event_id"] == "200"
+    assert final_match["analysis_context"] == {"tour": "atp", "surface": "indoor_hard", "best_of": 3}

@@ -6,7 +6,9 @@ import json
 import re
 from zoneinfo import ZoneInfo
 
+from tbt.match_format import infer_best_of
 from tbt.services.media_storage import _blob_service, _container, _container_name
+from tbt.utils import normalize_surface
 
 OFFER_FIELDS = (
     "upcoming", "prime_picks", "top_daily_picks", "daily_picks",
@@ -242,10 +244,24 @@ def keep_settlements(draws, previous_draws):
             player["score"] = scores[player["id"]] or player["score"]
 
 
+def fixture_context(fixture):
+    tour = str(fixture.get("tour") or "").strip().lower()
+    surface = normalize_surface(fixture.get("surface"))
+    best_of, _ = infer_best_of(explicit=fixture.get("best_of"))
+    return {
+        key: value for key, value in (
+            ("tour", tour if tour in {"atp", "wta"} else None),
+            ("surface", surface if surface in {"hard", "clay", "grass", "indoor_hard"} else None),
+            ("best_of", best_of),
+        ) if value is not None
+    }
+
+
 def build_feed(feed, evidence, previous, day, fetch, limit):
     events = {native_id(row.get("id")): row for row in evidence.get("events", []) if native_id(row.get("id"))}
     statuses = evidence.get("statuses") or {}
     by_tournament = {}
+    contexts = {}
     unresolved = 0
     for event_id, fixture in matches_on_day(feed, day):
         event = events.get(event_id) or fixture.get("provider_payload") or {}
@@ -260,6 +276,7 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
             unresolved += 1
             continue
         name = str(unique.get("name") or tournament.get("name") or fixture.get("tournament") or "")[:160]
+        contexts.setdefault(key, {}).setdefault(event_id, {}).update(fixture_context(fixture))
         _, rounds = by_tournament.setdefault(key, (name, set()))
         key_round = round_key((event.get("roundInfo") or {}).get("name") or fixture.get("round_name"))
         if key_round:
@@ -273,6 +290,12 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
         pending = entry.get("pending_rounds", []) if entry.get("last_seen") == today else []
         entry["last_seen"] = today
         entry["pending_rounds"] = sorted(set(pending) | rounds)
+        known_contexts = entry.get("fixture_contexts", {})
+        entry["fixture_contexts"] = {
+            **known_contexts,
+            **{event_id: {**known_contexts.get(event_id, {}), **context}
+               for event_id, context in contexts[key].items()},
+        }
 
     for event_id, event in events.items():
         entry = entries.get(tournament_key(event))
@@ -380,10 +403,36 @@ def display_draws(entry):
     return draws
 
 
+def add_analysis_context(draws, entry):
+    contexts = entry.get("fixture_contexts") or {}
+    shared = {}
+    for field in ("tour", "surface"):
+        values = {context[field] for context in contexts.values() if field in context}
+        if len(values) == 1:
+            shared[field], = values
+    for draw in draws:
+        for round_ in draw["rounds"]:
+            for match in round_["matches"]:
+                if match.get("pending_slot"):
+                    continue
+                context = {**shared, **contexts.get(match["event_id"], {})}
+                best_of, _ = infer_best_of(
+                    explicit=context.get("best_of"),
+                    tour=context.get("tour"),
+                    tournament=entry["name"],
+                    round_name=f'{draw.get("name", "")} {round_["name"]}',
+                )
+                if best_of:
+                    context["best_of"] = best_of
+                if context:
+                    match["analysis_context"] = context
+    return draws
+
+
 def public_brackets(snapshot, day):
     today = day.isoformat()
     tournaments = [
-        {"id": entry["id"], "name": entry["name"], "draws": display_draws(entry)}
+        {"id": entry["id"], "name": entry["name"], "draws": add_analysis_context(display_draws(entry), entry)}
         for entry in snapshot.get("tournaments", [])
         if entry["last_seen"] == today
     ]
