@@ -691,8 +691,9 @@
     });
     return apiWithSession(`/api/v1/comparator/players?${params.toString()}`);
   }
-  async function comparatorCompare(payload) {
-    return apiWithSession('/api/v1/comparator/compare', {
+  async function comparatorCompare(payload, context) {
+    const suffix = context === 'bracket' ? '?context=bracket' : '';
+    return apiWithSession('/api/v1/comparator/compare' + suffix, {
       method: 'POST',
       body: JSON.stringify(payload || {}),
     });

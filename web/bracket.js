@@ -453,6 +453,8 @@
       const data = await window.BlinqAuth.tournamentBrackets();
       if (activeView !== view || !root.isConnected) return;
       if (data.schema !== 1 || !Array.isArray(data.tournaments)) throw new Error('Invalid bracket feed');
+      // Server decides per level (Admin → Zobrazenie → Analýza v pavúku).
+      if (data.analysis_allowed === false) view.comparison = null;
       const tournaments = data.tournaments.slice().sort((a, b) =>
         Number(Boolean(b.draws.length)) - Number(Boolean(a.draws.length)) || a.name.localeCompare(b.name));
       render(view, tournaments);

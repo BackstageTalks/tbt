@@ -1418,6 +1418,12 @@ def validate_ui_config(payload: object) -> dict:
     for plan_id in ("trial", "expired", *detail_levels):
         if not isinstance(comparator_plans.get(plan_id), bool):
             raise ValueError(f"Invalid comparator access for {plan_id}")
+    if "bracket_analysis" in dashboard:
+        bracket = dashboard["bracket_analysis"]
+        plans = bracket.get("plans") if isinstance(bracket, dict) else None
+        if (not isinstance(plans, dict) or not set(detail_levels) <= set(plans)
+                or any(type(enabled) is not bool for enabled in plans.values())):
+            raise ValueError("Invalid bracket analysis access configuration")
     results_windows = dashboard.get("results_history_window") or {}
     allowed_result_windows = {"24h", "48h", "3d", "7d", "14d", "30d", "all"}
     if not isinstance(results_windows, dict):

@@ -415,7 +415,13 @@ def _comparator_request_allowed(user) -> bool:
     return True
 
 
-def _comparator_access(account: dict, runtime_ui: dict) -> tuple[bool, str]:
+def _bracket_analysis_plans(runtime_ui: dict) -> dict | None:
+    """Explicit per-level map from Admin; None = fall back to Comparator rules."""
+    plans = (((runtime_ui or {}).get("dashboard") or {}).get("bracket_analysis") or {}).get("plans")
+    return plans if isinstance(plans, dict) else None
+
+
+def _comparator_access(account: dict, runtime_ui: dict, feature: str = "comparator") -> tuple[bool, str]:
     if bool((account or {}).get("is_admin")) or str((account or {}).get("role") or "").lower() == "admin":
         return True, ""
     status = str((account or {}).get("status") or "expired").lower()
@@ -430,6 +436,10 @@ def _comparator_access(account: dict, runtime_ui: dict) -> tuple[bool, str]:
     }
     plans = ((((runtime_ui or {}).get("dashboard") or {}).get("comparator") or {}).get("plans") or {})
     effective = {**defaults, **(plans if isinstance(plans, dict) else {})}
+    if feature == "bracket_analysis" and _bracket_analysis_plans(runtime_ui) is not None:
+        # Explicit selection wins, including an empty one (all levels off).
+        explicit = _bracket_analysis_plans(runtime_ui)
+        effective = {key: explicit.get(key) is True for key in defaults}
     normalized = "rookie" if plan == "trial" else plan
     allowed = bool(effective.get(normalized, False))
     if allowed:
@@ -445,7 +455,7 @@ def _comparator_access(account: dict, runtime_ui: dict) -> tuple[bool, str]:
     return False, "goat"
 
 
-def _comparator_user(req):
+def _comparator_user(req, feature: str = "comparator"):
     user = _verified_user(req)
     if not user:
         return None, response({"error": "unauthorized"}, 401)
@@ -456,9 +466,10 @@ def _comparator_user(req):
     profile = _profile_for(user, required=False)
     account = public_account(user, cfg=settings, profile=profile)
     runtime_ui, _, _ = load_effective_ui_config()
-    allowed, required_level = _comparator_access(account, runtime_ui)
+    allowed, required_level = _comparator_access(account, runtime_ui, feature)
     if not allowed:
-        return None, response({"error": "comparator_access_required", "required_level": required_level}, 403)
+        error = "bracket_analysis_access_required" if feature == "bracket_analysis" else "comparator_access_required"
+        return None, response({"error": error, "required_level": required_level}, 403)
     if not _comparator_request_allowed(user):
         return None, response({"error": "rate_limited"}, 429)
     return user, None
@@ -672,7 +683,8 @@ def comparator_players(req):
 
 @app.route(route="v1/comparator/compare", methods=["POST"])
 def comparator_compare(req):
-    _, denied = _comparator_user(req)
+    feature = "bracket_analysis" if str(req.params.get("context") or "") == "bracket" else "comparator"
+    _, denied = _comparator_user(req, feature)
     if denied:
         return denied
     try:
@@ -1888,7 +1900,18 @@ def tournament_brackets(req):
     if user is None:
         return response({"error": "unauthorized"}, 401)
     try:
-        return response(public_brackets(load_bracket_snapshot(), datetime.now(BRATISLAVA).date()))
+        payload = public_brackets(load_bracket_snapshot(), datetime.now(BRATISLAVA).date())
+        try:
+            profile = _profile_for(user, required=False)
+            account = public_account(user, cfg=settings, profile=profile)
+            runtime_ui, _, _ = load_effective_ui_config()
+            payload["analysis_allowed"] = bool(
+                _comparator_access(account, runtime_ui, "bracket_analysis")[0]
+                and bool(user.get("email_verified", False)) and not is_suspended(user))
+        except Exception:
+            logging.exception("Bracket analysis access check failed")
+            payload["analysis_allowed"] = False
+        return response(payload)
     except Exception:
         logging.exception("Tournament bracket snapshot unavailable")
         return response({"error": "brackets_unavailable"}, 503)
