@@ -21,7 +21,7 @@ import azure.functions as func
 from tbt.config import settings
 from tbt.services.bracket import (
     BRATISLAVA, build_feed as build_bracket_feed, load_bracket_snapshot,
-    public_brackets, save_bracket_snapshot, settle_draws,
+    public_brackets, save_bracket_snapshot, settle_draws, update_bracket_predictions,
 )
 from tbt.errors import ConfigurationError, ProviderError
 from tbt.services.auth import (
@@ -1900,17 +1900,20 @@ def tournament_brackets(req):
     if user is None:
         return response({"error": "unauthorized"}, 401)
     try:
-        payload = public_brackets(load_bracket_snapshot(), datetime.now(BRATISLAVA).date())
+        analysis_allowed = False
         try:
             profile = _profile_for(user, required=False)
             account = public_account(user, cfg=settings, profile=profile)
             runtime_ui, _, _ = load_effective_ui_config()
-            payload["analysis_allowed"] = bool(
+            analysis_allowed = bool(
                 _comparator_access(account, runtime_ui, "bracket_analysis")[0]
                 and bool(user.get("email_verified", False)) and not is_suspended(user))
         except Exception:
             logging.exception("Bracket analysis access check failed")
-            payload["analysis_allowed"] = False
+        payload = public_brackets(
+            load_bracket_snapshot(), datetime.now(BRATISLAVA).date(), analysis_allowed=analysis_allowed,
+        )
+        payload["analysis_allowed"] = analysis_allowed
         return response(payload)
     except Exception:
         logging.exception("Tournament bracket snapshot unavailable")
@@ -2372,6 +2375,47 @@ def admin_api_budget(req):
         return response({"ok":True,"budget":shared_api_budget_status()})
     except SharedBudgetUnavailable:
         return response({"error":"api_budget_unavailable"},503)
+
+
+@app.route(route="v1/admin/api-collection", methods=["GET", "POST"])
+def admin_api_collection(req):
+    from tbt.services import manual_collection
+
+    try:
+        admin, denied = _admin_user(req)
+        if denied is not None:
+            return denied
+        if req.method == "GET":
+            return response(manual_collection.status())
+        if len(req.get_body()) > 1024:
+            return response({"error": "payload_too_large"}, 413)
+        return response({"collection": manual_collection.start(req.get_json(), admin["id"])}, 202)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except manual_collection.CollectionConflict as exc:
+        return response({"error": str(exc)}, 409)
+    except (AuthUnavailable, AdminStorageUnavailable, SharedBudgetUnavailable):
+        return response({"error": "Ručný zber alebo register kvóty je dočasne nedostupný."}, 503)
+
+
+@app.route(route="v1/internal/api-collection-sync", methods=["GET", "POST"])
+def internal_api_collection_sync(req):
+    from tbt.services import manual_collection
+
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        if req.method == "GET":
+            return response({"collection": manual_collection.worker_status()})
+        if len(req.get_body()) > 4096:
+            return response({"error": "payload_too_large"}, 413)
+        return response(manual_collection.sync(req.get_json()))
+    except ValueError:
+        return response({"error": "invalid_collection_observation"}, 400)
+    except manual_collection.CollectionConflict:
+        return response({"error": "collection_conflict"}, 409)
+    except AdminStorageUnavailable:
+        return response({"error": "collection_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/internal/telegram/settled-results", methods=["GET"])
@@ -2853,7 +2897,7 @@ def internal_match_status_worker(req):
 
             try:
                 day = datetime.now(BRATISLAVA).date()
-                previous_brackets = load_bracket_snapshot()
+                previous_brackets, bracket_revision = load_bracket_snapshot(with_revision=True)
 
                 def fetch_draw(tournament, season):
                     try:
@@ -2940,7 +2984,40 @@ def internal_match_status_worker(req):
         if bracket_snapshot is not None:
             try:
                 settle_draws(bracket_snapshot, persisted.get("statuses") or {}, bracket_events)
-                save_bracket_snapshot(bracket_snapshot)
+                before_inference = time.monotonic()
+                directory = None
+                remaining_evaluations = 4
+
+                def can_compare():
+                    return (remaining_evaluations > 0 and time.monotonic() - before_inference < 2
+                            and time.monotonic() - worker_started < 17)
+
+                def predict_bracket_pair(pair, context):
+                    nonlocal directory, remaining_evaluations
+                    remaining_evaluations -= 1
+                    try:
+                        if directory is None:
+                            directory = _load_comparator_players()
+                        args = dict(player1=pair[0], player2=pair[1], tour=context["tour"])
+                        artifact = load_pair_artifact(COMPARATOR_INDEX, directory, **args)
+                        compared = compare_from_artifact(
+                            artifact, **args, surface=context["surface"], best_of=context["best_of"],
+                        )
+                    except Exception as error:
+                        logging.warning("Bracket pair inference unavailable: %s", type(error).__name__)
+                        return None
+                    return {
+                        "predicted_winner_id": compared["winner"]["player_id"],
+                        "probability": compared["confidence"]["model_probability"],
+                        "quality": compared["quality"], "model_version": compared["model_version"],
+                        "source": "comparator", "odds": None,
+                    }
+
+                update_bracket_predictions(
+                    bracket_snapshot, feed_payload, bracket_events, persisted.get("statuses") or {},
+                    predict_bracket_pair, lambda: datetime.now(timezone.utc), can_compare,
+                )
+                save_bracket_snapshot(bracket_snapshot, revision=bracket_revision)
                 saved["brackets"] = bracket_report
             except Exception:
                 logging.exception("Tournament bracket snapshot publication failed")
