@@ -6152,6 +6152,32 @@ function adminActivityRows(){
     const good='<details class="admin-health-ok-details"'+(issues.length?'':' open')+'><summary><span>Fungujúce služby</span><b>'+healthy.length+' OK</b><span aria-hidden="true">⌄</span></summary><div class="admin-system-cards">'+healthy.map(card).join('')+'</div></details>';
     return {summary,sections:attention+good};
   }
+  function renderAdminApiCollection(){
+    const ui=state.adminCollectionUi||{}, data=ui.data||{}, item=data.collection;
+    const areas=data.areas||[];
+    const area=areas.find(option=>option.id===ui.area)||areas[0];
+    const statuses={queued:'Čaká na worker',waiting_for_budget:'Čaká na dostupnú kvótu',
+      dispatching:'Čaká na potvrdenie z GitHubu',running:'Beh je evidovaný v GitHube',
+      completed:'Workflow úspešne dokončený',failed:'Workflow skončil neúspešne',expired:'Požiadavka vypršala'};
+    const run=Number.isSafeInteger(item?.run_id)&&item.run_id>0
+      ? ` · <a href="https://github.com/BackstageTalks/tbt/actions/runs/${item.run_id}" target="_blank" rel="noopener noreferrer">Beh a správa o kvalite zberu</a>`:'';
+    const max=Math.min(data.max_requests||0,data.remaining||0);
+    const disabled=ui.busy||!data.can_start;
+    return `<section class="admin-form-section" aria-labelledby="adminCollectionTitle">
+      <div class="admin-form-section-title"><strong id="adminCollectionTitle">Kvalita zberu a ručný zber z API</strong>
+        <button type="button" class="btn btn-ghost" data-admin-action="collection-refresh" ${ui.busy?'disabled':''}>Obnoviť stav zberu</button></div>
+      ${area?`<form id="adminApiCollectionForm"><div class="admin-form-grid">
+        <label>Oblasť dát<select name="area" ${disabled?'disabled':''}>${areas.map(option=>
+          `<option value="${escapeHtml(option.id)}" ${option.id===area.id?'selected':''}>${escapeHtml(option.label)}</option>`).join('')}</select></label>
+        <label>Maximálny počet požiadaviek<input name="cap" type="number" min="1" max="${max}" step="1" required
+          value="${escapeHtml(ui.cap??Math.min(data.default_requests,max))}" ${disabled?'disabled':''}></label></div>
+        <p class="admin-detail-help" data-collection-description>${escapeHtml(area.description)}</p>
+        <p class="admin-detail-help">Posledných ${Number(data.lookback_days)} dní · dostupná kvóta pre históriu ${data.remaining==null?'nedostupná':Number(data.remaining)}.</p>
+        <button class="btn btn-primary" type="submit" ${disabled?'disabled':''}>Spustiť ručný zber</button></form>`:''}
+      <p role="status">${ui.busy?'Načítavam stav zberu…':item?
+        escapeHtml(statuses[item.state]||'Stav nedostupný')+' · '+escapeHtml(areas.find(x=>x.id===item.area)?.label||'')+' · limit '+Number(item.max_requests)+run:''}</p>
+      ${ui.error?`<p role="alert">${escapeHtml(ui.error)}</p>`:''}</section>`;
+  }
   function renderAdminSystem(){
     if(!state.adminDiagnostics){
       return '<section class="admin-ux-section"><div class="admin-health-empty" role="status"><strong>'+(state.adminDiagnosticsLoading?'Načítavam diagnostiku…':'Diagnostika ešte nebola načítaná')+'</strong><p>Kontroly služieb zobrazíme až po odpovedi produkčného API.</p></div></section>';
@@ -6193,7 +6219,7 @@ function adminActivityRows(){
     const pricePanel=`<div class="admin-form-section" aria-label="Coverage fotiek a kurzov"><div class="admin-form-section-title"><strong>PREZENTAČNÁ COVERAGE · FOTO & KURZY</strong><span>Počíta reálne deploynuté assety a reálne provider ceny. Samotné player ID sa už nevydáva za hotovú fotku; projekčné markety môžu zostať bez ceny, ak provider neponúka presný kontrakt.</span></div><div class="admin-system-details"><div><small>Fotky hráčov</small><strong>${escapeHtml(mediaDetail(playerImages))}</strong></div><div><small>Logá turnajov</small><strong>${escapeHtml(mediaDetail(tournamentLogos))}</strong></div><div><small>Povinné betting kurzy</small><strong>${escapeHtml(oddsDetail(requiredOdds))}</strong></div><div><small>Projekčné provider kurzy</small><strong>${escapeHtml(oddsDetail(projectionOdds))}</strong></div></div><div class="admin-system-details">${priceSections(requiredOdds)}${priceSections(projectionOdds)}</div></div>`;
     const healthView=adminSystemHealthView(d,cards);
     const events=(ops.items||[]).map(item=>`<tr><td><span class="ops-level is-${escapeHtml(item.level||'info')}">${escapeHtml(String(item.level||'info').toUpperCase())}</span></td><td>${escapeHtml(item.component||'app')}</td><td>${escapeHtml(item.message||'')}</td><td>${escapeHtml(fmtDate(item.occurred_at))} · ${escapeHtml(fmtTime(item.occurred_at))}</td></tr>`).join('');
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SYSTEM HEALTH</small><h2>Prevádzkový stav</h2><p>Diagnostika iba znovu načíta aktuálny stav API, úložiska, feedu, assetov, LIVE workeru a kontroly neaktívnych účtov. Nič neopravuje a nespúšťa data/enrichment run ani LIVE scan. Nespúšťa ani e-mailovú kontrolu účtov.</p></div><div class="admin-system-actions"><button class="btn btn-ghost" type="button" data-admin-action="copy-diagnostics">Kopírovať diagnostiku</button><button class="btn btn-primary" type="button" data-admin-action="diagnostics" ${state.adminDiagnosticsLoading?'disabled aria-busy="true"':''}>Obnoviť diagnostiku</button>${state.adminDiagnosticsLoading?'<span role="status" class="admin-refreshing">Obnovuje sa…</span>':''}</div></div>${healthView.summary}${healthView.sections}${pricePanel}${budgetPanel}<div class="admin-system-details"><div><small>Posledný feed</small><strong>${escapeHtml(feed.generated_at?`${fmtDate(feed.generated_at)} · ${fmtTime(feed.generated_at)}`:'—')}</strong></div><div><small>Model</small><strong>${escapeHtml(feed.model_version||state.feed?.model?.version||'—')}</strong></div><div><small>Upcoming / Results</small><strong>${Number(feed.upcoming||0)} / ${Number(feed.results||0)}</strong></div><div><small>Úložisko</small><strong>${escapeHtml(storageDetail)}</strong></div><div><small>Kontrola</small><strong>${d.checked_at?new Date(Number(d.checked_at)*1000).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):'—'}</strong></div></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Posledné udalosti</strong><span>Serverové chyby, ktoré zachytil BlinQ prevádzkový journal.</span></div><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Level</th><th>Komponent</th><th>Správa</th><th>Čas</th></tr></thead><tbody>${events||(ops.available===false?'<tr><td colspan="4">Prevádzkový journal nie je dostupný. Nulový počet udalostí nie je overený.</td></tr>':'<tr><td colspan="4">Za posledných 24 hodín nie sú zaznamenané žiadne prevádzkové udalosti.</td></tr>')}</tbody></table></div></div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SYSTEM HEALTH</small><h2>Prevádzkový stav</h2><p>Diagnostika iba znovu načíta aktuálny stav API, úložiska, feedu, assetov, LIVE workeru a kontroly neaktívnych účtov. Nič neopravuje a nespúšťa data/enrichment run ani LIVE scan. Nespúšťa ani e-mailovú kontrolu účtov.</p></div><div class="admin-system-actions"><button class="btn btn-ghost" type="button" data-admin-action="copy-diagnostics">Kopírovať diagnostiku</button><button class="btn btn-primary" type="button" data-admin-action="diagnostics" ${state.adminDiagnosticsLoading?'disabled aria-busy="true"':''}>Obnoviť diagnostiku</button>${state.adminDiagnosticsLoading?'<span role="status" class="admin-refreshing">Obnovuje sa…</span>':''}</div></div>${healthView.summary}${healthView.sections}${pricePanel}${budgetPanel}${renderAdminApiCollection()}<div class="admin-system-details"><div><small>Posledný feed</small><strong>${escapeHtml(feed.generated_at?`${fmtDate(feed.generated_at)} · ${fmtTime(feed.generated_at)}`:'—')}</strong></div><div><small>Model</small><strong>${escapeHtml(feed.model_version||state.feed?.model?.version||'—')}</strong></div><div><small>Upcoming / Results</small><strong>${Number(feed.upcoming||0)} / ${Number(feed.results||0)}</strong></div><div><small>Úložisko</small><strong>${escapeHtml(storageDetail)}</strong></div><div><small>Kontrola</small><strong>${d.checked_at?new Date(Number(d.checked_at)*1000).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):'—'}</strong></div></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Posledné udalosti</strong><span>Serverové chyby, ktoré zachytil BlinQ prevádzkový journal.</span></div><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Level</th><th>Komponent</th><th>Správa</th><th>Čas</th></tr></thead><tbody>${events||(ops.available===false?'<tr><td colspan="4">Prevádzkový journal nie je dostupný. Nulový počet udalostí nie je overený.</td></tr>':'<tr><td colspan="4">Za posledných 24 hodín nie sú zaznamenané žiadne prevádzkové udalosti.</td></tr>')}</tbody></table></div></div></section>`;
   }
   function renderAdminDisplayAccess(id){
     const editable=membershipHierarchy.includes(id);
@@ -7677,7 +7703,26 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(workarea)workarea.scrollTop=workareaScroll;
     }finally{if(generation===feedGeneration)state.adminFactoryPolling=false;}
   }
+  async function loadAdminApiCollection(payload){
+    const ui=state.adminCollectionUi??={};
+    if(ui.busy)return;
+    ui.busy=true;ui.error='';
+    if(payload&&ui.data)ui.data={...ui.data,can_start:false};
+    rerenderAdmin();
+    try{
+      if(payload){
+        const receipt=await BlinqAuth.adminApiCollection(payload);
+        ui.data={...ui.data,collection:receipt.collection};
+      }
+      if(state.adminCollectionUi===ui)ui.data=await BlinqAuth.adminApiCollection();
+    }catch(error){ui.error=error.message||'Stav zberu je nedostupný.';}
+    finally{
+      ui.busy=false;
+      if(state.adminCollectionUi===ui)rerenderAdmin();
+    }
+  }
   async function loadAdminDiagnostics(force=false){
+    if(force||!state.adminCollectionUi?.data)void loadAdminApiCollection();
     const generation=feedGeneration;
     if(state.adminDiagnosticsLoading||(!force&&state.adminDiagnostics))return;
     state.adminDiagnosticsLoading=true;rerenderAdmin();
@@ -7786,6 +7831,25 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     });
   }
   function wireAdmin(){
+    const collectionForm=document.getElementById('adminApiCollectionForm');
+    collectionForm?.addEventListener('input',event=>{
+      const ui=state.adminCollectionUi;
+      if(event.target.name==='cap')ui.cap=event.target.value;
+      if(event.target.name==='area'){
+        ui.area=event.target.value;
+        collectionForm.querySelector('[data-collection-description]').textContent=
+          ui.data.areas.find(area=>area.id===ui.area)?.description||'';
+      }
+    });
+    collectionForm?.addEventListener('submit',event=>{
+      event.preventDefault();
+      const area=collectionForm.elements.area.value;
+      const cap=collectionForm.elements.cap.valueAsNumber;
+      const label=state.adminCollectionUi.data.areas.find(option=>option.id===area)?.label;
+      if(label&&window.confirm(`Spustiť zber „${label}“ s limitom ${cap} požiadaviek?`)){
+        void loadAdminApiCollection({area,max_requests:cap});
+      }
+    });
     // Mobile: one section picker reuses the regular tab button handler.
     document.querySelector('[data-admin-tab-select]')?.addEventListener('change',event=>{
       const id=event.target.value;document.querySelector('.admin-side-nav [data-admin-tab="'+id+'"]')?.click();
@@ -8283,6 +8347,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       if(action==='offer-save'){saveAdminOffer();return;}
       if(action==='shadow-reload'){state.adminShadow=null;state.adminShadowError='';rerenderAdmin();return;}
       if(action==='offer-reload'){state.adminOffer=null;state.adminOfferError='';rerenderAdmin();return;}
+      if(action==='collection-refresh'){void loadAdminApiCollection();return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
@@ -9706,7 +9771,7 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
     state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
-    state.adminFactoryPolling=false;state.adminFactoryRevision=0;state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminModelLab=null;state.adminModelLabBusy=false;state.adminModelLabMessage='';state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
+    state.adminFactoryPolling=false;state.adminFactoryRevision=0;state.adminTraining=null;state.adminTrainingBusy=false;state.adminTrainingMessage="";state.adminModelLab=null;state.adminModelLabBusy=false;state.adminModelLabMessage='';state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminCollectionUi=null;state.adminCalibration=null;state.adminCalibrationLoading=false;state.adminCalibrationError='';state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
     state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
     state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';
