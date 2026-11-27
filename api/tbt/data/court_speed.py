@@ -203,6 +203,37 @@ class CourtSpeedHistory:
         return row
 
 
+def court_speed_venue_key(tour, venue, surface):
+    parts = tuple(map(_norm, (tour, venue, surface)))
+    return "|".join(parts) if all(parts) and parts[-1] != "unknown" else ""
+
+
+def court_speed_display_prior(matches, cutoff):
+    """Compact venue estimates from completed matches before the snapshot."""
+    surface_sum, venue_sum = defaultdict(float), defaultdict(float)
+    surface_n, venue_n = defaultdict(int), defaultdict(int)
+    for match in matches:
+        if not match.is_completed or match.scheduled_at >= cutoff:
+            continue
+        raw = _match_speed_raw(match)
+        if raw is None:
+            continue
+        surface = _norm(match.surface)
+        key = court_speed_venue_key(match.tour, match.tournament, match.surface)
+        surface_sum[surface] += raw
+        surface_n[surface] += 1
+        if key:
+            venue_sum[key] += raw
+            venue_n[key] += 1
+    venues = {}
+    for key, count in venue_n.items():
+        surface = key.rsplit("|", 1)[1]
+        if count >= 5 and surface_n[surface] >= 20 and surface_sum[surface] > 0:
+            index = 100 * (venue_sum[key] / count) / (surface_sum[surface] / surface_n[surface])
+            venues[key] = {"value": round(index, 1), "matches": count, "scope": "venue_history"}
+    return {"as_of": cutoff.isoformat(), "venues": venues}
+
+
 def coverage_summary(rows: Iterable[dict[str, float]]) -> dict[str, float | int]:
     materialized = list(rows)
     n = len(materialized)

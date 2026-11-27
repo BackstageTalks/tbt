@@ -11911,3 +11911,9 @@ body#blinqPremium.blinq-admin .monthly-parity-note.is-mismatch{
   }
   body#blinqPremium.blinq-admin .monthly-parity-note{font-size:10px}
 }
+
+.comparator-match-facts{margin:0;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.comparator-match-facts>div{min-width:0;padding:9px 11px;border:1px solid var(--bqd-glass-line,rgba(74,159,116,.35));border-radius:8px;background:var(--bqd-glass,linear-gradient(145deg,rgba(1,18,14,.82),rgba(2,23,18,.73)))}
+.comparator-match-facts dt{font-size:11px;color:#aac5bb;overflow-wrap:anywhere}
+.comparator-match-facts dd{margin:4px 0 0;font-size:14px;font-weight:700;color:#e4f4ed;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+@media(max-width:600px){.comparator-match-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}

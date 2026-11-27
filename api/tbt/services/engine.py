@@ -421,10 +421,13 @@ def predict(
             profile2["h2h_losses"] = h2h_p1
             provider_custom_id = ""
             match_format = {}
+            explicit_indoor = None
             if isinstance(match.provider_payload, dict):
                 provider_custom_id = str(match.provider_payload.get("customId") or match.provider_payload.get("custom_id") or "").strip()
                 marker = match.provider_payload.get("_tbt_match_format")
                 match_format = marker if isinstance(marker, dict) else {}
+                explicit_indoor = next((value for key in ("indoor", "isIndoor")
+                                        if type(value := match.provider_payload.get(key)) is bool), None)
             evidence = coverage(builder, match)
             # Descriptive PRE-MATCH feature availability, separate from count-based
             # data_depth. Never reinterpret this as calibrated model confidence.
@@ -452,7 +455,7 @@ def predict(
                     "country_code": tournament_context["country_code"],
                     "venue": tournament_context["venue_name"],
                 },
-                "surface": match.surface, "round": match.round_name,
+                "surface": match.surface, "indoor": explicit_indoor, "round": match.round_name,
                 "best_of": match.best_of,
                 "best_of_source": str(match_format.get("source") or ""),
                 "competition": match.tournament_level or "unknown", "quality": evidence,

@@ -1,7 +1,7 @@
 """Read-only Match Comparator runtime over a prebuilt JSON artifact."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 from typing import Mapping
 
@@ -312,6 +312,18 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
         if state.last_played is not None and state.last_played < match.scheduled_at
         else None
     )
+    def fatigue(days):
+        if not recent_all:
+            return None
+        window = [row for row in recent_all
+                  if row.played_at >= match.scheduled_at - timedelta(days=days)]
+        if len(recent_all) == state.recent.maxlen and recent_all[0] in window:
+            return None
+        known = [row.sets_played for row in window]
+        complete = all(isinstance(value, (float, int)) and math.isfinite(value) and value > 0
+                       for value in known)
+        return {"matches": len(window), "sets": int(sum(known)) if complete else None}
+
     def observed_rate(field):
         # Rich-rate inputs are proportions, not arbitrary numerical features.
         # Quarantine malformed historic values rather than allowing one
@@ -352,6 +364,8 @@ def _player_stats(builder: FeatureBuilder, match: MatchRecord, *, first: bool) -
             for row in recent
         ],
         "days_since_last_match": rest,
+        "fatigue_7d": fatigue(7),
+        "fatigue_14d": fatigue(14),
         "surface_serve_quality": None if serve is None else round(float(serve), 4),
         "surface_return_quality": None if ret is None else round(float(ret), 4),
         "surface_quality_samples": {"serve": serve_samples, "return": return_samples},
@@ -507,6 +521,10 @@ def compare_from_artifact(
         "tour": tour,
         "surface": surface,
         "best_of": best_of,
+        "match_context": {
+            "setting": "indoor" if surface == "indoor_hard" else None,
+            "court_speed": None, "blinq_probability": None, "odds": None, "selection_id": None,
+        },
         "winner": {
             "player_id": str(winner.get("player_id") or ""),
             "name": str(winner.get("name") or ""),
