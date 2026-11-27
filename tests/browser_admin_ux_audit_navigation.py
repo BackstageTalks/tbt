@@ -79,7 +79,7 @@ def test_width(browser,width):
     assert page.locator('[data-admin-subtab^="layout:"]').count()==3
     assert page.locator('[data-admin-subpanel="layout:access"]:visible').count()==1
     assert page.locator('[data-admin-subpanel="layout:daily"]:visible').count()==0
-    assert page.locator('[data-admin-display-access]').count()==3
+    assert page.locator('[data-admin-display-access]').count()==4  # + Analýza v pavúku (#1876)
     page.locator('[data-admin-subtab="layout:daily"]').click()
     assert page.locator('[data-admin-subpanel="layout:access"]:visible').count()==0
     assert page.locator('[data-admin-subpanel="layout:daily"]:visible').count()==2
