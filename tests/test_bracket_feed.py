@@ -222,3 +222,24 @@ def test_empty_cup_tree_displays_observed_players_and_progression():
     assert {match["parent_id"] for match in semi["matches"]} == {"103"}
     assert final["matches"][0]["event_id"] == "103"
     assert "pending_slot" not in final["matches"][0]
+
+
+def test_bracket_match_outside_offer_inherits_tournament_analysis_context(monkeypatch):
+    """Owner 27.11: non-offer matches inherit tour/surface/format shared by the edition."""
+    import tbt.services.bracket as bracket_mod
+    event = {**EVENT, "tournament": {"uniqueTournament": {"id": 12, "name": "Example Challenger"}}}
+    offer = OFFER
+    semifinal = CUP["cupTrees"][0]["views"][0][0]
+    final = {**semifinal, "eventIds": [200], "round": {"description": "Final"}, "left": semifinal}
+    cup = {"cupTrees": [{"id": 9, "name": "Singles", "views": [[final]]}]}
+    verified = {"tour": "atp", "surface": "indoor_hard", "best_of": 3}
+    monkeypatch.setattr(bracket_mod, "bracket_fixture_context",
+                        lambda ev, match, at: dict(verified) if str(match.get("event_id")) == "100" else None)
+
+    snapshot, _ = build_feed(offer, {"events": [event]}, {}, DAY, lambda *_: cup, 1)
+    tournament, = public_brackets(snapshot, DAY, analysis_allowed=True)["tournaments"]
+    _, final_round = tournament["draws"][0]["rounds"]
+    final_match, = final_round["matches"]
+    assert final_match["event_id"] == "200"
+    context = final_match["analysis_context"]
+    assert {k: context[k] for k in ("tour", "surface", "best_of")} == verified and context["inherited"] is True

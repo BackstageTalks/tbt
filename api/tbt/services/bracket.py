@@ -354,6 +354,21 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
                 context = bracket_fixture_context(event, match, verified_at)
                 if context is not None:
                     match["analysis_context"] = context
+        # Owner 27.11: matches outside the offer inherit tour/surface (and
+        # format) only when every verified match of this edition agrees.
+        verified = [m["analysis_context"] for m in matches if m.get("analysis_context")
+                    and not m["analysis_context"].get("inherited")]
+        shared = {}
+        for field in ("tour", "surface", "best_of"):
+            values = {ctx.get(field) for ctx in verified if ctx.get(field) is not None}
+            if len(values) == 1:
+                shared[field], = values
+        if {"tour", "surface"} <= set(shared):
+            for match in matches:
+                if (not match.get("analysis_context")
+                        and len([p for p in match.get("players", []) if p and p.get("id")]) == 2):
+                    match["analysis_context"] = {**shared, "inherited": True,
+                                                 "verified_at": verified_at.isoformat()}
     return snapshot, {
         "cup_tree_attempts": requests, "cup_tree_errors": failures, "unresolved_offer_rows": unresolved,
     }

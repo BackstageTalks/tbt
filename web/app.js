@@ -9332,12 +9332,12 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       const row=match.event_id && pools.flatMap(rows=>Array.isArray(rows)?rows:[])
         .find(row=>String(row.event_id||row.id||'')===String(match.event_id));
       const fixture=row?.fixture||row;
-      const tour=String(fixture?.tour||row?.tour||'').toLowerCase();
-      const surface=String(fixture?.surface||row?.surface||'').trim().toLowerCase().replace(/[ -]+/g,'_');
-      const bestOf=Number(fixture?.best_of||row?.best_of);
-      return {tour:['atp','wta'].includes(tour)?tour:'',
-        surface:['hard','clay','grass','indoor_hard'].includes(surface)?surface:'',
-        bestOf:bestOf===3||bestOf===5?bestOf:null};
+      const tour=[fixture?.tour,row?.tour,context?.tour].map(value=>String(value||'').trim().toLowerCase())
+        .find(value=>['atp','wta'].includes(value));
+      const surface=[fixture?.surface,row?.surface,context?.surface].map(value=>String(value||'').trim().toLowerCase().replace(/[ -]+/g,'_'))
+        .find(value=>['hard','clay','grass','indoor_hard'].includes(value));
+      const bestOf=[fixture?.best_of,row?.best_of,context?.best_of].map(Number).find(value=>value===3||value===5);
+      return {tour:tour||'',surface:surface||'',bestOf:bestOf||null};
     },
     search(name,tour){return BlinqAuth.comparatorPlayers(name,tour);},
     load(left,right,tour,surface,best_of){

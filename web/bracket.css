@@ -132,13 +132,13 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
 .bracket-match-slot { display: grid; min-width: 0; }
 .bracket-analysis-action {
   width: max-content; justify-self: end; margin: .3rem 0 0;
-  border: 1px solid #4bc5e9; border-radius: 999px;
-  background: #70d7f4; color: #062731;
+  border: 1px solid #3e9273; border-radius: 999px;
+  background: #134436; color: #a9ffe1;
   padding: .27rem .75rem; min-height: 30px;
   font: inherit; font-size: .75rem; font-weight: 750; cursor: pointer;
 }
-.bracket-analysis-action:hover { background: #b1eeff; }
-.bracket-analysis-action:focus-visible { outline: 2px solid #b1eeff; outline-offset: 2px; }
+.bracket-analysis-action:enabled:hover { background: #1c5a46; border-color: var(--bracket-winner); }
+.bracket-analysis-action:focus-visible { outline: 2px solid var(--bracket-winner); outline-offset: 2px; }
 .bracket-analysis-action:disabled { opacity: .6; cursor: wait; }
 .bracket-stats-trigger {
   position: absolute;
@@ -186,6 +186,10 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
 .bracket-analysis-panel > .bracket-player { max-width: 32rem; margin-inline: auto; }
 .bracket-analysis-form { display: grid; gap: .65rem; margin-top: .85rem; }
 .bracket-analysis-form .bracket-analysis-action { min-height: 38px; }
+.bracket-analysis-form [type="submit"] {
+  background: var(--bracket-winner); border-color: var(--bracket-winner); color: #041510;
+}
+.bracket-analysis-form [type="submit"]:enabled:hover { background: #a9ffe1; }
 .bracket-analysis-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; }
 .bracket-analysis-fields select { width: 100%; min-width: 0; padding-inline: .35rem; }
 .bracket-analysis-panel .bracket-status:empty { display: none; }
