@@ -98,6 +98,7 @@ def main():
     if count != collection.get('statistics_data_value', {}).get('new_statistic_values', 0):
         raise ValueError('Collector field count differs from independent readback')
     report = {'status':'VERIFIED' if count else 'VERIFIED_NO_NEW_FIELDS',
+              'persisted_enriched_matches':len(expected['added_fields']),
               'persisted_new_statistic_values':count, 'persisted_new_per_set_matches':set_count,
               'persisted_new_values_by_field':dict(sorted(field_counts.items())),
               'persisted_new_values_by_tour':{

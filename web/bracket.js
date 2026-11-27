@@ -314,7 +314,7 @@
           const [left, right] = [p1, p2].map((player, index) => ({
             name: player.name, player_id: selected?.[index].select.value,
           }));
-          const result = await comparison.load(left, right, tourSelect.value, surfaceSelect.value, Number(formatSelect.value));
+          const result = await comparison.load(left, right, tourSelect.value, surfaceSelect.value, Number(formatSelect.value), match.event_id);
           if (!dialog.open) return;
           comparison.render(output, result);
           status.textContent = '';
@@ -349,6 +349,46 @@
     if (form?.checkValidity()) form.requestSubmit();
   }
 
+  function tournamentStatsButton(panel, sections) {
+    if (!Array.isArray(sections) || !sections.length) return;
+    const accuracy = sections.find(section => section.id === 'accuracy')?.items?.[0]?.value;
+    const button = element('button', '🎯 ' + (accuracy ?? '—'), 'bracket-stats-trigger');
+    button.type = 'button';
+    button.setAttribute('aria-haspopup', 'dialog');
+    button.setAttribute('aria-label', copy('Štatistiky turnaja', 'Tournament statistics', 'Statistiky turnaje'));
+    button.addEventListener('click', () => {
+      const dialog = element('dialog', '', 'bracket-stats-dialog');
+      dialog.setAttribute('aria-label', button.getAttribute('aria-label'));
+      const close = element('button', '×', 'bracket-close');
+      close.type = 'button';
+      close.setAttribute('aria-label', copy('Zavrieť', 'Close', 'Zavřít'));
+      close.addEventListener('click', () => dialog.close());
+      dialog.append(close);
+      for (const section of sections) {
+        const part = element('section');
+        part.append(element('h3', String(section.title ?? '')));
+        const list = element('dl');
+        for (const item of section.items || []) {
+          const value = element('dd', String(item.value ?? '—'));
+          if (item.hint) value.append(element('small', String(item.hint)));
+          list.append(element('dt', String(item.label ?? '')), value);
+        }
+        part.append(list);
+        dialog.append(part);
+      }
+      dialog.addEventListener('click', event => {
+        if (event.target !== dialog) return;
+        const box = dialog.getBoundingClientRect();
+        if (event.clientX < box.left || event.clientX > box.right ||
+            event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+      });
+      dialog.addEventListener('close', () => { dialog.remove(); button.focus(); }, { once: true });
+      panel.append(dialog);
+      dialog.showModal();
+    });
+    panel.append(button);
+  }
+
   function render(view, tournaments) {
     view.lines?.disconnect();
     view.root.replaceChildren();
@@ -364,6 +404,7 @@
     panel.setAttribute('role', 'tabpanel');
     panel.tabIndex = 0;
     view.root.append(bracketTabs(view, tournaments, current, panel), panel);
+    tournamentStatsButton(panel, current.tournament_stats);
     if (!draw) {
       panel.append(element('p', copy(
         'Žreb zatiaľ nie je dostupný.',

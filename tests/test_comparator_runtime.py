@@ -225,3 +225,17 @@ def test_runtime_rejects_same_name_with_two_distinct_canonical_ids():
         assert "players must be different" in str(exc)
     else:
         raise AssertionError("same normalized name cannot be compared as two distinct players")
+
+
+def test_card_workload_has_strict_cutoff_and_does_not_invent_missing_sets():
+    artifact = build_serving_artifact(_model(), _history(), now=NOW)
+    state = artifact["feature_state"]["players"]["atp:a"]
+    for row in state["recent"]:
+        row["sets_played"] = 2.0
+    state["recent"][-1]["sets_played"] = None
+    answer = compare_from_artifact(artifact, player1="a", player2="b", tour="atp", surface="hard", now=NOW)
+    first = answer["player1"]["stats"]
+    assert first["days_since_last_match"] == 1
+    assert first["fatigue_7d"] == {"matches": 4, "sets": None}
+    assert first["fatigue_14d"] == {"matches": 7, "sets": None}
+    assert answer["match_context"]["setting"] is None

@@ -1,7 +1,7 @@
 name: Tennis data and predictions
-# Only an authenticated Model Lab request carries an operation marker.
+# Admin operations carry an exact correlation marker.
 # Preserve ordinary workflow names for all automatic/provider jobs.
-run-name: ${{ inputs.morning_parent_run_id && format('BlinQ morning refresh {0}', inputs.morning_parent_run_id) || inputs.stale_handoff_run_id && format('BlinQ safe deploy handoff {0}', inputs.stale_handoff_run_id) || inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
+run-name: ${{ startsWith(inputs.request_id, 'api-') && format('BlinQ manual API collection {0}', inputs.request_id) || inputs.morning_parent_run_id && format('BlinQ morning refresh {0}', inputs.morning_parent_run_id) || inputs.stale_handoff_run_id && format('BlinQ safe deploy handoff {0}', inputs.stale_handoff_run_id) || inputs.request_id && format('BlinQ inputs refresh {0}', inputs.request_id) || 'Tennis data and predictions' }}
 on:
   push:
     branches: [main]
@@ -15,7 +15,7 @@ on:
         type: string
         default: ''
       request_id:
-        description: Internal Model Lab correlation ID; leave blank for normal runs
+        description: Internal Admin correlation ID; leave blank for normal runs
         type: string
         default: ''
       stale_handoff_run_id:
@@ -132,6 +132,8 @@ jobs:
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
       MAX_REQUESTS: ${{ inputs.max_requests || 14500 }}
+      ADMIN_COLLECTION_ID: ${{ startsWith(inputs.request_id, 'api-') && inputs.request_id || '' }}
+      BLINQ_TARGETED_STATISTICS: ${{ startsWith(inputs.request_id, 'api-') && inputs.mode == 'statistics' && 'true' || 'false' }}
       BLINQ_REQUIRE_PROVIDER_RATE_LIMIT_HEADER: 'true'
       BLINQ_PROVIDER_REQUEST_RESERVE: '500'
       BLINQ_AUTOFILL_HIGH_YIELD: ${{ inputs.hourly_autofill && inputs.mode == 'statistics' && 'true' || 'false' }}
@@ -197,6 +199,20 @@ jobs:
           if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 14500 )); then
             echo "::error::MAX_REQUESTS must be 1..14500; refusing provider run."
             exit 1
+          fi
+          if [[ -n "$ADMIN_COLLECTION_ID" ]]; then
+            [[ "$ADMIN_COLLECTION_ID" =~ ^api-[0-9a-f]{24}$ &&
+               "$MODE" =~ ^(statistics|extras|identity)$ &&
+               "$PROMOTE" == false && "$HOURLY_AUTOFILL" != true &&
+               "$LOOKBACK_DAYS" == 365 && -z "$START_DATE" && -z "$END_DATE" ]] || {
+              echo "::error::Invalid manual Admin collection inputs."
+              exit 1
+            }
+            (( 10#$MAX_REQUESTS <= 500 )) || { echo "::error::Manual Admin collection cap is 500 attempts"; exit 1; }
+            [[ -n "$BLINQ_SHARED_API_BUDGET_URL" && -n "$BLINQ_SHARED_API_BUDGET_TOKEN" ]] || {
+              echo "::error::Shared Tennis API budget configuration required."
+              exit 1
+            }
           fi
           if [[ "${BLINQ_BP_FOCUS:-false}" == "true" ]]; then
             [[ "$MODE" == statistics && "${HOURLY_AUTOFILL}" != true && "$PROMOTE" != true ]] || { echo "::error::BP focus is non-promoting manual statistics only"; exit 1; }
@@ -498,6 +514,7 @@ jobs:
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             if [[ -n "${BLINQ_TARGET_STATS_TOUR:-}" ]]; then args+=(--target-tour "$BLINQ_TARGET_STATS_TOUR"); fi
             if [[ "${BLINQ_BP_FOCUS:-false}" == "true" ]]; then args+=(--break-points-focus); fi
+            if [[ "$HOURLY_AUTOFILL" == "true" ]]; then export BLINQ_HOURLY_COLLECTION_PHASE=primary; fi
             python scripts/download_tennis_history.py "${args[@]}"
           elif [[ "$MODE" == doubles-data ]]; then
             args=(
@@ -716,7 +733,7 @@ jobs:
                 --max-requests "$FALLBACK_MAX_REQUESTS")
           if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
           if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
-          BLINQ_AUTOFILL_HIGH_YIELD=false python scripts/download_tennis_history.py "${args[@]}"
+          BLINQ_HOURLY_COLLECTION_PHASE=fallback BLINQ_AUTOFILL_HIGH_YIELD=false python scripts/download_tennis_history.py "${args[@]}"
 
       - name: Independently verify recovered provider IDs in private CDB
         if: ${{ success() && env.MODE == 'identity' }}
@@ -920,6 +937,15 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Finalize hourly collection quality
+        if: ${{ always() && inputs.hourly_autofill == true }}
+        continue-on-error: true
+        env:
+          FALLBACK_EXPECTED: ${{ steps.verified_extras_fallback.outputs.allowed }}
+          BLINQ_MEDIA_STORAGE_CONNECTION_STRING: ${{ secrets.BLINQ_MEDIA_STORAGE_CONNECTION_STRING }}
+          BLINQ_MEDIA_CONTAINER: ${{ vars.BLINQ_MEDIA_CONTAINER }}
+        run: python scripts/hourly_collection_summary.py
+
       - name: Upload history/statistics run report
         if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -934,6 +960,7 @@ jobs:
             .cache/tbt/history/adaptive_cdb_evidence.md
             .cache/tbt/history/hourly_extras_fallback_plan.json
             .cache/tbt/history/hourly_primary_statistics_report.json
+            .cache/tbt/history/hourly_collection_summary.json
             .cache/tbt/history/extras_expected.json
             .cache/tbt/history/extras_readback.json
             .cache/tbt/history/identity_readback.json

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
+import math
 import re
 from zoneinfo import ZoneInfo
 
+from tbt.services.match_status import bracket_fixture_context
 from tbt.services.media_storage import _blob_service, _container, _container_name
+from tbt.match_format import explicit_best_of_from_event
+from tbt.services.match_status import classify_finished_event, explicit_actual_start, provider_event_schedule
+from tbt.utils import normalize_surface
 
 OFFER_FIELDS = (
     "upcoming", "prime_picks", "top_daily_picks", "daily_picks",
@@ -243,7 +248,16 @@ def keep_settlements(draws, previous_draws):
 
 
 def build_feed(feed, evidence, previous, day, fetch, limit):
-    events = {native_id(row.get("id")): row for row in evidence.get("events", []) if native_id(row.get("id"))}
+    events = {}
+    ambiguous = set()
+    for row in evidence.get("events", []):
+        event_id = native_id(row.get("id"))
+        if not event_id:
+            continue
+        if event_id in events and events[event_id] != row:
+            ambiguous.add(event_id)
+        events[event_id] = row
+    trusted_events = {eid: event for eid, event in events.items() if eid not in ambiguous}
     statuses = evidence.get("statuses") or {}
     by_tournament = {}
     unresolved = 0
@@ -326,6 +340,35 @@ def build_feed(feed, evidence, previous, day, fetch, limit):
 
     snapshot = {"schema": 1, "date": day.isoformat(), "tournaments": list(entries.values())}
     settle_draws(snapshot, statuses, events)
+    verified_at = datetime.now(BRATISLAVA)
+    for entry in snapshot["tournaments"]:
+        matches = [item[3] for item in entry.get("observed_matches", {}).values()]
+        matches.extend(draw_matches(entry["draws"]))
+        for match in matches:
+            event_id = match["event_id"]
+            event = trusted_events.get(event_id)
+            if event is None and event_id not in ambiguous:
+                continue  # retain previously verified context for the same node
+            match.pop("analysis_context", None)
+            if event is not None and tournament_key(event) == entry["id"]:
+                context = bracket_fixture_context(event, match, verified_at)
+                if context is not None:
+                    match["analysis_context"] = context
+        # Owner 27.11: matches outside the offer inherit tour/surface (and
+        # format) only when every verified match of this edition agrees.
+        verified = [m["analysis_context"] for m in matches if m.get("analysis_context")
+                    and not m["analysis_context"].get("inherited")]
+        shared = {}
+        for field in ("tour", "surface", "best_of"):
+            values = {ctx.get(field) for ctx in verified if ctx.get(field) is not None}
+            if len(values) == 1:
+                shared[field], = values
+        if {"tour", "surface"} <= set(shared):
+            for match in matches:
+                if (not match.get("analysis_context")
+                        and len([p for p in match.get("players", []) if p and p.get("id")]) == 2):
+                    match["analysis_context"] = {**shared, "inherited": True,
+                                                 "verified_at": verified_at.isoformat()}
     return snapshot, {
         "cup_tree_attempts": requests, "cup_tree_errors": failures, "unresolved_offer_rows": unresolved,
     }
@@ -341,21 +384,27 @@ def settle_draws(snapshot, statuses, events):
                 apply_settlement(match, statuses[event_id], events.get(event_id, {}))
 
 
-def load_bracket_snapshot():
+def load_bracket_snapshot(*, with_revision=False):
     from azure.core.exceptions import ResourceNotFoundError
 
     with _blob_service() as service:
         blob = service.get_blob_client(_container_name(), "feeds/bracket.json")
         try:
-            return json.loads(blob.download_blob().readall())
+            reader = blob.download_blob()
+            snapshot = json.loads(reader.readall())
+            return (snapshot, reader.properties.etag) if with_revision else snapshot
         except ResourceNotFoundError:
-            return {}
+            return ({}, None) if with_revision else {}
 
 
-def save_bracket_snapshot(snapshot):
+def save_bracket_snapshot(snapshot, *, revision):
+    from azure.core import MatchConditions
+
+    options = ({"overwrite": False} if revision is None else
+               {"overwrite": True, "etag": revision, "match_condition": MatchConditions.IfNotModified})
     with _container() as container:
-        container.upload_blob(
-            "feeds/bracket.json", json.dumps(snapshot, ensure_ascii=False), overwrite=True,
+        container.get_blob_client("feeds/bracket.json").upload_blob(
+            json.dumps(snapshot, ensure_ascii=False), **options,
         )
 
 
@@ -380,11 +429,183 @@ def display_draws(entry):
     return draws
 
 
-def public_brackets(snapshot, day):
-    today = day.isoformat()
-    tournaments = [
-        {"id": entry["id"], "name": entry["name"], "draws": display_draws(entry)}
-        for entry in snapshot.get("tournaments", [])
-        if entry["last_seen"] == today
+def _instant(value):
+    try:
+        value = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        return value if value.tzinfo else None
+    except ValueError:
+        return None
+
+
+def _pair(match):
+    ids = sorted(native_id(p.get("id")) for p in match.get("players", []))
+    return ids if len(ids) == 2 and all(ids) and ids[0] != ids[1] else []
+
+
+def _comparison_context(event):
+    tournament = event.get("tournament") or {}
+    unique = tournament.get("uniqueTournament") or {}
+    category = tournament.get("category") or unique.get("category") or {}
+    name = str(category.get("name") or "").strip().casefold()
+    tour = {
+        "atp": "atp", "atp challenger": "atp", "challenger men": "atp",
+        "wta": "wta", "wta 125": "wta", "wta challenger": "wta",
+    }.get(name)
+    surface = normalize_surface(event.get("groundType") or event.get("surface")
+                                or tournament.get("groundType") or unique.get("groundType"))
+    best_of = explicit_best_of_from_event(event)
+    if tour and surface in {"hard", "clay", "grass", "indoor_hard"} and best_of in (3, 5):
+        return {"tour": tour, "surface": surface, "best_of": best_of}
+    return None
+
+
+def _offer_prediction(rows, pair):
+    candidates = []
+    for row in rows:
+        ids = sorted(native_id((row.get(side) or {}).get("id")) for side in ("player1", "player2"))
+        winner = native_id(row.get("winner_id") or row.get("selection_id"))
+        probability = row.get("blinq_probability")
+        version = row.get("model_version")
+        raw_quality = row.get("quality") or {}
+        p1, p2 = (raw_quality.get(side) or {} for side in ("player1", "player2"))
+        sample_values = [p1.get("matches"), p2.get("matches"),
+                         p1.get("surface_matches"), p2.get("surface_matches")]
+        quality = None
+        if all(type(value) is int and value >= 0 for value in sample_values):
+            a, b, sa, sb = sample_values
+            band = ("high" if min(a, b) >= 25 and min(sa, sb) >= 10 else
+                    "medium" if min(a, b) >= 10 and min(sa, sb) >= 4 else "low")
+            quality = dict(band=band, player1_matches=a, player2_matches=b,
+                           player1_surface_matches=sa, player2_surface_matches=sb)
+        if (ids == pair and winner in pair and type(probability) in (float, int)
+                and 0 <= probability <= 1 and version and quality is not None):
+            raw_odds = row.get("odds")
+            odds = raw_odds if type(raw_odds) in (float, int) and math.isfinite(raw_odds) and raw_odds > 1 else None
+            candidates.append({"predicted_winner_id": winner, "probability": probability,
+                               "quality": quality, "model_version": version,
+                               "source": "offer", "odds": odds})
+    if candidates and all(item == candidates[0] for item in candidates):
+        return candidates[0]
+    return None
+
+
+def update_bracket_predictions(snapshot, feed, events, statuses, predict, clock, can_compare):
+    offers = {}
+    for field in ("top_daily_picks", "daily_picks", "prime_picks", "value_picks"):
+        for row in feed.get(field) or []:
+            if (str(row.get("market") or "match_winner") == "match_winner"
+                    and row.get("publication_status") == "published" and row.get("issued_at")):
+                offers.setdefault(native_id(row.get("event_id")), []).append(row)
+    for entry in snapshot["tournaments"]:
+        records = entry.setdefault("predictions", {})
+        for draw in display_draws(entry):
+            for round_row in draw["rounds"]:
+                for match in round_row["matches"]:
+                    eid, pair = native_id(match["event_id"]), _pair(match)
+                    if not eid or not pair:
+                        continue
+                    key = ":".join((eid, *pair))  # edition scopes the enclosing records
+                    record = records.get(key)
+                    event = events.get(eid) or {}
+                    event_verified = native_id(event.get("id")) == eid and tournament_key(event) == entry["id"]
+                    if event and not event_verified:
+                        continue
+                    terminal = statuses.get(eid) or {}
+                    if event_verified and (not terminal or not terminal.get("actual_started_at")):
+                        terminal = classify_finished_event(
+                            {"player1": {"id": pair[0]}, "player2": {"id": pair[1]},
+                             "winner_id": pair[0]},
+                            event, checked_at=clock(),
+                        ) or terminal
+                    if record is not None:
+                        if sorted(native_id(terminal.get(side)) for side in
+                                  ("provider_home_id", "provider_away_id")) != pair:
+                            continue
+                        status = terminal.get("status")
+                        if status in {"retired", "void"}:
+                            record["outcome"] = "excluded"
+                            continue
+                        started = _instant(terminal.get("actual_started_at"))
+                        winner = native_id(terminal.get("winner_id"))
+                        if status not in {"win", "loss"} or winner not in pair or started is None:
+                            continue
+                        frozen_at = _instant(record.get("frozen_at"))
+                        if frozen_at is None:
+                            continue
+                        record["outcome"] = (
+                            "excluded" if frozen_at >= started else
+                            "correct" if winner == record["predicted_winner_id"] else "incorrect"
+                        )
+                        continue
+                    if not event_verified:
+                        continue
+                    context = match.get("analysis_context") or _comparison_context(event)
+                    scheduled = provider_event_schedule(event)
+                    event_pair = sorted(native_id((event.get(side) or {}).get("id")) for side in ("homeTeam", "awayTeam"))
+                    state = (event.get("status") or {}).get("type")
+                    checked = clock()
+                    if (terminal or match.get("winner_id") or not scheduled or scheduled <= checked
+                            or explicit_actual_start(event) is not None
+                            or event_pair != pair or state != "notstarted"):
+                        continue
+                    candidates = [row for row in offers.get(eid, [])
+                                  if (issued := _instant(row["issued_at"])) is not None and issued <= checked]
+                    selected = _offer_prediction(candidates, pair)
+                    if selected is None and context and can_compare():
+                        selected = predict(pair, context)
+                    frozen = clock()
+                    if selected is None or frozen >= scheduled or selected["predicted_winner_id"] not in pair:
+                        continue
+                    records[key] = {**selected, "event_id": eid, "player_ids": pair,
+                                    "round": str(round_row.get("name") or ""),
+                                    "frozen_at": frozen.isoformat(), "outcome": "pending"}
+
+
+def tournament_stats(entry, draws):
+    keys = {":".join((eid, *pair)) for node in draw_matches(draws)
+            if (eid := native_id(node["event_id"])) and (pair := _pair(node))}
+    rows = [record for key, record in (entry.get("predictions") or {}).items() if key in keys]
+    def score(items):
+        correct = sum(row["outcome"] == "correct" for row in items)
+        incorrect = sum(row["outcome"] == "incorrect" for row in items)
+        return correct, incorrect
+    good, bad = score(rows)
+    waiting = sum(row["outcome"] == "pending" for row in rows)
+    total = good + bad
+    percent = f"{100 * good / total:.1f}".replace(".", ",") + " %" if total else "—"
+    return [
+        {"id": "accuracy", "title": "Úspešnosť", "items": [
+            {"label": "Správne predikcie", "value": percent, "hint": f"{good} z {total} vyhodnotených"},
+        ]},
+        {"id": "state", "title": "Stav", "items": [
+            {"label": label, "value": value, "hint": ""}
+            for label, value in (("Správne", good), ("Nesprávne", bad), ("Čaká", waiting))
+        ]},
+        {"id": "rounds", "title": "Podľa kôl", "items": [
+            {"label": name, "value": f"{hits} z {hits + misses}", "hint": "Správne z vyhodnotených"}
+            for name in sorted({row["round"] for row in rows if row["round"]})
+            for hits, misses in [score([row for row in rows if row["round"] == name])]
+        ]},
     ]
+
+
+def public_brackets(snapshot, day, *, analysis_allowed=False):
+    today = day.isoformat()
+    tournaments = []
+    for entry in snapshot.get("tournaments", []):
+        if entry["last_seen"] != today:
+            continue
+        draws = display_draws(entry)
+        item = {"id": entry["id"], "name": entry["name"], "draws": draws}
+        for match in draw_matches(draws):
+            if analysis_allowed:
+                key = ":".join((match["event_id"], *_pair(match)))
+                prediction = (entry.get("predictions") or {}).get(key)
+                if prediction:
+                    match["prediction"] = {k: deepcopy(v) for k, v in prediction.items() if k != "odds"}
+            else:
+                match.pop("analysis_context", None)
+        if analysis_allowed:
+            item["tournament_stats"] = tournament_stats(entry, draws)
+        tournaments.append(item)
     return {"schema": 1, "date": today, "tournaments": tournaments}
