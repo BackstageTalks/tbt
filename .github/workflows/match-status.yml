@@ -87,7 +87,7 @@ jobs:
 
 
       - name: Dispatch morning offer alarm at 06:30 Bratislava
-        # Native cron is disabled; reuse the external 15-minute clock.
+        # Native cron is disabled; reuse the external 10/15-minute clock (deduped per day).
         if: always()
         continue-on-error: true
         env:
@@ -98,6 +98,14 @@ jobs:
           now="$(TZ=Europe/Bratislava date +%H%M)"
           if (( 10#$now < 630 || 10#$now >= 645 )); then
             echo "Morning offer alarm not due ($now Bratislava)."
+            exit 0
+          fi
+          # 10- or 15-minute external clock: dispatch once per Bratislava day.
+          today="$(TZ=Europe/Bratislava date +%Y-%m-%d)"
+          since="$(date -u -d "TZ=\"Europe/Bratislava\" $today 06:00" +%Y-%m-%dT%H:%M:%SZ)"
+          if gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/morning-offer-alarm.yml/runs" -f per_page=20 \
+              | jq -e --arg since "$since" '.workflow_runs | any(.created_at >= $since)' >/dev/null; then
+            echo "Morning offer alarm already dispatched today."
             exit 0
           fi
           gh workflow run morning-offer-alarm.yml -R "$GITHUB_REPOSITORY" --ref main
@@ -117,6 +125,12 @@ jobs:
           minute="$(date -u +%M)"
           if (( 10#$hour % 6 != 0 || 10#$minute >= 30 )); then
             echo "Calibration monitor not due at this UTC hour."
+            exit 0
+          fi
+          slot="$(date -u +%Y-%m-%dT%H):"
+          if gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/model-calibration-monitor.yml/runs" -f per_page=20 \
+              | jq -e --arg slot "$slot" '.workflow_runs | any(.created_at | startswith($slot))' >/dev/null; then
+            echo "Calibration monitor already dispatched in this slot."
             exit 0
           fi
           gh workflow run model-calibration-monitor.yml -R "$GITHUB_REPOSITORY" --ref main
