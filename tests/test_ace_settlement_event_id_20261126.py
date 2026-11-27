@@ -71,3 +71,45 @@ def test_conflict_outside_aces_does_not_block_settlement():
     bad_df = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
         item("aces", 7, 3), item("doubleFaults", 2, 4), item("doubleFaults", 5, 4)]}]}]}
     assert parse_statistics(bad_df, home_is_player1=True, only_fields={"p1_aces", "p2_aces"})["p1_aces"] == 7
+
+
+def test_missing_match_voided_after_seven_days(monkeypatch):
+    from datetime import timedelta
+    ledger = _ledger("15000009")
+    ledger[0]["scheduled_at"] = "2026-11-10T12:00:00+00:00"
+    now = datetime(2026, 11, 27, 5, tzinfo=timezone.utc)
+    report, prov = _run_now(ledger, [], monkeypatch, now)
+    pub = ledger[0]["market_publications"][0]
+    assert pub["result"]["status"] == "void" and pub["result"]["reason"] == "match_not_found_7d"
+    assert report.get("voided_not_found") == 1 and report["missing_match"] == 0 and prov.calls == []
+
+
+def test_recent_missing_match_stays_pending(monkeypatch):
+    ledger = _ledger("15000010")
+    ledger[0]["scheduled_at"] = "2026-11-25T12:00:00+00:00"
+    now = datetime(2026, 11, 27, 5, tzinfo=timezone.utc)
+    report, _ = _run_now(ledger, [], monkeypatch, now)
+    assert "result" not in ledger[0]["market_publications"][0] and report["missing_match"] == 1
+
+
+def test_backfill_reads_only_missing_days(monkeypatch):
+    ledger = _ledger("15000011")
+    ledger[0]["scheduled_at"] = "2026-11-20T12:00:00+00:00"
+    seen = []
+
+    class P:
+        def matches_for_day(self, tour, day, historical=True):
+            seen.append((tour, day.isoformat()))
+            return [_match("canon-9", "15000011")]
+    monkeypatch.setattr(pipeline, "_merge_refresh_batch_safely",
+                        lambda matches, incoming, day, tour: (matches + incoming, incoming))
+    now = datetime(2026, 11, 27, 5, tzinfo=timezone.utc)
+    matches, report = pipeline._backfill_pending_ace_df_days(P(), ledger, [], now)
+    assert seen == [("atp", "2026-11-20"), ("wta", "2026-11-20")] and report["added"] == 2
+
+
+def _run_now(ledger, matches, monkeypatch, now):
+    monkeypatch.setattr(pipeline, "_provider_event_id", lambda m: m.provider_payload["_tbt_provider_event_id"])
+    monkeypatch.setattr(pipeline, "parse_statistics", lambda payload, home_is_player1, **kw: {"p1_aces": 5, "p2_aces": 3})
+    prov = Provider()
+    return pipeline._enrich_pending_ace_df_settlement_stats(prov, ledger, matches, now=now), prov

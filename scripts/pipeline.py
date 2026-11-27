@@ -475,7 +475,113 @@ def _ace_df_required_counts_ready(match, markets):
     return True
 
 
-def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
+ACE_DF_VOID_AFTER_DAYS = 7
+ACE_DF_BACKFILL_MAX_DAYS = 10
+
+
+def _ledger_row_time(row):
+    raw = str(row.get("original_scheduled_at") or row.get("scheduled_at") or "").strip()
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _ledger_rows_by_key(ledger):
+    rows = {}
+    for row in ledger if isinstance(ledger, list) else []:
+        if isinstance(row, dict):
+            key = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
+            if key:
+                rows[key] = row
+    return rows
+
+
+def _match_keys(match):
+    keys = {str(getattr(match, "match_id", "") or "")}
+    try:
+        keys.add(str(ledger_event_id(match) or ""))
+    except Exception:
+        pass
+    return keys - {""}
+
+
+def _backfill_pending_ace_df_days(provider, ledger, matches, now):
+    """Re-read the scheduled day of pending ACES/DF bets missing from history."""
+    report = {"days": [], "added": 0, "errors": 0}
+    requirements = _pending_ace_df_settlement_requirements(ledger)
+    if not requirements:
+        return matches, report
+    known = set()
+    for match in matches:
+        known |= _match_keys(match)
+    rows = _ledger_rows_by_key(ledger)
+    days = set()
+    for key in requirements:
+        if key in known:
+            continue
+        when = _ledger_row_time(rows.get(key) or {})
+        if when is None:
+            continue
+        day = when.astimezone(timezone.utc).date()
+        if 0 <= (now.date() - day).days <= 21:
+            days.add(day)
+    for day in sorted(days)[-ACE_DF_BACKFILL_MAX_DAYS:]:
+        report["days"].append(day.isoformat())
+        for tour in ("atp", "wta"):
+            try:
+                incoming = [m for m in provider.matches_for_day(tour, day, historical=True)
+                            if m.is_completed]
+            except RequestBudgetExceeded:
+                report["budget_stopped"] = True
+                return matches, report
+            except ProviderError:
+                report["errors"] += 1
+                continue
+            matches, accepted = _merge_refresh_batch_safely(matches, incoming, day=day, tour=tour)
+            report["added"] += len(accepted)
+    return matches, report
+
+
+def _void_unresolvable_ace_df(ledger, key, now, reason):
+    """Owner 27.11: unresolved after 7 days -> VOID (0 units, not in hit rate)."""
+    voided = 0
+    for row in ledger if isinstance(ledger, list) else []:
+        if not isinstance(row, dict):
+            continue
+        row_key = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
+        if row_key != key:
+            continue
+        when = _ledger_row_time(row)
+        for publication in row.get("market_publications", []) or []:
+            if not isinstance(publication, dict) or not publication.get("issued_at"):
+                continue
+            if str(publication.get("market") or "").strip().lower() not in {"aces", "double_faults"}:
+                continue
+            if isinstance(publication.get("result"), dict):
+                continue
+            publication["result"] = {
+                "status": "void", "reason": reason, "correct": None,
+                "staked_units": 0.0, "return_units": 0.0, "profit_units": 0.0,
+                "settled_at": now.isoformat(),
+                "scheduled_at": when.isoformat() if when else None,
+            }
+            publication.pop("excluded_reason", None)
+            voided += 1
+    return voided
+
+
+def _void_if_stale(ledger, key, match, now, report):
+    if now is None:
+        return
+    when = getattr(match, "scheduled_at", None)
+    if when is not None and now - when >= timedelta(days=ACE_DF_VOID_AFTER_DAYS):
+        report["voided_stats_unavailable"] = report.get("voided_stats_unavailable", 0) + \
+            _void_unresolvable_ace_df(ledger, key, now, "stats_unavailable_7d")
+
+
+def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches, now=None):
     """Fetch post-match counts only for issued ACES/DF bets that cannot settle yet.
 
     This is deliberately narrow: no board-wide statistics sweep and no relaxed
@@ -531,6 +637,12 @@ def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
             candidates = [m for m in candidates
                           if {str(m.player1_id), str(m.player2_id)} == expected]
         if not candidates:
+            row_time = _ledger_row_time(_ledger_rows_by_key(ledger).get(event_id) or {})
+            if (now is not None and row_time is not None
+                    and now - row_time >= timedelta(days=ACE_DF_VOID_AFTER_DAYS)):
+                report["voided_not_found"] = report.get("voided_not_found", 0) + \
+                    _void_unresolvable_ace_df(ledger, event_id, now, "match_not_found_7d")
+                continue
             report["missing_match"] += 1
             if report["missing_match"] <= 5:
                 print(json.dumps({
@@ -551,6 +663,12 @@ def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
         report["completed_candidates"] += 1
         if _ace_df_required_counts_ready(match, markets):
             report["already_ready"] += 1
+            reasons = sorted({str(p.get("excluded_reason")) for p in
+                              (_ledger_rows_by_key(ledger).get(event_id) or {}).get("market_publications", []) or []
+                              if isinstance(p, dict) and p.get("excluded_reason")})
+            if reasons and report["already_ready"] <= 8:
+                print(json.dumps({"warning": "ace_df_ready_but_excluded", "event_id": event_id,
+                                  "excluded_reasons": reasons}), flush=True)
             continue
 
         provider_event_id = _provider_event_id(match)
@@ -597,8 +715,10 @@ def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
                 report["enriched"] += 1
             else:
                 report["partial_or_unavailable"] += 1
+                _void_if_stale(ledger, event_id, match, now, report)
         except NoSupportedStatisticsError:
             report["partial_or_unavailable"] += 1
+            _void_if_stale(ledger, event_id, match, now, report)
         except RequestBudgetExceeded:
             report["budget_stopped"] = True
             break
@@ -1587,10 +1707,17 @@ def main():
                 getattr(provider, "_tbt_skipped_history_days", set())
             )
 
+        # Owner 27.11: pending ACES/DF bets whose match is older than the
+        # refresh window are retried by re-reading their own day (max 10 days,
+        # in-memory only, canonical history stays read-only).
+        matches, ace_backfill_report = _backfill_pending_ace_df_days(
+            provider, prediction_ledger, matches, now
+        )
+        print(json.dumps({"ace_df_settlement_backfill": ace_backfill_report}), flush=True)
         # Settlement has priority over fresh market discovery: fetch whole-match
         # Aces/DF counts only for already-issued, still-pending ACES/DF bets.
         ace_df_settlement_stats_report = _enrich_pending_ace_df_settlement_stats(
-            provider, prediction_ledger, matches
+            provider, prediction_ledger, matches, now=now
         )
         print(json.dumps({
             "ace_df_settlement_statistics": ace_df_settlement_stats_report
