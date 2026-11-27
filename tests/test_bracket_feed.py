@@ -23,6 +23,52 @@ CUP = {"cupTrees": [{"id": 9, "name": "Singles", "views": [[{
 SETTLED = {"status": "loss", "winner_id": "20", "provider_home_id": "10", "provider_away_id": "20"}
 
 
+def test_analysis_context_requires_exact_native_participants_and_explicit_format():
+    event = {
+        **EVENT, "startTimestamp": 1795604400, "bestOf": 3, "groundType": "Hard",
+        "tournament": {**EVENT["tournament"], "category": {"name": "ATP Challenger"}},
+    }
+    for raw, expected in (
+        (event, "atp"),
+        ({**event, "awayTeam": {"id": 99}}, None),
+        ({**event, "bestOf": None}, None),
+        ({**event, "tournament": {**event["tournament"], "category": {"name": "Challenger"}}}, None),
+    ):
+        snapshot, _ = build_feed(OFFER, {"events": [raw]}, {}, DAY, lambda *_: CUP, 1)
+        node = snapshot["tournaments"][0]["draws"][0]["rounds"][0]["matches"][0]
+        assert (node.get("analysis_context") or {}).get("tour") == expected
+        if expected:
+            assert node["analysis_context"]["best_of"] == 3
+            assert node["analysis_context"]["surface"] == "hard"
+            assert node["analysis_context"]["verified_at"]
+
+
+def test_verified_context_rejects_conflicting_observations_and_other_editions():
+    event = {
+        **EVENT, "startTimestamp": 1795604400000, "bestOf": 5, "groundType": "Grass",
+        "tournament": {**EVENT["tournament"], "category": {"name": "ATP"}},
+    }
+
+    def node(snapshot):
+        return snapshot["tournaments"][0]["draws"][0]["rounds"][0]["matches"][0]
+
+    first, _ = build_feed(OFFER, {"events": [event, event]}, {}, DAY, lambda *_: CUP, 1)
+    context = node(first)["analysis_context"]
+    assert context["best_of"] == 5
+    assert context["surface"] == "grass"
+    assert context["scheduled_at"].endswith("+00:00")
+    unchanged, _ = build_feed(OFFER, {}, first, DAY, lambda *_: CUP, 0)
+    assert node(unchanged)["analysis_context"] == context
+    changed, _ = build_feed(
+        OFFER, {"events": [event, {**event, "groundType": "Clay"}]}, first, DAY, lambda *_: CUP, 0,
+    )
+    assert "analysis_context" not in node(changed)
+    changed, _ = build_feed(
+        OFFER, {"events": [{**event, "season": {"id": 99}}]}, first, DAY, lambda *_: CUP, 0,
+    )
+    assert "analysis_context" not in node(changed)
+
+
 def test_initial_and_new_round_only_with_no_pay_for_settlement():
     calls = []
 
@@ -178,17 +224,22 @@ def test_empty_cup_tree_displays_observed_players_and_progression():
     assert "pending_slot" not in final["matches"][0]
 
 
-def test_bracket_match_outside_offer_inherits_tournament_analysis_context():
+def test_bracket_match_outside_offer_inherits_tournament_analysis_context(monkeypatch):
+    """Owner 27.11: non-offer matches inherit tour/surface/format shared by the edition."""
+    import tbt.services.bracket as bracket_mod
     event = {**EVENT, "tournament": {"uniqueTournament": {"id": 12, "name": "Example Challenger"}}}
-    fixture = {"scheduled_at": "2026-11-25T11:00:00Z", "tour": "atp", "surface": "indoor_hard", "best_of": 3}
-    offer = {"daily_picks": [{"event_id": 100, "fixture": fixture}]}
+    offer = OFFER
     semifinal = CUP["cupTrees"][0]["views"][0][0]
     final = {**semifinal, "eventIds": [200], "round": {"description": "Final"}, "left": semifinal}
     cup = {"cupTrees": [{"id": 9, "name": "Singles", "views": [[final]]}]}
+    verified = {"tour": "atp", "surface": "indoor_hard", "best_of": 3}
+    monkeypatch.setattr(bracket_mod, "bracket_fixture_context",
+                        lambda ev, match, at: dict(verified) if str(match.get("event_id")) == "100" else None)
 
     snapshot, _ = build_feed(offer, {"events": [event]}, {}, DAY, lambda *_: cup, 1)
-    tournament, = public_brackets(snapshot, DAY)["tournaments"]
+    tournament, = public_brackets(snapshot, DAY, analysis_allowed=True)["tournaments"]
     _, final_round = tournament["draws"][0]["rounds"]
     final_match, = final_round["matches"]
     assert final_match["event_id"] == "200"
-    assert final_match["analysis_context"] == {"tour": "atp", "surface": "indoor_hard", "best_of": 3}
+    context = final_match["analysis_context"]
+    assert {k: context[k] for k in ("tour", "surface", "best_of")} == verified and context["inherited"] is True

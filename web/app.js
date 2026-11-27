@@ -9322,11 +9322,16 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
         'Analýza zápasu je dostupná ve vyšším programu.');
     },
     context(match){
+      const context=match.analysis_context;
+      if(context&&['atp','wta'].includes(context.tour)
+        &&['hard','clay','grass','indoor_hard'].includes(context.surface)
+        &&[3,5].includes(context.best_of)){
+        return {tour:context.tour,surface:context.surface,bestOf:context.best_of};
+      }
       const pools=[state.feed?.upcoming,state.feed?.board_upcoming,state.feed?.daily_picks];
       const row=match.event_id && pools.flatMap(rows=>Array.isArray(rows)?rows:[])
         .find(row=>String(row.event_id||row.id||'')===String(match.event_id));
       const fixture=row?.fixture||row;
-      const context=match.analysis_context;
       const tour=[fixture?.tour,row?.tour,context?.tour].map(value=>String(value||'').trim().toLowerCase())
         .find(value=>['atp','wta'].includes(value));
       const surface=[fixture?.surface,row?.surface,context?.surface].map(value=>String(value||'').trim().toLowerCase().replace(/[ -]+/g,'_'))

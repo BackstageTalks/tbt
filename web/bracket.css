@@ -140,6 +140,45 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
 .bracket-analysis-action:enabled:hover { background: #1c5a46; border-color: var(--bracket-winner); }
 .bracket-analysis-action:focus-visible { outline: 2px solid var(--bracket-winner); outline-offset: 2px; }
 .bracket-analysis-action:disabled { opacity: .6; cursor: wait; }
+.bracket-stats-trigger {
+  position: absolute;
+  inset: auto .75rem .75rem auto;
+  z-index: 1;
+  color: inherit;
+  background: #0d3027;
+  border: 1px solid rgba(116, 208, 158, .45);
+  border-radius: 999px;
+  padding: .45rem .7rem;
+  cursor: pointer;
+}
+.bracket-panel:has(.bracket-stats-trigger) { position: relative; padding-bottom: 3rem; }
+.bracket-stats-dialog {
+  box-sizing: border-box;
+  width: min(28rem, calc(100vw - 2rem));
+  max-height: min(80vh, 40rem);
+  overflow: auto;
+  padding: 1.25rem;
+  color: #ecfff6;
+  background: var(--bqd-glass, linear-gradient(145deg, rgba(1, 18, 14, .82), rgba(2, 23, 18, .73)));
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--bqd-glass-line, rgba(74, 159, 116, .35));
+  border-radius: 1rem;
+}
+.bracket-stats-dialog::backdrop { background: rgba(0, 10, 8, .72); }
+.bracket-stats-dialog dl { display: grid; grid-template-columns: 1fr auto; gap: .5rem; }
+.bracket-stats-dialog dd { margin: 0; text-align: end; }
+.bracket-stats-dialog dd small { display: block; opacity: .8; }
+@media (max-width: 600px) {
+  .bracket-stats-dialog {
+    position: fixed;
+    inset: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    border-radius: 1rem 1rem 0 0;
+    padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  }
+}
 .bracket-analysis-panel {
   box-sizing: border-box; inset: 0; margin: auto;
   width: min(58rem, calc(100% - 2rem)); max-height: 88dvh;

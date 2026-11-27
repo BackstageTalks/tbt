@@ -1175,6 +1175,46 @@ def _provider_event_id(event: dict[str, Any]) -> str:
     return str(event.get("id") or event.get("eventId") or event.get("event_id") or "").strip()
 
 
+def bracket_fixture_context(event, match, verified_at):
+    """Only explicit fixture metadata bound to the bracket participants."""
+    from tbt.match_format import explicit_best_of_from_event
+    from tbt.utils import normalize_surface
+
+    event_id = _provider_event_id(event)
+    if not event_id or event_id != str(match.get("event_id") or ""):
+        return None
+    sides = [str((event.get(side) or {}).get("id") or "") for side in ("homeTeam", "awayTeam")]
+    players = [str(player.get("id") or "") for player in match.get("players", [])]
+    if len(players) != 2 or len(set(sides)) != 2 or "" in sides or set(sides) != set(players):
+        return None
+    tournament = event.get("tournament") or {}
+    unique = tournament.get("uniqueTournament") or {}
+    category = tournament.get("category") or unique.get("category") or {}
+    labels = {
+        "atp": "atp", "atp challenger": "atp", "challenger men": "atp",
+        "wta": "wta", "wta 125": "wta", "wta challenger": "wta",
+    }
+    tour = labels.get(str(category.get("name") or "").strip().casefold())
+    surface = normalize_surface(event.get("groundType") or event.get("surface")
+                                or tournament.get("groundType") or unique.get("groundType"))
+    best_of = explicit_best_of_from_event(event)
+    raw = next((event[key] for key in ("startTimestamp", "startTime", "scheduledAt", "scheduled_at")
+                if event.get(key) not in (None, "")), None)
+    try:
+        if type(raw) in (int, float) or isinstance(raw, str) and raw.isdigit():
+            stamp = float(raw)
+            scheduled = datetime.fromtimestamp(stamp / 1000 if stamp > 1e12 else stamp, timezone.utc)
+        else:
+            scheduled = _parse_time(raw)
+    except (OverflowError, OSError, ValueError, TypeError):
+        return None
+    if (not tour or surface not in {"hard", "clay", "grass", "indoor_hard"}
+            or best_of not in (3, 5) or scheduled is None):
+        return None
+    return {"tour": tour, "surface": surface, "best_of": best_of,
+            "scheduled_at": scheduled.isoformat(), "verified_at": verified_at.isoformat()}
+
+
 def _status_text(event: dict[str, Any]) -> str:
     status = event.get("status")
     parts: list[str] = []
@@ -1196,6 +1236,19 @@ def _status_text(event: dict[str, Any]) -> str:
         )
     )
     return " ".join(parts).strip().lower()
+
+
+def explicit_actual_start(event):
+    """Read explicit kickoff evidence separately from the fixture schedule."""
+    raw_start = event.get("actualStartTimestamp")
+    actual_start = _parse_time(event.get("actual_started_at"))
+    raw_start = float(raw_start) if isinstance(raw_start, str) and raw_start.isdigit() else raw_start
+    if type(raw_start) in (int, float):
+        try:
+            actual_start = datetime.fromtimestamp(raw_start / 1000 if raw_start > 1e12 else raw_start, timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            actual_start = None
+    return actual_start
 
 
 def classify_finished_event(
@@ -1250,6 +1303,9 @@ def classify_finished_event(
         return None
     base["provider_home_id"] = str(home.get("id") or "")
     base["provider_away_id"] = str(away.get("id") or "")
+    actual_start = explicit_actual_start(event)
+    if actual_start is not None and actual_start <= checked_at:
+        base["actual_started_at"] = actual_start.isoformat()
     if retired:
         return {**base, "status": "retired"}
     if void:
@@ -1406,6 +1462,27 @@ _LIVE_FRESHNESS = timedelta(minutes=75)
 _SCHEDULE_MAX_MOVE = timedelta(days=14)
 
 
+def provider_event_schedule(event):
+    raw = next((
+        event[key] for key in ("startTimestamp", "startTime", "scheduledAt", "scheduled_at")
+        if event.get(key) not in (None, "")
+    ), None)
+    scheduled = None
+    try:
+        if type(raw) in (int, float) or (
+            isinstance(raw, str) and raw.strip().isdigit()
+        ):
+            number = float(raw)
+            if number > 1e12:
+                number /= 1000
+            scheduled = datetime.fromtimestamp(number, tz=timezone.utc)
+        else:
+            scheduled = _parse_time(raw)
+    except (OverflowError, OSError, ValueError, TypeError):
+        return None
+    return scheduled
+
+
 def verified_schedule_observation(
     row: dict[str, Any], event: dict[str, Any], now: datetime
 ) -> dict[str, str] | None:
@@ -1425,23 +1502,7 @@ def verified_schedule_observation(
     original = _parse_time(row.get("scheduled_at") or row.get("date"))
     if original is None:
         return None
-    raw = next((
-        event[key] for key in ("startTimestamp", "startTime", "scheduledAt", "scheduled_at")
-        if event.get(key) not in (None, "")
-    ), None)
-    scheduled = None
-    try:
-        if isinstance(raw, (int, float)) or (
-            isinstance(raw, str) and raw.strip().isdigit()
-        ):
-            number = float(raw)
-            if number > 1e12:
-                number /= 1000
-            scheduled = datetime.fromtimestamp(number, tz=timezone.utc)
-        else:
-            scheduled = _parse_time(raw)
-    except (OverflowError, OSError, ValueError, TypeError):
-        return None
+    scheduled = provider_event_schedule(event)
     if scheduled is None or abs(scheduled - original) > _SCHEDULE_MAX_MOVE:
         return None
     raw_status = event.get("status")
