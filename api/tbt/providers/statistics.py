@@ -250,7 +250,11 @@ def complete_opponent_service_rates(values: dict[str, float]) -> bool:
     return changed
 
 
-def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float]:
+def parse_statistics(payload: dict, *, home_is_player1: bool,
+                     only_fields: set[str] | frozenset[str] | None = None) -> dict[str, float]:
+    """only_fields: settlement mode. A conflict in a field outside this set
+    drops that field instead of rejecting the event; the result is filtered
+    to only_fields. Conflicts inside only_fields still fail closed."""
     if payload == {} or payload.get("statistics") == []:
         return {}
     periods = payload.get("statistics")
@@ -300,6 +304,8 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                         continue
                     field = f"{prefix}_{count_name}"
                     if field in values and abs(values[field] - count) > 1e-6:
+                        if only_fields is not None and field not in only_fields:
+                            continue
                         raise ConflictingStatisticsError(field)
                     values[field] = count
                     continue
@@ -314,6 +320,8 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                     continue
                 field = f"{prefix}_{rate_name}"
                 if field in values and abs(values[field] - value) > 1e-6:
+                    if only_fields is not None and field not in only_fields:
+                        continue
                     raise ConflictingStatisticsError(field)
                 values[field] = value
                 if rate_name == "break_points_won":
@@ -321,6 +329,8 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                     # Retain the existing break_points_won model alias too.
                     bp_field = f"{prefix}_break_point_return_win"
                     if bp_field in values and abs(values[bp_field] - value) > 1e-6:
+                        if only_fields is not None and bp_field not in only_fields:
+                            continue
                         raise ConflictingStatisticsError(bp_field)
                     values[bp_field] = value
                 if total is not None:
@@ -366,7 +376,9 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             field = f"{prefix}_return_points_won"
             derived = (first[0] + second[0]) / (first[1] + second[1])
             if field in values and abs(values[field] - derived) > 1e-6:
-                raise ConflictingStatisticsError(field)
+                if only_fields is None or field in only_fields:
+                    raise ConflictingStatisticsError(field)
+                values.pop(field, None)
             values.setdefault(field, derived)
 
     for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
@@ -375,7 +387,9 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             service = (first[0] + second[0]) / (first[1] + second[1])
             service_field = f"{prefix}_service_points_won"
             if service_field in values and abs(values[service_field] - service) > 1e-6:
-                raise ConflictingStatisticsError(service_field)
+                if only_fields is None or service_field in only_fields:
+                    raise ConflictingStatisticsError(service_field)
+                values.pop(service_field, None)
             values.setdefault(service_field, service)
             values.setdefault(f"{opponent}_return_points_won", 1 - service)
 
@@ -452,7 +466,9 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                 current = values.get(field)
                 tol = 0.0 if field.endswith("_total") else 1e-6
                 if current is not None and abs(current - value) > tol:
-                    raise ConflictingStatisticsError(field)
+                    if only_fields is None or field in only_fields:
+                        raise ConflictingStatisticsError(field)
+                    continue
                 values.setdefault(field, value)
 
     if not values:

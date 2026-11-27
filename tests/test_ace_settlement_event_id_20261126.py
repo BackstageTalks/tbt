@@ -35,7 +35,7 @@ def _ledger(eid, p1="a", p2="b"):
 
 def _run(ledger, matches, monkeypatch):
     monkeypatch.setattr(pipeline, "_provider_event_id", lambda m: m.provider_payload["_tbt_provider_event_id"])
-    monkeypatch.setattr(pipeline, "parse_statistics", lambda payload, home_is_player1: {"p1_aces": 5, "p2_aces": 3})
+    monkeypatch.setattr(pipeline, "parse_statistics", lambda payload, home_is_player1, **kw: {"p1_aces": 5, "p2_aces": 3})
     prov = Provider()
     return pipeline._enrich_pending_ace_df_settlement_stats(prov, ledger, matches), prov
 
@@ -53,3 +53,21 @@ def test_wrong_players_never_settle(monkeypatch):
 def test_duplicate_candidates_are_ambiguous(monkeypatch):
     report, prov = _run(_ledger("15000001"), [_match("c1", "15000001"), _match("c2", "15000001")], monkeypatch)
     assert report["ambiguous_match"] == 1 and prov.calls == []
+
+
+def test_conflict_outside_aces_does_not_block_settlement():
+    from tbt.providers.statistics import parse_statistics, ConflictingStatisticsError
+    item = lambda key, h, a: {"key": key, "homeValue": h, "awayValue": a, "home": str(h), "away": str(a)}
+    payload = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        item("aces", 7, 3), item("doubleFaults", 2, 4),
+        item("aces", 7, 3)]}]}]}
+    out = parse_statistics(payload, home_is_player1=True, only_fields={"p1_aces", "p2_aces"})
+    assert out.get("p1_aces") == 7 and out.get("p2_aces") == 3
+    bad = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        item("aces", 7, 3), item("aces", 8, 3)]}]}]}
+    import pytest
+    with pytest.raises(ConflictingStatisticsError):
+        parse_statistics(bad, home_is_player1=True, only_fields={"p1_aces", "p2_aces"})
+    bad_df = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        item("aces", 7, 3), item("doubleFaults", 2, 4), item("doubleFaults", 5, 4)]}]}]}
+    assert parse_statistics(bad_df, home_is_player1=True, only_fields={"p1_aces", "p2_aces"})["p1_aces"] == 7

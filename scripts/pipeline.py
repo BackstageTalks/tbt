@@ -532,6 +532,15 @@ def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
                           if {str(m.player1_id), str(m.player2_id)} == expected]
         if not candidates:
             report["missing_match"] += 1
+            if report["missing_match"] <= 5:
+                print(json.dumps({
+                    "warning": "ace_df_settlement_missing_match",
+                    "event_id": event_id,
+                    "key_in_history": bool(by_key.get(event_id)),
+                    "history_players": [sorted({str(m.player1_id), str(m.player2_id)})
+                                        for m in by_key.get(event_id, [])][:2],
+                    "ledger_players": sorted(expected or []),
+                }, ensure_ascii=False), flush=True)
             continue
         if len(candidates) > 1:
             report["ambiguous_match"] += 1
@@ -573,7 +582,16 @@ def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
                     continue
 
             payload = provider.event_statistics(provider_event_id)
-            stats = parse_statistics(payload, home_is_player1=home == str(match.player1_id))
+            # Settlement needs only Aces/DF; a provider conflict in another
+            # field (seen 26.11: service_points_won) must not block the bet.
+            needed = set()
+            if "aces" in markets:
+                needed |= {"p1_aces", "p2_aces"}
+            if "double_faults" in markets:
+                needed |= {"p1_double_faults", "p2_double_faults"}
+            stats = parse_statistics(payload, home_is_player1=home == str(match.player1_id),
+                                     only_fields=needed)
+            stats = {k: v for k, v in stats.items() if k in needed}
             match.stats = {**(match.stats if isinstance(match.stats, dict) else {}), **stats}
             if _ace_df_required_counts_ready(match, markets):
                 report["enriched"] += 1
