@@ -434,6 +434,12 @@ def _save_doubles_history(store, rows, *, extra_report=None):
     return report
 
 
+ACE_DF_TERMINAL_EXCLUSIONS = frozenset({
+    "unknown_price_contract", "issued_after_actual_start", "invalid_issued_at",
+    "invalid_projection_selection", "invalid_published_ou_contract",
+})
+
+
 def _pending_ace_df_settlement_requirements(ledger):
     """Return issued ACES/DF markets that still need a result, keyed by event."""
     required = {}
@@ -454,6 +460,10 @@ def _pending_ace_df_settlement_requirements(ledger):
                 status = str(result.get("status") or "").strip().lower()
                 if status in {"hit", "miss", "void"}:
                     continue
+            # Engine excluded it for good (no O/U contract, issued after start,
+            # invalid selection): never settleable, never in KPI. Not pending.
+            if str(publication.get("excluded_reason") or "") in ACE_DF_TERMINAL_EXCLUSIONS:
+                continue
             required.setdefault(event_id, set()).add(market)
     return required
 
@@ -2445,11 +2455,35 @@ def main():
             match for match in matches
             if match.scheduled_at >= settlement_cutoff
         ]
+        # Pending ACES/DF bets older than the 14-day window (max 30 days) are
+        # reconciled too, only with an exact, unique, completed, ready match.
+        pending = _pending_ace_df_settlement_requirements(prediction_ledger)
+        rows_by_key = _ledger_rows_by_key(prediction_ledger)
+        older = {}
+        for match in matches:
+            if not (now - timedelta(days=30) <= match.scheduled_at < settlement_cutoff):
+                continue
+            key = str(ledger_event_id(match) or "")
+            if key in pending:
+                older.setdefault(key, []).append(match)
+        older_added = 0
+        for key, candidates in older.items():
+            if len(candidates) != 1:
+                continue
+            match = candidates[0]
+            row = rows_by_key.get(key) or {}
+            expected = {str((row.get(side) or {}).get("id") or "") for side in ("player1", "player2")}
+            if (len(expected) == 2 and "" not in expected
+                    and expected == {str(match.player1_id), str(match.player2_id)}
+                    and match.is_completed and _ace_df_required_counts_ready(match, pending[key])):
+                settlement_history.append(match)
+                older_added += 1
         print(json.dumps({
             "current_refresh_settlement": {
                 "history_matches_total": len(matches),
                 "history_matches_checked": len(settlement_history),
                 "cutoff": settlement_cutoff.isoformat(),
+                "older_ace_df_added": older_added,
             }
         }), flush=True)
 
