@@ -9147,6 +9147,23 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     }).join('')}</div>`;
   }
 
+  function comparatorOfferFixtureId(left,right,tour,surface){
+    const wanted=[String(left),String(right)].sort().join('|');
+    const rows=['daily_picks','prime_picks','top_daily_picks','value_picks','upcoming','board_upcoming']
+      .flatMap(key=>Array.isArray(state.feed?.[key])?state.feed[key]:[]);
+    const ids=new Set();
+    for(const row of rows){
+      const fixture=row.fixture||row;
+      const id=String(row.event_id||fixture.event_id||row.id||'');
+      const pair=['player1','player2'].map(side=>String((fixture[side]||row[side])?.id||'')).sort().join('|');
+      const started=Date.parse(fixture.scheduled_at||row.scheduled_at);
+      if(/^[1-9]\d{0,17}$/.test(id)&&pair===wanted&&started>Date.now()&&
+          String(fixture.tour||row.tour||'').toLowerCase()===tour&&
+          String(fixture.surface||row.surface||'').toLowerCase().replaceAll(' ','_')===surface)ids.add(id);
+    }
+    return ids.size===1?[...ids][0]:'';
+  }
+
   function comparatorResultHtml(result){
     if(!result)return '';
     const p1=result.player1||{},p2=result.player2||{},a=p1.stats||{},b=p2.stats||{},h=result.h2h||{},fresh=result.artifact||{};
@@ -9156,7 +9173,19 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
     const form=x=>valid(x?.matches)&&Number(x.matches)>0&&valid(x?.wins)?`${num(100*Number(x.wins)/Number(x.matches))} % (${num(x.wins)}/${num(x.matches)})`:'—';
     const quality=(x,key)=>valid(x?.surface_quality_samples?.[key])&&Number(x.surface_quality_samples[key])>=3&&valid(x?.[`surface_${key}_quality`])
        ?`${num(x[`surface_${key}_quality`],3)} · n=${num(x.surface_quality_samples[key])}`:'—';
-    const rest=v=>valid(v)?`${num(v)} ${lcopy('days','dní','dní')}`:'—';
+    const rest=v=>valid(v)?`${num(v)} ${lcopy('days','dní','dní')}`:'--';
+    const load=v=>`${valid(v?.matches)?num(v.matches):'--'} / ${valid(v?.sets)?num(v.sets):'--'}`;
+    const context=result.match_context||{},speed=context.court_speed;
+    const setting=context.setting==='indoor'?lcopy('Indoor','Hala','Hala'):
+      context.setting==='outdoor'?lcopy('Outdoor','Vonku','Venku'):'--';
+    const speedText=valid(speed?.value)?`${num(speed.value,1)} · n=${num(speed.matches)}`:'--';
+    const offerPlayer=[p1,p2].find(player=>String(player.player_id)===String(context.selection_id||''));
+    const matchFacts=[
+      [lcopy('Setting','Hala / vonku','Hala / venku'),setting],
+      [lcopy('Court speed (100 = surface average)','Rýchlosť kurtu (100 = priemer povrchu)','Rychlost kurtu (100 = průměr povrchu)'),speedText],
+      ['BlinQ %',valid(context.blinq_probability)?pct(context.blinq_probability):'--'],
+      [lcopy('Offer odds','Kurz z ponuky','Kurz z nabídky'),valid(context.odds)?num(context.odds,2):'--'],
+    ];
     const stat=(label,v1,v2,hint='')=>`<div class="comparator-stat-row"><span>${escapeHtml(label)}${hint?`<small>${escapeHtml(hint)}</small>`:''}</span><strong>${escapeHtml(String(v1))}</strong><strong>${escapeHtml(String(v2))}</strong></div>`;
     const strip=x=>(x.recent_results||[]).length?(x.recent_results||[]).map(item=>`<span class="comparator-form-chip ${item.result==='W'?'won':'lost'}" title="${escapeHtml((item.result==='W'?lcopy('Win','Výhra','Výhra'):lcopy('Loss','Prehra','Prohra'))+' · '+String(item.surface||''))}">${item.result==='W'?'W':'L'}</span>`).join(''):`<small>${escapeHtml(lcopy('No verified results','Bez dostupných výsledkov','Bez dostupných výsledků'))}</small>`;
     const winRate=x=>Number(x?.matches)>0&&Number.isFinite(Number(x?.wins))?Math.max(0,Math.min(100,100*Number(x.wins)/Number(x.matches))):null;
@@ -9270,6 +9299,10 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       <div class="comparator-prob-meter" role="img" aria-label="${escapeHtml(`${p1.name}: ${pct(p1.probability)}, ${p2.name}: ${pct(p2.probability)}`)}"><span style="width:${left.toFixed(2)}%"></span></div>
       <div class="comparator-quality"><b>${escapeHtml(sample)}</b><span>${escapeHtml(String(result.tour||'').toUpperCase())} · ${escapeHtml(String(result.surface||'').replace('_',' '))} · ${escapeHtml(lcopy('max sets','max. setov','max. setů'))} ${escapeHtml(String(result.best_of||3))}</span></div>
       <div class="comparator-analytics-body">
+        <dl class="comparator-match-facts" aria-label="${escapeHtml(lcopy('Pre-match context','Predzápasový kontext','Předzápasový kontext'))}">
+          ${matchFacts.map(([label,value])=>`<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join('')}
+          ${offerPlayer?.name?`<div><dt>${escapeHtml(lcopy('Offer selection','Výber v ponuke','Výběr v nabídce'))}</dt><dd>${escapeHtml(offerPlayer.name)}</dd></div>`:''}
+        </dl>
         <div class="comparator-evidence-time" role="status">${escapeHtml(lcopy('Verified snapshot cutoff','Cutoff overeného snapshotu','Cutoff ověřeného snapshotu'))}: <strong>${escapeHtml(cutoffNote)}</strong>${escapeHtml(ageNote)} ${fresh.stale?escapeHtml(lcopy('· older snapshot','· starší snapshot','· starší snapshot')):''}
           <span> · ${escapeHtml(lcopy('Last canonical match','Posledný zápas CDB','Poslední zápas CDB'))}: ${escapeHtml(canonicalLatest)}</span>
           <span> · ${escapeHtml(lcopy('Last market stats for tour','Posledná štatistika okruhu','Poslední statistika okruhu'))}: ${escapeHtml(statLatest)}</span></div>
@@ -9283,6 +9316,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
           </article>
           <article class="comparator-insight-card"><h4>${escapeHtml(lcopy('Rest & sample depth','Oddych a vzorka','Odpočinek a vzorek'))}</h4>
             ${stat(lcopy('Days since last match','Dni od posledného zápasu','Dny od posledního zápasu'),rest(a.days_since_last_match),rest(b.days_since_last_match))}
+            ${stat(lcopy('Last 7 days','Posledných 7 dní','Posledních 7 dní'),load(a.fatigue_7d),load(b.fatigue_7d),lcopy('Matches / sets','Zápasy / sety','Zápasy / sety'))}
+            ${stat(lcopy('Last 14 days','Posledných 14 dní','Posledních 14 dní'),load(a.fatigue_14d),load(b.fatigue_14d),lcopy('Matches / sets','Zápasy / sety','Zápasy / sety'))}
             ${stat(lcopy('Last completed match','Posledný započítaný zápas','Poslední započtený zápas'),lastDate(a),lastDate(b))}
             ${stat(lcopy('Recorded matches','Evidované zápasy','Evidované zápasy'),num(a.history_matches),num(b.history_matches))}
             ${stat(lcopy('Matches on surface','Zápasy na povrchu','Zápasy na povrchu'),num(a.surface_matches),num(b.surface_matches))}
@@ -9340,8 +9375,8 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
       return {tour:tour||'',surface:surface||'',bestOf:bestOf||null};
     },
     search(name,tour){return BlinqAuth.comparatorPlayers(name,tour);},
-    load(left,right,tour,surface,best_of){
-      const pair={tour,surface,best_of};
+    load(left,right,tour,surface,best_of,event_id){
+      const pair={tour,surface,best_of,event_id};
       for(const [index,player] of [left,right].entries()){
         pair[`player${index+1}${player.player_id?'_id':''}`]=player.player_id||player.name;
       }
@@ -9429,7 +9464,9 @@ by BlinQ Stat Engine</pre><small>Fiktívny náhľad. Pri dlhej ponuke sa riadky 
          normalizeComparatorPlayerName(s.players[0].name)===normalizeComparatorPlayerName(s.players[1].name)){s.error=lcopy('Choose two different players.','Vyber dvoch rôznych hráčov.','Vyber dva různé hráče.');refresh();return;}
       s.loading=true;s.error='';s.result=null;refresh();
       try{
-        s.result=await BlinqAuth.comparatorCompare({player1_id:s.players[0].player_id,player2_id:s.players[1].player_id,tour:s.tour,surface:s.surface,best_of:Number(s.bestOf)||3});
+        const player1_id=s.players[0].player_id,player2_id=s.players[1].player_id;
+        const event_id=comparatorOfferFixtureId(player1_id,player2_id,s.tour,s.surface);
+        s.result=await BlinqAuth.comparatorCompare({player1_id,player2_id,event_id,tour:s.tour,surface:s.surface,best_of:Number(s.bestOf)||3});
       }catch(error){
         s.error=lcopy('Comparison is temporarily unavailable. Try again after the next data refresh.','Porovnanie je dočasne nedostupné. Skús ho po najbližšom dátovom refreshe.','Porovnání je dočasně nedostupné. Zkus ho po nejbližším datovém refreshi.');
       }finally{s.loading=false;refresh();}

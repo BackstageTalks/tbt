@@ -470,7 +470,9 @@ def build_serving_artifact(
     # Canonical, pre-cutoff Aces/DF evidence is indexed separately at serving.
     # Keep champion probabilities and feature contracts unchanged.
     from .comparator_markets import build_market_state
+    from tbt.data.court_speed import court_speed_display_prior
     market_state = build_market_state(replay, allowed_state_keys, cutoff)
+    court_speed_display = court_speed_display_prior(replay, cutoff)
 
     artifact = {
         "schema": 1,
@@ -479,6 +481,7 @@ def build_serving_artifact(
         "model": export_portable_model(model),
         "feature_state": feature_state,
         "market_state": market_state,
+        "court_speed_display": court_speed_display,
         "players": players,
         "source": {
             "canonical_matches_replayed": len(replay),

@@ -314,7 +314,7 @@
           const [left, right] = [p1, p2].map((player, index) => ({
             name: player.name, player_id: selected?.[index].select.value,
           }));
-          const result = await comparison.load(left, right, tourSelect.value, surfaceSelect.value, Number(formatSelect.value));
+          const result = await comparison.load(left, right, tourSelect.value, surfaceSelect.value, Number(formatSelect.value), match.event_id);
           if (!dialog.open) return;
           comparison.render(output, result);
           status.textContent = '';

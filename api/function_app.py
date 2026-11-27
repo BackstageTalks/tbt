@@ -705,6 +705,26 @@ def comparator_compare(req):
     if not player1 or not player2:
         return response({"error": "players_required"}, 400)
 
+    fixture_id = str(payload.get("event_id") or "").strip()
+    if not re.fullmatch(r"[1-9][0-9]{0,17}", fixture_id):
+        fixture_id = ""
+
+    def public_result(result, cache):
+        from tbt.services.comparator_card import match_card_context
+
+        out = {key: value for key, value in result.items() if key != "_court_speed_display"}
+        if fixture_id:
+            # The same entitlement filter as the user's Dashboard. Keep
+            # account-specific offer values outside the pair-result cache.
+            try:
+                authorized = _authorized_feed_payload(req)
+                out["match_context"] = match_card_context(
+                    result, feed=authorized, event_id=fixture_id, now=datetime.now(timezone.utc),
+                )
+            except Exception:
+                logging.exception("Comparator fixture context unavailable")
+        return response({**out, "cache": cache})
+
     try:
         directory = _load_comparator_players()
         model_version = str(directory.get("model_version") or "")
@@ -713,8 +733,8 @@ def comparator_compare(req):
         now_mono = time.monotonic()
         with _COMPARATOR_RESULT_CACHE_LOCK:
             cached = _COMPARATOR_RESULT_CACHE.get(cache_key)
-            if cached and now_mono - cached[0] <= _COMPARATOR_RESULT_TTL_SECONDS:
-                return response({**cached[1], "cache": "hit"})
+        if cached and now_mono - cached[0] <= _COMPARATOR_RESULT_TTL_SECONDS:
+            return public_result(cached[1], "hit")
         artifact = load_pair_artifact(
             COMPARATOR_INDEX, directory, player1=player1, player2=player2, tour=tour,
         )
@@ -726,11 +746,12 @@ def comparator_compare(req):
             surface=surface,
             best_of=best_of,
         )
+        result["_court_speed_display"] = artifact.get("court_speed_display")
         with _COMPARATOR_RESULT_CACHE_LOCK:
             _COMPARATOR_RESULT_CACHE[cache_key] = (now_mono, result)
             if len(_COMPARATOR_RESULT_CACHE) > _COMPARATOR_RESULT_MAX_ENTRIES:
                 _prune_comparator_result_cache(now_mono)
-        return response({**result, "cache": "miss"})
+        return public_result(result, "miss")
     except ComparatorIndexError as exc:
         if str(exc) == "player_not_found":
             return response({"error": "player_not_found"}, 404)
