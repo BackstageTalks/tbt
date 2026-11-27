@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from tbt.services.hourly_http_metrics import usable_payload
+
 from ..config import Settings, settings
 from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
@@ -159,6 +161,7 @@ class RapidTennisClient:
             # Preserve the historical ~1.5 rps default for runtime/live callers.
             self._min_request_interval = 0.66
         self.request_count = 0
+        self.http_metrics = None
         # Per-client ceiling may never advertise more than the shared provider-day cap.
         self.request_limit = GLOBAL_CEILING
         # Latency-sensitive workers may opt out of retries without affecting batch jobs.
@@ -295,6 +298,8 @@ class RapidTennisClient:
             if self.request_budget is not None:
                 self.request_budget(self.client, self.cfg, enrichment=enrichment)
 
+            status = None
+            result = "transport"
             try:
                 self._last_request_at = time.monotonic()
                 self.request_count += 1
@@ -304,6 +309,8 @@ class RapidTennisClient:
                     params=params or {},
                 )
 
+                status = response.status_code
+                result = "empty" if status in {200, 204} else "http"
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
@@ -356,7 +363,11 @@ class RapidTennisClient:
                 if not response.content:
                     return {}
 
-                return response.json()
+                result = "invalid_json"
+                payload = response.json()
+                if getattr(self, "http_metrics", None) is not None:
+                    result = "data" if usable_payload(path, payload) else "empty"
+                return payload
 
             except (
                 httpx.HTTPError,
@@ -365,6 +376,13 @@ class RapidTennisClient:
                 last_error = exc
                 if attempt + 1 < attempts:
                     time.sleep(min(2**attempt, 10))
+            except RequestBudgetExceeded:
+                if getattr(self, "http_metrics", None) is not None:
+                    self.http_metrics.rejections["provider_remaining_header"] += 1
+                raise
+            finally:
+                if getattr(self, "http_metrics", None) is not None:
+                    self.http_metrics.record(path, status, result)
 
         raise ProviderError(
             f"RapidAPI request failed: "
@@ -403,6 +421,8 @@ class RapidTennisClient:
 
             headers = dict(self.headers)
             headers["Accept"] = "image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8"
+            status = None
+            result = "transport"
             try:
                 self._last_request_at = time.monotonic()
                 self.request_count += 1
@@ -412,6 +432,8 @@ class RapidTennisClient:
                     params=params or {},
                     follow_redirects=True,
                 )
+                status = response.status_code
+                result = "empty" if status in {200, 204} else "http"
                 remaining = response.headers.get("x-ratelimit-requests-remaining")
                 if remaining is not None:
                     self.rate_limit_remaining = safe_int(remaining)
@@ -444,10 +466,18 @@ class RapidTennisClient:
                 response.raise_for_status()
                 if not response.content:
                     return None
+                result = "data"
                 return response.content, str(response.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
             except httpx.HTTPError as exc:
                 last_error = exc
                 time.sleep(min(2**attempt, 10))
+            except RequestBudgetExceeded:
+                if getattr(self, "http_metrics", None) is not None:
+                    self.http_metrics.rejections["provider_remaining_header"] += 1
+                raise
+            finally:
+                if getattr(self, "http_metrics", None) is not None:
+                    self.http_metrics.record(path, status, result)
 
         raise ProviderError(f"RapidAPI binary request failed: {path}: {last_error}")
 

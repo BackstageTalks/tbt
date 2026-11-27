@@ -757,6 +757,11 @@ def main():
             pending_removals.clear()
 
     provider = RapidTennisClient(request_budget=None)
+    hourly_phase = os.getenv("BLINQ_HOURLY_COLLECTION_PHASE")
+    if hourly_phase in {"primary", "fallback"}:
+        from tbt.services.hourly_http_metrics import HourlyHttpMetrics
+
+        provider.http_metrics = HourlyHttpMetrics()
     provider.request_limit = allocation
     report = Counter()
     statistics_value = Counter()
@@ -1092,6 +1097,20 @@ def main():
                     "Tour/year diagnostic only; per-match API request deltas include detail "
                     "lookups and retries; local/cache gains are separate; no extra API calls."
                 )
+            if provider.http_metrics is not None:
+                write_json(directory / f"hourly_{hourly_phase}_collection.json", {
+                    **provider.http_metrics.snapshot(),
+                    "attempts": provider.request_count,
+                    "paid_statistic_values": output_report.get("statistics_data_value", {}).get(
+                        "api_new_statistic_values", 0
+                    ),
+                    "conflicts": {
+                        "statistics": output_report.get("statistics_conflict_diagnostics", {}).get(
+                            "rejected_responses", 0
+                        ),
+                        "extras_rejected": output_report.get("extras_rejected", 0),
+                    },
+                })
             write_json(directory / "download_report.json", output_report)
             if args.targeted_statistics:
                 write_json(directory / "statistics_expected.json", {

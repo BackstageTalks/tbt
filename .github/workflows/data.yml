@@ -497,6 +497,7 @@ jobs:
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             if [[ -n "${BLINQ_TARGET_STATS_TOUR:-}" ]]; then args+=(--target-tour "$BLINQ_TARGET_STATS_TOUR"); fi
             if [[ "${BLINQ_BP_FOCUS:-false}" == "true" ]]; then args+=(--break-points-focus); fi
+            if [[ "$HOURLY_AUTOFILL" == "true" ]]; then export BLINQ_HOURLY_COLLECTION_PHASE=primary; fi
             python scripts/download_tennis_history.py "${args[@]}"
           elif [[ "$MODE" == doubles-data ]]; then
             args=(
@@ -715,7 +716,7 @@ jobs:
                 --max-requests "$FALLBACK_MAX_REQUESTS")
           if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
           if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
-          BLINQ_AUTOFILL_HIGH_YIELD=false python scripts/download_tennis_history.py "${args[@]}"
+          BLINQ_HOURLY_COLLECTION_PHASE=fallback BLINQ_AUTOFILL_HIGH_YIELD=false python scripts/download_tennis_history.py "${args[@]}"
 
       - name: Independently verify recovered provider IDs in private CDB
         if: ${{ success() && env.MODE == 'identity' }}
@@ -919,6 +920,15 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
+      - name: Finalize hourly collection quality
+        if: ${{ always() && inputs.hourly_autofill == true }}
+        continue-on-error: true
+        env:
+          FALLBACK_EXPECTED: ${{ steps.verified_extras_fallback.outputs.allowed }}
+          BLINQ_MEDIA_STORAGE_CONNECTION_STRING: ${{ secrets.BLINQ_MEDIA_STORAGE_CONNECTION_STRING }}
+          BLINQ_MEDIA_CONTAINER: ${{ vars.BLINQ_MEDIA_CONTAINER }}
+        run: python scripts/hourly_collection_summary.py
+
       - name: Upload history/statistics run report
         if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics' || env.MODE == 'extras' || env.MODE == 'identity') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -933,6 +943,7 @@ jobs:
             .cache/tbt/history/adaptive_cdb_evidence.md
             .cache/tbt/history/hourly_extras_fallback_plan.json
             .cache/tbt/history/hourly_primary_statistics_report.json
+            .cache/tbt/history/hourly_collection_summary.json
             .cache/tbt/history/extras_expected.json
             .cache/tbt/history/extras_readback.json
             .cache/tbt/history/identity_readback.json
