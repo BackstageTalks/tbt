@@ -3810,6 +3810,12 @@ def admin_diagnostics(req):
         actor, denied = _admin_user(req)
         if denied:
             return denied
+        from tbt.services.hourly_collection import load_overview
+
+        try:
+            hourly_collection = load_overview()
+        except Exception:
+            hourly_collection = {"available": False}
         storage = admin_storage_diagnostics()
         storage_ok = storage.get("backend") != "unavailable"
         media = media_storage_diagnostics()
@@ -4056,6 +4062,7 @@ def admin_diagnostics(req):
             "services": service_health,
             "provider": provider_health,
             "api_budget": api_budget,
+            "hourly_collection_14d": hourly_collection,
             "ops": ops,
             "problems": problems,
             "actor_id": actor.get("id"),
