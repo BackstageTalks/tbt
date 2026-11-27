@@ -64,10 +64,11 @@ def _xlsx_values(path):
         if len(names)>150: raise ValueError("Unusually large XLSX archive member count")
         strings=[]
         if "xl/sharedStrings.xml" in names:
-            for _,elem in ET.iterparse(z.open("xl/sharedStrings.xml"),events=("end",)):
-                if elem.tag==NS+"si":
-                    strings.append("".join(x.text or "" for x in elem.iter(NS+"t")))
-                    elem.clear()
+            with z.open("xl/sharedStrings.xml") as shared_strings:
+                for _,elem in ET.iterparse(shared_strings,events=("end",)):
+                    if elem.tag==NS+"si":
+                        strings.append("".join(x.text or "" for x in elem.iter(NS+"t")))
+                        elem.clear()
         wb=ET.fromstring(z.read("xl/workbook.xml"))
         sheets=wb.find(NS+"sheets")
         if sheets is None or len(sheets)!=1:

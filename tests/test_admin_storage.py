@@ -654,3 +654,73 @@ def test_blurred_elite_see_all_does_not_render_rows_or_insights_in_browser_code(
     assert lock < render
     assert "const insight=$('dailyHubInsightBoard');if(insight)insight.hidden=true;" in script[lock:render]
     assert "return;" in script[lock:render]
+
+def test_insight_read_conflict_preserves_current_admin_edit(monkeypatch):
+    from azure.core import MatchConditions
+
+    class Messages:
+        row = {"title": "Original", "read_count": 2}
+        version = "old"
+
+        def get_entity(self, **_):
+            return admin_storage._VersionedStorageEntity(self.row.copy(), self.version)
+
+        def update_entity(self, patch, *, mode, etag, match_condition):
+            assert mode == "merge" and match_condition == MatchConditions.IfNotModified
+            assert set(patch) == {"PartitionKey", "RowKey", "read_count"}
+            if etag == "old":
+                self.version = "new"
+                self.row = {"title": "Updated", "read_count": 3}
+                raise admin_storage._StorageWriteConflict()
+            self.row["read_count"] = patch["read_count"]
+
+    class Receipts:
+        exists = False
+
+        def create_entity(self, _):
+            if self.exists:
+                raise admin_storage._StorageWriteConflict()
+            self.exists = True
+
+    messages, receipts = Messages(), Receipts()
+    tables = {admin_storage.INSIGHTS_TABLE: messages, admin_storage.INSIGHT_READS_TABLE: receipts}
+    monkeypatch.setattr(admin_storage, "_table", tables.__getitem__)
+
+    assert admin_storage.mark_insight_read(insight_id="message", user_id="member") == {
+        "read": True, "already_read": False,
+    }
+    assert messages.row == {"title": "Updated", "read_count": 4}
+    assert admin_storage.mark_insight_read(insight_id="message", user_id="member") == {
+        "read": True, "already_read": True,
+    }
+    assert messages.row["read_count"] == 4
+
+
+def test_insight_authorization_listing_skips_read_state(monkeypatch):
+    messages = FakeTable()
+    messages.entities = [
+        {"PartitionKey": "insights", "RowKey": "old", "active": True,
+         "created_at": "2026-10-01T18:00:00+00:00", "levels_json": '["pro"]'},
+        {"PartitionKey": "insights", "RowKey": "pinned", "active": True, "pinned": True,
+         "created_at": "2026-09-01T18:00:00+00:00", "levels_json": '["pro"]'},
+        {"PartitionKey": "insights", "RowKey": "new", "active": True,
+         "created_at": "2026-10-02T18:00:00+00:00", "levels_json": '["pro"]'},
+    ]
+    monkeypatch.setattr(admin_storage, "_table", {admin_storage.INSIGHTS_TABLE: messages}.__getitem__)
+    monkeypatch.setattr(admin_storage, "live_alert_levels", lambda: ["pro"])
+    monkeypatch.setattr(admin_storage, "info_alert_levels", lambda: ["pro"])
+    monkeypatch.setattr(admin_storage, "project_group_ids_for_user", lambda _: set())
+    monkeypatch.setattr(admin_storage, "_live_deletion_ids", lambda _: set())
+
+    visible = admin_storage.list_insights(plan="pro", user_id="member", include_read_state=False)
+    assert [item["id"] for item in visible["items"]] == ["pinned", "new", "old"]
+
+
+def test_editor_destinations_validate_malformed_urls_without_raising():
+    validate = admin_storage._valid_destination
+    assert validate("/matches/42")
+    assert validate("#predictions")
+    assert validate("https://example.org:8443/matches")
+    assert not validate("https://example.org:99999/matches")
+    assert not validate("https://[malformed")
+    assert not validate("/matches/42", allow_internal=False)

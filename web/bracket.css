@@ -100,10 +100,14 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
 .bracket-score { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .bracket-status { margin-block: 1rem; }
 .bracket-match-panel {
+  --bracket-top: clamp(1rem, var(--bracket-y), calc(100dvh - 22rem));
+  box-sizing: border-box;
   position: fixed; inset: 0 auto auto 0; margin: 0;
   left: clamp(1rem, calc(var(--bracket-x) + .5rem), calc(100vw - min(23rem, 100vw - 2rem) - 1rem));
-  top: clamp(1rem, var(--bracket-y), calc(100dvh - 22rem));
-  width: min(23rem, calc(100vw - 2rem)); max-height: min(30rem, 85dvh); overflow: auto;
+  top: var(--bracket-top);
+  width: min(23rem, calc(100vw - 2rem));
+  max-height: min(30rem, 85dvh, calc(100dvh - var(--bracket-top) - 1rem));
+  overflow: auto;
   padding: 1rem; border: 1px solid var(--bracket-edge); border-radius: 14px;
   color: var(--bracket-ink); background: rgba(9, 34, 28, .96);
   box-shadow: 0 12px 45px rgba(0, 0, 0, .5); backdrop-filter: blur(14px);
@@ -113,12 +117,12 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
 .bracket-match-panel h3 { margin: .85rem 0 .4rem; font-size: .9rem; }
 .bracket-match-panel .bracket-player { margin-block: .3rem; }
 .bracket-close {
-  position: absolute; inset: .35rem .45rem auto auto; width: 2rem; height: 2rem;
+  position: absolute; inset: .35rem .45rem auto auto; width: 2.75rem; height: 2.75rem;
   border: 0; border-radius: 50%; color: inherit; background: transparent; cursor: pointer;
   font: inherit; font-size: 1.4rem;
 }
-.bracket-predictions { display: grid; grid-template-columns: auto 1fr; gap: .25rem .85rem; margin: .3rem 0 .8rem; }
-.bracket-predictions dt, .bracket-predictions dd { margin: 0; }
+.bracket-predictions { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .25rem .85rem; margin: .3rem 0 .8rem; }
+.bracket-predictions dt, .bracket-predictions dd { margin: 0; overflow-wrap: anywhere; }
 .bracket-comparison { border-top: 1px solid var(--bracket-edge); margin-top: .8rem; min-height: 2.5rem; }
 
 @media (max-width: 600px) {
@@ -196,7 +200,7 @@ button.bracket-match:hover, .bracket-match:focus-visible { border-color: var(--b
 
 @media (max-width: 600px) {
   .bracket-analysis-panel { inset: auto 0 0; margin: 0; width: 100%; max-height: 90dvh; }
-  .bracket-analysis-action { min-height: 36px; }
+  .bracket-analysis-action, .bracket-analysis-form .bracket-analysis-action { min-height: 44px; }
   .bracket-analysis-panel .comparator-analytics-body { padding: 10px; }
 }
 
