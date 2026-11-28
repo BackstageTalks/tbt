@@ -116,3 +116,19 @@ def test_packaged_snapshot_reaches_api(tmp_path, monkeypatch):
     monkeypatch.setenv(point_model_shadow.SNAPSHOT, str(path))
     assert point_model_shadow.shadow_card("a") == card
     assert point_model_shadow.shadow_card("missing") is None
+
+
+def test_blob_url_falls_back_to_media_connection_string(monkeypatch):
+    import sys, types
+    sys.path.insert(0, "scripts")
+    import point_shadow_blob as b
+    monkeypatch.delenv("BLINQ_POINT_BLOB_WRITE_URL", raising=False)
+    monkeypatch.setenv("BLINQ_POINT_BLOB_READ_URL", "https://explicit/read?sig")
+    assert b._url("READ") == "https://explicit/read?sig"
+    monkeypatch.setattr(b, "_derived_url", lambda write: "https://derived/" + ("w" if write else "r"))
+    assert b._url("WRITE") == "https://derived/w"
+    monkeypatch.delenv("BLINQ_MEDIA_STORAGE_CONNECTION_STRING", raising=False)
+    monkeypatch.setattr(b, "_derived_url", lambda write: "")
+    import pytest
+    with pytest.raises(RuntimeError):
+        b.publish({})
