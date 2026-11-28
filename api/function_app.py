@@ -3261,6 +3261,29 @@ def internal_offer_shadow(req):
         return response({"error": "offer_shadow_storage_unavailable"}, 503)
 
 
+@app.route(route="v1/admin/point-model-shadow", methods=["GET"])
+def admin_point_model_shadow(req):
+    from tbt.services.point_model_shadow import enabled, shadow_card
+
+    try:
+        _, denied = _admin_user(req)
+        if denied:
+            return denied
+        if not enabled():
+            return response({"error": "not_found"}, 404)
+        match_id = str(req.params.get("match_id") or "").strip()
+        if not match_id or len(match_id) > 128:
+            return response({"error": "invalid_match_id"}, 400)
+        card = shadow_card(match_id)
+        if card is None:
+            return response({"error": "not_found"}, 404)
+        return response({"analysis_v2": card})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except (OSError, ValueError):
+        return response({"error": "point_model_shadow_unavailable"}, 503)
+
+
 @app.route(route="v1/admin/offer-shadow", methods=["GET"])
 def admin_offer_shadow(req):
     """Admin 'Shadow testing': results of virtual picks by category."""

@@ -1,0 +1,89 @@
+{
+  "groups": {
+    "ATP": {
+      "n": 277,
+      "offset": -0.1
+    },
+    "ATP|clay": {
+      "n": 107,
+      "offset": -0.1
+    },
+    "ATP|grass": {
+      "n": 74,
+      "offset": -0.1
+    },
+    "ATP|hard": {
+      "n": 96,
+      "offset": -0.1
+    },
+    "Challenger": {
+      "n": 310,
+      "offset": -0.1
+    },
+    "Challenger|clay": {
+      "n": 120,
+      "offset": -0.1
+    },
+    "Challenger|grass": {
+      "n": 70,
+      "offset": -0.1
+    },
+    "Challenger|hard": {
+      "n": 120,
+      "offset": -0.1
+    },
+    "ITF": {
+      "n": 490,
+      "offset": -0.1
+    },
+    "ITF|clay": {
+      "n": 120,
+      "offset": -0.1
+    },
+    "ITF|grass": {
+      "n": 113,
+      "offset": -0.1
+    },
+    "ITF|hard": {
+      "n": 120,
+      "offset": -0.1
+    },
+    "ITF|unknown": {
+      "n": 120,
+      "offset": -0.1
+    },
+    "WTA": {
+      "n": 360,
+      "offset": -0.075
+    },
+    "WTA 125": {
+      "n": 263,
+      "offset": -0.05
+    },
+    "WTA 125|clay": {
+      "n": 120,
+      "offset": -0.05
+    },
+    "WTA 125|hard": {
+      "n": 120,
+      "offset": -0.05
+    },
+    "WTA|clay": {
+      "n": 120,
+      "offset": -0.05
+    },
+    "WTA|grass": {
+      "n": 120,
+      "offset": -0.075
+    },
+    "WTA|hard": {
+      "n": 120,
+      "offset": -0.075
+    },
+    "all": {
+      "n": 1700,
+      "offset": -0.1
+    }
+  },
+  "train_end": "2026-04-27T22:40:44+00:00"
+}
