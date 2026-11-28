@@ -752,7 +752,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-    if os.getenv("BLINQ_POINT_BLOB_READ_URL"):
+    if os.getenv("BLINQ_POINT_BLOB_READ_URL") or os.getenv("BLINQ_MEDIA_STORAGE_CONNECTION_STRING"):
         try:
             from point_shadow_blob import package
             package(ROOT / "api/data/point_model_shadow.json")

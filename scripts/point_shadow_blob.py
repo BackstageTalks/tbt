@@ -7,6 +7,38 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 CANDIDATE = "blinq-candidate-frozen-45525499354-1"
+CONTAINER = "point-model-shadow"
+BLOB = "point_model_shadow.json"
+
+
+def _derived_url(write):
+    """SAS URL from the existing media storage connection string (no manual SAS).
+
+    Explicit BLINQ_POINT_BLOB_*_URL secrets still win when they are set."""
+    conn = os.getenv("BLINQ_MEDIA_STORAGE_CONNECTION_STRING", "").strip()
+    if not conn:
+        return ""
+    try:
+        from azure.storage.blob import (BlobSasPermissions, BlobServiceClient,
+                                        generate_blob_sas)
+    except ImportError:
+        return ""
+    service = BlobServiceClient.from_connection_string(conn)
+    container = service.get_container_client(CONTAINER)
+    if write and not container.exists():
+        container.create_container()  # private by default
+    key = service.credential.account_key
+    sas = generate_blob_sas(
+        account_name=service.account_name, container_name=CONTAINER, blob_name=BLOB,
+        account_key=key,
+        permission=BlobSasPermissions(read=True, add=write, create=write, write=write),
+        expiry=datetime.now(timezone.utc) + timedelta(hours=2))
+    return f"{container.url}/{BLOB}?{sas}"
+
+
+def _url(kind):
+    explicit = os.getenv(f"BLINQ_POINT_BLOB_{kind}_URL", "").strip()
+    return explicit or _derived_url(kind == "WRITE")
 
 
 def read_blob(url):
@@ -27,7 +59,9 @@ def envelope(cards):
 
 
 def publish(cards):
-    url = os.environ["BLINQ_POINT_BLOB_WRITE_URL"]
+    url = _url("WRITE")
+    if not url:
+        raise RuntimeError("Point shadow storage not configured")
     for _ in range(4):
         previous, etag = read_blob(url)
         now = datetime.now(timezone.utc)
@@ -55,7 +89,7 @@ def publish(cards):
 
 
 def package(path):
-    url = os.getenv("BLINQ_POINT_BLOB_READ_URL")
+    url = _url("READ")
     if url:
         cards, _ = read_blob(url)
         pending = path.with_suffix(".tmp")

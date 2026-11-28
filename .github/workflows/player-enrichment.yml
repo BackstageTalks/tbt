@@ -192,6 +192,7 @@ jobs:
         shell: bash
         env:
           BLINQ_POINT_BLOB_READ_URL: ${{ secrets.BLINQ_POINT_BLOB_READ_URL }}
+          BLINQ_MEDIA_STORAGE_CONNECTION_STRING: ${{ secrets.BLINQ_MEDIA_STORAGE_CONNECTION_STRING }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
