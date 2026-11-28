@@ -83,7 +83,7 @@ def build(history_path, fixtures_path, output):
             "compute_seconds": finished - prepared, "total_seconds": perf_counter() - start}
 
 
-def capture_morning(upcoming, predictions, candidate_path, history_dir):
+def capture_morning(upcoming, predictions, candidate_path, history_dir, sg_context=None):
     """Use only the already downloaded model, schedule, predictions and history."""
     from datetime import datetime, timedelta, timezone
     from hashlib import sha256
@@ -137,6 +137,24 @@ def capture_morning(upcoming, predictions, candidate_path, history_dir):
                        source_commit=os.getenv("GITHUB_SHA"),
                        model_version="point-model-v2:" + CANDIDATE, calibration_version=calibration)
              for key, card in cards.items() if timestamp(card["scheduled_at"]) > frozen}
+    if sg_context:
+        from tbt.services.point_sg import freeze
+        offer, fresh, primary, alternatives, floors = sg_context
+        def receipt_key(row):
+            return tuple(row.get(k) for k in ("event_id", "selection_id", "captured_at", "odds",
+                                               "odds_bookmaker", "odds_source"))
+        receipts = {receipt_key(row) for row in fresh}
+        by_event = {card["event_id"]: card for card in cards.values()}
+        for row in offer:
+            eid, market = str(row.get("event_id")), row.get("market")
+            card = by_event.get(eid)
+            if card and receipt_key(row) in receipts and floors.get(market) is not None:
+                result = freeze(card, row, primary.get(eid), alternatives.get(eid, {}).get(market, {}),
+                                floors[market], frozen)
+                completed = datetime.now(timezone.utc)
+                if result and completed < timestamp(card["scheduled_at"]):
+                    result["frozen_at"] = completed.isoformat()
+                    card.setdefault("sg_shadow", {})[market] = result
     publish(cards)
     return {"eligible": len(pending), "computed_before_start": len(cards)}
 
