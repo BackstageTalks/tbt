@@ -83,6 +83,64 @@ def build(history_path, fixtures_path, output):
             "compute_seconds": finished - prepared, "total_seconds": perf_counter() - start}
 
 
+def capture_morning(upcoming, predictions, candidate_path, history_dir):
+    """Use only the already downloaded model, schedule, predictions and history."""
+    from datetime import datetime, timedelta, timezone
+    from hashlib import sha256
+    from tempfile import TemporaryDirectory
+    from zoneinfo import ZoneInfo
+    from tbt.models.point_model import competition
+    from tbt.match_format import explicit_best_of_from_event
+    from tbt.services.engine import event_id
+    from point_shadow_blob import publish
+
+    if sha256(candidate_path.read_bytes()).hexdigest() != MODEL_SHA:
+        raise ValueError("Frozen candidate unavailable")
+    clock = datetime.now(timezone.utc)
+    zone = ZoneInfo("Europe/Bratislava")
+    today = clock.astimezone(zone).date()
+    pending = {m.match_id: m for m in upcoming if competition(m) in {"ATP", "WTA", "Challenger", "WTA 125"}
+               and not m.is_completed and m.status in {"upcoming", "notstarted", "scheduled"}
+               and m.scheduled_at > clock and today <= m.scheduled_at.astimezone(zone).date() <= today + timedelta(days=1)}
+    fixtures, issues, events = [], {}, {}
+    for row in predictions:
+        match = pending.get(row["id"])
+        if not match or match.match_id in issues:
+            continue
+        ids = [row[k]["id"] for k in ("player1", "player2")]
+        if (ids != [match.player1_id, match.player2_id] or row["event_id"] != event_id(match)
+                or timestamp(row["scheduled_at"]) != match.scheduled_at):
+            continue
+        fixture = {f.name: getattr(match, f.name) for f in fields(MatchRecord)
+                   if f.name not in ("provider_payload", "stats", "scheduled_at")}
+        fixture["scheduled_at"] = match.scheduled_at.isoformat()
+        for key in ("bestOf", "deciding_tiebreak", "scoring_rules"):
+            if key in match.provider_payload:
+                fixture[key] = match.provider_payload[key]
+        best = explicit_best_of_from_event(match.provider_payload) or match.best_of
+        if best in (3, 5):
+            fixture["bestOf"] = best
+        fixtures.append(fixture)
+        issues[match.match_id] = {"candidate": CANDIDATE, "model_sha256": MODEL_SHA, "players": ids,
+                                  "as_of": row["created_at"], "p1": row["player1"]["probability"]}
+        events[match.match_id] = row["event_id"]
+    with TemporaryDirectory() as directory:
+        source, output = Path(directory)/"inputs.json", Path(directory)/"snapshot.json"
+        source.write_text(json.dumps({"as_of": clock.isoformat(), "fixtures": fixtures,
+                                      "candidate_predictions": issues}), encoding="utf-8")
+        if fixtures:
+            build(history_dir, source, output)
+        cards = json.loads(output.read_bytes())["cards"] if fixtures else {}
+    frozen = datetime.now(timezone.utc)
+    calibration = sha256(Path(__file__).with_name("point_calibration_v2.json").read_bytes()).hexdigest()
+    cards = {key: dict(card, event_id=events[key], frozen_at=frozen.isoformat(),
+                       source_commit=os.getenv("GITHUB_SHA"),
+                       model_version="point-model-v2:" + CANDIDATE, calibration_version=calibration)
+             for key, card in cards.items() if timestamp(card["scheduled_at"]) > frozen}
+    publish(cards)
+    return {"eligible": len(pending), "computed_before_start": len(cards)}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--history", required=True, type=Path)

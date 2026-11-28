@@ -39,6 +39,7 @@ jobs:
 
       - name: Prepare immutable serving feed
         env:
+          BLINQ_POINT_BLOB_READ_URL: ${{ secrets.BLINQ_POINT_BLOB_READ_URL }}
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
         run: |

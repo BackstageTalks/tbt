@@ -752,3 +752,9 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    if os.getenv("BLINQ_POINT_BLOB_READ_URL"):
+        try:
+            from point_shadow_blob import package
+            package(ROOT / "api/data/point_model_shadow.json")
+        except Exception as exc:
+            print("::warning::Point shadow packaging failed", type(exc).__name__)
