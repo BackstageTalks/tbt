@@ -1619,6 +1619,7 @@ def scan_match_statuses(
     max_wall_seconds: float | None = None,
     issued_rollover_rows: list[dict[str, Any]] | None = None,
     bracket_events: dict[str, dict[str, Any]] | None = None,
+    point_events: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -1688,6 +1689,15 @@ def scan_match_statuses(
         and (fresh := _fresh_verified_schedule(value, now=now)) is not None
     }
     schedule_verified_this_run = 0
+    def observed_rows(payload):
+        candidates = _provider_rows(payload)
+        if point_events is not None:
+            for candidate in candidates:
+                key = _provider_event_id(candidate)
+                if key:
+                    point_events[key] = candidate
+        return candidates
+
     def observe(eid: str, row: dict[str, Any], event: dict[str, Any]) -> None:
         nonlocal schedule_verified_this_run
         if bracket_events is not None and _provider_event_id(event) == eid:
@@ -1931,12 +1941,12 @@ def scan_match_statuses(
                     if bracket_events is not None:
                         bracket_events.update(
                             (event_id, candidate)
-                            for candidate in _provider_rows(daily_cache[day_key])
+                            for candidate in observed_rows(daily_cache[day_key])
                             if (event_id := _provider_event_id(candidate))
                         )
                 daily_payload = daily_cache.get(day_key)
                 event = next(
-                    (candidate for candidate in _provider_rows(daily_payload)
+                    (candidate for candidate in observed_rows(daily_payload)
                      if _provider_event_id(candidate) == eid),
                     None,
                 )
@@ -2065,7 +2075,7 @@ def scan_match_statuses(
         consecutive_errors = 0
         successful_history += 1
         event = next(
-            (candidate for candidate in _provider_rows(payload)
+            (candidate for candidate in observed_rows(payload)
              if _provider_event_id(candidate) == eid),
             None,
         )
@@ -2092,7 +2102,7 @@ def scan_match_statuses(
                         near_cache[second_player_id] = second_payload
                     successful_history += 1
                     event = next(
-                        (candidate for candidate in _provider_rows(second_payload)
+                        (candidate for candidate in observed_rows(second_payload)
                          if _provider_event_id(candidate) == eid),
                         None,
                     )
@@ -2178,7 +2188,7 @@ def scan_match_statuses(
             if daily_cache.get(day) is None:
                 continue
             prestart_checked += len(candidates_by_day[day])
-            for event in _provider_rows(daily_cache.get(day)):
+            for event in observed_rows(daily_cache.get(day)):
                 eid = _provider_event_id(event)
                 row = rows.get(eid)
                 if row is not None and eid in candidates_by_day[day]:

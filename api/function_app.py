@@ -2840,6 +2840,8 @@ def internal_match_status_worker(req):
         client.retry_attempts = 1
         client.client.timeout = 4.0
         worker_started = time.monotonic()
+        from tbt.services import point_model_shadow
+        point_events = {} if point_model_shadow.enabled() else None
         bracket_events = {}
         bracket_snapshot = None
         bracket_report = None
@@ -2860,6 +2862,7 @@ def internal_match_status_worker(req):
                 max_near_checks=20,
                 max_wall_seconds=22.0,
                 bracket_events=bracket_events,
+                **({"point_events": point_events} if point_events is not None else {}),
             )
             # Only issued Aces/DF offers qualify for post-match statistics.
             # Reuse the same client/quota; never start an unbounded enrichment.
@@ -3012,6 +3015,12 @@ def internal_match_status_worker(req):
         saved["results_archive"] = save_settled_results_archive(
             settled_archive_candidates(tracking_feed, saved.get("statuses") or {})
         )
+        if point_events is not None and (bracket_events or point_events):
+            try:
+                from tbt.services.point_shadow_results import settle
+                settle({**bracket_events, **point_events})
+            except Exception as exc:
+                logging.warning("Point shadow settlement failed (%s)", type(exc).__name__)
         # Trusted worker response only: verify persisted Results category coverage,
         # without names, match IDs, selections, writes or provider API calls.
         saved["results_archive"]["category_readback"] = read_only_archive_category_counts(
@@ -3292,7 +3301,16 @@ def admin_offer_shadow(req):
         _, denied = _admin_user(req)
         if denied:
             return denied
-        return response({"ok": True, **summarize(load_months())})
+        payload = {"ok": True, **summarize(load_months())}
+        from tbt.services import point_model_shadow
+        if point_model_shadow.enabled():
+            try:
+                from tbt.services.point_shadow_results import rolling
+                payload["point_model"] = rolling()
+            except Exception as exc:
+                logging.warning("Point shadow report unavailable (%s)", type(exc).__name__)
+                payload["point_model"] = {"unavailable": True}
+        return response(payload)
     except AuthUnavailable:
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:

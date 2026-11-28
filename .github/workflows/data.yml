@@ -142,6 +142,8 @@ jobs:
       MARKET_ODDS_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.market_odds_max_events == 0 && '0' || inputs.market_odds_max_events || -1 }}
       PROPLINE_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.propline_max_events == 0 && '0' || inputs.propline_max_events || -1 }}
       DOUBLES_ODDS_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.doubles_odds_max_events == 0 && '0' || inputs.doubles_odds_max_events || -1 }}
+      BLINQ_POINT_MODEL_SHADOW: ${{ vars.BLINQ_POINT_MODEL_SHADOW }}
+      BLINQ_POINT_BLOB_WRITE_URL: ${{ inputs.morning_refresh && secrets.BLINQ_POINT_BLOB_WRITE_URL || '' }}
       MORNING_REFRESH: ${{ inputs.morning_refresh && 'true' || 'false' }}
       HOURLY_AUTOFILL: ${{ inputs.hourly_autofill && 'true' || 'false' }}
       BETTING_DAY_START_HOUR: ${{ inputs.betting_day_start_hour || 6 }}
@@ -1052,6 +1054,8 @@ jobs:
       - name: Prepare refreshed serving feed and cached player assets
         if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild'
         shell: bash
+        env:
+          BLINQ_POINT_BLOB_READ_URL: ${{ secrets.BLINQ_POINT_BLOB_READ_URL }}
         run: |
           set -euo pipefail
           python scripts/prepare_feed.py
@@ -1198,6 +1202,8 @@ jobs:
       - name: Prepare immutable serving snapshot
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         shell: bash
+        env:
+          BLINQ_POINT_BLOB_READ_URL: ${{ secrets.BLINQ_POINT_BLOB_READ_URL }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }

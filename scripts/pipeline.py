@@ -1177,6 +1177,22 @@ def _require_training_backup_gate(*, read_only_frozen: bool = False) -> dict:
         ) from exc
 
 
+def _point_shadow_after_offer(upcoming, predictions, challenger_predictions, champion, candidate_path, history_dir):
+    if os.getenv("BLINQ_POINT_MODEL_SHADOW", "").lower() == "true":
+        try:
+            from build_point_model_shadow import capture_morning
+            from tbt.models.point_anchor import MODEL_SHA
+            use_champion = sha256(champion.read_bytes()).hexdigest() == MODEL_SHA
+            counts = capture_morning(upcoming, predictions if use_champion else challenger_predictions,
+                                     champion if use_champion else candidate_path, history_dir)
+            message = {"point_model_shadow": counts}
+            if counts["computed_before_start"] < counts["eligible"]:
+                message["warning"] = "point_model_shadow_partial"
+            print(json.dumps(message), flush=True)
+        except Exception as exc:
+            print(json.dumps({"warning": "point_model_shadow_failed", "error_type": type(exc).__name__}), flush=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
     parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
@@ -2576,6 +2592,9 @@ def main():
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     write_json(target, feed)
+    if args.morning_refresh:
+        _point_shadow_after_offer(upcoming, predictions, challenger_predictions, model_dir / "model.joblib",
+                                  candidate_dir / "model.joblib", history_dir)
     refresh_report = {
         "row_quarantine": {"count": len(row_quarantine), "rows": row_quarantine},
         "requests": provider.request_count,

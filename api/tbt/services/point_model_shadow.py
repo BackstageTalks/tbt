@@ -28,13 +28,20 @@ def _signature(stat):
     return stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns
 
 
-def shadow_card(match_id):
-    path = os.getenv(SNAPSHOT, "").strip()
+def snapshot_cards():
+    path = os.getenv(SNAPSHOT, "data/point_model_shadow.json").strip()
     if not path:
         raise FileNotFoundError("Shadow snapshot path unavailable")
-    path = Path(path).resolve(strict=True)
+    path = Path(path)
+    if path == Path("data/point_model_shadow.json"):
+        path = Path(__file__).resolve().parents[2] / path
+    path = path.resolve(strict=True)
     try:
-        return _read(path, _signature(path.stat())).get(match_id)
+        return _read(path, _signature(path.stat()))
     except OSError:
         # An operator may atomically rotate a serving file during this request.
-        return _read(path, _signature(path.stat())).get(match_id)
+        return _read(path, _signature(path.stat()))
+
+
+def shadow_card(match_id):
+    return snapshot_cards().get(match_id)

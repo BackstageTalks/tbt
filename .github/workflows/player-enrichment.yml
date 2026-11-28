@@ -190,6 +190,8 @@ jobs:
 
       - name: Prepare serving feed from freshly published enrichment
         shell: bash
+        env:
+          BLINQ_POINT_BLOB_READ_URL: ${{ secrets.BLINQ_POINT_BLOB_READ_URL }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
