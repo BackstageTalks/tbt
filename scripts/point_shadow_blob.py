@@ -74,6 +74,12 @@ def publish(cards):
                     and datetime.fromisoformat(card["scheduled_at"]) > now):
                 merged[key] = card
                 events.add(card["event_id"])
+            elif (key in merged and card.get("sg_shadow")
+                  and all(merged[key].get(k) == card.get(k) for k in ("event_id", "players", "scheduled_at"))
+                  and datetime.fromisoformat(card["scheduled_at"]) > now):
+                # Tomorrow's card can precede today's quote. Append each market once.
+                evidence = {**card["sg_shadow"], **merged[key].get("sg_shadow", {})}
+                merged[key] = {**merged[key], "sg_shadow": evidence}
         if merged == previous:
             return
         body = gzip.compress(json.dumps(envelope(merged), allow_nan=False).encode())

@@ -44,4 +44,9 @@ def snapshot_cards():
 
 
 def shadow_card(match_id):
-    return snapshot_cards().get(match_id)
+    card = snapshot_cards().get(match_id)
+    if card and "sg_shadow" in card:
+        from .point_sg import enabled as sg_enabled
+        if not sg_enabled():
+            return {k: v for k, v in card.items() if k != "sg_shadow"}
+    return card

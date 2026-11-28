@@ -110,6 +110,20 @@ def settle(events):
                   "frozen_at": card["frozen_at"], "model_version": card["model_version"],
                   "calibration_version": card["calibration_version"], **actual,
                   "markets": json.dumps(list(markets(card, actual)), allow_nan=False)}
+        from . import point_sg
+        if point_sg.enabled() and card.get("sg_shadow"):
+            cutoff = explicit_actual_start(events[eid]) or provider_event_schedule(events[eid]) or datetime.fromisoformat(card["scheduled_at"])
+            graded = []
+            for market, receipt in card["sg_shadow"].items():
+                if datetime.fromisoformat(receipt["frozen_at"]) >= cutoff:
+                    continue
+                count = actual["games"] if market == "games" else sum(map(int, actual["set_score"].split(":")))
+                for model in ("current", "point"):
+                    bet = receipt[model]
+                    if bet:
+                        status, profit = point_sg.grade(bet, count)
+                        graded.append([market, model, status, profit, bet["odds"], bet["line"], bet["side"]])
+            record["sg_results"] = json.dumps(graded)
         try:
             table.create_entity(record)
         except (ResourceExistsError, _StorageWriteConflict):
@@ -119,10 +133,18 @@ def settle(events):
 def summarize(records):
     samples = defaultdict(list)
     counts = dict.fromkeys(LEVELS, 0)
+    from . import point_sg
+    from zoneinfo import ZoneInfo
+    comparison = defaultdict(list)
     count = 0
     for record in records:
         count += 1
         counts[record["level"]] += 1
+        if point_sg.enabled() and record.get("sg_results"):
+            day = datetime.fromisoformat(record["scheduled"]).astimezone(ZoneInfo("Europe/Bratislava")).date()
+            for market, model, status, profit, *_ in json.loads(record["sg_results"]):
+                for level in ("Spolu", record["level"]):
+                    comparison[market, level, model].append((day, status, profit))
         for market, p, y in json.loads(record["markets"]):
             for group in ("Spolu", record["level"]):
                 samples[group, market].append((p, int(y)))
@@ -135,7 +157,13 @@ def summarize(records):
         rows.append({"level": group, "market": market, "n": n,
                      "ece": sum(map(abs, bins.values()))/n,
                      "brier": sum((p-y)**2 for p,y in values)/n})
-    return {"count": count, "levels": counts, "days": 90, "checkpoint": 300, "rows": rows}
+    sg = {}
+    if point_sg.enabled():
+        sg["sg_comparison"] = [{"market":market, "level":level, "model":model,
+                                **point_sg.summary(comparison[market,level,model], 90)}
+                               for market in ("games","sets") for level in ("Spolu", *LEVELS)
+                               for model in ("current","point")]
+    return {**sg, "count": count, "levels": counts, "days": 90, "checkpoint": 300, "rows": rows}
 
 
 def rolling():

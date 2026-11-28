@@ -172,12 +172,16 @@ def test_refresh_uploads_and_independently_reads_private_capture_without_changin
     monkeypatch.setattr(pipeline, "ReleaseStore", reader)
     args = (store, [], [champion], [], model, {}, [upcoming])
     monkeypatch.delenv("TBT_PAIRED_MARKET_SHADOW_ENABLED", raising=False)
+    monkeypatch.delenv("BLINQ_POINT_SG_SHADOW", raising=False)
     baseline = pipeline._publish_predictions(*args)
+    baseline_bytes = bytes(assets["feed.json"])
+    monkeypatch.setenv("BLINQ_POINT_SG_SHADOW", "true")
     monkeypatch.setenv("TBT_PAIRED_MARKET_SHADOW_ENABLED", "true")
     enabled = pipeline._publish_predictions(
         *args, champion_sha256=HASH, paired_candidate_predictions=[candidate],
         paired_candidate_path=artifact,
     )
+    assert assets["feed.json"] == baseline_bytes
     assert enabled == baseline
     assert not any(FIELD in assets[name].decode() for name in ("feed.json", "ledger.json"))
     history = json.loads(gzip.decompress(assets["selection_candidates_2026-09.json.gz"]))

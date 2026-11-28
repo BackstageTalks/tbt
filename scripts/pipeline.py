@@ -1177,14 +1177,15 @@ def _require_training_backup_gate(*, read_only_frozen: bool = False) -> dict:
         ) from exc
 
 
-def _point_shadow_after_offer(upcoming, predictions, challenger_predictions, champion, candidate_path, history_dir):
+def _point_shadow_after_offer(upcoming, predictions, challenger_predictions, champion, candidate_path, history_dir, sg_context=None):
     if os.getenv("BLINQ_POINT_MODEL_SHADOW", "").lower() == "true":
         try:
             from build_point_model_shadow import capture_morning
             from tbt.models.point_anchor import MODEL_SHA
             use_champion = sha256(champion.read_bytes()).hexdigest() == MODEL_SHA
             counts = capture_morning(upcoming, predictions if use_champion else challenger_predictions,
-                                     champion if use_champion else candidate_path, history_dir)
+                                     champion if use_champion else candidate_path, history_dir,
+                                     **({"sg_context": sg_context} if sg_context else {}))
             message = {"point_model_shadow": counts}
             if counts["computed_before_start"] < counts["eligible"]:
                 message["warning"] = "point_model_shadow_partial"
@@ -2594,7 +2595,10 @@ def main():
     write_json(target, feed)
     if args.morning_refresh:
         _point_shadow_after_offer(upcoming, predictions, challenger_predictions, model_dir / "model.joblib",
-                                  candidate_dir / "model.joblib", history_dir)
+                                  candidate_dir / "model.joblib", history_dir,
+                                  (feed.get("sg_picks", []), sg_picks, projection_market_cache, prop_market_payloads,
+                                   (sg_report or {}).get("adaptive_confidence_floor", {}))
+                                  if os.getenv("BLINQ_POINT_SG_SHADOW", "").lower() == "true" else None)
     refresh_report = {
         "row_quarantine": {"count": len(row_quarantine), "rows": row_quarantine},
         "requests": provider.request_count,
